@@ -30,6 +30,8 @@ Payload/
 *.o
 *.dSYM
 *.dSYM.zip
+*.metallib
+*.xcarchive
 
 # --- Rust -------------------------------------------------------------------
 target/

@@ -1,4 +1,4 @@
-# 3ds2apple 执行计划 v0.4
+# 3ds2apple 执行计划 v0.5
 
 > 首发 10 款 · 本地无 Mac（Windows / Linux）· 侧载 · 开源 · iPhone 14 Pro Max（A16 / 6 GB / iOS 26.7.2）
 
@@ -282,3 +282,74 @@ idevicesyslog / crash report → 回到 Windows/Linux 修
 3. Apple ID 用免费还是付费 $99/年？（10 款建议付费）
 4. ROM 上传云 Mac 是否接受？（只传当前批次、构建后删除）
 5. Bundle ID / App 名称 / 图标有没有偏好？
+
+---
+
+## 附录 B：Windows-only 出包（S2Arm 式）可行吗？
+
+> 这一节回答"理论上是不是不用 macOS 也能实现"。结论：**每款游戏的打包/签名可以 Windows-only；但通用壳仍然至少要构建一次 macOS 版本。S2Arm 自己也是这么做的。**
+
+### B.1 先拆成三层
+
+| 层 | S2Arm 怎么做 | 3ds2apple 能否 Windows-only |
+|---|---|---|
+| 通用壳（SwiftUI/UIKit + 引擎 + Metal） | `pack/shell_build.sh` **只在 Mac 上跑**（要 `xcodebuild` / `xcrun` / `codesign`） | 不能，除非自建完整 iOS 交叉工具链 |
+| 每款游戏的模块 | 纯 Python 写 Mach-O dylib（Switch 代码已是 AArch64，不需要 C 编译器） | **可以**，但 3DS 多一步 C → ARM64 |
+| 签名/安装 | Windows 随包 Impactor + plumesign | 可以（`rcodesign` / Impactor / AltStore） |
+
+关键事实：S2Arm 的 Windows 发行包里，`Shell/` 是"预编壳"，由 Mac 产出后作为输入；Windows 只做"游戏模块 + 注入 + 签名"。所以它不是"完全不用 macOS"，而是"**macOS 只出一次壳**"。
+
+### B.2 3DS 比 S2Arm 多出来的那一步
+
+Switch 的游戏代码是 AArch64，S2Arm 可以直接把 ARM64 代码写进 Mach-O dylib，**不需要 C 编译器**。  
+3DS 的 AOT 代码是 **C**，必须编译成 ARM64 Mach-O。Windows 上的可选工具链：
+
+| 步骤 | 工具 | 风险 |
+|---|---|---|
+| C → ARM64 Mach-O object | LLVM `clang -target arm64-apple-ios -c` | 需要 iOS SDK 头文件或最小 sysroot |
+| 链接 dylib | LLVM `ld64.lld -dylib` 或 S2Arm 式 Python Mach-O writer | `ld64.lld` 在 Windows 上不是官方主路径 |
+| 签名 | `rcodesign`（apple-codesign）、Impactor/plumesign | 描述文件/entitlements 要自己处理 |
+| 注入/加载 | S2Arm 式 `Frameworks/Game.dylib` + 自定义 `MAP_FIXED` loader | **最大风险**：iOS 26.7.2 的代码签名/内存保护是否允许 |
+| Shader | Metal Developer Tools for Windows → `.metallib`；或运行时 `makeLibrary(source:)` | 只解决 shader，不解决 app 编译/链接/签名 |
+
+**Metal Developer Tools for Windows 的边界：** 它能把 `.metal` 编译成 `.metallib`，可能带 Metal Shader Converter；它**不包含** iOS SDK、UIKit/SwiftUI、Swift 编译器、`ld64`、`codesign`、描述文件。它能让 shader 在 Windows 上编译，但不能让整个 App 在 Windows 上构建。
+
+### B.3 可行的 Windows-only 管线（壳由 Mac 出一次）
+
+```
+[一次性] 云 Mac / 借的 Mac / CI：
+  SwiftUI 壳 + Zakuro 核心 + 游戏加载器 → shell.ipa（预编壳）
+
+[每款，Windows]：
+  3dsrecomp（Rust，Windows 可跑）→ C
+  clang -target arm64-apple-ios -c → .o
+  ld64.lld -dylib → Game.dylib（或 Python Mach-O writer）
+  注入 shell.ipa 的 Frameworks/ + 更新 loader 表
+  rcodesign / Impactor 签名 + 描述文件
+  AltStore / SideStore 安装到 iPhone
+```
+
+### B.4 风险
+
+1. **自定义 loader 在 iOS 26.7.2 的兼容性**：S2Arm 的 `MAP_FIXED` 方案依赖签名/内存保护行为；新 iOS 可能收紧。必须先用 hello-world dylib 实测。
+2. **`ld64.lld` 在 Windows 的稳定性**：链接 dylib、处理 ARM64 重定位、ad-hoc 签名；没有 Apple 官方支持。
+3. **iOS SDK 头文件/授权**：生成 C 只依赖少量标准头；但一旦需要 iOS SDK，授权和分发都是问题。
+4. **Swift/ObjC 壳不能重链接**：只能"注入 dylib"，不能像静态链接那样改主程序；壳的 ABI/加载器要一次设计好。
+5. **壳更新仍需 Mac**：Zakuro 升级、iOS 新 SDK、Metal 新特性，都要重新出壳。
+6. **两套构建脚本**：Mac 出壳 + Windows 出包，维护成本高。
+
+### B.5 建议
+
+- **v1 先用云 Mac 批量**（方案 A）：壳 + 10 款一次做完，风险最低。
+- 同时做 **2–3 周 Windows-only spike**：
+  1. 用云 Mac 出一个最小壳（带 `Frameworks/` 注入点和 loader）；
+  2. 在 Windows 编译一个 hello-world C 函数为 ARM64 dylib；
+  3. 注入、签名、装到 iPhone 26.7.2；
+  4. 能跑 → 再试 3dsrecomp 生成的真实 C；不能跑 → 回到方案 A。
+- **不要承诺"完全不用 Mac"**：S2Arm 的壳本身也是 Mac 构建的；3ds2apple 至少要有一次 macOS 出壳。
+
+### B.6 仓库边界
+
+- 仓库只放脚本、模板、文档；**不提交** ROM、keys、生成的 C、IPA、dylib、截图中的游戏资源。
+- 构建产物全部在 `.gitignore` 的 `out/`、`build/`、`Payload/`、`*.ipa` 下。
+- 贡献指南已明确：生成的 C 是游戏衍生内容，不进仓库。

@@ -6,7 +6,7 @@
 
 > 仓库：<https://github.com/HFYKratos/3ds2apple> · 状态：规划中 · 许可：Apache-2.0
 
-- [执行计划 v0.4（2026-11-11）](docs/plan.md)：首发 10 款、无本地 Mac、侧载、开源的落地方案。
+- [执行计划 v0.5（2026-11-11）](docs/plan.md)：首发 10 款、无本地 Mac、侧载、开源的落地方案；附录 B 讨论 Windows-only 出包（S2Arm 式）。
 - [可行性评估 v0.2](docs/feasibility.md)：3dsrecomp + Zakuro 的通用 AOT 路线、iOS 缺口、工作量与风险。
 - [可行性评估 v0.1](docs/feasibility-v0.1.md)：路线 A（Azahar/Cytrus）、B（AOT）、C（反编译）的横向对比。
 
@@ -24,6 +24,8 @@
 2. **按需云 Mac（1–2 周/批）**：每款游戏的 AOT C 编译 + Xcode 打包 + unsigned IPA；ROM 只临时放在云 Mac，构建后删除。
 3. **Windows**：AltStore / SideStore / Sideloadly 签名安装；`idevicesyslog` / 崩溃报告调试。
 4. **GitHub Actions（macOS）**：只构建不含游戏数据的通用壳/核心，公开仓库免费；不要把 ROM 传上去。
+
+> **Windows-only 可行吗？** 每款游戏的打包/签名可以 Windows-only（S2Arm 式：预编译壳 + 游戏 dylib + 签名），但 **通用壳仍需 macOS 构建一次**；S2Arm 的壳也是 Mac 出的。3DS 还多一步 C→ARM64，Windows 上要用 `clang` + `ld64.lld` + `rcodesign`，需先做 spike。Metal Developer Tools for Windows 只解决 `.metal → .metallib`，不提供 iOS SDK/UIKit/链接/签名。详见 [plan.md 附录 B](docs/plan.md#附录-bwindows-only-出包s2arm-式可行吗)。
 
 预算：云 Mac **$25–50/月**或 **$1–2/小时**；Apple Developer **$99/年**（10 个 IPA 建议付费）。
 

@@ -21,6 +21,9 @@ most useful contributions right now are:
 4. **Licenses.** This repository's own code is Apache-2.0. Zakuro and
    3dsrecomp are MIT; keep their notices. Do not paste GPL code (Azahar,
    TriAevum) into this repository.
+5. **Generated code is game-derived.** Keep the C code from 3dsrecomp, the
+   compiled dylibs, IPAs, and extracted assets out of git. Build outputs
+   belong in `out/`, `build/`, or `Payload/`, which are ignored.
 
 ## Pull requests
 
