@@ -48,6 +48,7 @@ NOTICE                 版权/商标/无 ROM 声明
 THIRD_PARTY.md         计划依赖与参考项目的许可证
 CONTRIBUTING.md        贡献指南（禁止 ROM/keys）
 LICENSE                Apache-2.0
+IPA/                   本地测试 IPA（.gitignore，不提交）
 ```
 
 ## 许可与声明

@@ -63,3 +63,5 @@ desktop.ini
 *.log
 logs/
 tmp/
+# --- Local test IPAs (never commit) ----------------------------------------
+IPA/
