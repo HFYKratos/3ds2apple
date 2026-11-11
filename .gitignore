@@ -1,0 +1,63 @@
+# --- Game data / secrets: never commit -------------------------------------
+*.3ds
+*.cci
+*.cia
+*.cxi
+*.3dsx
+*.nsp
+*.xci
+*.nca
+*.keys
+*prod.keys
+aes_keys.txt
+seeddb.bin
+sysdata/
+romfs/
+exefs/
+*.sav
+*.dsv
+
+# --- Build outputs ----------------------------------------------------------
+build/
+out/
+dist/
+DerivedData/
+Payload/
+*.ipa
+*.app/
+*.dylib
+*.a
+*.o
+*.dSYM
+*.dSYM.zip
+
+# --- Rust -------------------------------------------------------------------
+target/
+**/*.rs.bk
+
+# --- Xcode ------------------------------------------------------------------
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.hmap
+*.moved-aside
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# --- Editors / OS -----------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs / local scratch ---------------------------------------------------
+*.log
+logs/
+tmp/

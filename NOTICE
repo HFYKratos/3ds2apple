@@ -1,0 +1,12 @@
+3ds2apple
+Copyright 2026 Kratos huang
+
+This project is not affiliated with, endorsed by, or sponsored by Nintendo.
+Nintendo 3DS is a trademark of Nintendo Co., Ltd.
+
+No Nintendo ROMs, keys, system files, or game assets are included in this
+repository. Users must supply their own legally obtained, decrypted dumps.
+
+This repository currently contains planning documents only. The planned
+runtime and tooling include third-party components; see THIRD_PARTY.md for
+the list and licenses.
