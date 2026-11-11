@@ -26,6 +26,8 @@
 4. **GitHub Actions（macOS）**：只构建不含游戏数据的通用壳/核心，公开仓库免费；不要把 ROM 传上去。
 
 > **Windows-only 可行吗？** 每款游戏的打包/签名可以 Windows-only（S2Arm 式：预编译壳 + 游戏 dylib + 签名），但 **通用壳仍需 macOS 构建一次**；S2Arm 的壳也是 Mac 出的。3DS 还多一步 C→ARM64，Windows 上要用 `clang` + `ld64.lld` + `rcodesign`，需先做 spike。Metal Developer Tools for Windows 只解决 `.metal → .metallib`，不提供 iOS SDK/UIKit/链接/签名。详见 [plan.md 附录 B](docs/plan.md#附录-bwindows-only-出包s2arm-式可行吗)。
+>
+> **macOS 虚拟机可以吗？** 可以，但只适合 **headless 构建**（`xcodebuild` + 打包 unsigned IPA）；VM 里不需要 GPU、Apple ID、USB，签名仍在 Windows。Linux KVM 看 `ultimate-macOS-KVM` / `OSX-KVM`，Windows VMware 看 `OC4VM`。注意 macOS EULA 限制（仅 Apple 硬件），产品化仍建议云 Mac/二手 Mac mini。详见 [plan.md 附录 C](docs/plan.md#附录-cmacos-虚拟机方案替代云-mac)。
 
 预算：云 Mac **$25–50/月**或 **$1–2/小时**；Apple Developer **$99/年**（10 个 IPA 建议付费）。
 

@@ -353,3 +353,76 @@ Switch 的游戏代码是 AArch64，S2Arm 可以直接把 ARM64 代码写进 Mac
 - 仓库只放脚本、模板、文档；**不提交** ROM、keys、生成的 C、IPA、dylib、截图中的游戏资源。
 - 构建产物全部在 `.gitignore` 的 `out/`、`build/`、`Payload/`、`*.ipa` 下。
 - 贡献指南已明确：生成的 C 是游戏衍生内容，不进仓库。
+---
+
+## 附录 C：macOS 虚拟机方案（替代云 Mac）
+
+> 结论：**可以用 macOS VM 完成"macOS 需要的步骤"**（`xcodebuild` / `xcrun metal` / 打包 unsigned IPA），但只适合 **headless 构建**；VM 里的 Xcode GUI、iOS 模拟器会很慢。Apple EULA 限制 macOS 只能在 Apple 硬件上运行，VM 方案有合规风险；产品化仍建议云 Mac 或二手 Mac mini。
+
+### C.1 VM 只需要做三件事
+
+| 步骤 | 工具 | 是否需要 GPU/Metal |
+|---|---|---|
+| 编译 iOS App（device，不跑 simulator） | `xcodebuild` + iOS SDK | 否 |
+| 编译 Metal shader（可选） | `xcrun metal` / `metallib` | 否（CPU 编译器） |
+| 打包 unsigned IPA | `Payload/App.app` + `zip` | 否 |
+
+因此 VM **不需要** GPU 直通、Metal 加速、Apple ID、USB 连 iPhone；它只做"编译 + 打包"，签名/安装仍在 Windows 用 AltStore/SideStore 完成。这是 VM 方案能成立的关键。
+
+### C.2 相关 GitHub 项目
+
+| 项目 | 宿主 | 方式 | 支持版本 | 备注 |
+|---|---|---|---|---|
+| [ultimate-macOS-KVM](https://github.com/Coopydood/ultimate-macOS-KVM) | Linux KVM | QEMU + OpenCore，自动化 | 已确认 macOS Tahoe 可装可启动 | 目前最适合 Linux 的向导式方案 |
+| [OSX-KVM](https://github.com/kholia/OSX-KVM) | Linux KVM | QEMU + OpenCore | Monterey / Ventura / Sonoma | 最成熟、文档最多；需要 VT-x/AMD-V、SSE4.1、AVX2 |
+| [Docker-OSX](https://github.com/sickcodes/Docker-OSX) | Linux / Windows WSL2 | Docker + QEMU | Catalina 起多个版本 | 支持 USB/GPU 透传；需要 `/dev/kvm` |
+| [OC4VM](https://github.com/DrDonk/OC4VM) | Windows / Linux VMware | OpenCore for VMware | Big Sur → Tahoe；Intel/AMD | 不需要 patch VMware；AMD 也可 |
+| [Unlocker](https://github.com/DrDonk/unlocker) | Windows / Linux VMware | patch VMware | 旧版 macOS | macOS 27 起 Intel 结束；逐步被 OC4VM 取代 |
+| [KVM-Opencore](https://github.com/thenickdude/KVM-Opencore) | Proxmox / QEMU | OpenCore 磁盘镜像 | 多版本 | 适合 Proxmox 用户 |
+
+### C.3 推荐组合
+
+- **Linux 裸机 + KVM**：优先 `ultimate-macOS-KVM`（Tahoe）或 `OSX-KVM`（Sonoma）；内存 16 GB+，磁盘 150 GB+，4–6 vCPU。
+- **Windows**：VMware Workstation + `OC4VM`（Intel/AMD 都支持，macOS Tahoe 测试过）；不需要 Unlocker。VMware 的虚拟 GPU 没有 Metal，但 headless 构建不需要。
+- **WSL2**：`Docker-OSX` 需要 `/dev/kvm`；WSL2 嵌套虚拟化不一定开启，优先在 Windows 宿主上跑 VMware，而不是 WSL 里套 Docker。
+- **不推荐 VirtualBox**：macOS guest 支持差、性能低。
+
+### C.4 版本选择：Xcode 16 兜底
+
+- x86 VM 能跑到 **macOS Tahoe 26**（最后一个 Intel 版本）；macOS 27 起只支持 Apple Silicon，x86 VM 到头。
+- Xcode 26 是否有可用的 Intel 版本需要实测；**保守方案是 macOS Sequoia 15.x + Xcode 16.x + iOS 18 SDK**。
+- 用 iOS 18 SDK 构建、`MinimumOSVersion` 设为 iOS 16 的 App，可以正常安装/运行在 iOS 26 设备上；只要不使用 iOS 26 新 API。
+- 本项目首版用 SwiftUI + Metal + GameController，iOS 16+ 的 API 足够，所以 Xcode 16 不影响 MVP。
+
+### C.5 最小工作流
+
+```
+[VM] macOS + Xcode
+  xcodebuild -sdk iphoneos CODE_SIGNING_ALLOWED=NO
+  → Payload/3ds2apple.app → zip → unsigned IPA
+        │
+        ▼
+[Windows] AltStore / SideStore / Sideloadly
+  签名 + 安装到 iPhone 14 Pro Max
+```
+
+VM 里不需要 Apple ID、不需要登录 Xcode、不需要 USB 连手机；SSH/VNC 管理即可。第一次要接受 Xcode license、安装 iOS 平台组件（`xcodebuild -runFirstLaunch` / `-downloadPlatform iOS`）。
+
+### C.6 风险
+
+| 风险 | 说明 | 缓解 |
+|---|---|---|
+| **EULA/合规** | macOS 只允许在 Apple 硬件上运行；VM/Unlocker 可能违反 EULA/DMCA | 仅个人研究；产品化用云 Mac/二手 Mac |
+| **Xcode 版本** | Xcode 26 的 Intel 支持不确定；未来 macOS 27 只支持 Apple Silicon | 用 Xcode 16 + iOS 18 SDK 兜底 |
+| **无 Metal 加速** | Xcode GUI、iOS 模拟器慢/不可用 | 只做 headless 构建，不跑 simulator |
+| **VM 稳定性** | macOS 更新、OpenCore、AMD patch、休眠/恢复 | 固定版本、快照、只做构建机 |
+| **性能** | 编译 15–40 分钟/款 | 4–6 vCPU、SSD、16 GB+ RAM；批量构建 |
+| **合法分发** | 公开仓库不宜放绕过 Apple 限制的脚本/补丁 | 文档只放链接与评估，不放安装补丁 |
+
+### C.7 建议
+
+1. **先确认 Linux 是否裸机、CPU 是否支持 VT-x/AMD-V + AVX2**；是 → 试 `ultimate-macOS-KVM` 或 `OSX-KVM`。
+2. **Windows 宿主** → 试 `OC4VM` + VMware Workstation；不用 Unlocker。
+3. 用 **Xcode 16 + iOS 18 SDK** 做 hello-world unsigned IPA，先验证 `xcodebuild` + 打包 + Windows 签名安装链路。
+4. VM 能稳定出 IPA → 可以替代云 Mac 做 per-game 构建；不稳定/不想折腾 → 云 Mac 或二手 M1 Mac mini。
+5. 产品化/长期维护：**二手 M1 Mac mini（$300–400）或云 Mac** 更稳、合规；x86 VM 只适合过渡/研究。
