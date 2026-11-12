@@ -166,6 +166,16 @@ log "staging $APP_BASENAME in Payload/"
 cp -R "$APP_PATH" "$STAGE/Payload/"
 [[ -d "$STAGE/Payload/$APP_BASENAME" ]] || die "failed to stage the app bundle"
 
+# Optional embedded framework (used by the Metal/MoltenVK hardware-rendering
+# build: the runtime dlopen()s MoltenVK from Frameworks/). Local only.
+if [[ -n "${MOLTENVK_FRAMEWORK:-}" ]]; then
+  [[ -d "$MOLTENVK_FRAMEWORK" ]] || die "MOLTENVK_FRAMEWORK is not a directory: $MOLTENVK_FRAMEWORK"
+  mkdir -p "$STAGE/Payload/$APP_BASENAME/Frameworks"
+  rm -rf "$STAGE/Payload/$APP_BASENAME/Frameworks/MoltenVK.framework"
+  cp -R "$MOLTENVK_FRAMEWORK" "$STAGE/Payload/$APP_BASENAME/Frameworks/MoltenVK.framework"
+  log "embedded MoltenVK.framework"
+fi
+
 # ROM transfer: expose Documents/ to Finder/iTunes and the Files app. The
 # generated Info.plist does not reliably carry these keys from XcodeGen, so
 # inject them into the staged bundle before zipping.
