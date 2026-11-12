@@ -159,6 +159,19 @@ final class ROMSession: ObservableObject {
     /// unload/background). Used to tell a cold first run from a warmed one and
     /// exported in diagnostics.
     @Published private(set) var pipelineCacheStats = PipelineCacheStats.empty
+    /// Emulation is paused (in-game menu open, or the user paused): the frame
+    /// loop and the audio engine are stopped, the runtime handle stays.
+    @Published private(set) var isPaused = false
+    /// Screen arrangement chosen in Settings. Read when a load starts: only the
+    /// console layout can be presented on the CAMetalLayer, so the other
+    /// layouts load through the screen-readback path.
+    private(set) var screenLayout: ScreenLayout = .stacked
+    /// Drawable resolution factor (1 = 400x480, 2 = 800x960) requested for the
+    /// presented screens. Applied to the Metal view (and its presenter) as soon
+    /// as it exists, and remembered for the first load.
+    private var requestedRenderScale: CGFloat = 1
+    /// Free-run frame cap (frames per second). Mutable while playing.
+    private let frameRateCap = FrameRateCapState()
     /// A1: drawable size of `metalScreenView` in pixels. Main queue only.
     private(set) var presentedDrawableSize = CGSize.zero
     /// A1: presenter handle (`zk_presenter_*`). Created and destroyed on the
@@ -276,6 +289,7 @@ final class ROMSession: ObservableObject {
         stopFrameLoop()
         stopAudio()
         inputState.clearAll()
+        isPaused = false
         warmUp = GraphicsWarmUpStatus()
         setPhase(.importing(name: name))
         runtimeQueue.async { [weak self] in
@@ -304,6 +318,7 @@ final class ROMSession: ObservableObject {
         stopFrameLoop()
         stopAudio()
         inputState.clearAll()
+        isPaused = false
         warmUp = GraphicsWarmUpStatus()
         setPhase(.starting(name: rom.name))
         runtimeQueue.async { [weak self] in
@@ -318,6 +333,7 @@ final class ROMSession: ObservableObject {
         stopFrameLoop()
         stopAudio()
         inputState.clearAll()
+        isPaused = false
         runtimeQueue.async { [weak self] in
             guard let self else { return }
             self.destroySystem()
@@ -337,6 +353,7 @@ final class ROMSession: ObservableObject {
         stopFrameLoop()
         stopAudio()
         inputState.clearAll()
+        isPaused = false
         runtimeQueue.async { [weak self] in
             guard let self else { return }
             let hadRuntime = self.system != nil
@@ -402,6 +419,99 @@ final class ROMSession: ObservableObject {
         inputState.setTouch(x: x, y: y)
     }
 
+    // MARK: - Settings (main queue)
+
+    /// True while a runtime handle exists: a load is in progress or a game is
+    /// running. The settings pages use it to disable actions that would race the
+    /// runtime (clearing the pipeline cache, for example).
+    var isRuntimeActive: Bool {
+        switch phase {
+        case .starting, .preparing, .loaded: return true
+        case .idle, .importing, .failed, .finished: return false
+        }
+    }
+
+    /// Records the screen arrangement for the next load. Applying it does not
+    /// touch a running session; the page says it takes effect on the next load.
+    func setScreenLayout(_ layout: ScreenLayout) {
+        screenLayout = layout
+    }
+
+    /// Changes the free-run frame cap. Safe while a game is playing: the next
+    /// scheduled frame uses the new period.
+    func setFrameRateCap(_ framesPerSecond: Int) {
+        let cap = framesPerSecond <= 30 ? 30 : 60
+        frameRateCap.set(cap)
+        if isRuntimeActive, !isPaused {
+            frameLoopLabel = "free-run · cap \(cap) fps"
+        }
+        AppLog.log("[3ds2apple] frame cap: %d fps", cap)
+    }
+
+    /// The current free-run cap, for the diagnostics report.
+    var frameRateCapValue: Int { frameRateCap.current }
+
+    /// Drawable resolution factor for the presented screens (1 or 2). The swapchain
+    /// is resized on the runtime queue by the Metal view's size callback.
+    func applyRenderScale(_ scale: CGFloat) {
+        let factor: CGFloat = scale >= 2 ? 2 : 1
+        requestedRenderScale = factor
+        metalScreenView?.setRenderScale(factor)
+        AppLog.log("[3ds2apple] render scale: %.0fx", factor)
+    }
+
+    /// Audio output volume, 0...1. Applied to the running mixer immediately.
+    func setAudioVolume(_ volume: Float) {
+        audioOutput.setVolume(volume)
+    }
+
+    /// Audio latency preference, in seconds. A running engine is restarted so
+    /// the new buffer duration takes effect immediately.
+    func setAudioBufferDuration(_ seconds: TimeInterval) {
+        audioOutput.setPreferredBufferDuration(seconds)
+        guard isRuntimeAudible else { return }
+        if audioOutput.isMuted {
+            audioState = .muted
+        } else if audioOutput.startEngine() {
+            audioState = .running
+        } else {
+            audioState = .failed("the audio engine could not start")
+        }
+    }
+
+    // MARK: - In-game menu (main queue)
+
+    /// Pauses the frame loop and the audio engine for the in-game menu. The
+    /// runtime and the last frame stay; `resumeFromMenu()` continues the same
+    /// session without re-loading the ROM.
+    func pauseForMenu() {
+        guard !isPaused, case .loaded = phase else { return }
+        isPaused = true
+        inputState.clearAll()
+        stopFrameLoop()
+        stopAudio()
+        AppLog.log("[3ds2apple] runtime paused")
+    }
+
+    /// Continues a session paused by `pauseForMenu()`.
+    func resumeFromMenu() {
+        guard isPaused else { return }
+        isPaused = false
+        guard case .loaded = phase, let rom = lastROM else { return }
+        startFrameLoop(warmUp: nil, romKey: rom.relativePath)
+        startAudio()
+        AppLog.log("[3ds2apple] runtime resumed")
+    }
+
+    /// Restarts the loaded game from its ROM. Save data is kept: the same
+    /// per-ROM data directory is passed to the new runtime.
+    func resetRuntime() {
+        guard case .loaded = phase else { return }
+        AppLog.log("[3ds2apple] runtime reset requested")
+        isPaused = false
+        loadLastROM()
+    }
+
     // MARK: - A1 presentation (main queue creates, runtimeQueue presents)
 
     /// Whether the app tries the CAMetalLayer presentation path. Set this to
@@ -441,6 +551,15 @@ final class ROMSession: ObservableObject {
     /// loads do not retry the same missing/unsupported setup.
     private func presenterForLoadOnMain() -> UnsafeMutableRawPointer? {
         guard Self.preferMetalPresentation else { return nil }
+        // The presenter draws the console layout (upper above lower) into one
+        // drawable; the other screen arrangements are shown from the two screen
+        // images instead. Returns nil so this load takes the readback path; an
+        // already-created presenter stays alive for a later console-layout load.
+        guard screenLayout.usesPresentedPath else {
+            AppLog.log("[3ds2apple] screen layout %@: using the CGImage readback path",
+                  screenLayout.rawValue)
+            return nil
+        }
         if let presenter { return presenter }
         if presenterUnavailable { return nil }
 
@@ -452,6 +571,7 @@ final class ROMSession: ObservableObject {
             created.onDrawableSizeChanged = { [weak self] size in
                 self?.presentedDrawableSizeChanged(size)
             }
+            created.setRenderScale(requestedRenderScale)
             created.prepareForPresentation(provisionalSize: Self.provisionalPresentedPixelSize())
             metalScreenView = created
             view = created
@@ -750,12 +870,12 @@ final class ROMSession: ObservableObject {
     /// pre-I3-T9 CADisplayLink-paced loop. No other code change is needed.
     private static let frameLoopDriver: FrameLoopDriver = .freeRun
 
-    /// Free-run cap: frames never start closer together than the 3DS 60 Hz
-    /// timeline. This is a *cap*, not a target — a frame that takes longer than
-    /// 1/60 s (e.g. the measured 22.6 ms Pokémon Y AOT frame) starts the next
-    /// frame immediately instead of waiting for a display tick, so the loop
-    /// runs at the real throughput (~44 fps) instead of a 30 fps multiple.
-    private static let freeRunFramesPerSecond = 60
+    // Free-run cap: frames never start closer together than 1/60 s by
+    // default (the 3DS timeline; the Settings page can lower it to 30 fps in
+    // `frameRateCap`). This is a *cap*, not a target — a frame that takes
+    // longer than 1/60 s (e.g. the measured 22.6 ms Pokémon Y AOT frame) starts
+    // the next frame immediately instead of waiting for a display tick, so the
+    // loop runs at the real throughput (~44 fps) instead of a 30 fps multiple.
 
     /// CADisplayLink fallback rate. 60 reproduces the pre-I3-T9 behaviour; 120
     /// is the I3-T9 experiment (`preferredFramesPerSecond = 120`). 120 only
@@ -763,9 +883,10 @@ final class ROMSession: ObservableObject {
     /// spans several ticks, so the fallback would stay at ~30 fps.
     private static let displayLinkFramesPerSecond = 60
 
-    /// One free-run slot in mach ticks (1/60 s).
-    private static let freeRunPeriodTicks: UInt64 =
-        FrameClock.ticks(seconds: 1.0 / Double(freeRunFramesPerSecond))
+    /// One free-run slot in mach ticks for the current cap (1/60 s by default).
+    private var freeRunPeriodTicks: UInt64 {
+        FrameClock.ticks(seconds: 1.0 / Double(frameRateCap.current))
+    }
 
     /// `DispatchQueue.asyncAfter` wakes about 1 ms after the requested
     /// deadline on this device. Without the compensation the loop misses the
@@ -803,13 +924,13 @@ final class ROMSession: ObservableObject {
         switch Self.frameLoopDriver {
         case .freeRun:
             let generation = freeRunState.start()
-            frameLoopLabel = "free-run · cap \(Self.freeRunFramesPerSecond) fps"
+            let cap = frameRateCap.current
+            frameLoopLabel = "free-run · cap \(cap) fps"
             // First frame right away; every later frame is scheduled by the
             // runtime queue after the previous one, so at most one frame is in
             // flight and at most one continuation is queued.
             scheduleFreeRunFrame(after: 0, generation: generation)
-            AppLog.log("[3ds2apple] frame loop started (free-run, cap %d fps)",
-                  Self.freeRunFramesPerSecond)
+            AppLog.log("[3ds2apple] frame loop started (free-run, cap %d fps)", cap)
         case .displayLink:
             startDisplayLinkOnMain()
             frameLoopLabel = "CADisplayLink · \(Self.displayLinkFramesPerSecond) Hz"
@@ -854,11 +975,12 @@ final class ROMSession: ObservableObject {
               freeRunState.isCurrent(generation),
               system != nil else { return }
 
-        // 60 Hz cap: only the early part of the slot is waited out. A frame
-        // that overran its slot continues immediately (delay 0), which is what
-        // removes the CADisplayLink quantization.
+        // 60 Hz cap (or the cap chosen in Settings): only the early part of the
+        // slot is waited out. A frame that overran its slot continues
+        // immediately (delay 0), which is what removes the CADisplayLink
+        // quantization.
         let now = FrameClock.now()
-        let deadline = frameStart &+ Self.freeRunPeriodTicks
+        let deadline = frameStart &+ freeRunPeriodTicks
         let rawDelay = deadline > now ? FrameClock.seconds(deadline - now) : 0
         // Aim slightly early so asyncAfter's wake-up latency lands on the
         // 60 Hz deadline instead of ~1 ms after it.
@@ -1226,6 +1348,7 @@ final class ROMSession: ObservableObject {
             self.stopFrameLoopOnMain()
             self.stopAudio()
             self.inputState.clearAll()
+            self.isPaused = false
             if let stoppedWarmUp, case .preparing = self.phase {
                 self.warmUp = stoppedWarmUp
                 AppLog.log("[3ds2apple] graphics warm-up: %@", stoppedWarmUp.logLine)
@@ -1245,6 +1368,7 @@ final class ROMSession: ObservableObject {
         bottomScreenImage = nil
         frameLoopLabel = "—"
         frameStats = FrameStats()
+        isPaused = false
     }
 
     // MARK: - Audio (main queue control, runtimeQueue feeding)
@@ -1268,12 +1392,14 @@ final class ROMSession: ObservableObject {
         audioState = .off
     }
 
-    /// Mute switch, persisted by the view via @AppStorage.
+    /// Mute switch, persisted by the settings page.
     func setAudioMuted(_ muted: Bool) {
         audioOutput.setMuted(muted)
         // Audio runs during the warm-up too (boot sounds belong to loading),
-        // so the switch stays live in the preparing phase as well.
-        guard isRuntimeAudible else { return }
+        // so the switch stays live in the preparing phase as well. While the
+        // in-game menu has paused the session only the preference changes; the
+        // engine starts again on resume.
+        guard isRuntimeAudible, !isPaused else { return }
         if muted {
             audioState = .muted
         } else {
@@ -1476,5 +1602,24 @@ private final class FreeRunLoopState {
         lock.lock()
         defer { lock.unlock() }
         return active && generation == self.generation
+    }
+}
+
+/// Lock-protected free-run cap (frames per second). Changed from the settings UI
+/// on the main queue; read by every scheduled frame on the runtime queue.
+private final class FrameRateCapState {
+    private let lock = NSLock()
+    private var value = 60
+
+    var current: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+
+    func set(_ framesPerSecond: Int) {
+        lock.lock()
+        value = framesPerSecond
+        lock.unlock()
     }
 }

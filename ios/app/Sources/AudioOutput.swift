@@ -141,6 +141,15 @@ final class AudioRingBuffer {
         availableFrames = 0
     }
 
+    /// Drops buffered audio without touching the mute state (engine restarts).
+    func reset() {
+        lock.lock()
+        defer { lock.unlock() }
+        readFrame = 0
+        writeFrame = 0
+        availableFrames = 0
+    }
+
     var isMuted: Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -178,6 +187,13 @@ final class AudioOutput {
     private let format: AVAudioFormat?
     private var engine: AVAudioEngine?
     private var sourceNode: AVAudioSourceNode?
+    /// Output volume, 0...1. Kept here so a later engine start restores it.
+    private var volume: Float = 1.0
+    /// Mute preference; the ring buffer also drops incoming samples while muted.
+    private var muted = false
+    /// IO buffer duration requested from the audio session. 10 ms matches the
+    /// value the app has always used; the Settings page can lower or raise it.
+    private var preferredBufferDuration: TimeInterval = 0.01
 
     init() {
         format = AVAudioFormat(
@@ -204,7 +220,7 @@ final class AudioOutput {
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .default, options: [])
-            try session.setPreferredIOBufferDuration(0.01)
+            try session.setPreferredIOBufferDuration(preferredBufferDuration)
             try session.setActive(true)
         } catch {
             AppLog.log("[3ds2apple] audio session failed: %@", error.localizedDescription)
@@ -229,7 +245,10 @@ final class AudioOutput {
 
         self.engine = engine
         self.sourceNode = node
-        AppLog.log("[3ds2apple] audio started: %.0f Hz stereo i16 → AVAudioEngine", Self.sampleRate)
+        applyVolumeToMixer()
+        applyMuteToRing()
+        AppLog.log("[3ds2apple] audio started: %.0f Hz stereo i16 → AVAudioEngine (buffer %.1f ms)",
+              Self.sampleRate, preferredBufferDuration * 1000)
         return true
     }
 
@@ -245,7 +264,7 @@ final class AudioOutput {
         try? AVAudioSession.sharedInstance().setActive(
             false, options: .notifyOthersOnDeactivation
         )
-        ring.setMuted(false)
+        ring.reset()
         AppLog.log("[3ds2apple] audio stopped")
     }
 
@@ -255,11 +274,43 @@ final class AudioOutput {
     }
 
     func setMuted(_ muted: Bool) {
-        ring.setMuted(muted)
+        self.muted = muted
+        applyMuteToRing()
     }
 
-    var isMuted: Bool { ring.isMuted }
+    var isMuted: Bool { muted }
+
+    /// Output volume, 0...1. Applied to the running mixer immediately and
+    /// restored when the engine starts again.
+    func setVolume(_ newVolume: Float) {
+        volume = min(max(newVolume, 0.0), 1.0)
+        applyVolumeToMixer()
+    }
+
+    var currentVolume: Float { volume }
+
+    /// Requests a new IO buffer duration (seconds). A running engine is
+    /// restarted so the setting takes effect; false only when the restart
+    /// fails.
+    @discardableResult
+    func setPreferredBufferDuration(_ seconds: TimeInterval) -> Bool {
+        preferredBufferDuration = min(max(seconds, 0.005), 0.05)
+        guard engine != nil else { return true }
+        stopEngine()
+        return startEngine()
+    }
+
+    var currentBufferDuration: TimeInterval { preferredBufferDuration }
+
     var underrunFrames: Int { ring.underruns }
+
+    private func applyVolumeToMixer() {
+        engine?.mainMixerNode.outputVolume = volume
+    }
+
+    private func applyMuteToRing() {
+        ring.setMuted(muted)
+    }
 
     private static func makeSourceNode(format: AVAudioFormat,
                                        ring: AudioRingBuffer) -> AVAudioSourceNode {
