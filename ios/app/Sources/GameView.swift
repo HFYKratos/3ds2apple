@@ -79,12 +79,14 @@ struct GameView: View {
                 InGameMenuView(
                     romName: romName,
                     settings: settings,
+                    saveStates: model.saveStates,
                     onResume: resumeGame,
                     onReset: { requestConfirmation(.reset) },
                     onDisplaySettings: { sheet = .quickDisplaySettings },
                     onSaveManager: { sheet = .saveManager },
                     onDiagnostics: exportDiagnostics,
-                    onExit: { requestConfirmation(.exit) }
+                    onExit: { requestConfirmation(.exit) },
+                    onLoadStateCompleted: resumeAfterStateLoad
                 )
             }
         }
@@ -100,7 +102,11 @@ struct GameView: View {
                 QuickDisplaySettingsView(settings: settings)
             case .saveManager:
                 NavigationStack {
-                    SaveManagerView(model: model)
+                    SaveManagerView(
+                        model: model,
+                        saveStates: model.saveStates,
+                        onLoadStateCompleted: resumeAfterStateLoad
+                    )
                 }
             case .diagnostics(let url):
                 ShareSheet(items: [url])
@@ -138,6 +144,19 @@ struct GameView: View {
     }
 
     private func resumeGame() {
+        // A save or load is mid-serialization on the runtime queue; let it
+        // finish (the menu disables Resume meanwhile, this is the guard).
+        guard !model.saveStates.busy else { return }
+        isMenuPresented = false
+        model.resumeFromMenu()
+    }
+
+    /// A state load succeeded: close the menu/sheet and continue the restored
+    /// console. The game view keeps the last frame on screen until the next
+    /// frame draws, and SaveStateSupport already dropped the audio buffered
+    /// before the load.
+    private func resumeAfterStateLoad() {
+        sheet = nil
         isMenuPresented = false
         model.resumeFromMenu()
     }
@@ -148,6 +167,7 @@ struct GameView: View {
     }
 
     private func performConfirmedAction() {
+        guard !model.saveStates.busy else { return }
         isMenuPresented = false
         switch confirmationKind {
         case .reset:

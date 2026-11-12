@@ -102,7 +102,7 @@ enum Presentation: Equatable {
 }
 
 /// Owns the Zakuro runtime handle, the ROM import pipeline and the frame loop.
-final class ROMSession: ObservableObject {
+final class ROMSession: ObservableObject, SaveStateRuntime {
     enum Phase {
         /// Nothing imported or loaded yet.
         case idle
@@ -162,6 +162,10 @@ final class ROMSession: ObservableObject {
     /// Emulation is paused (in-game menu open, or the user paused): the frame
     /// loop and the audio engine are stopped, the runtime handle stays.
     @Published private(set) var isPaused = false
+    /// Instant save slots of the current game (SaveStateSupport.swift). Created
+    /// on first use; the runtime itself is passed weakly, so the session owns
+    /// the support object and not the other way around.
+    private(set) lazy var saveStates: SaveStateSupport = SaveStateSupport(runtime: self)
     /// Screen arrangement chosen in Settings. Read when a load starts: only the
     /// console layout can be presented on the CAMetalLayer, so the other
     /// layouts load through the screen-readback path.
@@ -512,6 +516,67 @@ final class ROMSession: ObservableObject {
         loadLastROM()
     }
 
+    // MARK: - Save states (main queue control, runtimeQueue executes)
+    //
+    // SaveStateSupport (SaveStateSupport.swift) owns the slots and the
+    // size -> copy -> load protocol; the session provides what it needs: whether
+    // a game is loaded, the pause/resume around the serialization, the audio
+    // buffer drop after a load, and the serial queue that owns the handle.
+
+    /// True while a game is loaded and its handle is alive: the console can be
+    /// serialized or restored.
+    var isRuntimeLoaded: Bool {
+        if case .loaded = phase { return true }
+        return false
+    }
+
+    /// ROM name used to name the save-state folder (the last imported game).
+    var saveStateROMName: String? { lastROM?.name }
+
+    /// Stops the frame loop and the audio engine before the console is
+    /// serialized or restored, so a state is always taken between frames.
+    /// Returns true when it stopped a running session; pass that to
+    /// `resumeAfterStateWork(_:)` so the session only restarts what it paused
+    /// (the in-game menu resumes a game it paused itself).
+    func suspendForStateWork() -> Bool {
+        guard !isPaused else { return false }
+        guard case .loaded = phase else { return false }
+        isPaused = true
+        inputState.clearAll()
+        stopFrameLoop()
+        stopAudio()
+        AppLog.log("[3ds2apple] runtime paused for a save-state operation")
+        return true
+    }
+
+    /// Restarts what `suspendForStateWork()` stopped; a no-op when it stopped
+    /// nothing (the caller paused the game separately).
+    func resumeAfterStateWork(_ suspended: Bool) {
+        guard suspended else { return }
+        guard case .loaded = phase, let rom = lastROM else { return }
+        isPaused = false
+        startFrameLoop(warmUp: nil, romKey: rom.relativePath)
+        startAudio()
+        AppLog.log("[3ds2apple] runtime resumed after the save-state operation")
+    }
+
+    /// Drops audio buffered before a state load: the DSP state went back to the
+    /// saved point too, so samples produced by the console before the load must
+    /// not play.
+    func discardBufferedAudio() {
+        audioOutput.resetBuffer()
+    }
+
+    /// Queues one save-state operation on the serial queue that owns the runtime
+    /// handle. The block receives the handle, or nil when the game was unloaded
+    /// before it ran; the support code turns that into an error instead of
+    /// touching a released handle.
+    func runOnRuntimeQueue(_ work: @escaping (zk_system_t?) -> Void) {
+        runtimeQueue.async { [weak self] in
+            work(self?.system)
+        }
+    }
+
     // MARK: - A1 presentation (main queue creates, runtimeQueue presents)
 
     /// Whether the app tries the CAMetalLayer presentation path. Set this to
@@ -696,7 +761,7 @@ final class ROMSession: ObservableObject {
         let romURL = documentsDirectory.appendingPathComponent(rom.relativePath)
         let dataDirectory = documentsDirectory
             .appendingPathComponent("data", isDirectory: true)
-            .appendingPathComponent(Self.dataDirectoryName(for: rom.name), isDirectory: true)
+            .appendingPathComponent(SaveDataStore.gameDirectoryName(for: rom.name), isDirectory: true)
         do {
             try fileManager.createDirectory(at: dataDirectory, withIntermediateDirectories: true)
         } catch {
@@ -1504,19 +1569,6 @@ final class ROMSession: ObservableObject {
     private var documentsDirectory: URL {
         fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-    }
-
-    /// Per-ROM directory for saves/cache, passed as `data_dir` to zk_create.
-    private static func dataDirectoryName(for romName: String) -> String {
-        let stem = (romName as NSString).deletingPathExtension
-        let sanitized = stem.map { character -> Character in
-            if character.isLetter || character.isNumber
-                || character == "-" || character == "_" || character == "." {
-                return character
-            }
-            return "_"
-        }
-        return sanitized.isEmpty ? "rom" : String(sanitized)
     }
 
     /// .3ds / .cci have no registered UTTypes on iOS, so the picker offers
