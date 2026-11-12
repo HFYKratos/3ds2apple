@@ -73,6 +73,8 @@ final class ROMSession: ObservableObject {
     @Published private(set) var frameStats = FrameStats()
     /// Human-readable name of the connected hardware controller, if any.
     @Published private(set) var controllerName: String? = nil
+    /// Audio path state for the status line.
+    @Published private(set) var audioState: AudioState = .off
 
     /// Serial queue that owns every zk_* call.
     private let runtimeQueue = DispatchQueue(
@@ -87,6 +89,11 @@ final class ROMSession: ObservableObject {
     private let inputState = InputState()
     /// Hardware controller bridge; created by `startControllerSupport()`.
     private var controllerManager: GameControllerManager?
+
+    /// Audio path: ring buffer + AVAudioEngine, started after a successful load.
+    private let audioOutput = AudioOutput()
+    /// Scratch buffer for zk_take_audio; runtimeQueue only. 16384 stereo frames.
+    private var audioScratch = [Int16](repeating: 0, count: 16384 * 2)
 
     private static let lastROMPathKey = "I2.lastROMRelativePath"
 
@@ -113,6 +120,7 @@ final class ROMSession: ObservableObject {
 
     deinit {
         controllerManager?.stop()
+        audioOutput.stopEngine()
         // The display link lives on the main run loop; invalidate it there.
         // Capturing the link (not `self`) keeps this valid after deallocation.
         if let displayLink {
@@ -137,8 +145,9 @@ final class ROMSession: ObservableObject {
             setPhase(.failed(message: "Unsupported file “\(name)”. Choose a decrypted .3ds or .cci ROM."))
             return
         }
-        // Stop ticking before the current runtime is replaced.
+        // Stop ticking/audio before the current runtime is replaced.
         stopFrameLoop()
+        stopAudio()
         inputState.clearAll()
         setPhase(.importing(name: name))
         runtimeQueue.async { [weak self] in
@@ -165,6 +174,7 @@ final class ROMSession: ObservableObject {
             return
         }
         stopFrameLoop()
+        stopAudio()
         inputState.clearAll()
         setPhase(.starting(name: rom.name))
         runtimeQueue.async { [weak self] in
@@ -177,6 +187,7 @@ final class ROMSession: ObservableObject {
     /// The imported file stays in Documents so it can be loaded again.
     func unload() {
         stopFrameLoop()
+        stopAudio()
         inputState.clearAll()
         runtimeQueue.async { [weak self] in
             guard let self else { return }
@@ -194,6 +205,7 @@ final class ROMSession: ObservableObject {
     /// handle must not outlive the active scene.
     func stopForBackground() {
         stopFrameLoop()
+        stopAudio()
         inputState.clearAll()
         runtimeQueue.async { [weak self] in
             guard let self else { return }
@@ -300,6 +312,7 @@ final class ROMSession: ObservableObject {
             self.clearScreens()
             self.setPhase(.loaded(name: rom.name))
             self.startFrameLoop()
+            self.startAudio()
         }
     }
 
@@ -384,6 +397,7 @@ final class ROMSession: ObservableObject {
             let top = screenImage(system: system, which: 0)
             let bottom = screenImage(system: system, which: 1)
             publishFrame(top: top, bottom: bottom, result: result)
+            pumpAudio(system: system)
         case 1:
             // ZK_FRAME_EXITED.
             finishRuntime(message: "The game requested exit (zk_run_frame = 1).", isError: false)
@@ -448,6 +462,7 @@ final class ROMSession: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.stopFrameLoopOnMain()
+            self.stopAudio()
             self.inputState.clearAll()
             var stats = self.frameStats
             stats.fps = 0
@@ -462,6 +477,55 @@ final class ROMSession: ObservableObject {
         topScreenImage = nil
         bottomScreenImage = nil
         frameStats = FrameStats()
+    }
+
+    // MARK: - Audio (main queue control, runtimeQueue feeding)
+
+    /// Starts the audio engine after a successful load. Main queue only.
+    private func startAudio() {
+        guard !audioOutput.isMuted else {
+            audioState = .muted
+            return
+        }
+        guard audioOutput.startEngine() else {
+            audioState = .failed("the audio engine could not start")
+            return
+        }
+        audioState = .running
+    }
+
+    /// Stops the engine and drops buffered audio. Main queue only.
+    private func stopAudio() {
+        audioOutput.stopEngine()
+        audioState = .off
+    }
+
+    /// Mute switch, persisted by the view via @AppStorage.
+    func setAudioMuted(_ muted: Bool) {
+        audioOutput.setMuted(muted)
+        guard case .loaded = phase else { return }
+        if muted {
+            audioState = .muted
+        } else {
+            startAudio()
+        }
+    }
+
+    /// Drains whatever audio the runtime produced this frame into the ring
+    /// buffer. runtimeQueue only; never blocks the frame loop (the ring drops
+    /// the oldest audio when full and the render block outputs silence when
+    /// empty).
+    private func pumpAudio(system: zk_system_t) {
+        let capacity = audioScratch.count
+        let frames: Int = audioScratch.withUnsafeMutableBufferPointer { buffer -> Int in
+            guard let base = buffer.baseAddress else { return 0 }
+            return zk_take_audio(system, base, capacity)
+        }
+        guard frames > 0 else { return }
+        audioScratch.withUnsafeBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return }
+            audioOutput.enqueue(base, frameCount: frames)
+        }
     }
 
     // MARK: - ROM storage (runtimeQueue only)

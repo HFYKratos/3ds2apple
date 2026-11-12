@@ -13,11 +13,15 @@ Minimal SwiftUI app that links the Zakuro iOS static library
   `zk_run_frame()` on the same serial queue and displays the upper 400×240 and
   lower 320×240 screens (`zk_read_screen` RGBA8 → `CGImage`) above each other,
   with an fps / frames / last-result status line.
-- **I3-T1** (this branch): input. A semi-transparent on-screen pad (D-pad,
+- **I3-T1** (merged): input. A semi-transparent on-screen pad (D-pad,
   A/B/X/Y, Start/Select, L/R), the lower screen as the 3DS touchscreen, and
   MFi/Xbox/DualSense controllers all feed one `InputState`; `zk_set_input` runs
-  on the runtime queue immediately before every `zk_run_frame`. Audio
-  (`zk_take_audio`) is still out of scope — that is I3-T2.
+  on the runtime queue immediately before every `zk_run_frame`.
+- **I3-T4** (this branch): audio. The runtime queue drains `zk_take_audio`
+  (interleaved stereo i16 at Zakuro's 32730 Hz DSP rate) into a ring buffer;
+  an `AVAudioSourceNode` plays it through `AVAudioEngine` without blocking the
+  frame loop. Mute is persisted and the status line shows
+  `audio: on|off|muted|failed`.
 
 ## Layout
 
@@ -32,6 +36,7 @@ Minimal SwiftUI app that links the Zakuro iOS static library
 | `Sources/InputState.swift` | thread-safe input merge + `ZK_BUTTON_*` bit mapping |
 | `Sources/GameControllerInput.swift` | MFi/Xbox/DualSense → `InputState` |
 | `Sources/TouchControlsView.swift` | semi-transparent on-screen pad (D-pad, ABXY, Start/Select, L/R) |
+| `Sources/AudioOutput.swift` | `zk_take_audio` i16 ring buffer → `AVAudioSourceNode`/`AVAudioEngine` |
 | `../ZakuroBridge.h` | hand-written C ABI (`zk_*`), imported via the bridging header |
 | `../../scripts/build-zakuro-ios.sh` | builds the static lib on macOS (I0) |
 
@@ -201,6 +206,7 @@ Only one handle exists at a time. Every `zk_*` call on it happens on the
 | loaded, before first frame | black screens + "Waiting for first frame…" | `zk_create OK after …`, `frame loop started` |
 | running | both screens + `N fps · N frames · last: completed` | frame-loop logs (see below) |
 | input | overlay pad / touch / controller usable, "Controller: …" when a pad is connected | `controller support started` |
+| audio | status line `audio: on`; game sound while frames run | `audio started: 32730 Hz stereo i16 → AVAudioEngine` |
 | exit / fault | "Runtime stopped" or red "Could not load ROM"; last frame kept | `frame loop ending: …`, `frame loop stopped` |
 | app backgrounded | "Runtime stopped … Load the ROM again" | `zk_destroy: runtime released` |
 
@@ -209,7 +215,8 @@ Unload, on replace, on background, and (best effort) in `ROMSession.deinit`.
 
 ### Not in this task
 
-- Audio (`zk_take_audio`) is I3-T2.
+- 3dsrecomp static linking, the GLES/Metal renderer and the performance
+  baseline are separate I3 tasks (see `docs/pocket-native.md`).
 - Hardware rendering (MoltenVK) is later; I2 uses the software screens.
 
 ## Frame loop (I2-T2)
@@ -323,6 +330,47 @@ in `deinit`, so a held button or touch never leaks into the next runtime.
   one frame can be missed.
 - Pokémon Y language-screen check: D-pad ▼/▲ + A.
 
+## Audio (I3-T4)
+
+`zk_take_audio` returns interleaved stereo **i16** samples at Zakuro's
+`AUDIO_SAMPLE_RATE` (3DS DSP, 32730 Hz). It is drained on the runtime serial
+queue right after each successful frame and pushed into a fixed ring buffer;
+an `AVAudioSourceNode` (float32, 32730 Hz, 2 ch) plays that buffer through
+`AVAudioEngine`. The engine's mixer converts to the device sample rate, so the
+frame loop never waits for audio and no audio work happens on the main thread.
+
+| Piece | Value |
+|---|---|
+| Source format | float32, 32730 Hz, 2 channels, non-interleaved |
+| Ring capacity | 32 730 frames (≈1 s), interleaved i16 |
+| Scratch batch | 16 384 frames per frame; whatever the runtime has is drained |
+| Overflow policy | drop the **oldest** buffered audio so latency stays bounded |
+| Underrun policy | render block pads the remainder with silence (no blocking) |
+| Audio session | `.playback` (ignores the silent switch), IO buffer 10 ms |
+
+### Lifecycle
+
+- Started after a successful `zk_create` (same main-thread hop as the display
+  link). `audio: on` appears in the status line.
+- Stopped and cleared on **Unload**, **Change ROM**, when the app goes to the
+  **background**, and on runtime exit/fault; the audio session is deactivated
+  with `.notifyOthersOnDeactivation`.
+- **Mute audio / Unmute audio** in the ROM card, persisted via
+  `@AppStorage("I3.audioMuted")`. Muting drops buffered audio immediately so
+  unmuting never replays stale sound.
+- Degradation: if the audio session or engine cannot start, the app keeps
+  running and the status line shows `audio: failed` plus the reason.
+
+### Why it can sound choppy before 3dsrecomp
+
+The loop is driven by the display link, not by the audio clock. The runtime
+produces 32730 samples per **emulated** second; while emulation runs below real
+time (e.g. 20–30 fps of a 60 fps game) it produces only 30–50 % of the samples
+the device consumes, so the ring underruns and short silent gaps are expected.
+This is a speed problem, not an audio-buffer bug — AOT/3dsrecomp and the
+renderer work raise fps and the gaps shrink. Nothing outside the audio pipeline
+is affected.
+
 ## Package an unsigned IPA
 
 `scripts/package-ipa.sh` (I1-T2, owned by build-infra) automates this, writing
@@ -380,6 +428,11 @@ If the repo is moved, nothing needs changing — all three are repo-relative.
 | Controller connected but ignored | Look for the "Controller: …" line. If it is absent the pad is not a `GCExtendedGamepad`, or the app was backgrounded. Reattach and check `idevicesyslog` for `controller support started`. |
 | A button stays pressed | Should not happen — Unload, Change ROM, app background and hiding the pad all clear input. If it does, report the exact sequence. |
 | Touchscreen taps do nothing | Touch is only sent while a runtime is loaded, and only on the **lower** screen area; coordinates map to 320×240 pixels. |
+| No sound at all | Check the status line: `audio: on` means the engine started; `audio: muted` means the mute toggle is on; `audio: failed` shows why. `idevicesyslog` logs `audio session failed` / `audio engine failed` / `audio started`. The `.playback` category ignores the iPhone silent switch. |
+| Sound is choppy / cuts in and out | Expected while emulation runs below real time: samples are produced at emulated speed but consumed at wall-clock 32730 Hz, so the ring underruns and gaps are silenced. Raising fps is the fix (AOT/3dsrecomp, renderer). |
+| Pops or clicks | Persistent popping is usually engine restarts (Change ROM / background) or a too-small IO buffer; `setPreferredIOBufferDuration(0.01)` is 10 ms. Buffer underruns themselves become silent gaps, not loud pops. |
+| Audio still playing after Unload / background | Should not happen — Unload, Change ROM, background and exit all stop the engine and deactivate the session. Report it if it does. |
+| Pitch or playback speed sounds wrong | The engine declares Zakuro's `AUDIO_SAMPLE_RATE` (`AudioOutput.sampleRate = 32730`). If `zakuro-core` changes it, update that one constant; the mixer handles the device conversion. |
 
 ## Rebuild after changes
 

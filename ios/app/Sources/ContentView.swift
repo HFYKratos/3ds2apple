@@ -18,6 +18,8 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     /// On-screen controls visibility, persisted between launches.
     @AppStorage("I3.showTouchControls") private var showTouchControls = true
+    /// Audio mute, persisted between launches.
+    @AppStorage("I3.audioMuted") private var audioMuted = false
 
     /// Screen geometry is read from the linked static library.
     private let topScreen = ZakuroScreen(which: 0)
@@ -50,6 +52,7 @@ struct ContentView: View {
         }
         .onAppear {
             model.startControllerSupport()
+            model.setAudioMuted(audioMuted)
             logRuntimeProbe()
         }
         .onChange(of: scenePhase) { newPhase in
@@ -57,6 +60,9 @@ struct ContentView: View {
             if newPhase == .background {
                 model.stopForBackground()
             }
+        }
+        .onChange(of: audioMuted) { muted in
+            model.setAudioMuted(muted)
         }
     }
 
@@ -185,6 +191,13 @@ struct ContentView: View {
             .controlSize(.large)
             .accessibilityIdentifier("toggle-controls")
 
+            Button(audioMuted ? "Unmute audio" : "Mute audio") {
+                audioMuted.toggle()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .accessibilityIdentifier("toggle-audio")
+
             Button(role: .destructive) {
                 model.unload()
             } label: {
@@ -217,6 +230,7 @@ struct ContentView: View {
                 .overlay(bottomTouchOverlay)
 
                 frameStatusLine
+                audioFailureLine
 
                 if showTouchControls {
                     TouchControlsView { bit, pressed in
@@ -251,15 +265,30 @@ struct ContentView: View {
     }
 
     private var frameStatusLine: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
             Text(String(format: "%.0f fps", model.frameStats.fps))
             Text("\(model.frameStats.frames) frames")
             Text("last: \(frameResultLabel(model.frameStats.lastResult))")
+            Text("audio: \(model.audioState.label)")
+                .accessibilityIdentifier("audio-status")
         }
         .font(.caption2)
         .foregroundColor(.secondary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
         .frame(maxWidth: .infinity, alignment: .center)
         .accessibilityIdentifier("frame-status")
+    }
+
+    @ViewBuilder
+    private var audioFailureLine: some View {
+        if let failure = model.audioState.failureMessage {
+            Text("Audio: \(failure)")
+                .font(.caption2)
+                .foregroundColor(.red)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .accessibilityIdentifier("audio-error")
+        }
     }
 
     @ViewBuilder
@@ -306,7 +335,7 @@ struct ContentView: View {
     }
 
     private var footer: some View {
-        Text("I3 · input + frame loop · interpreter only, no JIT")
+        Text("I3 · input + audio + frame loop · interpreter only, no JIT")
             .font(.caption2)
             .foregroundColor(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)
