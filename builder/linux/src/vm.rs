@@ -991,10 +991,10 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         drop(listener);
         let reach = probe_ssh("127.0.0.1", port, Duration::from_millis(200));
-        assert!(
-            matches!(reach, Reach::Closed | Reach::TimedOut),
-            "{reach:?}"
-        );
+        // A released port can be reused by another process between drop() and
+        // the probe on a busy CI host; the property under test is that it is
+        // not mistaken for an SSH banner.
+        assert!(!reach.is_ssh(), "{reach:?}");
     }
 
     #[test]
