@@ -10,6 +10,7 @@
 - [可行性评估 v0.2](docs/feasibility.md)：3dsrecomp + Zakuro 的通用 AOT 路线、iOS 缺口、工作量与风险。
 - [协作与迭代指南](AGENTS.md)（Agent 必读）
 - [里程碑](docs/milestones.md)：M0 iOS 构建链路已打通（macOS VM → IPA → 真机）。
+- [Pocket Native 评估](docs/pocket-native.md)：最接近本项目的 AOT 参考实现。
 - [iOS 集成](docs/integration.md)：Zakuro 静态库构建与 C ABI。
 - [可行性评估 v0.1](docs/feasibility-v0.1.md)：路线 A（Azahar/Cytrus）、B（AOT）、C（反编译）的横向对比。
 

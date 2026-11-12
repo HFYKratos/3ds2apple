@@ -23,8 +23,9 @@
    不要恢复 `zakuro-gpu` 的 `jit` 默认特性（见 `docs/integration.md`）。
 5. **只用用户自己的 ROM**：不提供 ROM 下载/破解/密钥分发；兼容性报告只描述
    游戏与 bug，不写获取途径。
-6. **许可证**：本项目 Apache-2.0；Zakuro、3dsrecomp 为 MIT。不要粘贴 GPL 代码
-   （Azahar、TriAevum 仅作参考，不进入本仓库代码）。
+6. **许可证**：本项目 Apache-2.0；Zakuro、3dsrecomp、Pocket Native 为 MIT。
+   复用 MIT 代码必须保留版权/许可声明；不要粘贴 GPL 代码（Azahar、TriAevum
+   仅作参考，不进入本仓库代码）。
 7. **一个作用域一个写者**：同一目录/文件不要两个 Agent 同时改；用 worktree + 分支。
 8. **提交前自测**：Rust 至少 `cargo check`；iOS 至少 `xcodebuild` 成功；文档改动
    检查链接。不要提交"只在我机器上能跑"的东西。
@@ -71,6 +72,7 @@ unsigned IPA → Windows Sideloadly/AltStore → iPhone
 | SwiftUI 壳 | 待建（I1） | ROM 导入、上下屏、音频、GameController、设置 |
 | 3dsrecomp | 上游 `fearkov/3dsrecomp` | 构建时 ARM→C；不修改游戏数据 |
 | Zakuro | 上游 `fearkov/zakuro` | HLE 运行时；本地补丁见构建脚本 |
+| Pocket Native | <https://github.com/whovian64/pocket-native> | **主要参考/候选上游**：Zakuro + 3dsrecomp AOT fork，GLES 渲染器、`port` 静态链接、`titles/` 游戏 profile；MIT |
 | 构建机 | CachyOS + macOS VM | Xcode 16.4 / iOS 18.5 SDK；Rust 1.99.1 |
 | 签名/安装 | Windows | Sideloadly / AltStore；Apple ID 只由用户本人输入 |
 
@@ -122,15 +124,21 @@ unsigned IPA → Windows Sideloadly/AltStore → iPhone
 **验收**：第一款游戏到标题/首个可操作画面；20 分钟不崩；输入能过标题；
 截图/日志归档。
 
-### I3 — 音频、输入、性能与 3dsrecomp（3–4 周）
+### I3 — 输入、3dsrecomp、音频与渲染（4–6 周）
+
+> 参考实现：**Pocket Native**（MIT，Zakuro + 3dsrecomp 的 AOT 分支，见
+> `docs/pocket-native.md`）。其 `recompiler/src/port.rs` 已给出静态 `Linked` 的
+> 完整范式，`titles/` 有 Pokémon Y/AS/USUM 的 profile，`engine/gpu` 有 GLES
+> 渲染器，应优先复用/参考，不要从零推导。
 
 | 任务 | 交付 | 写者 |
 |---|---|---|
-| I3-T1 音频 | `zk_take_audio` → AVAudioEngine | ios-shell |
-| I3-T2 触摸/手柄 | GameController + 触摸 overlay + 圆盘摇杆 | ios-shell |
-| I3-T3 3dsrecomp 接入 | 第一款游戏的 C 代码 + `libgame.a` 链接 | runtime-ffi + build-infra |
-| I3-T4 性能基线 | 速度 %、1% low、热降频、内存 | qa |
-| I3-T5 可玩性 | 3D Land 可玩 20 分钟；存档 | Lead + qa |
+| I3-T1 输入 | 触摸 overlay + GameController + `zk_set_input`（已完成构建） | ios-shell |
+| I3-T2 3dsrecomp 静态链接 | 按 Pocket Native `port.rs` 的 `Linked::new` 把生成 C 静态链进 `libzakuro_ios.a`；`libgame.a` + Xcode 链接 | runtime-ffi + build-infra |
+| I3-T3 音频 | `zk_take_audio` → AVAudioEngine | ios-shell |
+| I3-T4 渲染器评估 | Pocket Native GLES 3.1 渲染器/iOS GLES spike；决定 v1 用 GLES 还是 Metal/MoltenVK | runtime-ffi + ios-shell |
+| I3-T5 性能基线 | 速度 %、1% low、热降频、内存；对比 3dsrecomp 前后 | qa |
+| I3-T6 可玩性 | 第一款游戏可玩 20 分钟；存档 | Lead + qa |
 
 **验收**：第一款游戏"能正常玩"；构建可复现；性能数据入库。
 
@@ -261,3 +269,5 @@ Lead 决定是否调整迭代或找用户确认。
 - `docs/milestones.md`：M0 记录与踩坑。
 - `docs/integration.md`：静态库构建与 C ABI。
 - 上游：<https://github.com/fearkov/zakuro>、<https://github.com/fearkov/3dsrecomp>。
+- **Pocket Native**（MIT）：<https://github.com/whovian64/pocket-native>；评估见
+  `docs/pocket-native.md`。

@@ -9,6 +9,7 @@ code is vendored here.
 |---|---|---|
 | [Zakuro](https://github.com/fearkov/zakuro) | MIT | 3DS HLE runtime that uses AOT recompilation instead of a JIT |
 | [3dsrecomp](https://github.com/fearkov/3dsrecomp) | MIT (declared in `Cargo.toml`) | ARM / Thumb / VFP → C static recompiler |
+| [Pocket Native](https://github.com/whovian64/pocket-native) | MIT | Zakuro + 3dsrecomp AOT fork for Linux handhelds/Android; primary reference/candidate upstream for static `Linked` integration, GLES renderer and per-game `titles/` profiles |
 
 ## Reference only (not linked into the planned pipeline)
 
