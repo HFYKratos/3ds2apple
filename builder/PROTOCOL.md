@@ -1,9 +1,10 @@
 # Builder ↔ Build Agent protocol, version 1
 
-> **Status: design.** This is the normative v1 interface between the
-> cross-platform Builder and the macOS Build Agent. No implementation exists
-> yet; the message shapes, states and error codes below are the contract the
-> work packages in [README.md](README.md) implement and test against.
+> **Status: v1 implemented for the SSH binding.** The message shapes, states
+> and error codes below are implemented in Rust in `builder/core`,
+> `builder/cli` and `builder/agent`, and are locked by the golden fixtures in
+> `builder/tests/protocol/`. The HTTP binding described in §3.2 is not
+> implemented yet; see §15 for exactly what is available.
 
 The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
@@ -953,13 +954,15 @@ The following are MUSTs for both sides, beyond the transport-specific rules in
 
 The protocol is designed to be tested without macOS:
 
-- **Fake Agent** (`builder/tests/fake-agent/`): implements both bindings in
-  process with scriptable scenarios (success, each error code, upload
-  interruption, log replay, restart, artifact corruption). Used by the
-  Builder's unit/integration tests on Linux and Windows CI.
-- **Golden fixtures** (`builder/tests/protocol/`): versioned JSON requests and
-  expected replies/events per scenario; a fixture mismatch fails CI and forces
-  a deliberate protocol change review.
+- **Fake Agent**: in this release the real Agent binary runs with
+  `--fake-build`, which replaces only the macOS script execution with
+  scriptable outcomes (`success`, `fail-recompiling`, `fail-packaging`,
+  `slow`, `corrupt-artifact`) while keeping the real protocol, queue, log
+  stream, cancellation and artifact path. It is used by the CLI end-to-end
+  tests on Linux.
+- **Golden fixtures** (`builder/tests/protocol/`): versioned JSON requests,
+  expected replies/events and data-channel status lines; a fixture mismatch
+  fails `cargo test` and forces a deliberate protocol change review.
 - **State-machine tests:** every allowed/forbidden transition, idempotent
   `job.create`/`cancel`/`delete`, cancel during each stage, restart recovery.
 - **Chaos tests:** kill the control connection mid-upload and mid-build;
@@ -1036,7 +1039,45 @@ and a "start new build" action (new job, same inputs; the Agent already
 deleted the previous job's inputs unless `keep_input` was set — the UI warns
 before the retry).
 
-## 14. Deferred features
+## 14. Implementation status of this release
+
+This section is informative; §1–§13 remain the contract.
+
+Implemented and covered by golden fixtures (`builder/tests/protocol/*.json`) and
+the CLI/Agent end-to-end tests:
+
+- frame types `hello`, `ping`/`pong`, `job.create`, `job.created`,
+  `job.input_ready`, `job.status`, `job.subscribe`, `job.event`, `job.cancel`,
+  `job.list`, `job.delete`, `artifact.manifest`, `artifact.ack`, `error`;
+- SSH binding: `stdio`, `upload` (resumable by offset), `upload-status`,
+  `download-artifact` (resumable by offset), `doctor --json`, with the
+  `ssh-dispatch` forced-command allowlist;
+- job states `created → queued → running → terminal`, one build slot, FIFO
+  queue, idempotent `job.create` by `request_id`, cancellation with a SIGTERM
+  grace then SIGKILL on the process group, restart recovery to `interrupted`;
+- NDJSON event log with per-job `seq`, replay by `since_seq`, 32 KiB line
+  splitting, and state transitions persisted before they are reported;
+- cleanup of uploaded inputs unless `keep_input` is set, plus name-scoped
+  build-product cleanup in the checkout, and the retention `gc` command;
+- artifact record with IPA/manifest size+SHA256, re-verified by the Agent and
+  by the Builder while downloading.
+
+Not implemented in this release (no client may rely on them):
+
+- the HTTP+SSE binding (§3.2) and token pairing against a live HTTP listener
+  (`builder-agent pair` only generates and stores the token hash);
+- `transport.mode: "path"` (`job.input_from_path`);
+- `heartbeat` events (the stream simply stays quiet when a stage produces no
+  output);
+- automatic `input_timeout` expiry of abandoned `created` jobs (the `expires_at`
+  field is reported, but the daemon does not sweep it; `gc` cleans stale staging
+  files);
+- `rate_limited` responses and HTTP `429` handling (SSH mode has no token
+  rate limiting);
+- a Builder-embedded expected source revision; the CLI sends one only when
+  `--expected-revision` is given.
+
+## 15. Deferred features
 
 Explicitly out of scope for v1 (the protocol reserves room for them, but no
 client may rely on them):

@@ -1,0 +1,28 @@
+{
+  "name": "subscribed job with events",
+  "request_type": "job.subscribe",
+  "request": {"type": "job.subscribe", "tag": "t-30", "job_id": "job_01J8Z3K4T9ABCDEFGHJKMNPQRS", "since_seq": 0},
+  "reply_type": "job.subscribe.result",
+  "reply": {
+    "type": "job.subscribe.result",
+    "tag": "t-30",
+    "job": {
+      "job_id": "job_01J8Z3K4T9ABCDEFGHJKMNPQRS",
+      "state": "running",
+      "stage": "recompiling",
+      "created_at": "2026-11-12T19:33:10Z",
+      "updated_at": "2026-11-12T19:43:40Z",
+      "stages": [],
+      "inputs_present": true,
+      "inputs_kept": false
+    },
+    "earliest_seq": 1,
+    "log_truncated": false
+  },
+  "events": [
+    {"type": "job.event", "seq": 187, "job_id": "job_01J8Z3K4T9ABCDEFGHJKMNPQRS", "ts": "2026-11-12T19:44:01.120Z", "kind": "log", "stage": "recompiling", "source": "script", "level": "info", "line": "[build-recomp-ios] compiling generated code (318/761)"},
+    {"type": "job.event", "seq": 188, "job_id": "job_01J8Z3K4T9ABCDEFGHJKMNPQRS", "ts": "2026-11-12T19:44:02Z", "kind": "state", "state": "running", "stage": "linking"},
+    {"type": "job.event", "seq": 189, "job_id": "job_01J8Z3K4T9ABCDEFGHJKMNPQRS", "ts": "2026-11-12T19:58:02Z", "kind": "artifact", "stage": "verifying", "artifact": {"name": "pokemon-y-AOT.ipa", "bytes": 98765432, "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}},
+    {"type": "job.event", "seq": 190, "job_id": "job_01J8Z3K4T9ABCDEFGHJKMNPQRS", "ts": "2026-11-12T19:58:02Z", "kind": "end", "state": "succeeded", "message": "build succeeded"}
+  ]
+}

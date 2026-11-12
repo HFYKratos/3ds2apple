@@ -1,0 +1,19 @@
+{
+  "name": "build failure error frame",
+  "request_type": "job.status",
+  "request": {"type": "job.status", "tag": "t-31", "job_id": "job_01J8Z3K4T9ABCDEFGHJKMNPQRS"},
+  "reply_type": "error",
+  "reply": {
+    "type": "error",
+    "tag": "t-31",
+    "error": {
+      "code": "build_failed",
+      "message": "xcodebuild failed (exit 65) while linking the app",
+      "stage": "packaging",
+      "hint": "Undefined _recomp_* symbols: check that -lzakuro_ios is listed before -lgame.",
+      "retryable": false,
+      "details": {"exit_code": 65, "log_ends_at_seq": 1204},
+      "log_tail": ["[build-game-ipa] error: ..."]
+    }
+  }
+}

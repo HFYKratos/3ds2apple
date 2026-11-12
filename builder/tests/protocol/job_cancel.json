@@ -1,0 +1,7 @@
+{
+  "name": "cancel a running job",
+  "request_type": "job.cancel",
+  "request": {"type": "job.cancel", "tag": "t-40", "job_id": "job_01J8Z3K4T9ABCDEFGHJKMNPQRS", "reason": "user_canceled"},
+  "reply_type": "job.cancel.result",
+  "reply": {"type": "job.cancel.result", "tag": "t-40", "job_id": "job_01J8Z3K4T9ABCDEFGHJKMNPQRS", "state": "canceling"}
+}

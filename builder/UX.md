@@ -1,9 +1,9 @@
 # Builder user experience
 
-> **Status: design.** These are the intended v1 screens and flows for the
-> Windows/Linux Builder. The protocol they sit on is in
-> [PROTOCOL.md](PROTOCOL.md); the technology behind them is in
-> [STACK.md](STACK.md).
+> **Status: CLI implemented, GUI design.** The command line client and its
+> flows below exist today (`zkb`); the Windows/Linux GUI screens are still
+> design only. The protocol underneath is in [PROTOCOL.md](PROTOCOL.md); the
+> technology choice is in [STACK.md](STACK.md).
 
 The Builder has one job: take a ROM the user owns from a Windows or Linux
 desktop, build it on a macOS host the user controls, and hand back an unsigned
@@ -353,8 +353,8 @@ frames for scripting.
 
 ```bash
 # host setup (prints the authorized_keys line and fingerprint)
-zkb host add --ssh builder@mac-mini.local --port 22 --name office
-zkb host doctor office
+zkb host add --name office --ssh builder@mac-mini.local --port 22
+zkb host test office
 
 # build one game (prints stages, streams logs, downloads and verifies)
 zkb build --host office --rom "./ROM/Pokemon Y.cci" \
