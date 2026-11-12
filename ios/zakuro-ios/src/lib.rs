@@ -8,9 +8,11 @@
 //!
 //! ## Error reporting
 //!
-//! `zk_create` records a human-readable, thread-local message on failure;
-//! [`zk_last_error`] returns it. A successful `zk_create` clears the message.
-//! Other `zk_*` functions never touch it.
+//! `zk_create`, the saved-state calls in [`savestate`] and the hardware and
+//! presenter calls record a human-readable, thread-local message on failure;
+//! [`zk_last_error`] returns it. A successful `zk_create`, state measurement,
+//! state copy or state load clears the message. Calls that only read
+//! diagnostics never touch it.
 //!
 //! ## Linked game code
 //!
@@ -63,6 +65,17 @@
 //! presented system whose renderer stayed on the CPU presents its pixels through
 //! the same Metal layer. The existing `zk_*` signatures are unchanged.
 //!
+//! ## Saved states
+//!
+//! [`savestate`] exposes Zakuro's instant save/load pair to the app: the whole
+//! console (CPU, kernel, services, GPU state and the four memories) is written
+//! to one compressed blob between frames and put back later, with
+//! [`savestate::zk_save_state_size`] / [`savestate::zk_save_state_copy`] /
+//! [`savestate::zk_load_state`]. The container is checked before Zakuro reads
+//! it, so a truncated or damaged file cannot ask the allocator for gigabytes or
+//! touch the running console. Measured states are kept until copied/discarded
+//! and released with the handle.
+//!
 //! Zakuro's own `log` records (the loader's linked-code warnings, GPU warnings)
 //! are forwarded to stderr by [`zk_create`], because an iOS app installs no
 //! logger and they would otherwise be dropped.
@@ -83,9 +96,10 @@ use zakuro_gpu::SharedDevice;
 
 mod perf;
 mod presenter;
+mod savestate;
 
 thread_local! {
-    /// Last `zk_create` failure on the current thread; empty when there is none.
+    /// Last failure recorded on the current thread; empty when there is none.
     static LAST_ERROR: RefCell<CString> = RefCell::new(CString::default());
     /// Last text [`zk_recompiled_status`] or [`zk_profiler_hot_spots`] returned
     /// on the current thread. Kept apart from `LAST_ERROR` so those calls never
@@ -570,14 +584,19 @@ fn log_linked_outcome(system: &System) {
     eprintln!("zk_create: AOT inactive: interpreting everything: {reason}");
 }
 
-/// Returns the last `zk_create` failure on the calling thread, or `NULL` when
-/// there is no pending error.
+/// Returns the last failure on the calling thread, or `NULL` when there is no
+/// pending error.
+///
+/// `zk_create`, the saved-state calls (`zk_save_state_size`,
+/// `zk_save_state_copy`, `zk_load_state`), the hardware switches and the
+/// presenter calls record their failures here; a successful `zk_create`,
+/// state measurement/copy/load clears the message.
 ///
 /// The returned pointer is owned by this library and remains valid until the
-/// next `zk_create` or `zk_last_error` call **on the same thread**. Copy the text
-/// (for example `String(cString:)` in Swift) if it must outlive that; never free
-/// it. A failure recorded on a background queue can only be read back on that
-/// same thread.
+/// next call that records or clears an error on **the same thread**. Copy the
+/// text (for example `String(cString:)` in Swift) if it must outlive that; never
+/// free it. A failure recorded on a background queue can only be read back on
+/// that same thread.
 #[no_mangle]
 pub extern "C" fn zk_last_error() -> *const c_char {
     match LAST_ERROR.try_with(|slot| {
@@ -1143,9 +1162,17 @@ pub extern "C" fn zk_set_input(
     });
 }
 
+/// Releases a handle returned by `zk_create()`. Safe to call with NULL.
+///
+/// Also releases a saved state the handle had measured and not copied yet (see
+/// [`savestate::zk_save_state_discard`]), so an abandoned save does not outlive
+/// the runtime.
 #[no_mangle]
 pub extern "C" fn zk_destroy(system: *mut c_void) {
     if !system.is_null() {
+        // The handle's measured saved state is owned by this library, not by the
+        // `System`; release it before the pointer can be handed to a new system.
+        savestate::forget(system);
         // SAFETY: `system` is a pointer produced by `zk_create` (a `Box<System>`
         // leaked through `Box::into_raw`) and is freed exactly once here. The C
         // ABI requires the caller to stop using the handle afterwards.

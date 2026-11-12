@@ -166,8 +166,94 @@ void zk_set_input(zk_system_t system, zk_buttons_t buttons, float circle_x,
                   float circle_y, int32_t touch, uint16_t touch_x,
                   uint16_t touch_y);
 
-/** Releases a handle returned by zk_create(). Safe to call with NULL. */
+/**
+ * Releases a handle returned by zk_create(). Safe to call with NULL.
+ *
+ * Also releases a saved state the handle measured and did not copy yet (see
+ * zk_save_state_discard()), so an abandoned save does not outlive the runtime.
+ */
 void zk_destroy(zk_system_t system);
+
+/* ------------------------------------------------- saved states (instant) -- */
+
+/**
+ * The largest one saved state may be, in bytes, in either direction. Mirrors
+ * ZK_SAVE_STATE_MAX_BYTES in ios/zakuro-ios/src/savestate.rs; keep both in
+ * step. The raw console memories are at most a New3DS's 256 MiB FCRAM plus
+ * 6 MiB VRAM and 1 MiB DSP RAM/AXI WRAM, so a bigger length is a bug or a
+ * damaged file, and the library refuses it instead of asking for the memory.
+ */
+#define ZK_SAVE_STATE_MAX_BYTES (512u * 1024u * 1024u)
+
+/** zk_load_state() results. */
+enum {
+    ZK_LOAD_STATE_LOADED = 0,        /**< The state was applied. */
+    ZK_LOAD_STATE_BAD_HANDLE = -1,   /**< NULL system handle. */
+    ZK_LOAD_STATE_BAD_ARGUMENT = -2, /**< NULL data with a length, or a length
+                                          past ZK_SAVE_STATE_MAX_BYTES. */
+    ZK_LOAD_STATE_REFUSED = -3       /**< Not a state this console can take
+                                          (another game, another Zakuro
+                                          version, another console model, or
+                                          damaged/truncated bytes). Nothing was
+                                          applied. */
+};
+
+/**
+ * Bytes a saved state of `system` takes, 0 on failure.
+ *
+ * Serializes the whole console once (tens of milliseconds up to about a
+ * second) and keeps the blob inside the library, so the following
+ * zk_save_state_copy() copies that exact snapshot instead of serializing
+ * again. Call it between frames on the runtime's serial queue with the frame
+ * loop paused: the blob is the console as it was at this call.
+ *
+ * A success clears the calling thread's last error; a failure returns 0 and
+ * writes the reason to zk_last_error() on that thread.
+ */
+size_t zk_save_state_size(zk_system_t system);
+
+/**
+ * Copies the measured saved state into `out`; returns its full length, 0 on
+ * failure (reason in zk_last_error()).
+ *
+ * `out == NULL` (or `capacity == 0`) only reports the length and keeps the
+ * blob, like zk_save_state_size(). Otherwise it copies
+ * `min(capacity, length)` bytes: a short buffer is logged and the blob stays
+ * for a retry with the full length, while a complete copy releases it. When no
+ * blob is kept for the handle (no zk_save_state_size() call, or the kept one
+ * belongs to another handle) the console is serialized here first, so a copy
+ * into an already large enough buffer works on its own.
+ *
+ * `out` must point to `capacity` writable bytes (the zk_read_screen() contract);
+ * a real state is never 0 bytes long.
+ */
+size_t zk_save_state_copy(zk_system_t system, uint8_t *out, size_t capacity);
+
+/**
+ * Releases the state zk_save_state_size()/zk_save_state_copy() kept for
+ * `system`, without copying it, when a measured save is abandoned.
+ *
+ * The kept blob is the size of the state (tens of MiB). A complete copy, a
+ * load, a destroy and the next measurement release it too. Safe with NULL.
+ */
+void zk_save_state_discard(zk_system_t system);
+
+/**
+ * Loads a saved state back into `system`: 0 (ZK_LOAD_STATE_LOADED) on success,
+ * a negative ZK_LOAD_STATE_* code otherwise, with the reason in
+ * zk_last_error() on the calling thread. A success clears that error.
+ *
+ * The container is checked before Zakuro reads it (magic, truncation, section
+ * lengths and the four memory sizes), so a truncated or damaged file is
+ * refused without a many-gigabyte allocation request and without touching the
+ * running console. Zakuro then checks the format version and title ID and
+ * applies nothing unless the whole state was read and accepted.
+ *
+ * Call it between frames on the runtime's serial queue. After a successful
+ * load, drop audio buffered before the load (the DSP state went back too) and
+ * let the next frame redraw; the GPU's guest-side state is part of the state.
+ */
+int32_t zk_load_state(zk_system_t system, const uint8_t *data, size_t length);
 
 /* ------------------------------- presentation on the app's CAMetalLayer -- */
 

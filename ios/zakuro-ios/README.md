@@ -124,13 +124,17 @@ The app-side thresholds, log lines and diagnostics fields are documented in
 | Function | Purpose |
 |---|---|
 | `zk_create(rom, data_dir)` | Load a decrypted ROM; returns an opaque handle or NULL |
-| `zk_last_error()` | Last `zk_create` error on the calling thread |
+| `zk_last_error()` | Last failure on the calling thread (`zk_create`, save-state and hardware/presenter calls) |
 | `zk_run_frame(system)` | Run one 3DS frame (0 completed, 1 exited, negative fault) |
 | `zk_screen_width(which)` / `zk_screen_height(which)` | 400×240 upper, 320×240 lower |
 | `zk_read_screen(system, which, out, cap)` | Copy RGBA8 pixels; returns full byte count |
 | `zk_take_audio(system, out, cap)` | Drain interleaved stereo `i16` PCM |
 | `zk_set_input(system, buttons, cx, cy, touch, tx, ty)` | Push buttons, Circle Pad and touch |
-| `zk_destroy(system)` | Release the runtime |
+| `zk_destroy(system)` | Release the runtime (and a measured saved state it did not copy) |
+| `zk_save_state_size(system)` | Serialize the console once and return the saved state's byte count; the blob is kept for the copy. `0` on error |
+| `zk_save_state_copy(system, out, cap)` | Copy the measured saved state, or only report its length with `out == NULL`; returns the full byte count (a short buffer is logged), `0` on error |
+| `zk_save_state_discard(system)` | Release a measured saved state that will not be copied (tens of MiB) |
+| `zk_load_state(system, data, length)` | Restore a saved state: `0` loaded, `-1` bad handle, `-2` bad argument, `-3` refused |
 | `zk_presenter_create(ui_view, width, height)` | Make a Vulkan presenter for a `UIView` whose layer is a `CAMetalLayer`; returns an opaque presenter or NULL |
 | `zk_presenter_resize(presenter, width, height)` | New drawable size in pixels (rotation/layout); the swapchain rebuilds on the next present |
 | `zk_presenter_destroy(presenter)` | Release the presenter; destroy its systems first |
@@ -164,14 +168,63 @@ bridging header); the probe/setter switches are declared in `src/lib.rs` only
 and are documented here, so the app does not call them today. The build-time
 `ZAKURO_IOS_HARDWARE` switch needs no header change.
 
+## Saved states
+
+The library can write the whole console — CPU, kernel objects, services, GPU
+state and the four memories — to one compressed blob between frames and put it
+back later, which is what instant save slots need. A blob is tens of MiB: the
+raw memories are 128 MiB of FCRAM plus 6 MiB of VRAM and 1 MiB of DSP RAM/AXI
+WRAM on an Old3DS build (256 MiB FCRAM on a New3DS build), LZ4-compressed into
+one file. The exact size is what `zk_save_state_size` returns; the hard limit in
+either direction is `ZK_SAVE_STATE_MAX_BYTES` (512 MiB).
+
+The C ABI is a size → copy protocol, because the compressed size is only known
+after the state has been written:
+
+1. `zk_save_state_size(system)` serializes the console once and returns the
+   byte count, keeping the blob inside the library.
+2. The app allocates that many bytes and calls
+   `zk_save_state_copy(system, out, capacity)`, which copies the kept snapshot
+   and returns its length. A short buffer copies what fits, logs it, and
+   returns the full length so the app can retry with a bigger buffer; the kept
+   blob makes the retry cheap. A complete copy releases it.
+3. `zk_load_state(system, data, length)` restores a blob: `0` on success, `-1`
+   for a NULL handle, `-2` for NULL data or a length past the limit, `-3` when
+   refused. Before Zakuro reads the state its container is checked (the magic,
+   truncation, the section lengths and that the four memories unpack to the
+   sizes this console has), so a truncated or damaged file is refused without a
+   many-gigabyte allocation and without touching the running console. Zakuro
+   then checks the state's format version and title ID and applies nothing
+   unless the whole state was read and accepted. The reason for a failure is in
+   `zk_last_error` on the calling thread; a success clears it.
+
+A measured state is a snapshot of the console at the `zk_save_state_size` call:
+running frames afterwards does not change the bytes the copy gets. It is
+released by a complete copy, `zk_save_state_discard`, a load, `zk_destroy`, and
+the next measurement of any handle. An app that measures a state and then
+abandons it must call `zk_save_state_discard`, because the kept blob is the
+size of the state (tens of MiB).
+
+Saves are not files at this level: the app decides where the bytes go (writing
+a temporary file and renaming it into place is the safe order) and reads them
+back before `zk_load_state`. Save and load are not thread-safe either: pause
+the frame loop and call them on the runtime's serial queue like every other
+handle call. After a successful load, drop the audio buffered before it (the
+DSP state went back too) and refresh the HUD; the state also carries the GPU's
+guest-side state, and the hardware paths rebuild the host GPU state from the
+restored memory on the next frame.
+
 ## Threading
 
 - `zk_system_t` is not thread-safe.
 - Every call that takes a handle must run on one serial queue.
-- `zk_last_error` returns a thread-local pointer valid only until the next
-  `zk_create`/`zk_last_error` call on the same thread; copy the text before
+- `zk_last_error` returns a thread-local pointer valid only until the next call
+  that records or clears an error on the same thread; copy the text before
   hopping queues.
 - `zk_destroy` must not run concurrently with any other call on the handle.
+- Save and load follow the same rule and run between frames: a save or load
+  copies the whole console (tens of MiB) and can take from tens of milliseconds
+  to about a second, so the frame loop should be paused for it.
 - The hardware switches (`zk_set_hardware_renderer`, `zk_set_vulkan_library`,
   `zk_set_hardware_option`) are process-wide and are read by the next
   `zk_create`; call them on the runtime's serial queue before loading a ROM.
@@ -237,11 +290,18 @@ normalised-touch → lower-screen mapping) in `src/presenter.rs`; unlike
 `hardware_probe_makes_a_device` they need no Vulkan. The device verification
 steps for hardware rendering and presentation are in [METAL.md](METAL.md) §8.
 
+The saved-state ABI has host tests in `src/savestate.rs`: NULL and argument
+validation, the kept-state life cycle, the container preflight against
+truncated, damaged and foreign states, and a real save → load round trip on a
+console with no ROM loaded. They need no game either, only a few hundred MiB of
+host RAM.
+
 ## Layout
 
 ```text
 src/lib.rs       C ABI, handle/error handling, linked table wiring, hardware FFI
 src/presenter.rs A1 CAMetalLayer presentation: presenter/swapchain FFI, touch mapping
+src/savestate.rs  saved states: size/copy/discard/load FFI, container preflight
 src/perf.rs      frame-time logging and profiler helpers
 build.rs         linked-build title ID validation
 Cargo.toml       staticlib crate; `linked` and `profiling` features
