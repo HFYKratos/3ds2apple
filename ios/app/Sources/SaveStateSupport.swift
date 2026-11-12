@@ -14,6 +14,11 @@
 
 import Foundation
 
+struct SaveStateError: Error, LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
+}
+
 enum SaveStateSupport {
     /// Whether the runtime can take/restore a save state in this build.
     static let isAvailable = false
@@ -25,11 +30,11 @@ enum SaveStateSupport {
     /// Save Manager page instead.
     static let slotCount = 1
 
-    static func save(slot: Int) -> Result<Void, String> {
-        .failure(unavailableReason)
+    static func save(slot: Int) -> Result<Void, SaveStateError> {
+        .failure(SaveStateError(message: unavailableReason))
     }
 
-    static func load(slot: Int) -> Result<Void, String> {
-        .failure(unavailableReason)
+    static func load(slot: Int) -> Result<Void, SaveStateError> {
+        .failure(SaveStateError(message: unavailableReason))
     }
 }
