@@ -175,6 +175,10 @@ if [[ -x /usr/libexec/PlistBuddy ]]; then
   /usr/libexec/PlistBuddy -c 'Add :UIFileSharingEnabled bool true' "$APP_PLIST" >/dev/null
   /usr/libexec/PlistBuddy -c 'Delete :LSSupportsOpeningDocumentsInPlace' "$APP_PLIST" >/dev/null 2>&1 || true
   /usr/libexec/PlistBuddy -c 'Add :LSSupportsOpeningDocumentsInPlace bool true' "$APP_PLIST" >/dev/null
+  # System Metal Performance HUD (FPS / GPU time / memory). Works for
+  # development/self-built apps; useful while the Metal renderer is brought up.
+  /usr/libexec/PlistBuddy -c 'Delete :MetalHudEnabled' "$APP_PLIST" >/dev/null 2>&1 || true
+  /usr/libexec/PlistBuddy -c 'Add :MetalHudEnabled bool true' "$APP_PLIST" >/dev/null
 else
   printf '[package-ipa] warning: PlistBuddy not found; document-sharing keys not injected\n' >&2
 fi
