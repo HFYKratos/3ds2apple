@@ -92,3 +92,15 @@ min iOS 16.0，bundle `com.kratos.3ds2apple`）；`libzakuro_ios.a` 已链接，
 - 触摸 overlay 的 L/Select/Start/R、D-pad、A/B/X/Y 均可见；未接手柄时提示
   `No controller connected — use the on-screen controls`。
 - 截图不入库（AGENTS.md 规则）；此处只记录文字指标。
+
+## I3-T2/I3-T3 AOT 链路（2026-11-12 进行中）
+
+- 在 Linux 上用 pinned upstream 3dsrecomp（recomp-abi `df82e6e`，ABI5/GEN5）
+  对 Pokémon Y 生成 C：**489 个 C 文件，约 635 MiB**，title ID
+  `0004000000055E00`。
+- 已构建 linked `libzakuro_ios.a`（`--features linked`，
+  `ZAKURO_LINKED_PROGRAM_ID=0004000000055E00`），`nm -u` 出现 7 个
+  `_recomp_*` 未定义符号，等待 `libgame.a` 解析。
+- 正在 macOS VM 用 iOS clang 并行（3 路）编译生成 C → `librecomp.a`；
+  完成后链接 `-lzakuro_ios -lgame` 出首个 AOT IPA。
+- 预计首帧/性能对比：纯解释器 26 fps（Pokémon Y 开场）；AOT 后复测。
