@@ -45,6 +45,9 @@ scripts/build-zakuro-ios.sh
 | `zk_take_audio(sys, out, cap)` | 读 interleaved stereo `i16`；返回帧数 |
 | `zk_set_input(sys, buttons, cx, cy, touch, tx, ty)` | 3DS HID 位掩码、圆盘摇杆、触摸 |
 | `zk_destroy(sys)` | 释放 |
+| `zk_linked_code()` | 1 = 该构建带 AOT 生成代码（`linked` feature），0 = 纯解释器壳 |
+| `zk_linked_program_id()` | 编译期链接的游戏 title ID（u64），0 = 无 |
+| `zk_recompiled(sys)` | 1 = 当前 System 正在执行 linked AOT 代码，0 = 回退解释器 |
 
 `buttons` 使用 3DS HID 位布局（`PadState`）：A=1<<0、B=1<<1、Select=1<<2、
 Start=1<<3、Right=1<<4、Left=1<<5、Up=1<<6、Down=1<<7、R=1<<8、L=1<<9、

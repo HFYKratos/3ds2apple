@@ -152,6 +152,23 @@ void zk_set_input(zk_system_t system, zk_buttons_t buttons, float circle_x,
 /** Releases a handle returned by zk_create(). Safe to call with NULL. */
 void zk_destroy(zk_system_t system);
 
+/* ------------------------------------------------ linked (AOT) diagnostics -- */
+
+/**
+ * 1 when this build was compiled with the `linked` feature and carries
+ * 3dsrecomp-generated code, 0 for the plain interpreter shell.
+ */
+int32_t zk_linked_code(void);
+
+/** Title ID (16 hex digits as u64) the linked build was compiled for; 0 = none. */
+uint64_t zk_linked_program_id(void);
+
+/**
+ * 1 when the running System is actually executing the linked code, 0 when it
+ * fell back to the interpreter (title ID / ABI / update mismatch).
+ */
+int32_t zk_recompiled(zk_system_t system);
+
 #ifdef __cplusplus
 }
 #endif
