@@ -267,14 +267,20 @@ struct ContentView: View {
     }
 
     private var frameStatusLine: some View {
-        HStack(spacing: 10) {
-            Text(String(format: "%.0f fps", model.frameStats.fps))
-            Text("\(model.frameStats.frames) frames")
-            Text("last: \(frameResultLabel(model.frameStats.lastResult))")
-            Text("audio: \(model.audioState.label)")
-                .accessibilityIdentifier("audio-status")
-            Text("AOT: \(model.aotStatus.label)")
-                .accessibilityIdentifier("aot-status")
+        VStack(spacing: 2) {
+            HStack(spacing: 10) {
+                Text(String(format: "%.0f fps", model.frameStats.fps))
+                Text("\(model.frameStats.frames) frames")
+                Text("last: \(frameResultLabel(model.frameStats.lastResult))")
+                Text("audio: \(model.audioState.label)")
+                    .accessibilityIdentifier("audio-status")
+            }
+            HStack(spacing: 10) {
+                Text("AOT: \(model.aotStatus.label)")
+                    .accessibilityIdentifier("aot-status")
+                Text(String(format: "speed: %.0f%% of 60 Hz", model.frameStats.fps / 60.0 * 100))
+                    .accessibilityIdentifier("speed-status")
+            }
         }
         .font(.caption2)
         .foregroundColor(.secondary)
