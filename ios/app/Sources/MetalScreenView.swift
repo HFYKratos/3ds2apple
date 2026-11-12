@@ -21,6 +21,7 @@
 //
 
 import QuartzCore
+import SwiftUI
 import UIKit
 
 /// A `UIView` whose backing layer is a `CAMetalLayer`, sized for the presenter
