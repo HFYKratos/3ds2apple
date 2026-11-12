@@ -31,6 +31,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: "com.kratos.3ds2apple"
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_CFBundleDisplayName: "3ds2apple"
+        # Let iTunes/Finder and the Files app see Documents/ (ROM transfer).
+        INFOPLIST_KEY_UIFileSharingEnabled: "YES"
+        INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: "YES"
 
         # --- Info.plist ---------------------------------------------------
         # No checked-in Info.plist: let Xcode synthesize it.
