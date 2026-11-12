@@ -11,6 +11,16 @@
 //! `zk_create` records a human-readable, thread-local message on failure;
 //! [`zk_last_error`] returns it. A successful `zk_create` clears the message.
 //! Other `zk_*` functions never touch it.
+//!
+//! ## Linked game code
+//!
+//! A build with `--features linked` carries one title's 3dsrecomp-generated
+//! tables, which the app links in as a static archive beside this library, and
+//! [`zk_create`] hands them to Zakuro so the game runs as AOT C instead of in
+//! the interpreter. The default build is the interpreter-only shell and links
+//! nothing extra. `RECOMP.md` in this directory has the build and
+//! version-matching rules; [`zk_linked_code`], [`zk_linked_program_id`] and
+//! [`zk_recompiled`] report what a build and a loaded system ended up using.
 
 use std::cell::RefCell;
 use std::ffi::{c_char, c_void, CStr, CString};
@@ -67,6 +77,122 @@ fn clear_last_error() {
     let _ = LAST_ERROR.try_with(|slot| *slot.borrow_mut() = CString::default());
 }
 
+/// One title's code, recompiled by 3dsrecomp at build time and linked into the
+/// app instead of loaded from a library at run time. See `RECOMP.md`.
+#[cfg(feature = "linked")]
+mod linked {
+    use std::ffi::c_void;
+    use std::ptr;
+
+    use zakuro_core::recompiled::Linked;
+
+    // The tables 3dsrecomp's generated C exports: the executable's entry
+    // points, its CRO modules, and what the code was made from (`recomp.h`,
+    // "Exported symbols"; there is no title ID among them).
+    //
+    // The generated archive the app links defines these; a `linked` build
+    // without it fails at the app's final link with undefined `recomp_*`
+    // symbols, which is intended.
+    #[cfg(not(test))]
+    extern "C" {
+        static recomp_abi: u32;
+        static recomp_generation: u32;
+        static recomp_entry_count: u32;
+        static recomp_entries: u8;
+        static recomp_module_count: u32;
+        static recomp_modules: u8;
+        static recomp_origins: u8;
+    }
+
+    /// The 3DS title ID of the game the linked tables came from, baked at build
+    /// time by `build.rs` from `ZAKURO_LINKED_PROGRAM_ID`.
+    ///
+    /// `Linked::new` needs it so the loader can check that the code matches the
+    /// title in the ROM; a `3dsrecomp port` program bakes it into its `main.rs`
+    /// the same way, because the symbols carry the tables but not the title.
+    pub fn program_id() -> Option<u64> {
+        let value = option_env!("ZAKURO_LINKED_PROGRAM_ID")?;
+        let digits = value.trim();
+        let digits = digits
+            .strip_prefix("0x")
+            .or_else(|| digits.strip_prefix("0X"))
+            .unwrap_or(digits);
+        u64::from_str_radix(digits, 16).ok()
+    }
+
+    /// The linked tables as Zakuro's `Linked`, or `None` when the build has no
+    /// title ID to go with them.
+    pub fn code() -> Option<Linked> {
+        let program_id = program_id()?;
+        // SAFETY: `tables` reads the constant tables of the code 3dsrecomp
+        // generated, which the app links in and which live for the whole
+        // process; `recomp.h` declares their layout and `recomp-abi` keeps the
+        // Rust `Linked` in step with it.
+        let (abi, entries, entry_count, modules, module_count, generation, origins) =
+            unsafe { tables() };
+        // SAFETY: the arguments are exactly those tables: the interface
+        // version, the arrays and their counts, and the generation and origins
+        // of the same generated code, as `Linked::new` and `with_origins` ask.
+        Some(unsafe {
+            Linked::new(program_id, abi, entries, entry_count, modules, module_count)
+                .with_origins(generation, origins)
+        })
+    }
+
+    /// The tables' addresses and counts, as `recomp.h` declares them.
+    ///
+    /// # Safety
+    ///
+    /// reads the `recomp_*` tables, which only the generated archive the app
+    /// links defines.
+    #[cfg(not(test))]
+    unsafe fn tables() -> (
+        u32,
+        *const c_void,
+        u32,
+        *const c_void,
+        u32,
+        u32,
+        *const c_void,
+    ) {
+        (
+            recomp_abi,
+            ptr::addr_of!(recomp_entries) as *const c_void,
+            recomp_entry_count,
+            ptr::addr_of!(recomp_modules) as *const c_void,
+            recomp_module_count,
+            recomp_generation,
+            ptr::addr_of!(recomp_origins) as *const c_void,
+        )
+    }
+
+    /// Stand-ins shaped like the tables `recomp.h` declares but holding no code,
+    /// so host unit tests can build a `Linked` without a ROM or a generated
+    /// archive.
+    ///
+    /// The interface version is `recomp.h`'s `RECOMP_ABI`, which upstream raises
+    /// when the layout or meaning of the tables changes.
+    ///
+    /// # Safety
+    ///
+    /// always safe; `unsafe` to match the real `tables`.
+    #[cfg(test)]
+    unsafe fn tables() -> (
+        u32,
+        *const c_void,
+        u32,
+        *const c_void,
+        u32,
+        u32,
+        *const c_void,
+    ) {
+        // aligned for `Entry`/`Module`/`Origins`, only ever used as addresses
+        static EMPTY: u64 = 0;
+        let empty = ptr::addr_of!(EMPTY) as *const c_void;
+        (5, empty, 0, empty, 0, 5, empty)
+    }
+}
+
 /// Returns the last `zk_create` failure on the calling thread, or `NULL` when
 /// there is no pending error.
 ///
@@ -89,6 +215,31 @@ pub extern "C" fn zk_last_error() -> *const c_char {
         // TLS is gone during teardown; report "no error" instead of panicking.
         Err(_) => ptr::null(),
     }
+}
+
+/// 1 when this static library was built with one game's recompiled code linked
+/// in (`--features linked`, see `RECOMP.md`), 0 for the interpreter-only shell.
+#[no_mangle]
+pub extern "C" fn zk_linked_code() -> i32 {
+    if cfg!(feature = "linked") {
+        1
+    } else {
+        0
+    }
+}
+
+/// The 3DS title ID (`0004xxxxxxxxxxxx`) the linked recompiled code was built
+/// from, or 0 when this library has no linked code.
+///
+/// The loader compares it with the title in the ROM: a mismatch logs a warning
+/// and interprets everything rather than running code meant for another game.
+#[no_mangle]
+pub extern "C" fn zk_linked_program_id() -> u64 {
+    #[cfg(feature = "linked")]
+    let id = linked::program_id().unwrap_or(0);
+    #[cfg(not(feature = "linked"))]
+    let id = 0;
+    id
 }
 
 /// Loads a decrypted `.3ds` / `.cci` and returns an opaque `System*`.
@@ -126,9 +277,35 @@ pub extern "C" fn zk_create(rom: *const c_char, data_dir: *const c_char) -> *mut
     // iOS forbids executable memory: no JIT, no recompiled-code discovery here.
     config.find_recompiled = false;
 
+    // One game's AOT code can be linked into the app instead (`RECOMP.md`). The
+    // loader checks its title ID and interface version, and interprets instead
+    // when they do not match.
+    #[cfg(feature = "linked")]
+    {
+        match linked::code() {
+            Some(code) => config.linked = Some(code),
+            None => {
+                eprintln!("zk_create: the linked build has no title ID, interpreting everything")
+            }
+        }
+    }
+
     match loader::load(&rom, config) {
         Ok(system) => {
             clear_last_error();
+            // Whether the loader took the linked tables: it falls back to the
+            // interpreter when the title ID or interface version differs. The
+            // shell can also ask `zk_recompiled` about the handle.
+            #[cfg(feature = "linked")]
+            {
+                if system.recompiled.is_some() {
+                    eprintln!("zk_create: running the recompiled code linked in");
+                } else {
+                    eprintln!(
+                        "zk_create: the code linked in was not used, interpreting everything"
+                    );
+                }
+            }
             Box::into_raw(Box::new(system)) as *mut c_void
         }
         Err(error) => {
@@ -154,6 +331,25 @@ pub extern "C" fn zk_run_frame(system: *mut c_void) -> i32 {
         FrameOutcome::Completed => 0,
         FrameOutcome::Exited => 1,
         FrameOutcome::Faulted => -1,
+    }
+}
+
+/// 1 when this `System` is running 3dsrecomp code, 0 when the interpreter runs
+/// everything (no recompiled code for the title, or the loader refused it).
+///
+/// For QA logs and performance triage: an AOT build that reports 0 here is
+/// interpreting, which is slow, not broken.
+#[no_mangle]
+pub extern "C" fn zk_recompiled(system: *mut c_void) -> i32 {
+    if system.is_null() {
+        return 0;
+    }
+    // SAFETY: see `zk_run_frame`: a live handle, read-only, on the serial queue.
+    let system = unsafe { &*(system as *const System) };
+    if system.recompiled.is_some() {
+        1
+    } else {
+        0
     }
 }
 
@@ -186,7 +382,11 @@ pub extern "C" fn zk_read_screen(
     // SAFETY: see `zk_run_frame`: serial calls guarantee exclusive access to the
     // `System` behind `system`.
     let system = unsafe { &mut *(system as *mut System) };
-    let screen = if which == 0 { Screen::Top } else { Screen::Bottom };
+    let screen = if which == 0 {
+        Screen::Top
+    } else {
+        Screen::Bottom
+    };
     let pixels = system.read_screen(screen);
     let n = pixels.len().min(capacity);
     // SAFETY: `out` is non-NULL and the caller guarantees `capacity` writable
@@ -198,11 +398,7 @@ pub extern "C" fn zk_read_screen(
 
 /// Copies interleaved stereo i16 samples into `out`. Returns frames written.
 #[no_mangle]
-pub extern "C" fn zk_take_audio(
-    system: *mut c_void,
-    out: *mut i16,
-    capacity: usize,
-) -> usize {
+pub extern "C" fn zk_take_audio(system: *mut c_void, out: *mut i16, capacity: usize) -> usize {
     if system.is_null() || out.is_null() {
         return 0;
     }
@@ -271,7 +467,10 @@ mod tests {
     use std::ffi::{c_char, CStr};
     use std::ptr;
 
-    use super::{clear_last_error, set_last_error, zk_create, zk_last_error};
+    use super::{
+        clear_last_error, set_last_error, zk_create, zk_last_error, zk_linked_code,
+        zk_linked_program_id, zk_recompiled,
+    };
 
     /// Copies the current thread's last error, if any.
     fn last_error_text() -> Option<String> {
@@ -282,7 +481,11 @@ mod tests {
         // SAFETY: the pointer comes from `zk_last_error` and stays valid until
         // the next `zk_create` / `zk_last_error` call on this thread; it is read
         // immediately here.
-        Some(unsafe { CStr::from_ptr(pointer) }.to_string_lossy().into_owned())
+        Some(
+            unsafe { CStr::from_ptr(pointer) }
+                .to_string_lossy()
+                .into_owned(),
+        )
     }
 
     #[test]
@@ -312,7 +515,10 @@ mod tests {
         let system = zk_create(ptr::null(), ptr::null());
         assert!(system.is_null());
         let message = last_error_text().expect("null rom must set an error");
-        assert!(message.contains("rom path is NULL"), "unexpected: {message}");
+        assert!(
+            message.contains("rom path is NULL"),
+            "unexpected: {message}"
+        );
     }
 
     #[test]
@@ -340,5 +546,48 @@ mod tests {
         assert_eq!(worker.as_deref(), Some("worker thread"));
         // The worker's write did not clobber this thread's message.
         assert_eq!(last_error_text().as_deref(), Some("main thread"));
+    }
+
+    #[test]
+    fn null_handle_reports_no_recompiled_code() {
+        assert_eq!(zk_recompiled(ptr::null_mut()), 0);
+    }
+
+    #[test]
+    fn linked_build_reports_its_knobs() {
+        #[cfg(feature = "linked")]
+        {
+            assert_eq!(zk_linked_code(), 1);
+            let id = zk_linked_program_id();
+            assert_ne!(id, 0, "the linked feature needs ZAKURO_LINKED_PROGRAM_ID");
+            assert_eq!(super::linked::program_id(), Some(id));
+            let code = super::linked::code().expect("tables for the build-time title ID");
+            // The stand-in tables carry a layout-compatible interface version, so
+            // Zakuro turns them into a Library; they hold no code.
+            let library = zakuro_core::recompiled::Library::linked(&code)
+                .expect("accepted interface version");
+            assert_eq!(library.describe(), "0 entry points, 0 modules");
+        }
+        #[cfg(not(feature = "linked"))]
+        {
+            assert_eq!(zk_linked_code(), 0);
+            assert_eq!(zk_linked_program_id(), 0);
+        }
+    }
+
+    #[cfg(feature = "linked")]
+    #[test]
+    fn linked_abi_mismatch_is_refused() {
+        use zakuro_core::recompiled::{Library, Linked};
+
+        // Interface version 3 is older than the oldest one Zakuro accepts, so a
+        // `Linked` built for it is refused and the loader interprets instead.
+        // SAFETY: the pointers are never read; the version is checked first.
+        let old = unsafe { Linked::new(0, 3, ptr::null(), 0, ptr::null(), 0) };
+        let error = match Library::linked(&old) {
+            Ok(_) => panic!("interface version 3 must be refused"),
+            Err(error) => error,
+        };
+        assert!(error.contains("version"), "unexpected: {error}");
     }
 }
