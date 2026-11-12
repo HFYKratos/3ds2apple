@@ -25,11 +25,22 @@
 //! keeps a real Metal layer for the system Metal HUD, though the pixels still
 //! travel through the CPU.
 //!
+//! The screens can be arranged and rotated (`ScreenLayout`, `ScreenOrientation`)
+//! and the app sets that through [`zk_presenter_set_layout`] and
+//! [`zk_presenter_set_orientation`], so the console layout is not fixed to the
+//! stacked portrait arrangement: side by side, a single screen and the console
+//! arrangement turned a quarter turn all present through the same swapchain.
+//! [`zk_present_layout_size`] reports the pixels the chosen arrangement takes at
+//! its native size, which is the drawable size the app should give the layer;
+//! [`zk_present_touch_map`] applies the same layout when mapping a touch.
+//!
 //! Threading follows the rest of the C ABI: a presenter is not thread-safe.
 //! Create, resize and destroy it on the app's main queue (the `UIView` is a
 //! UIKit object), and call [`zk_present`] on the same serial queue as
 //! `zk_run_frame`. The presenter must outlive every presented system that uses
-//! its device; release the systems first.
+//! its device; release the systems first. A live layout/orientation change is a
+//! presenter call like the others: it has to run on the serial queue too, so it
+//! cannot land in the middle of a present.
 
 use std::ffi::c_void;
 use std::ptr::{self, NonNull};
@@ -92,6 +103,69 @@ impl BackendMode {
             BackendMode::Direct => "direct",
             BackendMode::Uploaded => "uploaded",
         }
+    }
+}
+
+/// How the two screens are arranged on the layer, as the app passes it over the
+/// C ABI: `zk_presenter_set_layout`, `zk_present_layout_size` and
+/// `zk_present_touch_map` all take the same number.
+///
+/// | number | arrangement |
+/// |---|---|
+/// | 0 | stacked: upper screen above the lower one (the console) |
+/// | 1 | side by side: upper on the left, lower on the right |
+/// | 2 | upper screen only |
+/// | 3 | lower screen only |
+/// | 4 | large upper screen with the lower one small at its lower right |
+pub const ZK_LAYOUT_STACKED: u32 = 0;
+pub const ZK_LAYOUT_SIDE_BY_SIDE: u32 = 1;
+pub const ZK_LAYOUT_TOP_ONLY: u32 = 2;
+pub const ZK_LAYOUT_BOTTOM_ONLY: u32 = 3;
+pub const ZK_LAYOUT_LARGE_TOP: u32 = 4;
+
+/// Which way the screens are turned inside the layer: north is the console's
+/// own upright orientation, the other numbers rotate the picture clockwise.
+pub const ZK_ORIENTATION_NORTH: u32 = 0;
+pub const ZK_ORIENTATION_EAST: u32 = 1;
+pub const ZK_ORIENTATION_SOUTH: u32 = 2;
+pub const ZK_ORIENTATION_WEST: u32 = 3;
+
+/// The arrangement for an ABI layout number, `None` for an unknown one.
+fn screen_layout(value: u32) -> Option<ScreenLayout> {
+    match value {
+        ZK_LAYOUT_STACKED => Some(ScreenLayout::Stacked),
+        ZK_LAYOUT_SIDE_BY_SIDE => Some(ScreenLayout::SideBySide),
+        ZK_LAYOUT_TOP_ONLY => Some(ScreenLayout::TopOnly),
+        ZK_LAYOUT_BOTTOM_ONLY => Some(ScreenLayout::BottomOnly),
+        ZK_LAYOUT_LARGE_TOP => Some(ScreenLayout::LargeTop),
+        _ => None,
+    }
+}
+
+/// The screen orientation for an ABI orientation number, `None` for an unknown
+/// one.
+fn screen_orientation(value: u32) -> Option<ScreenOrientation> {
+    match value {
+        ZK_ORIENTATION_NORTH => Some(ScreenOrientation::North),
+        ZK_ORIENTATION_EAST => Some(ScreenOrientation::East),
+        ZK_ORIENTATION_SOUTH => Some(ScreenOrientation::South),
+        ZK_ORIENTATION_WEST => Some(ScreenOrientation::West),
+        _ => None,
+    }
+}
+
+/// The pixels an arrangement takes at the console's own resolution, with the
+/// console arrangement turned when the orientation is a quarter turn: stacked
+/// is 400x480 upright and 480x400 turned, side by side is 720x240 upright and
+/// 240x720 turned. This is the drawable size that shows the arrangement without
+/// letterboxing; the presenter scales the screens to whatever drawable it is
+/// actually given.
+fn layout_pixel_size(arrangement: ScreenLayout, orientation: ScreenOrientation) -> (u32, u32) {
+    let (width, height) = arrangement.size(TOP_WIDTH);
+    if orientation.is_portrait() {
+        (height, width)
+    } else {
+        (width, height)
     }
 }
 
@@ -278,6 +352,96 @@ pub extern "C" fn zk_presenter_resize(presenter: *mut c_void, width: u32, height
     0
 }
 
+/// Sets how the screens are arranged on the layer, from the next
+/// [`zk_present`] on.
+///
+/// The layout is one of [`ZK_LAYOUT_STACKED`], [`ZK_LAYOUT_SIDE_BY_SIDE`],
+/// [`ZK_LAYOUT_TOP_ONLY`], [`ZK_LAYOUT_BOTTOM_ONLY`] or
+/// [`ZK_LAYOUT_LARGE_TOP`]. The app normally picks the layer's drawable size with
+/// [`zk_present_layout_size`] for the same layout, so the screens fill the layer
+/// instead of being letterboxed; a different drawable still presents, scaled to
+/// fit and centred. The layout is a presenter call like [`zk_present`], so
+/// change it on the runtime's serial queue while a system is presenting (the
+/// next frame uses it), or on the main queue before a load starts. Returns 0,
+/// or -1 for a `NULL` presenter or an unknown layout.
+#[no_mangle]
+pub extern "C" fn zk_presenter_set_layout(presenter: *mut c_void, layout: u32) -> i32 {
+    let Some(presenter) = (unsafe { (presenter as *mut PresenterHandle).as_mut() }) else {
+        return -1;
+    };
+    let Some(arrangement) = screen_layout(layout) else {
+        let message = format!("zk_presenter_set_layout: unknown layout {layout}");
+        eprintln!("{message}");
+        set_last_error(message);
+        return -1;
+    };
+    eprintln!("zk_presenter_set_layout: screens arranged {arrangement:?}");
+    presenter.presenter.set_layout(arrangement);
+    0
+}
+
+/// Sets which way the screens are turned on the layer, from the next
+/// [`zk_present`] on: [`ZK_ORIENTATION_NORTH`] is upright, the other numbers
+/// rotate the picture clockwise. Used with [`zk_presenter_set_layout`] for the
+/// console arrangement held sideways, where the stacked screens become two
+/// columns. A call like the others: runtime serial queue while presenting, main
+/// queue before a load. Returns 0, or -1 for a `NULL` presenter or an unknown
+/// orientation.
+#[no_mangle]
+pub extern "C" fn zk_presenter_set_orientation(presenter: *mut c_void, orientation: u32) -> i32 {
+    let Some(presenter) = (unsafe { (presenter as *mut PresenterHandle).as_mut() }) else {
+        return -1;
+    };
+    let Some(turned) = screen_orientation(orientation) else {
+        let message = format!("zk_presenter_set_orientation: unknown orientation {orientation}");
+        eprintln!("{message}");
+        set_last_error(message);
+        return -1;
+    };
+    eprintln!("zk_presenter_set_orientation: screens turned {turned:?}");
+    presenter.presenter.set_orientation(turned);
+    0
+}
+
+/// Reports the drawable size, in pixels, that shows a layout without
+/// letterboxing: the two 3DS screens at their own resolution, arranged and
+/// turned as asked.
+///
+/// `layout` and `orientation` take the same numbers as
+/// [`zk_presenter_set_layout`] and [`zk_presenter_set_orientation`]. The app
+/// gives its `CAMetalLayer` this size and passes the same layout/orientation to
+/// the presenter, so every screen pixel maps to the layer. Returns 1 and writes
+/// both outputs, or 0 for an unknown layout/orientation or a `NULL` output.
+///
+/// # Safety
+///
+/// `out_width` and `out_height` must be `NULL` or point to writable `uint32_t`s;
+/// they are only written when the function returns 1.
+#[no_mangle]
+pub extern "C" fn zk_present_layout_size(
+    layout: u32,
+    orientation: u32,
+    out_width: *mut u32,
+    out_height: *mut u32,
+) -> i32 {
+    if out_width.is_null() || out_height.is_null() {
+        return 0;
+    }
+    let (Some(arrangement), Some(turned)) =
+        (screen_layout(layout), screen_orientation(orientation))
+    else {
+        return 0;
+    };
+    let (width, height) = layout_pixel_size(arrangement, turned);
+    // SAFETY: both pointers were checked non-NULL and the caller guarantees they
+    // are writable.
+    unsafe {
+        *out_width = width;
+        *out_height = height;
+    }
+    1
+}
+
 /// Releases a presenter returned by [`zk_presenter_create`].
 ///
 /// Release the systems loaded with [`zk_create_presented`] first (or at least
@@ -451,15 +615,19 @@ pub extern "C" fn zk_present_mode(system: *mut c_void, presenter: *mut c_void) -
 /// Maps a touch in the presented Metal view to lower-screen pixels.
 ///
 /// `width` and `height` are the drawable size in pixels that the presenter was
-/// created/last resized for; `x` and `y` are the touch position normalised to
-/// `0.0 ... 1.0` from the view's top-left, so the caller does not have to care
-/// about points versus pixels. The same layout the presenter uses (upper screen
-/// above lower screen, in the console's 400x480 shape) decides whether the point
-/// is on the lower screen.
+/// created/last resized for; `layout` and `orientation` take the same numbers as
+/// [`zk_presenter_set_layout`] and [`zk_presenter_set_orientation`] — pass what
+/// the presenter is configured with. `x` and `y` are the touch position
+/// normalised to `0.0 ... 1.0` from the view's top-left, so the caller does not
+/// have to care about points versus pixels.
 ///
-/// Returns 1 and writes the lower-screen pixel coordinates (`0...320`,
-/// `0...240`) to `out_x`/`out_y` when the point is on the lower screen, 0 when
-/// it is not (the touch releases) or an argument is missing.
+/// The same layout the presenter uses decides whether the point is on the lower
+/// screen: not on it for the upper-only layout, beside it for the console's side
+/// margins, and a point on a turned layout is mapped back into the lower
+/// screen's own upright pixels. Returns 1 and writes the lower-screen pixel
+/// coordinates (`0...320`, `0...240`) to `out_x`/`out_y` when the point is on the
+/// lower screen, 0 when it is not (the touch releases) or an argument is
+/// missing/unknown.
 ///
 /// # Safety
 ///
@@ -469,6 +637,8 @@ pub extern "C" fn zk_present_mode(system: *mut c_void, presenter: *mut c_void) -
 pub extern "C" fn zk_present_touch_map(
     width: u32,
     height: u32,
+    layout_id: u32,
+    orientation_id: u32,
     x: f32,
     y: f32,
     out_x: *mut u16,
@@ -477,14 +647,12 @@ pub extern "C" fn zk_present_touch_map(
     if width == 0 || height == 0 || out_x.is_null() || out_y.is_null() {
         return 0;
     }
-    let (_, bottom) = layout(
-        width,
-        height,
-        ScreenLayout::Stacked,
-        ScreenOrientation::North,
-        TOP_WIDTH,
-        false,
-    );
+    let (Some(arrangement), Some(turned)) =
+        (screen_layout(layout_id), screen_orientation(orientation_id))
+    else {
+        return 0;
+    };
+    let (_, bottom) = layout(width, height, arrangement, turned, TOP_WIDTH, false);
     let Some(viewport) = bottom else {
         return 0;
     };
@@ -498,10 +666,19 @@ pub extern "C" fn zk_present_touch_map(
     if !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
         return 0;
     }
+    // The presenter's vertex shader samples the screen turned by the same
+    // clockwise angle the viewport was rotated by (present.vert), so undo that
+    // turn here to land in the lower screen's own upright pixels.
+    let (screen_u, screen_v) = match turned {
+        ScreenOrientation::North => (u, v),
+        ScreenOrientation::South => (1.0 - u, 1.0 - v),
+        ScreenOrientation::East => (v, 1.0 - u),
+        ScreenOrientation::West => (1.0 - v, u),
+    };
     // The 3DS touch panel reports pixels within 320x240; round like a finger
     // landing between pixels and keep the last row/column addressable.
-    let touch_x = (u * 320.0).round().clamp(0.0, 320.0) as u16;
-    let touch_y = (v * 240.0).round().clamp(0.0, 240.0) as u16;
+    let touch_x = (screen_u * 320.0).round().clamp(0.0, 320.0) as u16;
+    let touch_y = (screen_v * 240.0).round().clamp(0.0, 240.0) as u16;
     // SAFETY: the pointers were checked non-NULL and the caller guarantees they
     // are writable.
     unsafe {
@@ -517,8 +694,11 @@ mod tests {
     use std::ptr;
 
     use super::{
-        zk_create_presented, zk_present, zk_present_mode, zk_present_touch_map,
-        zk_presenter_create, zk_presenter_destroy, zk_presenter_resize, zk_presenter_shared_device,
+        zk_create_presented, zk_present, zk_present_layout_size, zk_present_mode,
+        zk_present_touch_map, zk_presenter_create, zk_presenter_destroy, zk_presenter_resize,
+        zk_presenter_set_layout, zk_presenter_set_orientation, zk_presenter_shared_device,
+        ZK_LAYOUT_BOTTOM_ONLY, ZK_LAYOUT_SIDE_BY_SIDE, ZK_LAYOUT_STACKED, ZK_LAYOUT_TOP_ONLY,
+        ZK_ORIENTATION_EAST, ZK_ORIENTATION_NORTH, ZK_ORIENTATION_SOUTH, ZK_ORIENTATION_WEST,
     };
 
     /// Copies the calling thread's last error, if any.
@@ -565,8 +745,74 @@ mod tests {
     fn presenter_calls_need_a_presenter() {
         assert_eq!(zk_presenter_resize(ptr::null_mut(), 400, 480), -1);
         assert_eq!(zk_presenter_shared_device(ptr::null_mut()), -1);
+        assert_eq!(
+            zk_presenter_set_layout(ptr::null_mut(), ZK_LAYOUT_STACKED),
+            -1
+        );
+        assert_eq!(
+            zk_presenter_set_orientation(ptr::null_mut(), ZK_ORIENTATION_NORTH),
+            -1
+        );
         // Destroying NULL is a no-op, not a fault.
         zk_presenter_destroy(ptr::null_mut());
+    }
+
+    #[test]
+    fn unknown_layout_and_orientation_are_rejected() {
+        crate::clear_last_error();
+        assert_eq!(zk_presenter_set_layout(ptr::null_mut(), 99), -1);
+        assert_eq!(zk_presenter_set_orientation(ptr::null_mut(), 99), -1);
+        let mut width = 0u32;
+        let mut height = 0u32;
+        assert_eq!(
+            zk_present_layout_size(99, ZK_ORIENTATION_NORTH, &mut width, &mut height),
+            0
+        );
+        assert_eq!(
+            zk_present_layout_size(ZK_LAYOUT_STACKED, 99, &mut width, &mut height),
+            0
+        );
+        assert_eq!(
+            zk_present_layout_size(
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_NORTH,
+                ptr::null_mut(),
+                &mut height
+            ),
+            0
+        );
+    }
+
+    #[test]
+    fn layout_size_reports_the_console_combinations() {
+        let mut width = 0u32;
+        let mut height = 0u32;
+        for (layout, orientation, expected) in [
+            // the console's stacked screens, upright and turned a quarter
+            (ZK_LAYOUT_STACKED, ZK_ORIENTATION_NORTH, (400, 480)),
+            (ZK_LAYOUT_STACKED, ZK_ORIENTATION_EAST, (480, 400)),
+            (ZK_LAYOUT_STACKED, ZK_ORIENTATION_SOUTH, (400, 480)),
+            (ZK_LAYOUT_STACKED, ZK_ORIENTATION_WEST, (480, 400)),
+            // the two screens in one row, upright and turned
+            (ZK_LAYOUT_SIDE_BY_SIDE, ZK_ORIENTATION_NORTH, (720, 240)),
+            (ZK_LAYOUT_SIDE_BY_SIDE, ZK_ORIENTATION_EAST, (240, 720)),
+            // one screen at a time
+            (ZK_LAYOUT_TOP_ONLY, ZK_ORIENTATION_NORTH, (400, 240)),
+            (ZK_LAYOUT_TOP_ONLY, ZK_ORIENTATION_EAST, (240, 400)),
+            (ZK_LAYOUT_BOTTOM_ONLY, ZK_ORIENTATION_NORTH, (320, 240)),
+            (ZK_LAYOUT_BOTTOM_ONLY, ZK_ORIENTATION_EAST, (240, 320)),
+        ] {
+            assert_eq!(
+                zk_present_layout_size(layout, orientation, &mut width, &mut height),
+                1,
+                "layout {layout} orientation {orientation}"
+            );
+            assert_eq!(
+                (width, height),
+                expected,
+                "layout {layout} orientation {orientation}"
+            );
+        }
     }
 
     #[test]
@@ -614,35 +860,122 @@ mod tests {
 
         // 400x480 is the console's own layout: the lower screen is 320x240,
         // centred under the upper one (a 40 pixel margin each side).
-        assert_eq!(zk_present_touch_map(400, 480, 0.5, 0.75, &mut x, &mut y), 1);
+        assert_eq!(
+            zk_present_touch_map(
+                400,
+                480,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_NORTH,
+                0.5,
+                0.75,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
         assert_eq!((x, y), (160, 120), "the centre of the lower screen");
 
         // The upper screen is not a touch surface.
-        assert_eq!(zk_present_touch_map(400, 480, 0.5, 0.25, &mut x, &mut y), 0);
+        assert_eq!(
+            zk_present_touch_map(
+                400,
+                480,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_NORTH,
+                0.5,
+                0.25,
+                &mut x,
+                &mut y
+            ),
+            0
+        );
         // Nor is the console's side margin beside the lower screen.
         assert_eq!(
-            zk_present_touch_map(400, 480, 0.05, 0.75, &mut x, &mut y),
+            zk_present_touch_map(
+                400,
+                480,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_NORTH,
+                0.05,
+                0.75,
+                &mut x,
+                &mut y
+            ),
             0
         );
 
         // Its top-left corner is the lower screen's (0, 0); the bottom-right
         // edge rounds to the last addressable pixel.
-        assert_eq!(zk_present_touch_map(400, 480, 0.1, 0.5, &mut x, &mut y), 1);
+        assert_eq!(
+            zk_present_touch_map(
+                400,
+                480,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_NORTH,
+                0.1,
+                0.5,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
         assert_eq!((x, y), (0, 0));
-        assert_eq!(zk_present_touch_map(400, 480, 0.9, 1.0, &mut x, &mut y), 1);
+        assert_eq!(
+            zk_present_touch_map(
+                400,
+                480,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_NORTH,
+                0.9,
+                1.0,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
         assert_eq!((x, y), (320, 240));
 
         // Missing outputs just fail instead of writing.
         assert_eq!(
-            zk_present_touch_map(400, 480, 0.5, 0.75, ptr::null_mut(), &mut y),
+            zk_present_touch_map(
+                400,
+                480,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_NORTH,
+                0.5,
+                0.75,
+                ptr::null_mut(),
+                &mut y
+            ),
             0
         );
         assert_eq!(
-            zk_present_touch_map(400, 480, 0.5, 0.75, &mut x, ptr::null_mut()),
+            zk_present_touch_map(
+                400,
+                480,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_NORTH,
+                0.5,
+                0.75,
+                &mut x,
+                ptr::null_mut()
+            ),
             0
         );
         // A zero drawable size has no layout to map.
-        assert_eq!(zk_present_touch_map(0, 0, 0.5, 0.75, &mut x, &mut y), 0);
+        assert_eq!(
+            zk_present_touch_map(
+                0,
+                0,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_NORTH,
+                0.5,
+                0.75,
+                &mut x,
+                &mut y
+            ),
+            0
+        );
     }
 
     #[test]
@@ -651,11 +984,278 @@ mod tests {
         let mut y = 0u16;
         // Twice the pixels, same shape: the same normalised point maps to the
         // same console pixel.
-        assert_eq!(zk_present_touch_map(800, 960, 0.5, 0.75, &mut x, &mut y), 1);
+        assert_eq!(
+            zk_present_touch_map(
+                800,
+                960,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_NORTH,
+                0.5,
+                0.75,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
         assert_eq!((x, y), (160, 120));
-        // A wider window letterboxes; the lower screen keeps its place in the
-        // middle, so the same normalised x no longer hits its centre.
-        assert_eq!(zk_present_touch_map(800, 480, 0.5, 0.75, &mut x, &mut y), 1);
+        // A wider window letterboxes; the same normalised point on the layer
+        // still maps to the middle of the lower screen.
+        assert_eq!(
+            zk_present_touch_map(
+                800,
+                480,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_NORTH,
+                0.5,
+                0.75,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
         assert_eq!((x, y), (160, 120));
+    }
+
+    #[test]
+    fn touch_map_follows_the_other_layouts() {
+        let mut x = 0u16;
+        let mut y = 0u16;
+
+        // Side by side in a 720x240 drawable: the lower screen is the right
+        // half, so the middle of the drawable is the upper screen.
+        assert_eq!(
+            zk_present_touch_map(
+                720,
+                240,
+                ZK_LAYOUT_SIDE_BY_SIDE,
+                ZK_ORIENTATION_NORTH,
+                0.5,
+                0.5,
+                &mut x,
+                &mut y
+            ),
+            0
+        );
+        assert_eq!(
+            zk_present_touch_map(
+                720,
+                240,
+                ZK_LAYOUT_SIDE_BY_SIDE,
+                ZK_ORIENTATION_NORTH,
+                560.0 / 720.0,
+                0.5,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
+        assert_eq!((x, y), (160, 120), "the middle of the right-hand screen");
+
+        // The upper-only layout has no touch surface at all.
+        assert_eq!(
+            zk_present_touch_map(
+                400,
+                240,
+                ZK_LAYOUT_TOP_ONLY,
+                ZK_ORIENTATION_NORTH,
+                0.5,
+                0.5,
+                &mut x,
+                &mut y
+            ),
+            0
+        );
+
+        // The lower-only layout makes the whole drawable the touch surface.
+        assert_eq!(
+            zk_present_touch_map(
+                320,
+                240,
+                ZK_LAYOUT_BOTTOM_ONLY,
+                ZK_ORIENTATION_NORTH,
+                0.0,
+                0.0,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
+        assert_eq!((x, y), (0, 0));
+        assert_eq!(
+            zk_present_touch_map(
+                320,
+                240,
+                ZK_LAYOUT_BOTTOM_ONLY,
+                ZK_ORIENTATION_NORTH,
+                1.0,
+                1.0,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
+        assert_eq!((x, y), (320, 240));
+    }
+
+    #[test]
+    fn touch_map_undoes_the_screen_rotation() {
+        let mut x = 0u16;
+        let mut y = 0u16;
+
+        // The console arrangement turned a quarter turn is the 480x400
+        // landscape layout: the lower screen is the left column, below the
+        // upper one's turned column.
+        assert_eq!(
+            zk_present_touch_map(
+                480,
+                400,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_EAST,
+                0.25,
+                0.5,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
+        assert_eq!((x, y), (160, 120), "the middle of the turned lower screen");
+        // The upper screen's column is still not a touch surface.
+        assert_eq!(
+            zk_present_touch_map(
+                480,
+                400,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_EAST,
+                0.75,
+                0.5,
+                &mut x,
+                &mut y
+            ),
+            0
+        );
+        // The turned lower screen's top-left corner in viewport space is the
+        // lower screen's bottom-left pixel.
+        assert_eq!(
+            zk_present_touch_map(
+                480,
+                400,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_EAST,
+                0.0,
+                0.1,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
+        assert_eq!((x, y), (0, 240));
+
+        // The other quarter turn puts the lower screen in the right column and
+        // turns the pixels the other way.
+        assert_eq!(
+            zk_present_touch_map(
+                480,
+                400,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_WEST,
+                0.75,
+                0.5,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
+        assert_eq!((x, y), (160, 120));
+        assert_eq!(
+            zk_present_touch_map(
+                480,
+                400,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_WEST,
+                0.25,
+                0.5,
+                &mut x,
+                &mut y
+            ),
+            0
+        );
+
+        // Upside down: the console arrangement keeps its shape but the touch
+        // position is mirrored both ways.
+        assert_eq!(
+            zk_present_touch_map(
+                400,
+                480,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_SOUTH,
+                0.5,
+                0.25,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
+        assert_eq!((x, y), (160, 120));
+        assert_eq!(
+            zk_present_touch_map(
+                400,
+                480,
+                ZK_LAYOUT_STACKED,
+                ZK_ORIENTATION_SOUTH,
+                0.5,
+                0.75,
+                &mut x,
+                &mut y
+            ),
+            0
+        );
+
+        // Side by side turned is two rows; the lower screen is the bottom row.
+        assert_eq!(
+            zk_present_touch_map(
+                240,
+                720,
+                ZK_LAYOUT_SIDE_BY_SIDE,
+                ZK_ORIENTATION_EAST,
+                0.5,
+                560.0 / 720.0,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
+        assert_eq!((x, y), (160, 120));
+        assert_eq!(
+            zk_present_touch_map(
+                240,
+                720,
+                ZK_LAYOUT_SIDE_BY_SIDE,
+                ZK_ORIENTATION_EAST,
+                0.5,
+                0.25,
+                &mut x,
+                &mut y
+            ),
+            0
+        );
+
+        // Unknown numbers are rejected like a missing argument.
+        assert_eq!(
+            zk_present_touch_map(
+                400,
+                480,
+                99,
+                ZK_ORIENTATION_NORTH,
+                0.5,
+                0.75,
+                &mut x,
+                &mut y
+            ),
+            0
+        );
+        assert_eq!(
+            zk_present_touch_map(400, 480, ZK_LAYOUT_STACKED, 99, 0.5, 0.75, &mut x, &mut y),
+            0
+        );
     }
 }

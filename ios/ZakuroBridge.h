@@ -340,22 +340,94 @@ int32_t zk_present(zk_system_t system, zk_presenter_t presenter);
 int32_t zk_present_mode(zk_system_t system, zk_presenter_t presenter);
 
 /**
+ * How the two screens are arranged on the presented layer. Pass these numbers to
+ * zk_presenter_set_layout() and zk_present_layout_size(); the same number also
+ * selects the lower screen in zk_present_touch_map().
+ */
+enum {
+    ZK_LAYOUT_STACKED = 0,      /**< Upper screen above the lower one (console). */
+    ZK_LAYOUT_SIDE_BY_SIDE = 1, /**< Upper screen left, lower screen right. */
+    ZK_LAYOUT_TOP_ONLY = 2,     /**< Upper screen only. */
+    ZK_LAYOUT_BOTTOM_ONLY = 3,  /**< Lower screen only. */
+    ZK_LAYOUT_LARGE_TOP = 4     /**< Large upper screen, lower one small at its lower right. */
+};
+
+/**
+ * Which way the screens are turned inside the presented layer. North is the
+ * console's upright orientation; the other values rotate the picture clockwise,
+ * so a stacked console held sideways becomes two columns. A rotation is not a
+ * property of the device's interface orientation: iOS rotates the app's view
+ * with the device already.
+ */
+enum {
+    ZK_ORIENTATION_NORTH = 0,
+    ZK_ORIENTATION_EAST = 1,
+    ZK_ORIENTATION_SOUTH = 2,
+    ZK_ORIENTATION_WEST = 3
+};
+
+/**
+ * Sets how the screens are arranged on the layer, from the next zk_present() on.
+ *
+ * The app normally gives the CAMetalLayer the drawable size that
+ * zk_present_layout_size() reports for the same layout/orientation, so the
+ * screens fill the layer instead of being letterboxed. This is a presenter call
+ * like zk_present(): change it on the runtime serial queue while a system is
+ * presenting (the next frame uses it), or on the main queue before a load
+ * starts. Returns 0, or -1 for a NULL presenter or an unknown layout.
+ */
+int32_t zk_presenter_set_layout(zk_presenter_t presenter, uint32_t layout);
+
+/**
+ * Sets which way the screens are turned on the layer, from the next
+ * zk_present() on (see ZK_ORIENTATION_*). Called the same way as
+ * zk_presenter_set_layout(). Returns 0, or -1 for a NULL presenter or an
+ * unknown orientation.
+ */
+int32_t zk_presenter_set_orientation(zk_presenter_t presenter, uint32_t orientation);
+
+/**
+ * Reports the drawable size, in pixels, that shows a layout without
+ * letterboxing: both 3DS screens at their own resolution, arranged and turned as
+ * asked. The app sets its CAMetalLayer (and the presenter, through
+ * zk_presenter_create / zk_presenter_resize) to this size.
+ *
+ * Returns 1 and writes both outputs, or 0 for an unknown layout/orientation or a
+ * NULL output. What it returns for the common combinations:
+ *
+ * | layout                         | north   | east/west |
+ * |--------------------------------|---------|-----------|
+ * | ZK_LAYOUT_STACKED              | 400x480 | 480x400   |
+ * | ZK_LAYOUT_SIDE_BY_SIDE         | 720x240 | 240x720   |
+ * | ZK_LAYOUT_TOP_ONLY             | 400x240 | 240x400   |
+ * | ZK_LAYOUT_BOTTOM_ONLY          | 320x240 | 240x320   |
+ */
+int32_t zk_present_layout_size(uint32_t layout, uint32_t orientation,
+                               uint32_t *out_width, uint32_t *out_height);
+
+/**
  * Maps a touch on the presented layer to lower-screen pixels.
  *
- * @param width   Drawable width in pixels (as passed to zk_presenter_create /
- *                zk_presenter_resize).
- * @param height  Drawable height in pixels.
- * @param x       Touch X normalised to 0.0 ... 1.0 from the view's left edge.
- * @param y       Touch Y normalised to 0.0 ... 1.0 from the view's top edge.
- * @param out_x   Receives the lower-screen X in pixels (0 ... 320).
- * @param out_y   Receives the lower-screen Y in pixels (0 ... 240).
- * @return        1 when the touch is on the lower screen (outputs written),
- *                0 when it is not (the touch releases) or an argument is NULL.
+ * @param width       Drawable width in pixels (as passed to zk_presenter_create /
+ *                    zk_presenter_resize).
+ * @param height      Drawable height in pixels.
+ * @param layout      ZK_LAYOUT_* the presenter is configured with.
+ * @param orientation ZK_ORIENTATION_* the presenter is configured with.
+ * @param x           Touch X normalised to 0.0 ... 1.0 from the view's left edge.
+ * @param y           Touch Y normalised to 0.0 ... 1.0 from the view's top edge.
+ * @param out_x       Receives the lower-screen X in pixels (0 ... 320).
+ * @param out_y       Receives the lower-screen Y in pixels (0 ... 240).
+ * @return            1 when the touch is on the lower screen (outputs written),
+ *                    0 when it is not (the touch releases) or an argument is
+ *                    NULL/unknown.
  *
- * The presenter draws the upper screen above the lower one (the console's
- * 400x480 shape); this applies the same layout the presenter uses.
+ * The layout decides where the lower screen is: nowhere for the upper-only
+ * layout, and turned back into the screen's own upright pixels when the
+ * orientation is not north.
  */
-int32_t zk_present_touch_map(uint32_t width, uint32_t height, float x, float y,
+int32_t zk_present_touch_map(uint32_t width, uint32_t height,
+                             uint32_t layout, uint32_t orientation,
+                             float x, float y,
                              uint16_t *out_x, uint16_t *out_y);
 
 /* --------------------------------------------------- hardware diagnostics -- */

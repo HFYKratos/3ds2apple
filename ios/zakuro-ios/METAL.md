@@ -242,24 +242,36 @@ A1 replaces the last step of A0 ("readback → `CGImage`") with a Metal swapchai
 The app provides:
 
 1. **A `UIView`** whose `layerClass` is `CAMetalLayer` (`MetalScreenView` in
-   `ios/app/Sources/MetalScreenView.swift`). It is laid out at the console's
-   400:480 shape, so the presenter's stacked upper/lower screens fit the layer.
-   Swift passes it to the FFI with
-   `Unmanaged.passUnretained(view).toOpaque()`.
-2. **Drawable size in pixels** (the view's `bounds × contentScaleFactor`),
-   passed when the presenter is made and again whenever the view is laid out
-   (rotation, split view). The view keeps `CAMetalLayer.drawableSize` in step
-   because MoltenVK takes the surface extent from it.
-3. **A present cadence**: the app's existing free-run frame loop; `zk_present`
+   `ios/app/Sources/MetalScreenView.swift`). Its drawable is the chosen screen
+   arrangement at the 3DS resolutions (400×480 for the console's stacked
+   screens, 480×400 when that arrangement is turned a quarter turn, 720×240 for
+   the two screens side by side, 400×240 or 320×240 for a single screen), so the
+   two screens fill the layer instead of being letterboxed. Swift passes it to
+   the FFI with `Unmanaged.passUnretained(view).toOpaque()`.
+2. **Drawable size in pixels**, the size `zk_present_layout_size()` reports for
+   the layout/orientation, times the render-scale setting. It is passed when the
+   presenter is made and again whenever that size changes (layout, rotation,
+   render scale). The view keeps `CAMetalLayer.drawableSize` in step because
+   MoltenVK takes the surface extent from it; SwiftUI/CoreAnimation scales the
+   resulting image to the view's bounds, so the app can letterbox (fit), force a
+   4:3 area or stretch the picture without another swapchain.
+3. **The screen arrangement and rotation** (layout numbers: stacked, side by
+   side, upper only, lower only, large upper; orientation numbers: north, east,
+   south, west), set through `zk_presenter_set_layout` /
+   `zk_presenter_set_orientation`. The presenter lays the screens out from the
+   same numbers, so a live change shows up on the next `zk_present`; turning the
+   console arrangement north/east/south/west is how the stacked screens become
+   two columns for a landscape display.
+4. **A present cadence**: the app's existing free-run frame loop; `zk_present`
    follows each completed `zk_run_frame` on the runtime serial queue. The
    preferred present mode is mailbox (no vblank wait); FIFO is the fallback.
-4. **Lifecycle**: the view and the presenter are made on the main queue; the
+5. **Lifecycle**: the view and the presenter are made on the main queue; the
    system is loaded on the presenter's device and destroyed before the presenter.
    Stopping the frame loop (Unload, background, exit/fault) stops presenting; the
    presenter, its device and the layer are kept for the next load, and are
    released with the app. A size change marks the swapchain stale and it is
    rebuilt on the next present.
-5. **C API** (implemented in `ios/zakuro-ios/src/presenter.rs`, declared in
+6. **C API** (implemented in `ios/zakuro-ios/src/presenter.rs`, declared in
    `ios/ZakuroBridge.h`):
 
 ```c
@@ -269,6 +281,12 @@ int32_t        zk_presenter_resize(zk_presenter_t presenter, uint32_t width, uin
 void           zk_presenter_destroy(zk_presenter_t presenter);
 /* 1 = the renderer can share the presenter's device (no readback) */
 int32_t        zk_presenter_shared_device(zk_presenter_t presenter);
+/* how the screens are arranged / turned; the next zk_present uses it */
+int32_t        zk_presenter_set_layout(zk_presenter_t presenter, uint32_t layout);
+int32_t        zk_presenter_set_orientation(zk_presenter_t presenter, uint32_t orientation);
+/* drawable pixels that show a layout without letterboxing: 1 ok, 0 unknown */
+int32_t        zk_present_layout_size(uint32_t layout, uint32_t orientation,
+                                      uint32_t *out_width, uint32_t *out_height);
 /* load on the presenter's device; zk_create's contract otherwise */
 zk_system_t    zk_create_presented(const char *rom_path, const char *data_dir,
                                    zk_presenter_t presenter);
@@ -276,8 +294,11 @@ zk_system_t    zk_create_presented(const char *rom_path, const char *data_dir,
 int32_t        zk_present(zk_system_t system, zk_presenter_t presenter);
 /* 0 = readback, 1 = GPU direct, 2 = CPU pixels uploaded through the layer */
 int32_t        zk_present_mode(zk_system_t system, zk_presenter_t presenter);
-/* normalised touch on the presented layer -> lower-screen pixels */
-int32_t        zk_present_touch_map(uint32_t width, uint32_t height, float x, float y,
+/* normalised touch on the presented layer -> lower-screen pixels, for the
+   presenter's layout/orientation (turn undone, upper screen/margins = 0) */
+int32_t        zk_present_touch_map(uint32_t width, uint32_t height,
+                                    uint32_t layout, uint32_t orientation,
+                                    float x, float y,
                                     uint16_t *out_x, uint16_t *out_y);
 ```
 
@@ -303,10 +324,17 @@ Implementation notes (all verified against the upstream code):
   The app's display path is still the Metal layer, so it never needs the
   `CGImage` code; that path is only used when the presenter itself cannot be
   made.
-- The presenter draws the upper screen over the lower one in the console's
-  400×480 shape. `zk_present_touch_map` applies the presenter's layout to a
-  normalised touch, so the app's on-screen buttons and lower-screen touch work
-  without duplicating the layout maths.
+- The presenter arranges the screens itself from the layout/orientation numbers
+  (`ScreenLayout` / `ScreenOrientation` in
+  `crates/zakuro-gpu/src/backend/mod.rs`): stacked 400×480, side by side
+  720×240, a single screen, and the whole arrangement turned a quarter turn
+  (480×400 for stacked, two columns). The app gives the layer the size
+  `zk_present_layout_size` reports for the same numbers, and
+  `zk_present_touch_map` applies the same layout (including undoing a
+  non-north rotation) to a normalised touch, so the on-screen buttons and
+  lower-screen touch work without duplicating the layout maths in Swift. View
+  aspect handling (`fit` / `4:3` / stretch / integer scaling) happens after
+  presentation: CoreAnimation scales the layer to the box SwiftUI gives it.
 
 ## 4. MoltenVK
 
@@ -862,6 +890,16 @@ Then record a steady-state `zk_perf` line from the second or third window:
 - [ ] picture correct, 20-minute soak passes, memory/thermals normal;
 - [ ] background/Unload/Load-last and rotation keep working (swapchain rebuilt
       after a size change);
+- [ ] every screen layout (stacked, side by side, upper only, lower only) and all
+      four rotations present through the same layer; the load log has
+      `screen layout … · … · native drawable WxH` and the size matches
+      `zk_present_layout_size`;
+- [ ] changing layout / rotation / render scale while a game runs shows up on
+      the next frame (no reload), and a touch on the lower screen still lands on
+      the right pixel, including with a quarter turn;
+- [ ] the landscape game view keeps the D-pad, A/B/X/Y, L/R and Start/Select off
+      the screens, respects the notch/home-indicator safe areas, and reflows when
+      the device rotates;
 - [ ] fallback: build without MoltenVK still runs on the readback path;
 - [ ] software build regression: with the switch off (and no presenter),
       behaviour is unchanged;
@@ -893,6 +931,7 @@ Then record a steady-state `zk_perf` line from the second or third window:
 | R13 | presenter/swapchain failure leaves a black layer | low/medium | the app counts `zk_present` failures and falls back to the CGImage readback path after about a second; the Metal view stays alive for the presenter |
 | R14 | the Vulkan device/Metal layer is suspended with the app and the GPU takes it away | low/low | the frame loop and presenting stop in the background; on return the same device is used again. If the first frames after resume fail, `zk_present` errors fall back to the readback path (R13). Device verification point |
 | R15 | the graphics warm-up delays a first load by up to 5 s | medium/low | the wait is bounded and hidden behind an explicit "Preparing graphics" screen; frames still spiking at the cap reveal the game anyway; a cached later load uses a shorter plan; the overlay has a Skip button (10.3). Device verification point: perceived load time and skip behaviour |
+| R16 | a live layout/rotation change races a `zk_present` | low/medium | the app sends `zk_presenter_set_layout` / `zk_presenter_set_orientation` / `zk_presenter_resize` on the same serial queue as `zk_present`, so the next frame uses them; the presenter is only configured on the main queue while the frame loop is stopped (load start). Device verification point: switch layouts repeatedly during play |
 
 ## 10. First-run pipeline compilation: warm-up, cache and async creation
 

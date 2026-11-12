@@ -15,7 +15,7 @@ views do not carry duplicated strings.
 | Page | Contents |
 |---|---|
 | **Home** | Current game card (ROM name), Play / Load, Import / Change ROM, and tools: Settings, Save Manager, Diagnostics export, About. |
-| **Game** | The two screens on a `CAMetalLayer` (or the screen-readback path), status line (including the active fast-forward speed), performance HUD, on-screen controls, the optional "Preparing graphics" warm-up overlay and the in-game menu. |
+| **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), performance HUD, on-screen controls, the optional "Preparing graphics" warm-up overlay and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. |
 | **Settings** | Display, Audio, Controls, Performance (frame cap, fast-forward, system Metal HUD, optional graphics warm-up), Storage and About sections. |
 | **Save Manager** | The battery save files of the current game (size, date, export as ZIP, import, delete), the three instant save-state slots (save, load, delete) and the container usage. |
 | **About** | Version, runtime state, acknowledgements and licence. |
@@ -30,11 +30,14 @@ on-screen controls, so no input or audio advances behind it.
 
 - Import a decrypted `.3ds` / `.cci` from the Files app; the file stays in the
   app's Documents directory and is never included in the app bundle.
-- Upper screen 400×240 above lower screen 320×240, with the lower screen also
-  acting as the 3DS touchscreen.
+- Upper screen 400×240 and lower screen 320×240, arranged stacked, side by side
+  or one at a time, optionally turned a quarter turn; the lower screen also acts
+  as the 3DS touchscreen.
 - On-screen buttons (D-pad, A/B/X/Y, L/R, Start/Select) with configurable
   opacity and optional haptic feedback, plus GameController support (MFi, Xbox,
-  DualSense).
+  DualSense). In landscape the two button clusters sit in reserved side rails and
+  L/R/Start/Select in a top bar, so the screens stay uncovered; the layout
+  reflows when the device rotates.
 - Audio through `zk_take_audio` and AVAudioEngine, with volume, mute and an IO
   buffer size preference.
 - Instant save states: three slots per game, one file per slot under
@@ -55,9 +58,9 @@ on-screen controls, so no input or audio advances behind it.
   shows or hides it on the presented layer at run time
   (`CAMetalLayer.developerHUDProperties`, iOS 16), off by default. See "System
   Metal HUD" below.
-- Display settings: screen layout, aspect, integer scaling, render resolution
-  (1×/2×) and orientation. See "Display settings" below for what applies
-  immediately.
+- Display settings: screen layout, screen rotation, aspect (fit / 4:3 / stretch),
+  integer scaling, render resolution (1×/2×) and interface orientation. All of
+  them apply immediately, also while a game runs. See "Display settings" below.
 - Performance HUD: `zk_run_frame`, presentation (`present`), the fallback
   screen reads/CGImages, and audio pump, in milliseconds; it can be hidden.
 - AOT status (`linked, active` / `linked, interpreting` / `interpreter shell`)
@@ -81,13 +84,19 @@ on-screen controls, so no input or audio advances behind it.
 
 ## Display settings
 
-| Setting | Values | When it applies |
+| Setting | Values | Behaviour |
 |---|---|---|
-| Screen layout | Stacked (console), side by side, upper only, lower only | Next game load. The presented `CAMetalLayer` path draws the console layout; the other layouts load through the screen-readback path (slower). |
-| Aspect ratio | Native (console), stretch to 4:3 | Immediately. "Stretch" deliberately distorts the picture to fill a 4:3 area. |
-| Integer scaling | On / off | Immediately for the presented console image: each 3DS pixel maps to a whole number of screen pixels. |
-| Render resolution | 1× (400×480) / 2× (800×960) | Immediately. The presenter's swapchain is resized through `zk_presenter_resize`; the following frame presents at the new size. |
-| Orientation | Automatic / portrait / landscape | Immediately: the app restricts the supported orientations and asks the window scene to rotate. iOS still decides in some situations (for example during a phone call). |
+| Screen layout | Stacked (console), side by side, upper only, lower only | Immediately. Every layout is drawn by the `CAMetalLayer` presenter; the layer's drawable becomes the arrangement's own pixels (400×480 stacked, 720×240 side by side, 400×240 / 320×240 for a single screen). |
+| Screen rotation | Upright, 90° clockwise, upside down, 90° counter-clockwise | Immediately. Turns the screens inside their area, e.g. the stacked console becomes two columns (480×400) a quarter turn clockwise. The touchscreen is mapped back into the screen's own pixels. |
+| Aspect ratio | Fit (native), 4:3, Stretch | Immediately. Fit keeps the arrangement's shape; 4:3 fits the picture inside a 4:3 area with black bars; Stretch fills the game view's space and deliberately distorts the picture. |
+| Integer scaling | On / off | Immediately, with Fit and 4:3 (Stretch ignores it): each 3DS pixel maps to a whole number of screen pixels and the layer magnifies with nearest-pixel filtering. |
+| Render resolution | 1× / 2× | Immediately. The presenter renders the arrangement at its own pixels (×2 for a sharper picture) and CoreAnimation scales the result to the screen; the swapchain is resized through `zk_presenter_resize` and the following frame presents at the new size. |
+| Orientation | Automatic / portrait / landscape | Immediately: the app restricts the supported orientations and asks the window scene to rotate. The in-game layout reflows for portrait/landscape. iOS still decides in some situations (for example during a phone call). |
+
+The 3DS screens stay upright in the app's interface, which iOS rotates with the
+device; `Screen rotation` turns the pictures inside their area for playing with
+the console held sideways. In landscape with the default stacked layout the
+screens are fitted in the middle of the screen; side by side uses the width best.
 
 ## Audio settings
 
@@ -267,12 +276,12 @@ Without it the app still builds and runs, on the readback path.
 | `ApplicationDelegate.swift` | UIKit delegate used for the orientation preference. |
 | `ContentView.swift` | Root router: home page or game for the current session phase; applies settings to the session. |
 | `HomeView.swift` | Home page: current game card, Play/Import, tools. |
-| `GameView.swift` | Running game: screens, status line, performance HUD, on-screen controls, warm-up overlay, in-game menu. |
+| `GameView.swift` | Running game: responsive portrait/landscape layout, screens, status line, performance HUD, on-screen controls, warm-up overlay, in-game menu. |
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, reset, display settings, save manager, diagnostics, exit) and quick toggles. |
 | `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. |
 | `SaveManagerView.swift` | Battery save list (export as ZIP, import, delete) and the instant save-state slots (save, load, delete), with progress and errors. |
 | `AboutView.swift` | Version, runtime state, acknowledgements, licence, language in use. |
-| `AppSettings.swift` | Persisted settings model (enums for layout, aspect, orientation, buffer size, frame cap, playback speed, Metal HUD and warm-up switches) and the UserDefaults keys. |
+| `AppSettings.swift` | Persisted settings model (enums for layout, screen rotation, aspect, interface orientation, buffer size, frame cap, playback speed, Metal HUD and warm-up switches) and the UserDefaults keys. |
 | `DiagnosticsReport.swift` | Diagnostics report text, the shared diagnostics file type and screen geometry helpers. |
 | `StorageInspector.swift` | Container folder sizes, save-data file list, pipeline-cache clearing, and `AtomicFileWriter` for temporary-file-then-rename writes. |
 | `SaveStateSupport.swift` | Instant save states: three slots per game, the runtime's size → copy → load protocol on the serial runtime queue, the pause/audio-drop around save and load, and the slot list. |
@@ -280,11 +289,12 @@ Without it the app still builds and runs, on the readback path.
 | `ZipArchive.swift` | Small ZIP writer (stored entries) and reader (stored and deflated entries) used for save-data backups. |
 | `SaveArchivePicker.swift` | Files picker for importing a save-data ZIP or individual save files. |
 | `ROMSession.swift` | Runtime handle, ROM import, frame loop, presenter lifecycle, input/audio plumbing, pause/resume/reset and the settings that change runtime behaviour. |
-| `MetalScreenView.swift` | `UIView` with a `CAMetalLayer` the presenter draws into (A1); drawable resolution (1×/2×). |
+| `MetalScreenView.swift` | `UIView` with a `CAMetalLayer` the presenter draws into (A1); drawable size for the chosen layout/rotation and the render scale, plus the integer-scaling magnification filter. |
+| `ScreenGeometry.swift` | The drawable size of each layout/rotation and the box the screens occupy for the aspect/integer-scale settings. |
 | `ROMDocumentPicker.swift` | Files document picker wrapper. |
 | `ScreenImage.swift` | Reusable RGBA buffers and `CGImage` conversion. |
 | `InputState.swift` | Thread-safe merge of touch, overlay and controller input. |
-| `TouchControlsView.swift` | On-screen button overlay (opacity and haptics options). |
+| `TouchControlsView.swift` | On-screen button controls: the portrait pad and the landscape top bar / side rails (opacity and haptics options). |
 | `GameControllerInput.swift` | GameController-to-3DS button mapping. |
 | `AudioOutput.swift` | Ring buffer and AVAudioEngine output (volume, mute, buffer duration). |
 | `FrameTiming.swift` | Per-phase frame timing for the HUD. |
@@ -300,19 +310,18 @@ run on the single serial queue owned by `ROMSession`.
 
 ## Presentation (A1)
 
-The two screens are presented in one of two ways, chosen when a ROM loads:
+The app has one presentation path and one fallback:
 
 | Path | What happens | HUD |
 |---|---|---|
-| **CAMetalLayer (A1)** | The app owns a `MetalScreenView` (`UIView` + `CAMetalLayer`), makes a Zakuro Vulkan presenter for it (`zk_presenter_create`) and loads the ROM with `zk_create_presented`. After every `zk_run_frame` it calls `zk_present`; the screens go straight from the renderer's GPU images to the swapchain. | `present` row; no screen reads, no `CGImage` |
-| **CGImage readback (fallback)** | `zk_create` + `zk_read_screen` for each screen, converted to `CGImage` and shown by SwiftUI. Also used for the alternate screen layouts, which one presented drawable cannot rearrange. | `read top` / `read bottom` / `CGImage` rows |
+| **CAMetalLayer (A1)** | The app owns a `MetalScreenView` (`UIView` + `CAMetalLayer`), makes a Zakuro Vulkan presenter for it (`zk_presenter_create`) and loads the ROM with `zk_create_presented`. The presenter lays out the chosen screen arrangement in the layer's drawable (`zk_presenter_set_layout` / `zk_presenter_set_orientation`); after every `zk_run_frame` the app calls `zk_present` and the screens go straight from the renderer's GPU images to the swapchain. | `present` row; no screen reads, no `CGImage` |
+| **CGImage readback (fallback)** | `zk_create` + `zk_read_screen` for each screen, converted to `CGImage` and shown by SwiftUI in the same layout/rotation. Only when no presenter can be made. | `read top` / `read bottom` / `CGImage` rows |
 
-- Both screens are in the one layer: Zakuro's presenter draws the upper (3D)
-  screen over the lower (2D) one in the console's 400×480 shape, so no 2D
-  composition in Swift is needed. The on-screen touch surface maps a normalised
-  touch to lower-screen pixels with `zk_present_touch_map`. When the optional
-  first-load graphics warm-up is enabled, the same presenter path runs behind
-  the opaque overlay, so the warm-up frames are the real presentation workload.
+- Both screens are in the one layer: Zakuro's presenter arranges them itself, so
+  no 2D composition in Swift is needed. The on-screen touch surface maps a
+  normalised touch to lower-screen pixels with `zk_present_touch_map`, passing
+  the same layout and rotation the presenter uses (a rotated screen is mapped
+  back into its own upright pixels).
 - The fallback triggers automatically when `zk_presenter_create` returns `NULL`
   (for example no MoltenVK in the app, or a device that cannot make a Vulkan
   device), when `zk_create_presented` fails (the load is retried once with
@@ -322,8 +331,9 @@ The two screens are presented in one of two ways, chosen when a ROM loads:
 - The Metal view and presenter are created on the main queue and kept for the
   app's lifetime, so a later load reuses the same layer and Vulkan device. The
   frame loop stops presenting when the runtime stops (Unload, background,
-  exit/fault); the presenter is released with the app. The swapchain rebuilds
-  after a size change (render resolution, rotation, split view), which costs one
+  exit/fault); the presenter is released with the app. A display change (layout,
+  rotation, render scale) resizes the layer's drawable and the presenter's
+  swapchain on the runtime queue, so the next frame uses it; that costs one
   out-of-date present.
 - Because there is a real Metal layer, the system Metal Performance HUD can
   attach to it: Settings → Performance → System Metal HUD sets
@@ -334,14 +344,18 @@ The two screens are presented in one of two ways, chosen when a ROM loads:
 
 ## Input
 
-- The on-screen pad and a connected hardware controller are merged by
+- The on-screen controls and a connected hardware controller are merged by
   `InputState`; the session reads one snapshot on the runtime queue immediately
-  before `zk_run_frame` and calls `zk_set_input` there.
+  before `zk_run_frame` and calls `zk_set_input` there. In portrait the pad sits
+  below the screens; in landscape the D-pad and A/B/X/Y clusters sit in reserved
+  left/right rails and L/R/Select/Start in a top bar, so they never cover the
+  screens.
 - Controller mapping: D-pad → D-pad, A/B/X/Y → A/B/X/Y, L1/R1 → L/R, L2/R2 →
   ZL/ZR, Menu → Start, Options → Select, left stick → Circle Pad.
-- Dragging on the lower screen (or on the lower part of the presented layer)
-  sends touchscreen coordinates in lower-screen pixels. A touch started on the
-  upper screen is ignored.
+- Dragging on the lower screen sends touchscreen coordinates in lower-screen
+  pixels; on the presented layer the runtime finds the lower screen from the
+  current layout and rotation, so only that part of the layer is a touch
+  surface. A touch on the upper screen is ignored.
 - Input is cleared on pause, unload, background and reset, so a held button
   cannot survive a state change.
 
@@ -409,8 +423,10 @@ Instant save states:
   experimental and a presenter is reused for the whole app run.
 - 3D stereo, frame interpolation and texture packs exist in the presenter but
   are not exposed by the app UI.
-- Screen layouts other than stacked, and the 2× render resolution, are limited
-  by the presented path's single 400×480 drawable; see "Display settings".
+- The readback fallback (no MoltenVK / no Vulkan device) still shows every
+  layout and rotation, but it copies both screens to the CPU each frame and is
+  slower than the presented path; its stretch mode divides the space between the
+  two screens rather than reproducing the presenter's exact sub-screen split.
 - Games run only when a matching recompiled `libgame.a` is linked into the app.
   A generic interpreter-only build exists but is much slower.
 - The first release does not include camera, microphone, online play or a full
@@ -468,6 +484,7 @@ The exported diagnostics header adds the build, device, session phase
 `touch_controls=`, `controls_opacity=`, `haptics=`, `custom_hud=`,
 `playback_speed=`, `playback_speed_effective=`,
 `playback_speed_auto_reduced=`, `warmup_enabled=`, `system_metal_hud=`,
+`screen_rotation=`, `presented_native_pixels=`, `presented_drawable_pixels=`,
 `system_metal_hud_build_enabled=`, `app_language=`, `system_language=`), the
 `warmup_*` fields (`outcome`, duration, frames, max frame, spike count, plan
 limit, whether the pipelines were already cached) and the `pipeline_cache*`

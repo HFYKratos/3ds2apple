@@ -187,14 +187,21 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// on first use; the runtime itself is passed weakly, so the session owns
     /// the support object and not the other way around.
     private(set) lazy var saveStates: SaveStateSupport = SaveStateSupport(runtime: self)
-    /// Screen arrangement chosen in Settings. Read when a load starts: only the
-    /// console layout can be presented on the CAMetalLayer, so the other
-    /// layouts load through the screen-readback path.
+    /// Screen arrangement chosen in Settings. Applied live: the Metal view's
+    /// drawable is resized and the presenter is told the new layout, so the next
+    /// frame shows it. Every layout goes through the CAMetalLayer presenter; the
+    /// readback path is only used when no presenter can be made.
     private(set) var screenLayout: ScreenLayout = .stacked
-    /// Drawable resolution factor (1 = 400x480, 2 = 800x960) requested for the
-    /// presented screens. Applied to the Metal view (and its presenter) as soon
-    /// as it exists, and remembered for the first load.
+    /// Turn of the screens inside their area (Settings → Display). Applied the
+    /// same way as the layout.
+    private(set) var screenRotation: ScreenRotation = .upright
+    /// Drawable resolution factor (1 = the arrangement's own pixels, 2 = twice
+    /// them) requested for the presented screens. Applied to the Metal view (and
+    /// its presenter) as soon as it exists, and remembered for the first load.
     private var requestedRenderScale: CGFloat = 1
+    /// Integer scaling for the layer's magnification (nearest-pixel filtering).
+    /// The layout box itself is computed by the game view from the setting.
+    private var integerScaleSetting = false
     /// Free-run frame cap (frames per second). Mutable while playing.
     private let frameRateCap = LockedIntState(initialValue: 60)
     /// Fast-forward target the frame loop currently uses (1, 2 or 4). Written
@@ -474,10 +481,33 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         }
     }
 
-    /// Records the screen arrangement for the next load. Applying it does not
-    /// touch a running session; the page says it takes effect on the next load.
+    /// Records and applies the screen arrangement. Safe while a game runs: the
+    /// Metal view's drawable becomes the arrangement's own size and the presenter
+    /// uses the new layout from the next frame (the swapchain is resized on the
+    /// runtime queue).
     func setScreenLayout(_ layout: ScreenLayout) {
+        guard layout != screenLayout else { return }
         screenLayout = layout
+        AppLog.log("[3ds2apple] screen layout: %@", layout.rawValue)
+        applyPresentedGeometry()
+    }
+
+    /// Records and applies which way the screens are turned. Safe while a game
+    /// runs (same path as the layout change).
+    func setScreenRotation(_ rotation: ScreenRotation) {
+        guard rotation != screenRotation else { return }
+        screenRotation = rotation
+        AppLog.log("[3ds2apple] screen rotation: %@", rotation.rawValue)
+        applyPresentedGeometry()
+    }
+
+    /// Turns whole-console-pixel magnification on or off. The game view computes
+    /// its box from the same setting; this only tells the layer which filter to
+    /// magnify the drawable with.
+    func setIntegerScaling(_ enabled: Bool) {
+        guard enabled != integerScaleSetting else { return }
+        integerScaleSetting = enabled
+        applyPresentedGeometry()
     }
 
     /// Changes the free-run frame cap. Safe while a game is playing: the next
@@ -564,13 +594,37 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Whether the optional graphics warm-up is on, for diagnostics.
     var graphicsWarmUpEnabled: Bool { graphicsWarmUpSetting.current == 1 }
 
-    /// Drawable resolution factor for the presented screens (1 or 2). The swapchain
-    /// is resized on the runtime queue by the Metal view's size callback.
+    /// Drawable resolution factor for the presented screens (1 or 2). The
+    /// swapchain is resized on the runtime queue by the Metal view's size
+    /// callback.
     func applyRenderScale(_ scale: CGFloat) {
         let factor: CGFloat = scale >= 2 ? 2 : 1
         requestedRenderScale = factor
-        metalScreenView?.setRenderScale(factor)
+        applyPresentedGeometry()
         AppLog.log("[3ds2apple] render scale: %.0fx", factor)
+    }
+
+    /// Pushes the layout, rotation, render scale and integer-scaling choice into
+    /// the Metal view (drawable size and magnification filter), and — when a
+    /// system is presenting — tells the presenter the same layout/orientation and
+    /// resizes its swapchain, all on the runtime serial queue. Main queue only.
+    private func applyPresentedGeometry() {
+        guard let view = metalScreenView else { return }
+        configurePresentedGeometry(view)
+        guard let presenter else { return }
+        let layout = screenLayout.presenterValue
+        let rotation = screenRotation.presenterValue
+        let size = view.drawablePixelSize
+        let width = UInt32(max(1, size.width.rounded()))
+        let height = UInt32(max(1, size.height.rounded()))
+        runtimeQueue.async { [weak self] in
+            // Only a system mid-presentation needs the live change; a load that
+            // is about to start gets the layout from presenterForLoadOnMain.
+            guard let self, self.framePresenter != nil else { return }
+            _ = zk_presenter_set_layout(presenter, layout)
+            _ = zk_presenter_set_orientation(presenter, rotation)
+            _ = zk_presenter_resize(presenter, width, height)
+        }
     }
 
     /// Audio output volume, 0...1. Applied to the running mixer immediately.
@@ -730,17 +784,6 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// loads do not retry the same missing/unsupported setup.
     private func presenterForLoadOnMain() -> UnsafeMutableRawPointer? {
         guard Self.preferMetalPresentation else { return nil }
-        // The presenter draws the console layout (upper above lower) into one
-        // drawable; the other screen arrangements are shown from the two screen
-        // images instead. Returns nil so this load takes the readback path; an
-        // already-created presenter stays alive for a later console-layout load.
-        guard screenLayout.usesPresentedPath else {
-            AppLog.log("[3ds2apple] screen layout %@: using the CGImage readback path",
-                  screenLayout.rawValue)
-            return nil
-        }
-        if let presenter { return presenter }
-        if presenterUnavailable { return nil }
 
         let view: MetalScreenView
         if let existing = metalScreenView {
@@ -750,14 +793,27 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             created.onDrawableSizeChanged = { [weak self] size in
                 self?.presentedDrawableSizeChanged(size)
             }
-            created.setRenderScale(requestedRenderScale)
-            created.prepareForPresentation(provisionalSize: Self.provisionalPresentedPixelSize())
             metalScreenView = created
             view = created
         }
+        // The drawable is the arrangement's own pixels (400x480 for the stacked
+        // console, 720x240 side by side, or the arrangement turned a quarter
+        // turn), times the render scale. Set before the presenter is made so the
+        // surface and first swapchain start at the right size.
+        configurePresentedGeometry(view)
         // The setting applies to the layer, which lives for the app run: apply
         // it again on every load so it also survives app navigation/reloads.
         view.applySystemMetalHUD(enabled: systemMetalHUDEnabled)
+        view.prepareForPresentation()
+
+        if let presenter {
+            // A reused presenter is configured for this load here on the main
+            // queue: the frame loop is stopped (the load restarts it), so no
+            // zk_present can be running at the same time.
+            applyScreenArrangementOnMain(presenter)
+            return presenter
+        }
+        if presenterUnavailable { return nil }
 
         let size = view.drawablePixelSize
         let width = UInt32(max(1, size.width.rounded()))
@@ -768,6 +824,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             presentedDrawableSize = CGSize(width: CGFloat(width), height: CGFloat(height))
             AppLog.log("[3ds2apple] zk_presenter_create: CAMetalLayer %ux%u · shared device: %@",
                   width, height, zk_presenter_shared_device(handle) == 1 ? "yes" : "no")
+            applyScreenArrangementOnMain(handle)
             return handle
         }
         // Read the thread-local error here, before anything else can replace it.
@@ -777,6 +834,50 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         presenterUnavailable = true
         metalScreenView = nil
         return nil
+    }
+
+    /// Pushes the layout, rotation, render scale and integer-scaling choice into
+    /// the Metal view. Main queue only.
+    private func configurePresentedGeometry(_ view: MetalScreenView) {
+        let native = ScreenGeometry.nativePixelSize(layout: screenLayout, rotation: screenRotation)
+        view.setPresentedGeometry(
+            nativePixelSize: native,
+            renderScale: requestedRenderScale,
+            integerScaling: integerScaleSetting
+        )
+        presentedDrawableSize = view.drawablePixelSize
+    }
+
+    /// Tells the presenter the layout/orientation a load will present with, and
+    /// logs that the Swift geometry agrees with the Rust layout helper. Main
+    /// queue, with the frame loop stopped (a load start); live changes go through
+    /// `applyPresentedGeometry` on the runtime queue. `presenterForLoadOnMain`
+    /// runs before the system is created, so no `zk_present` can overlap.
+    private func applyScreenArrangementOnMain(_ handle: UnsafeMutableRawPointer) {
+        let layout = screenLayout.presenterValue
+        let rotation = screenRotation.presenterValue
+        _ = zk_presenter_set_layout(handle, layout)
+        _ = zk_presenter_set_orientation(handle, rotation)
+
+        let native = ScreenGeometry.nativePixelSize(layout: screenLayout, rotation: screenRotation)
+        var expectedWidth: UInt32 = 0
+        var expectedHeight: UInt32 = 0
+        guard zk_present_layout_size(layout, rotation, &expectedWidth, &expectedHeight) == 1 else {
+            AppLog.log("[3ds2apple] zk_present_layout_size rejected layout %u orientation %u",
+                  layout, rotation)
+            return
+        }
+        let matches = Int(expectedWidth) == Int(native.width.rounded())
+            && Int(expectedHeight) == Int(native.height.rounded())
+        AppLog.log(
+            "[3ds2apple] screen layout %@ · %@ · native drawable %ux%u · Swift %@%@",
+            screenLayout.rawValue,
+            screenRotation.rawValue,
+            expectedWidth,
+            expectedHeight,
+            "\(Int(native.width.rounded()))x\(Int(native.height.rounded()))",
+            matches ? "" : " (MISMATCH)"
+        )
     }
 
     /// The Metal view was laid out again (rotation, split view, a new screen):
@@ -791,20 +892,6 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             guard let self, self.framePresenter != nil else { return }
             _ = zk_presenter_resize(presenter, width, height)
         }
-    }
-
-    /// Size, in pixels, for the Metal view before SwiftUI lays it out. The real
-    /// layout pass replaces it (and resizes the swapchain).
-    private static func provisionalPresentedPixelSize() -> CGSize {
-        let scale = max(UITraitCollection.current.displayScale, 1)
-        var points: CGFloat = 390
-        if let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first {
-            points = max(scene.screen.bounds.width, 1)
-        }
-        let width = (points * scale).rounded()
-        return CGSize(width: width, height: (width * 1.2).rounded())
     }
 
     /// A1: drag/tap on the presented layer, normalised to the view's 0...1
@@ -823,6 +910,8 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         let onLowerScreen = zk_present_touch_map(
             UInt32(size.width.rounded()),
             UInt32(size.height.rounded()),
+            screenLayout.presenterValue,
+            screenRotation.presenterValue,
             Float(min(max(normalisedX, 0), 1)),
             Float(min(max(normalisedY, 0), 1)),
             &x,

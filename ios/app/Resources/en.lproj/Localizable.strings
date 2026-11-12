@@ -19,7 +19,10 @@
 "3ds2apple" = "3ds2apple";
 "3ds2apple is not affiliated with Nintendo. Use only game dumps you made from your own console." = "3ds2apple is not affiliated with Nintendo. Use only game dumps you made from your own console.";
 "3dsrecomp (MIT): ahead-of-time ARM/Thumb/VFP to C recompiler." = "3dsrecomp (MIT): ahead-of-time ARM/Thumb/VFP to C recompiler.";
+"4:3" = "4:3";
 "5 ms. Least delay, most sensitive to audio dropouts." = "5 ms. Least delay, most sensitive to audio dropouts.";
+"90° clockwise" = "90° clockwise";
+"90° counter-clockwise" = "90° counter-clockwise";
 "A backup is a ZIP archive of the files above. Importing one merges its files back into this game's save-data folder." = "A backup is a ZIP archive of the files above. Importing one merges its files back into this game's save-data folder.";
 "A save state is a snapshot of the whole console, taken between frames. Loading one restores that point, drops the audio buffered before it and continues the same game session." = "A save state is a snapshot of the whole console, taken between frames. Loading one restores that point, drops the audio buffered before it and continues the same game session.";
 "AOT code" = "AOT code";
@@ -39,7 +42,7 @@
 "Battery saves" = "Battery saves";
 "Battery saves and instant save slots" = "Battery saves and instant save slots";
 "Battery saves are written by the game runtime into Documents/data/<game>. Instant save slots are stored in Documents/states/<game>. Both stay on this device." = "Battery saves are written by the game runtime into Documents/data/<game>. Instant save slots are stored in Documents/states/<game>. Both stay on this device.";
-"Both screens in one row, for landscape. Uses the screen-readback path." = "Both screens in one row, for landscape. Uses the screen-readback path.";
+"Both screens in one row: upper on the left, lower on the right. Fits a landscape screen." = "Both screens in one row: upper on the left, lower on the right. Fits a landscape screen.";
 "Buffer size" = "Buffer size";
 "Button remapping" = "Button remapping";
 "CADisplayLink · %ld Hz" = "CADisplayLink · %ld Hz";
@@ -96,6 +99,8 @@
 "Diagnostics" = "Diagnostics";
 "Dismiss" = "Dismiss";
 "Display" = "Display";
+"Display changes apply immediately, also while a game is running. The in-game layout moves the on-screen controls out of the screens' way in landscape." = "Display changes apply immediately, also while a game is running. The in-game layout moves the on-screen controls out of the screens' way in landscape.";
+"Display changes apply immediately, also while a game is running: the layer is resized to the new layout and the next frame uses it. Integer scaling needs Fit or 4:3 and snaps each 3DS pixel to a whole number of screen pixels; Stretch ignores it. Render resolution changes the presenter's internal drawable, not the screen space the picture takes." = "Display changes apply immediately, also while a game is running: the layer is resized to the new layout and the next frame uses it. Integer scaling needs Fit or 4:3 and snaps each 3DS pixel to a whole number of screen pixels; Stretch ignores it. Render resolution changes the presenter's internal drawable, not the screen space the picture takes.";
 "Display settings" = "Display settings";
 "Display, audio, controls, performance, storage" = "Display, audio, controls, performance, storage";
 "Done" = "Done";
@@ -113,7 +118,10 @@
 "Export diagnostics" = "Export diagnostics";
 "Fast-forward" = "Fast-forward";
 "Fast-forward applies when the game resumes and mutes its audio while it is active." = "Fast-forward applies when the game resumes and mutes its audio while it is active.";
+"Fills the whole area, stretching the picture if its shape differs. The 3DS aspect ratio is not kept." = "Fills the whole area, stretching the picture if its shape differs. The 3DS aspect ratio is not kept.";
 "First-load graphics warm-up (optional)" = "First-load graphics warm-up (optional)";
+"Fit (native)" = "Fit (native)";
+"Fits the picture inside a 4:3 area, the classic TV shape. The extra space becomes black bars." = "Fits the picture inside a 4:3 area, the classic TV shape. The extra space becomes black bars.";
 "Folder" = "Folder";
 "Frame cap" = "Frame cap";
 "Frame loop" = "Frame loop";
@@ -135,6 +143,7 @@
 "Importing battery saves…" = "Importing battery saves…";
 "Integer scaling" = "Integer scaling";
 "Invalid runtime handle (zk_run_frame = %d)." = "Invalid runtime handle (zk_run_frame = %d).";
+"Keeps the 3DS picture's own shape. Black bars fill the rest of the screen." = "Keeps the 3DS picture's own shape. Black bars fill the rest of the screen.";
 "Landscape" = "Landscape";
 "Language" = "Language";
 "Licence" = "Licence";
@@ -150,7 +159,6 @@
 "Multi-disk ZIP archives are not supported." = "Multi-disk ZIP archives are not supported.";
 "Mute" = "Mute";
 "Mute audio" = "Mute audio";
-"Native (console)" = "Native (console)";
 "Nintendo 3DS games as native ARM64 apps on iPhone and iPad." = "Nintendo 3DS games as native ARM64 apps on iPhone and iPad.";
 "Nintendo 3DS is a trademark of Nintendo Co., Ltd. This app is not affiliated with or endorsed by Nintendo." = "Nintendo 3DS is a trademark of Nintendo Co., Ltd. This app is not affiliated with or endorsed by Nintendo.";
 "Nintendo 3DS, natively on iPhone and iPad" = "Nintendo 3DS, natively on iPhone and iPad";
@@ -168,8 +176,8 @@
 "On-screen controls" = "On-screen controls";
 "On: the HUD is shown over the presented Metal layer." = "On: the HUD is shown over the presented Metal layer.";
 "On: the first frames of each load run behind a “Preparing graphics” screen until they stop spiking (at most 5 s). Later pipelines can still compile on first use." = "On: the first frames of each load run behind a “Preparing graphics” screen until they stop spiking (at most 5 s). Later pipelines can still compile on first use.";
-"Only the lower (touch) screen. Uses the screen-readback path." = "Only the lower (touch) screen. Uses the screen-readback path.";
-"Only the upper (3D) screen. Uses the screen-readback path." = "Only the upper (3D) screen. Uses the screen-readback path.";
+"Only the lower (touch) screen." = "Only the lower (touch) screen.";
+"Only the upper (3D) screen. The game's touchscreen is not shown." = "Only the upper (3D) screen. The game's touchscreen is not shown.";
 "Orientation" = "Orientation";
 "Overlay opacity" = "Overlay opacity";
 "Packing battery saves into a ZIP archive…" = "Packing battery saves into a ZIP archive…";
@@ -206,6 +214,7 @@
 "Saved %@ · %@" = "Saved %@ · %@";
 "Saving to slot %ld…" = "Saving to slot %ld…";
 "Screen layout" = "Screen layout";
+"Screen rotation" = "Screen rotation";
 "Screens" = "Screens";
 "Serializing the console…" = "Serializing the console…";
 "Settings" = "Settings";
@@ -227,7 +236,7 @@
 "Starting %@…" = "Starting %@…";
 "Starting Zakuro…" = "Starting Zakuro…";
 "Storage" = "Storage";
-"Stretch to 4:3" = "Stretch to 4:3";
+"Stretch" = "Stretch";
 "Summary" = "Summary";
 "System Metal HUD" = "System Metal HUD";
 "That file is not inside the game's save-data folder." = "That file is not inside the game's save-data folder.";
@@ -256,12 +265,13 @@
 "The game stopped before the state could be restored." = "The game stopped before the state could be restored.";
 "The game stopped before the state could be saved." = "The game stopped before the state could be saved.";
 "The instant save state in Slot %ld is removed. The game's own battery saves are not touched." = "The instant save state in Slot %ld is removed. The game's own battery saves are not touched.";
+"The interface follows the device. The in-game layout adapts to portrait and landscape." = "The interface follows the device. The in-game layout adapts to portrait and landscape.";
+"The interface stays landscape. Side-by-side or a turned console layout uses the width best." = "The interface stays landscape. Side-by-side or a turned console layout uses the width best.";
+"The interface stays portrait." = "The interface stays portrait.";
 "The on-screen pad and a connected controller are merged. Dragging on the lower screen is the 3DS touchscreen." = "The on-screen pad and a connected controller are merged. Dragging on the lower screen is the 3DS touchscreen.";
 "The runtime is released and the game closes. Imported ROMs and save data stay on the device." = "The runtime is released and the game closes. Imported ROMs and save data stay on the device.";
 "The runtime was stopped when the app went to the background. Load the ROM again to continue." = "The runtime was stopped when the app went to the background. Load the ROM again to continue.";
 "The save data is too large for a ZIP archive (4 GB limit)." = "The save data is too large for a ZIP archive (4 GB limit).";
-"The screen layout is read when a game loads, so a layout change applies to the next load. The presented console layout is the fastest path; other layouts use the screen-readback path. Integer scaling snaps the presented image to whole screen pixels." = "The screen layout is read when a game loads, so a layout change applies to the next load. The presented console layout is the fastest path; other layouts use the screen-readback path. Integer scaling snaps the presented image to whole screen pixels.";
-"The screen layout is read when a game loads, so it applies to the next load. The other display changes apply immediately." = "The screen layout is read when a game loads, so it applies to the next load. The other display changes apply immediately.";
 "The selected file is empty." = "The selected file is empty.";
 "The selected file is not a ZIP archive." = "The selected file is not a ZIP archive.";
 "The selected file is too large to import." = "The selected file is too large to import.";
@@ -272,8 +282,10 @@
 "This app ships without any game data. It has no ROMs, decryption keys, system files or game assets. Import only dumps that you made from a console you own." = "This app ships without any game data. It has no ROMs, decryption keys, system files or game assets. Import only dumps that you made from a console you own.";
 "Tools" = "Tools";
 "Unsupported file “%@”. Choose a decrypted .3ds or .cci ROM." = "Unsupported file “%@”. Choose a decrypted .3ds or .cci ROM.";
-"Upper screen above the lower one, as on the console. Uses the fast presented path." = "Upper screen above the lower one, as on the console. Uses the fast presented path.";
+"Upper screen above the lower one, as on the console. Fits a portrait screen; with 90° rotation it becomes two columns." = "Upper screen above the lower one, as on the console. Fits a portrait screen; with 90° rotation it becomes two columns.";
 "Upper screen only" = "Upper screen only";
+"Upright" = "Upright";
+"Upside down" = "Upside down";
 "Version" = "Version";
 "Version %@ · build %@" = "Version %@ · build %@";
 "Version, runtime and acknowledgements" = "Version, runtime and acknowledgements";

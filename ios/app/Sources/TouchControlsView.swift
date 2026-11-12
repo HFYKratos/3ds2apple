@@ -6,6 +6,11 @@
 //  Start/Select, L/R). Presses map onto the ZK_BUTTON_* HID bits and are
 //  merged with the hardware controller in `InputState`.
 //
+//  Portrait uses `TouchControlsView`, the pad under the screens. Landscape uses
+//  the three `LandscapeControls*` views: the shoulder buttons and the two button
+//  clusters sit in a top bar and in reserved side rails, so no button covers the
+//  screens. Both styles report the same ZK_BUTTON_* bits.
+//
 
 import SwiftUI
 import UIKit
@@ -138,5 +143,194 @@ private struct TouchButton: View {
                     }
             )
             .accessibilityIdentifier("btn-\(label)")
+    }
+}
+
+// MARK: - Landscape controls
+
+/// Sizes shared by the landscape controls. The side rails are wide enough for
+/// the 3x3 D-pad and the A/B/X/Y diamond, and the screens keep the space between
+/// them, so no button overlaps a screen.
+enum LandscapeControlsLayout {
+    static let buttonSize: CGFloat = 44
+    static let railWidth: CGFloat = 150
+    static let shoulderWidth: CGFloat = 58
+    static let shoulderHeight: CGFloat = 30
+    static let selectStartWidth: CGFloat = 60
+    static let selectStartHeight: CGFloat = 30
+    static let topBarHeight: CGFloat = 40
+    static let railPadding: CGFloat = 8
+}
+
+/// The top bar in landscape: Select/Start in the middle. The pause button is
+/// drawn by the game view over the trailing end of this row, which is kept free.
+struct LandscapeControlsTopBar: View {
+    private let backgroundOpacity: Double
+    private let haptics: Bool
+    private let onButton: (UInt32, Bool) -> Void
+
+    init(backgroundOpacity: Double = 0.55,
+         haptics: Bool = false,
+         onButton: @escaping (UInt32, Bool) -> Void) {
+        self.backgroundOpacity = min(max(backgroundOpacity, 0.0), 1.0)
+        self.haptics = haptics
+        self.onButton = onButton
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Spacer(minLength: 0)
+            TouchButton(
+                label: "Select",
+                width: LandscapeControlsLayout.selectStartWidth,
+                height: LandscapeControlsLayout.selectStartHeight,
+                bit: ZKButton.select,
+                haptics: haptics,
+                onButton: onButton
+            )
+            TouchButton(
+                label: "Start",
+                width: LandscapeControlsLayout.selectStartWidth,
+                height: LandscapeControlsLayout.selectStartHeight,
+                bit: ZKButton.start,
+                haptics: haptics,
+                onButton: onButton
+            )
+            // Room for the pause button on the trailing side.
+            Spacer(minLength: 56)
+        }
+        .frame(height: LandscapeControlsLayout.topBarHeight)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.black.opacity(backgroundOpacity))
+        )
+        .accessibilityIdentifier("touch-controls-top")
+    }
+}
+
+/// The left rail in landscape: L at the top, the D-pad centred below it.
+struct LandscapeControlsLeftRail: View {
+    private let backgroundOpacity: Double
+    private let haptics: Bool
+    private let onButton: (UInt32, Bool) -> Void
+
+    init(backgroundOpacity: Double = 0.55,
+         haptics: Bool = false,
+         onButton: @escaping (UInt32, Bool) -> Void) {
+        self.backgroundOpacity = min(max(backgroundOpacity, 0.0), 1.0)
+        self.haptics = haptics
+        self.onButton = onButton
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TouchButton(
+                label: "L",
+                width: LandscapeControlsLayout.shoulderWidth,
+                height: LandscapeControlsLayout.shoulderHeight,
+                bit: ZKButton.l,
+                haptics: haptics,
+                onButton: onButton
+            )
+            Spacer(minLength: 8)
+            DpadCluster(buttonSize: LandscapeControlsLayout.buttonSize,
+                        haptics: haptics,
+                        onButton: onButton)
+            Spacer(minLength: 8)
+        }
+        .padding(LandscapeControlsLayout.railPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.black.opacity(backgroundOpacity))
+        )
+        .accessibilityIdentifier("touch-controls-left")
+    }
+}
+
+/// The right rail in landscape: R at the top, A/B/X/Y centred below it.
+struct LandscapeControlsRightRail: View {
+    private let backgroundOpacity: Double
+    private let haptics: Bool
+    private let onButton: (UInt32, Bool) -> Void
+
+    init(backgroundOpacity: Double = 0.55,
+         haptics: Bool = false,
+         onButton: @escaping (UInt32, Bool) -> Void) {
+        self.backgroundOpacity = min(max(backgroundOpacity, 0.0), 1.0)
+        self.haptics = haptics
+        self.onButton = onButton
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TouchButton(
+                label: "R",
+                width: LandscapeControlsLayout.shoulderWidth,
+                height: LandscapeControlsLayout.shoulderHeight,
+                bit: ZKButton.r,
+                haptics: haptics,
+                onButton: onButton
+            )
+            Spacer(minLength: 8)
+            FaceButtonCluster(buttonSize: LandscapeControlsLayout.buttonSize,
+                              haptics: haptics,
+                              onButton: onButton)
+            Spacer(minLength: 8)
+        }
+        .padding(LandscapeControlsLayout.railPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.black.opacity(backgroundOpacity))
+        )
+        .accessibilityIdentifier("touch-controls-right")
+    }
+}
+
+// MARK: - Button clusters
+
+/// The four direction buttons as a plus.
+private struct DpadCluster: View {
+    let buttonSize: CGFloat
+    let haptics: Bool
+    let onButton: (UInt32, Bool) -> Void
+
+    var body: some View {
+        VStack(spacing: 4) {
+            TouchButton(label: "▲", width: buttonSize, bit: ZKButton.up,
+                        haptics: haptics, onButton: onButton)
+            HStack(spacing: 4) {
+                TouchButton(label: "◀", width: buttonSize, bit: ZKButton.left,
+                            haptics: haptics, onButton: onButton)
+                Color.clear.frame(width: buttonSize, height: buttonSize)
+                TouchButton(label: "▶", width: buttonSize, bit: ZKButton.right,
+                            haptics: haptics, onButton: onButton)
+            }
+            TouchButton(label: "▼", width: buttonSize, bit: ZKButton.down,
+                        haptics: haptics, onButton: onButton)
+        }
+    }
+}
+
+/// Y over X/A over B, the 3DS face-button diamond.
+private struct FaceButtonCluster: View {
+    let buttonSize: CGFloat
+    let haptics: Bool
+    let onButton: (UInt32, Bool) -> Void
+
+    var body: some View {
+        VStack(spacing: 4) {
+            TouchButton(label: "Y", width: buttonSize, bit: ZKButton.y,
+                        haptics: haptics, onButton: onButton)
+            HStack(spacing: 4) {
+                TouchButton(label: "X", width: buttonSize, bit: ZKButton.x,
+                            haptics: haptics, onButton: onButton)
+                TouchButton(label: "A", width: buttonSize, bit: ZKButton.a,
+                            haptics: haptics, onButton: onButton)
+            }
+            TouchButton(label: "B", width: buttonSize, bit: ZKButton.b,
+                        haptics: haptics, onButton: onButton)
+        }
     }
 }

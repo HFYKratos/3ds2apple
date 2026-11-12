@@ -80,6 +80,14 @@ the GPU renderer itself, because the screens the renderer draws have to be the
 ones the presenter shows. Setting it only affects a plain `zk_create` load, i.e.
 the A0 fallback build.
 
+The presented layer is not fixed to the console's stacked portrait layout:
+`zk_presenter_set_layout` and `zk_presenter_set_orientation` arrange and turn
+the screens (stacked, side by side, a single screen, or the console arrangement
+rotated a quarter turn), `zk_present_layout_size` reports the drawable pixels
+that shows an arrangement without letterboxing, and `zk_present_touch_map`
+applies the same layout/rotation when the app maps a touch. The app's display
+settings use these live while a game runs.
+
 The app still has to embed MoltenVK; [METAL.md](METAL.md) §8.3 has the download
 and packaging steps.
 
@@ -136,13 +144,16 @@ The app-side thresholds, log lines and diagnostics fields are documented in
 | `zk_save_state_discard(system)` | Release a measured saved state that will not be copied (tens of MiB) |
 | `zk_load_state(system, data, length)` | Restore a saved state: `0` loaded, `-1` bad handle, `-2` bad argument, `-3` refused |
 | `zk_presenter_create(ui_view, width, height)` | Make a Vulkan presenter for a `UIView` whose layer is a `CAMetalLayer`; returns an opaque presenter or NULL |
-| `zk_presenter_resize(presenter, width, height)` | New drawable size in pixels (rotation/layout); the swapchain rebuilds on the next present |
+| `zk_presenter_resize(presenter, width, height)` | New drawable size in pixels (layout/rotation/render scale); the swapchain rebuilds on the next present |
 | `zk_presenter_destroy(presenter)` | Release the presenter; destroy its systems first |
 | `zk_presenter_shared_device(presenter)` | 1 when the renderer can draw on the presenter's device (no readback), 0 for upload presentation, -1 for NULL |
+| `zk_presenter_set_layout(presenter, layout)` | Arrange the screens (`ZK_LAYOUT_*`: stacked, side by side, upper only, lower only, large upper); 0, or -1 for NULL/unknown |
+| `zk_presenter_set_orientation(presenter, orientation)` | Turn the screens clockwise (`ZK_ORIENTATION_*`: north/east/south/west); 0, or -1 for NULL/unknown |
+| `zk_present_layout_size(layout, orientation, out_w, out_h)` | Drawable pixels that show a layout without letterboxing (stacked 400×480 north / 480×400 east-west, side by side 720×240, …); 1, or 0 for unknown/NULL |
 | `zk_create_presented(rom, data_dir, presenter)` | `zk_create` on the presenter's device: GPU renderer requested, screens presented through the layer |
 | `zk_present(system, presenter)` | Present the frame `zk_run_frame` just drew; 0 ok, 1 swapchain out of date (continue), -1 bad handle, -2 failed |
 | `zk_present_mode(system, presenter)` | Presentation path of a loaded system: 0 readback, 1 GPU direct, 2 uploaded |
-| `zk_present_touch_map(width, height, x, y, out_x, out_y)` | Normalised touch on the presented layer → lower-screen pixels (1) or not on it (0) |
+| `zk_present_touch_map(width, height, layout, orientation, x, y, out_x, out_y)` | Normalised touch on the presented layer → lower-screen pixels (1) or not on it (0), for the presenter's layout and rotation |
 | `zk_linked_code()` | 1 if this build contains linked AOT code |
 | `zk_linked_program_id()` | Title ID the linked code was built for |
 | `zk_recompiled(system)` | 1 if the running title is executing linked code |
@@ -230,8 +241,10 @@ restored memory on the next frame.
   `zk_create`; call them on the runtime's serial queue before loading a ROM.
 - A presenter (`zk_presenter_t`) is not thread-safe either. Create, resize and
   destroy it on the main queue (it wraps a `UIView`); call `zk_present` on the
-  same serial queue as `zk_run_frame`, after the frame completed. Destroy the
-  systems loaded with `zk_create_presented` before the presenter.
+  same serial queue as `zk_run_frame`, after the frame completed, and change its
+  layout/orientation on that serial queue too while a system is presenting (or
+  on the main queue before a load starts). Destroy the systems loaded with
+  `zk_create_presented` before the presenter.
 
 ## Linked AOT code
 
