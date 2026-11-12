@@ -84,3 +84,11 @@ min iOS 16.0，bundle `com.kratos.3ds2apple`）；`libzakuro_ios.a` 已链接，
 - 触摸 overlay（D-pad、A/B/X/Y、L/R、Start/Select）+ GameController 映射；
   单一 `zk_set_input` 调用点，在每帧 `zk_run_frame` 前于 runtime 串行队列执行。
 - 待真机：Pokémon Y 语言选择 → ▼/▲ + A；再测 Start/L/R、手柄、Unload/后台无卡键。
+
+## I3-T1 真机验收（2026-11-12，通过）
+
+- Pokémon Y 语言选择已用触摸 D-pad + A 通过；进入开场画面，上屏正常显示，
+  下屏为 3DS 触摸屏；状态行 `26 fps · 1,482 frames · last: completed`。
+- 触摸 overlay 的 L/Select/Start/R、D-pad、A/B/X/Y 均可见；未接手柄时提示
+  `No controller connected — use the on-screen controls`。
+- 截图不入库（AGENTS.md 规则）；此处只记录文字指标。
