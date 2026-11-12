@@ -8,6 +8,7 @@
 
 - [执行计划 v0.5（2026-11-11）](docs/plan.md)：首发 10 款、无本地 Mac、侧载、开源的落地方案；附录 B 讨论 Windows-only 出包（S2Arm 式）。
 - [可行性评估 v0.2](docs/feasibility.md)：3dsrecomp + Zakuro 的通用 AOT 路线、iOS 缺口、工作量与风险。
+- [协作与迭代指南](AGENTS.md)（Agent 必读）
 - [里程碑](docs/milestones.md)：M0 iOS 构建链路已打通（macOS VM → IPA → 真机）。
 - [iOS 集成](docs/integration.md)：Zakuro 静态库构建与 C ABI。
 - [可行性评估 v0.1](docs/feasibility-v0.1.md)：路线 A（Azahar/Cytrus）、B（AOT）、C（反编译）的横向对比。
@@ -49,6 +50,7 @@ docs/
 NOTICE                 版权/商标/无 ROM 声明
 THIRD_PARTY.md         计划依赖与参考项目的许可证
 CONTRIBUTING.md        贡献指南（禁止 ROM/keys）
+AGENTS.md              Agent 协作与迭代规则
 LICENSE                Apache-2.0
 IPA/                   本地测试 IPA（.gitignore，不提交）
 ios/zakuro-ios/        Zakuro iOS staticlib 的 C ABI

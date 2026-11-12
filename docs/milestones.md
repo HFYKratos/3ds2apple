@@ -28,7 +28,7 @@
 
 ### 下一里程碑
 
-- [ ] Zakuro 核心编译为 `aarch64-apple-ios` 静态库
+- [x] Zakuro 核心编译为 `aarch64-apple-ios` 静态库（`libzakuro_ios.a`，52 MB）
 - [ ] SwiftUI 壳接入 `read_screen` + `take_audio` + `set_input`
 - [ ] 3dsrecomp 生成第一款游戏的 C 代码并链接
 - [ ] 第一款游戏在真机跑起来
