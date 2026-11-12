@@ -11,6 +11,12 @@
 //         the 3DS 60 Hz timeline, instead of being paced by CADisplayLink. The
 //         display-link loop is kept behind the `frameLoopDriver` constant as a
 //         one-line fallback.
+//  A1:     the screens can be presented on a CAMetalLayer owned by the app
+//          (`MetalScreenView`) instead of being read back into a CGImage. The
+//          presenter and the Metal view are main-queue objects; `zk_present()`
+//          runs on the runtime queue right after `zk_run_frame()`. When the
+//          layer/presenter cannot be made the session falls back to the
+//          `zk_read_screen` + CGImage path unchanged.
 //
 //  Threading contract (docs/integration.md, ios/zakuro-ios/README.md):
 //  - every zk_* call that takes a handle runs on `runtimeQueue`, a single
@@ -37,6 +43,7 @@ import Combine
 import CoreGraphics
 import Foundation
 import QuartzCore
+import UIKit
 
 /// A ROM stored in the app's Documents directory.
 struct ImportedROM {
@@ -70,6 +77,28 @@ enum AOTStatus: String {
     case linkedActive = "linked, active"
 
     var label: String { rawValue }
+}
+
+/// A1: how the frame loop reaches the display.
+enum Presentation: Equatable {
+    /// No CAMetalLayer: `zk_read_screen` into a `CGImage` (pre-A1 path).
+    case readback
+    /// CAMetalLayer: the renderer's GPU images go straight to the swapchain.
+    case metalDirect
+    /// CAMetalLayer: the renderer is software, so the presenter uploads pixels.
+    case metalUploaded
+
+    /// Whether the screens are shown through a CAMetalLayer at all.
+    var usesMetalLayer: Bool { self != .readback }
+
+    /// One line for the status area and the device log.
+    var label: String {
+        switch self {
+        case .readback: return "CGImage readback"
+        case .metalDirect: return "CAMetalLayer · GPU direct"
+        case .metalUploaded: return "CAMetalLayer · uploaded"
+        }
+    }
 }
 
 /// Owns the Zakuro runtime handle, the ROM import pipeline and the frame loop.
@@ -108,6 +137,25 @@ final class ROMSession: ObservableObject {
     /// `CADisplayLink · 60 Hz`). Shown in the status line so a device
     /// screenshot records which loop is running (I3-T9).
     @Published private(set) var frameLoopLabel: String = "—"
+    /// A1: the Metal view the presenter draws into, nil while the Metal path is
+    /// off or unavailable. The session keeps it for the app's lifetime: the
+    /// presenter's swapchain references its layer.
+    @Published private(set) var metalScreenView: MetalScreenView?
+    /// A1: how the loaded runtime reaches the display (status line + which
+    /// screen surface the UI shows).
+    @Published private(set) var displayPath: Presentation = .readback
+    /// A1: drawable size of `metalScreenView` in pixels. Main queue only.
+    private(set) var presentedDrawableSize = CGSize.zero
+    /// A1: presenter handle (`zk_presenter_*`). Created and destroyed on the
+    /// main queue; the value is handed to the runtime queue for `zk_present`.
+    private var presenter: UnsafeMutableRawPointer?
+    /// A1: presenter copy the frame loop presents through. runtimeQueue only.
+    private var framePresenter: UnsafeMutableRawPointer?
+    /// A1: set once the Metal view/presenter could not be made; later loads use
+    /// the readback path instead of retrying the same failure every time.
+    private var presenterUnavailable = false
+    /// A1: consecutive `zk_present` failures. runtimeQueue only.
+    private var presentFailures = 0
 
     /// Serial queue that owns every zk_* call.
     private let runtimeQueue = DispatchQueue(
@@ -184,6 +232,16 @@ final class ROMSession: ObservableObject {
         if let system {
             zk_destroy(system)
         }
+        // A1: the presenter shares its Vulkan device with the renderer, so the
+        // runtime went first above. `zk_presenter_destroy` touches UIKit
+        // objects, so it runs on the main queue when this deinit does not.
+        if let presenter {
+            if Thread.isMainThread {
+                zk_presenter_destroy(presenter)
+            } else {
+                DispatchQueue.main.async { zk_presenter_destroy(presenter) }
+            }
+        }
     }
 
     // MARK: - Commands (main queue)
@@ -205,7 +263,7 @@ final class ROMSession: ObservableObject {
             guard let self else { return }
             switch self.prepareROM(from: url) {
             case .success(let rom):
-                self.startRuntime(for: rom)
+                self.beginLoad(rom)
             case .failure(let failure):
                 self.publishFailure("Could not import “\(name)”: \(failure.message)")
             }
@@ -230,7 +288,7 @@ final class ROMSession: ObservableObject {
         setPhase(.starting(name: rom.name))
         runtimeQueue.async { [weak self] in
             guard let self else { return }
-            self.startRuntime(for: rom)
+            self.beginLoad(rom)
         }
     }
 
@@ -312,19 +370,166 @@ final class ROMSession: ObservableObject {
         inputState.setTouch(x: x, y: y)
     }
 
+    // MARK: - A1 presentation (main queue creates, runtimeQueue presents)
+
+    /// Whether the app tries the CAMetalLayer presentation path. Set this to
+    /// `false` for an on-device A/B against the pre-A1 `CGImage` path; the
+    /// fallback is automatic when a presenter cannot be made (no MoltenVK in
+    /// the app's Frameworks, a GPU that cannot make a Vulkan device, ...).
+    private static let preferMetalPresentation = true
+
+    /// Consecutive `zk_present()` failures after which the frame loop falls
+    /// back to the CGImage readback path (≈ a second at 30-60 fps).
+    private static let presentFailureLimit = 30
+
+    /// A presented load is started from `runtimeQueue`; the Metal view and its
+    /// presenter are main-queue objects, so this hops over, creates them if
+    /// needed, and starts the load back on the runtime queue. runtimeQueue only
+    /// (the calls themselves follow the queue rules above).
+    private func beginLoad(_ rom: ImportedROM) {
+        // Show "Starting Zakuro…" (and the Metal view, once it exists) while
+        // the ROM loads; `importROM` was still showing the copy phase.
+        setPhase(.starting(name: rom.name))
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let presenter = self.presenterForLoadOnMain()
+            let drawableSize = self.presentedDrawableSize
+            self.runtimeQueue.async { [weak self] in
+                self?.startRuntime(for: rom, presenter: presenter, drawableSize: drawableSize)
+            }
+        }
+    }
+
+    /// Creates the `MetalScreenView` and its presenter the first time a load
+    /// asks for them and reuses them afterwards (the layer outlives a single
+    /// ROM). Main queue only.
+    ///
+    /// Returns `nil` when the Metal path is off or unavailable; the caller then
+    /// uses `zk_create` + `zk_read_screen`. A failure is remembered, so later
+    /// loads do not retry the same missing/unsupported setup.
+    private func presenterForLoadOnMain() -> UnsafeMutableRawPointer? {
+        guard Self.preferMetalPresentation else { return nil }
+        if let presenter { return presenter }
+        if presenterUnavailable { return nil }
+
+        let view: MetalScreenView
+        if let existing = metalScreenView {
+            view = existing
+        } else {
+            let created = MetalScreenView(frame: .zero)
+            created.onDrawableSizeChanged = { [weak self] size in
+                self?.presentedDrawableSizeChanged(size)
+            }
+            created.prepareForPresentation(provisionalSize: Self.provisionalPresentedPixelSize())
+            metalScreenView = created
+            view = created
+        }
+
+        let size = view.drawablePixelSize
+        let width = UInt32(max(1, size.width.rounded()))
+        let height = UInt32(max(1, size.height.rounded()))
+        if let handle = zk_presenter_create(Unmanaged.passUnretained(view).toOpaque(),
+                                            width, height) {
+            presenter = handle
+            presentedDrawableSize = CGSize(width: CGFloat(width), height: CGFloat(height))
+            NSLog("[3ds2apple] zk_presenter_create: CAMetalLayer %ux%u · shared device: %@",
+                  width, height, zk_presenter_shared_device(handle) == 1 ? "yes" : "no")
+            return handle
+        }
+        // Read the thread-local error here, before anything else can replace it.
+        let message = Self.currentRuntimeError()
+        NSLog("[3ds2apple] zk_presenter_create failed; using the CGImage readback path: %@",
+              message)
+        presenterUnavailable = true
+        metalScreenView = nil
+        return nil
+    }
+
+    /// The Metal view was laid out again (rotation, split view, a new screen):
+    /// the runtime queue resizes the swapchain and the next `zk_present()`
+    /// rebuilds it. Main queue only.
+    private func presentedDrawableSizeChanged(_ size: CGSize) {
+        presentedDrawableSize = size
+        guard let presenter else { return }
+        let width = UInt32(max(1, size.width.rounded()))
+        let height = UInt32(max(1, size.height.rounded()))
+        runtimeQueue.async { [weak self] in
+            guard let self, self.framePresenter != nil else { return }
+            _ = zk_presenter_resize(presenter, width, height)
+        }
+    }
+
+    /// Size, in pixels, for the Metal view before SwiftUI lays it out. The real
+    /// layout pass replaces it (and resizes the swapchain).
+    private static func provisionalPresentedPixelSize() -> CGSize {
+        let scale = max(UITraitCollection.current.displayScale, 1)
+        var points: CGFloat = 390
+        if let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first {
+            points = max(scene.screen.bounds.width, 1)
+        }
+        let width = (points * scale).rounded()
+        return CGSize(width: width, height: (width * 1.2).rounded())
+    }
+
+    /// A1: drag/tap on the presented layer, normalised to the view's 0...1
+    /// space. Only the part of the layer that holds the lower screen is a touch
+    /// surface; the runtime maps the point with `zk_present_touch_map()`.
+    /// Main queue only.
+    func setPresentedTouch(normalisedX: CGFloat, normalisedY: CGFloat) {
+        guard displayPath.usesMetalLayer else {
+            setTouchPoint(x: nil, y: nil)
+            return
+        }
+        let size = presentedDrawableSize
+        guard size.width >= 1, size.height >= 1 else { return }
+        var x: UInt16 = 0
+        var y: UInt16 = 0
+        let onLowerScreen = zk_present_touch_map(
+            UInt32(size.width.rounded()),
+            UInt32(size.height.rounded()),
+            Float(min(max(normalisedX, 0), 1)),
+            Float(min(max(normalisedY, 0), 1)),
+            &x,
+            &y
+        )
+        if onLowerScreen != 0 {
+            setTouchPoint(x: x, y: y)
+        } else {
+            setTouchPoint(x: nil, y: nil)
+        }
+    }
+
     // MARK: - Runtime (runtimeQueue only)
 
     /// Releases the current handle. Must run on `runtimeQueue`.
     private func destroySystem() {
+        if let presenter = framePresenter {
+            // The presenter's device and the screens it showed belong to this
+            // runtime: stop presenting before the system goes away.
+            framePresenter = nil
+            NSLog("[3ds2apple] CAMetalLayer presentation detached (shared device: %@)",
+                  zk_presenter_shared_device(presenter) == 1 ? "yes" : "no")
+        }
         guard let system else { return }
         zk_destroy(system)
         self.system = nil
+        presentFailures = 0
         NSLog("[3ds2apple] zk_destroy: runtime released")
     }
 
     /// zk_create() for `rom`: destroy old handle, create new one, publish state
     /// and start the frame loop. Must run on `runtimeQueue`.
-    private func startRuntime(for rom: ImportedROM) {
+    ///
+    /// A1: with a non-nil `presenter` the ROM loads through
+    /// `zk_create_presented`, so its screens are shown on the app's
+    /// CAMetalLayer. A presented load that fails is retried once with the plain
+    /// `zk_create` readback path, so a presenter problem cannot make a ROM
+    /// unplayable.
+    private func startRuntime(for rom: ImportedROM,
+                              presenter: UnsafeMutableRawPointer?,
+                              drawableSize: CGSize) {
         let romURL = documentsDirectory.appendingPathComponent(rom.relativePath)
         let dataDirectory = documentsDirectory
             .appendingPathComponent("data", isDirectory: true)
@@ -339,9 +544,25 @@ final class ROMSession: ObservableObject {
         // Replacing a ROM always releases the previous handle first.
         destroySystem()
 
-        NSLog("[3ds2apple] zk_create: loading %@", romURL.path)
+        NSLog("[3ds2apple] zk_create: loading %@ (CAMetalLayer: %@)",
+              romURL.path, presenter == nil ? "no" : "yes")
         let startedAt = Date()
-        let handle = zk_create(romURL.path, dataDirectory.path)
+        var usedPresenter = presenter
+        var handle: zk_system_t?
+        if let presenter {
+            handle = zk_create_presented(romURL.path, dataDirectory.path, presenter)
+            if handle == nil {
+                // Copy the thread-local error before anything else can replace
+                // it, then fall back to the pre-A1 load path.
+                let presentedError = Self.currentRuntimeError()
+                NSLog("[3ds2apple] zk_create_presented failed; retrying with zk_create: %@",
+                      presentedError)
+                usedPresenter = nil
+                handle = zk_create(romURL.path, dataDirectory.path)
+            }
+        } else {
+            handle = zk_create(romURL.path, dataDirectory.path)
+        }
         let elapsed = Date().timeIntervalSince(startedAt)
 
         guard let handle else {
@@ -354,12 +575,35 @@ final class ROMSession: ObservableObject {
         }
 
         system = handle
+        framePresenter = usedPresenter
+        if presenter != nil, usedPresenter == nil {
+            // The presented load failed but the plain one worked, so the
+            // presenter/device path is what broke: do not retry it on every
+            // later load. The Metal view and presenter stay alive but unused.
+            DispatchQueue.main.async { [weak self] in
+                self?.presenterUnavailable = true
+            }
+        }
+        if let usedPresenter {
+            let width = UInt32(max(1, drawableSize.width.rounded()))
+            let height = UInt32(max(1, drawableSize.height.rounded()))
+            _ = zk_presenter_resize(usedPresenter, width, height)
+        }
+        let mode = zk_present_mode(handle, usedPresenter)
+        let displayPath: Presentation
+        switch mode {
+        case 1: displayPath = .metalDirect
+        case 2: displayPath = .metalUploaded
+        default: displayPath = .readback
+        }
         let linked = zk_linked_code() == 1
         let recompiled = zk_recompiled(handle) == 1
         let programID = zk_linked_program_id()
         let aot: AOTStatus = linked ? (recompiled ? .linkedActive : .linkedInterpreting) : .shell
         NSLog("[3ds2apple] AOT linked=%d recompiled=%d program=0x%016llx status=%@",
               linked ? 1 : 0, recompiled ? 1 : 0, programID, aot.label)
+        NSLog("[3ds2apple] display: %@", displayPath.label)
+        NSLog("[3ds2apple] hardware: %@", Self.hardwareStatusText(handle))
         NSLog("[3ds2apple] zk_create OK after %.1f s: %@", elapsed, rom.relativePath)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -368,10 +612,19 @@ final class ROMSession: ObservableObject {
             self.inputState.clearAll()
             self.clearScreens()
             self.aotStatus = aot
+            self.displayPath = displayPath
             self.setPhase(.loaded(name: rom.name))
             self.startFrameLoop()
             self.startAudio()
         }
+    }
+
+    /// Copies `zk_hardware_status()` into a Swift String. The pointer is
+    /// library-owned and only valid until the next status call on this thread.
+    private static func hardwareStatusText(_ handle: zk_system_t) -> String {
+        guard let pointer = zk_hardware_status(handle) else { return "no status" }
+        let text = String(cString: pointer)
+        return text.isEmpty ? "no status" : text
     }
 
     /// Copies `zk_last_error()` into a Swift String. Must run on the thread
@@ -569,17 +822,33 @@ final class ROMSession: ObservableObject {
 
         switch result {
         case 0:
-            // ZK_FRAME_COMPLETED: read both screens + build their CGImages.
-            var cgImageTicks: UInt64 = 0
-            let top = screenImage(system: system, which: 0, cgImageTicks: &cgImageTicks)
-            let bottom = screenImage(system: system, which: 1, cgImageTicks: &cgImageTicks)
-            timingWindow.record(.cgImage, ticks: cgImageTicks)
-
-            // Drain audio after the frame and before publishing: both run on
-            // this queue, so the timings belong to the same frame.
+            // ZK_FRAME_COMPLETED. Audio first: it does not depend on the
+            // display, and in Metal mode a present can wait for a drawable,
+            // which must not delay draining the ring buffer.
             let audioStart = FrameClock.now()
             pumpAudio(system: system)
             timingWindow.record(.audioPump, ticks: FrameClock.now() - audioStart)
+
+            var top: CGImage?
+            var bottom: CGImage?
+            if let presenter = framePresenter {
+                // A1: the screens go to the CAMetalLayer (straight from the
+                // renderer's GPU images when the device is shared).
+                let presentStart = FrameClock.now()
+                let presented = zk_present(system, presenter)
+                timingWindow.record(.present, ticks: FrameClock.now() - presentStart)
+                if presented <= -2 {
+                    presentFailed(result: presented)
+                } else {
+                    presentFailures = 0
+                }
+            } else {
+                // Pre-A1 path: copy both screens to the CPU and build CGImages.
+                var cgImageTicks: UInt64 = 0
+                top = screenImage(system: system, which: 0, cgImageTicks: &cgImageTicks)
+                bottom = screenImage(system: system, which: 1, cgImageTicks: &cgImageTicks)
+                timingWindow.record(.cgImage, ticks: cgImageTicks)
+            }
 
             timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
             publishFrame(top: top, bottom: bottom, result: result)
@@ -599,6 +868,25 @@ final class ROMSession: ObservableObject {
             // ZK_FRAME_BAD_HANDLE (-2).
             finishRuntime(message: "Invalid runtime handle (zk_run_frame = \(result)).", isError: true)
             return false
+        }
+    }
+
+    /// A1: `zk_present()` failed (a negative result below -1). Counts
+    /// consecutive failures and, after a short run of them, stops presenting and
+    /// lets the next frames use the CGImage readback path, so a broken swapchain
+    /// cannot leave a black picture for the rest of the session. runtimeQueue
+    /// only.
+    private func presentFailed(result: Int32) {
+        presentFailures += 1
+        if presentFailures == 1 || presentFailures == Self.presentFailureLimit {
+            NSLog("[3ds2apple] zk_present failed (result %d, %d in a row)",
+                  result, presentFailures)
+        }
+        guard presentFailures >= Self.presentFailureLimit else { return }
+        framePresenter = nil
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.displayPath = .readback
         }
     }
 
@@ -723,12 +1011,14 @@ final class ROMSession: ObservableObject {
         let timing = stats.timing
         let line = String(
             format: "perf: fps=%.1f frames=%llu | total=%.1f/%.1f/%.1f "
-                + "run=%.1f/%.1f readTop=%.2f/%.2f readBottom=%.2f/%.2f "
-                + "image=%.2f/%.2f audio=%.2f/%.2f ms (avg/max; total avg/max/last)",
+                + "run=%.1f/%.1f present=%.2f/%.2f readTop=%.2f/%.2f "
+                + "readBottom=%.2f/%.2f image=%.2f/%.2f audio=%.2f/%.2f ms "
+                + "(avg/max; total avg/max/last)",
             stats.fps,
             stats.frames,
             timing.renderTotal.average, timing.renderTotal.maximum, timing.renderTotal.last,
             timing.runFrame.average, timing.runFrame.maximum,
+            timing.present.average, timing.present.maximum,
             timing.topScreenRead.average, timing.topScreenRead.maximum,
             timing.bottomScreenRead.average, timing.bottomScreenRead.maximum,
             timing.cgImage.average, timing.cgImage.maximum,

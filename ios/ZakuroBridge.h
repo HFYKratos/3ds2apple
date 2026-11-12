@@ -11,6 +11,15 @@
  * handle must run on the same serial queue (docs/integration.md).
  * Null handles are tolerated and turn calls into no-ops.
  *
+ * Presentation: zk_presenter_create() takes a UIView whose layer is a
+ * CAMetalLayer and makes Zakuro's Vulkan presenter draw into it (on iOS that is
+ * MoltenVK over Metal). zk_create_presented() then loads a ROM on the device
+ * the renderer shares with the presenter, and zk_present() shows each frame
+ * without the zk_read_screen() GPU→CPU copy. The presenter is a main-queue
+ * object (UIView); zk_present() belongs on the runtime serial queue. Without a
+ * loadable MoltenVK zk_presenter_create() returns NULL and the app keeps the
+ * zk_create + zk_read_screen + CGImage path.
+ *
  * No CPU JIT: iOS forbids executable memory. This is the AOT + interpreter
  * build, so nothing here creates executable pages.
  */
@@ -45,6 +54,14 @@ typedef uint32_t zk_buttons_t;
 
 /** Result of zk_run_frame(). See ZK_FRAME_*. */
 typedef int32_t zk_frame_result_t;
+
+/**
+ * Opaque handle to a presenter drawing into the app's CAMetalLayer.
+ *
+ * Created by zk_presenter_create(); release with zk_presenter_destroy(). NULL is
+ * never valid.
+ */
+typedef void *zk_presenter_t;
 
 /* ------------------------------------------------------------ constants -- */
 
@@ -151,6 +168,127 @@ void zk_set_input(zk_system_t system, zk_buttons_t buttons, float circle_x,
 
 /** Releases a handle returned by zk_create(). Safe to call with NULL. */
 void zk_destroy(zk_system_t system);
+
+/* ------------------------------- presentation on the app's CAMetalLayer -- */
+
+/**
+ * Creates a presenter for the app's UIView: Zakuro's Vulkan presenter makes a
+ * surface, swapchain and present pipeline over the view's CAMetalLayer, and
+ * keeps a Vulkan device the renderer can share. On iOS the Vulkan
+ * implementation is MoltenVK over Metal.
+ *
+ * @param ui_view  Pointer to a UIView whose `layerClass` is CAMetalLayer; pass
+ *                 Unmanaged.passUnretained(view).toOpaque() in Swift. The view
+ *                 must outlive the presenter and stay on the main thread.
+ * @param width    Drawable width in pixels.
+ * @param height   Drawable height in pixels.
+ * @return         Presenter handle, or NULL when no surface/device can be made
+ *                 (usually: no MoltenVK in the app, or a zero size). The reason
+ *                 is in zk_last_error() on the calling thread.
+ *
+ * Call on the main queue before zk_create_presented(). If this returns NULL the
+ * app is expected to keep the readback path (zk_create + zk_read_screen).
+ */
+zk_presenter_t zk_presenter_create(void *ui_view, uint32_t width, uint32_t height);
+
+/**
+ * Resizes the swapchain to a new drawable size in pixels.
+ *
+ * Call on the main queue when the view is laid out again (rotation, split view).
+ * The swapchain is rebuilt on the next zk_present(), which returns 1 (out of
+ * date) once; following frames present normally. Returns 0, or -1 for a NULL
+ * presenter or a zero size.
+ */
+int32_t zk_presenter_resize(zk_presenter_t presenter, uint32_t width, uint32_t height);
+
+/**
+ * Releases a presenter and everything it made. Release the systems loaded with
+ * zk_create_presented() first. Safe to call with NULL.
+ */
+void zk_presenter_destroy(zk_presenter_t presenter);
+
+/**
+ * 1 when the presenter has a Vulkan device it can share with the renderer (the
+ * screens can go straight to the layer), 0 when it owns a plain device and
+ * pixels are uploaded, -1 for a NULL presenter.
+ */
+int32_t zk_presenter_shared_device(zk_presenter_t presenter);
+
+/**
+ * Loads a decrypted ROM with presentation on the app's CAMetalLayer.
+ *
+ * Same as zk_create(), but the 3D draws on the presenter's Vulkan device and
+ * zk_present() shows the screens without zk_read_screen(). The loader falls
+ * back to the software renderer (whose pixels the presenter uploads) when the
+ * GPU renderer cannot start; the app still never needs zk_read_screen().
+ *
+ * Returns NULL on failure; the reason is in zk_last_error() on the calling
+ * thread. The app should then fall back to zk_create() (the readback path).
+ * Call it on the runtime serial queue, after zk_presenter_create().
+ */
+zk_system_t zk_create_presented(const char *rom_path, const char *data_dir,
+                                zk_presenter_t presenter);
+
+/**
+ * Presents the frame zk_run_frame() just drew on the CAMetalLayer.
+ *
+ * Call once per completed frame, on the same serial queue as zk_run_frame(),
+ * while the presenter and the system are both alive.
+ *
+ * @return 0  presented (including a rebuilt swapchain),
+ *         1  the swapchain was out of date and rebuilt; continue presenting,
+ *        -1  a NULL/unusable handle,
+ *        -2  presenting failed (reason in zk_last_error() and the log).
+ */
+int32_t zk_present(zk_system_t system, zk_presenter_t presenter);
+
+/**
+ * How a loaded system puts its screens on the display:
+ * 0 = no presenter, the app reads them back (zk_read_screen);
+ * 1 = presenter shows the renderer's GPU images directly;
+ * 2 = presenter uploads CPU pixels (renderer in software, or no shared device).
+ *
+ * Pass the presenter given to zk_create_presented(), or NULL for a zk_create
+ * system. Returns 0 for a NULL system or NULL presenter.
+ */
+int32_t zk_present_mode(zk_system_t system, zk_presenter_t presenter);
+
+/**
+ * Maps a touch on the presented layer to lower-screen pixels.
+ *
+ * @param width   Drawable width in pixels (as passed to zk_presenter_create /
+ *                zk_presenter_resize).
+ * @param height  Drawable height in pixels.
+ * @param x       Touch X normalised to 0.0 ... 1.0 from the view's left edge.
+ * @param y       Touch Y normalised to 0.0 ... 1.0 from the view's top edge.
+ * @param out_x   Receives the lower-screen X in pixels (0 ... 320).
+ * @param out_y   Receives the lower-screen Y in pixels (0 ... 240).
+ * @return        1 when the touch is on the lower screen (outputs written),
+ *                0 when it is not (the touch releases) or an argument is NULL.
+ *
+ * The presenter draws the upper screen above the lower one (the console's
+ * 400x480 shape); this applies the same layout the presenter uses.
+ */
+int32_t zk_present_touch_map(uint32_t width, uint32_t height, float x, float y,
+                             uint16_t *out_x, uint16_t *out_y);
+
+/* --------------------------------------------------- hardware diagnostics -- */
+
+/**
+ * What a loaded system ended up drawing the 3D on: the host GPU through Vulkan
+ * (MoltenVK over Metal on iOS) with the resolution scale, whether the screens
+ * go straight to the CAMetalLayer or are read back, a request that fell back to
+ * software, or software by choice.
+ *
+ * The pointer is owned by the library and stays valid until the next status
+ * call on the same thread; copy it (String(cString:) in Swift). NULL is not
+ * expected, but treat it as "no text". Other build/probe switches
+ * (zk_hardware_probe, zk_set_hardware_renderer, zk_set_vulkan_library,
+ * zk_set_hardware_option) are declared in ios/zakuro-ios/src/lib.rs and
+ * documented in ios/zakuro-ios/README.md; this header only carries what the app
+ * calls today.
+ */
+const char *zk_hardware_status(zk_system_t system);
 
 /* ------------------------------------------------ linked (AOT) diagnostics -- */
 

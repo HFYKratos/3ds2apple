@@ -8,6 +8,9 @@
 //  I3-T6: compact performance HUD (per-phase frame timings in ms).
 //  I3-T9: the status line shows which frame-loop driver is active (free-run
 //         with its fps cap, or the CADisplayLink fallback).
+//  A1:    the screens can come from a CAMetalLayer view instead of two
+//         CGImages; the HUD then shows a `present` phase instead of the
+//         screen-read/CGImage phases, and the system Metal HUD can attach.
 //
 
 import CoreGraphics
@@ -212,26 +215,13 @@ struct ContentView: View {
         }
     }
 
-    /// Upper screen above lower screen; both keep their 3DS aspect ratio.
+    /// The screens: one CAMetalLayer view showing both (A1), or the two
+    /// CGImages of the readback fallback.
     @ViewBuilder
     private var screenCard: some View {
         if isShowingScreens {
             VStack(spacing: 10) {
-                screenSurface(
-                    image: model.topScreenImage,
-                    aspectRatio: aspectRatio(of: topScreen),
-                    placeholder: "Waiting for first frame…"
-                )
-                .accessibilityIdentifier("top-screen")
-
-                screenSurface(
-                    image: model.bottomScreenImage,
-                    aspectRatio: aspectRatio(of: bottomScreen),
-                    placeholder: "Waiting for first frame…"
-                )
-                .accessibilityIdentifier("bottom-screen")
-                .overlay(bottomTouchOverlay)
-
+                screenSurfaces
                 frameStatusLine
                 performanceHUD
                 audioFailureLine
@@ -247,6 +237,78 @@ struct ContentView: View {
             .padding(12)
             .background(cardBackground)
             .accessibilityIdentifier("screens")
+        }
+    }
+
+    /// A1: Zakuro's presenter draws the upper and lower screens stacked into
+    /// the app's CAMetalLayer, so one view replaces the two CGImages. The
+    /// CGImage path stays as the fallback (no MoltenVK, or a presenter that
+    /// could not be made).
+    @ViewBuilder
+    private var screenSurfaces: some View {
+        if let metalView = model.metalScreenView,
+           model.displayPath.usesMetalLayer || isRuntimeStarting {
+            MetalScreenRepresentable(view: metalView)
+                .aspectRatio(consoleAspectRatio, contentMode: .fit)
+                .background(Color.black)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(metalFirstFramePlaceholder)
+                .overlay(presentedTouchOverlay)
+                .accessibilityIdentifier("metal-screen")
+        } else {
+            VStack(spacing: 10) {
+                screenSurface(
+                    image: model.topScreenImage,
+                    aspectRatio: aspectRatio(of: topScreen),
+                    placeholder: "Waiting for first frame…"
+                )
+                .accessibilityIdentifier("top-screen")
+
+                screenSurface(
+                    image: model.bottomScreenImage,
+                    aspectRatio: aspectRatio(of: bottomScreen),
+                    placeholder: "Waiting for first frame…"
+                )
+                .accessibilityIdentifier("bottom-screen")
+                .overlay(bottomTouchOverlay)
+            }
+        }
+    }
+
+    /// A single CAMetalLayer holds both screens in the console's 400x480 shape.
+    private var consoleAspectRatio: CGFloat { 400.0 / 480.0 }
+
+    @ViewBuilder
+    private var metalFirstFramePlaceholder: some View {
+        if model.frameStats.frames == 0 {
+            Text(isRuntimeStarting ? "Starting Zakuro…" : "Waiting for first frame…")
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.65))
+        }
+    }
+
+    /// A1: touch on the presented layer. It shows the upper screen over the
+    /// lower one, so the runtime maps the point and ignores anything that is
+    /// not the lower screen.
+    private var presentedTouchOverlay: some View {
+        GeometryReader { geometry in
+            Color.clear
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            guard isTouchscreenEnabled else { return }
+                            let width = max(geometry.size.width, 1)
+                            let height = max(geometry.size.height, 1)
+                            model.setPresentedTouch(
+                                normalisedX: value.location.x / width,
+                                normalisedY: value.location.y / height
+                            )
+                        }
+                        .onEnded { _ in
+                            model.setTouchPoint(x: nil, y: nil)
+                        }
+                )
         }
     }
 
@@ -286,6 +348,8 @@ struct ContentView: View {
             HStack(spacing: 10) {
                 Text("loop: \(model.frameLoopLabel)")
                     .accessibilityIdentifier("loop-status")
+                Text("display: \(model.displayPath.label)")
+                    .accessibilityIdentifier("display-path")
             }
         }
         .font(.caption2)
@@ -316,9 +380,15 @@ struct ContentView: View {
 
             hudRow("total", timing.renderTotal, decimals: 1, identifier: "perf-total")
             hudRow("run", timing.runFrame, decimals: 1, identifier: "perf-run")
-            hudRow("read top", timing.topScreenRead, decimals: 2, identifier: "perf-read-top")
-            hudRow("read bottom", timing.bottomScreenRead, decimals: 2, identifier: "perf-read-bottom")
-            hudRow("CGImage", timing.cgImage, decimals: 2, identifier: "perf-cgimage")
+            if model.displayPath.usesMetalLayer {
+                // A1: one swapchain present replaces the two screen reads and
+                // the CGImage conversion.
+                hudRow("present", timing.present, decimals: 2, identifier: "perf-present")
+            } else {
+                hudRow("read top", timing.topScreenRead, decimals: 2, identifier: "perf-read-top")
+                hudRow("read bottom", timing.bottomScreenRead, decimals: 2, identifier: "perf-read-bottom")
+                hudRow("CGImage", timing.cgImage, decimals: 2, identifier: "perf-cgimage")
+            }
             hudRow("audio", timing.audioPump, decimals: 2, identifier: "perf-audio")
         }
         .font(.caption2)
@@ -404,7 +474,7 @@ struct ContentView: View {
     }
 
     private var footer: some View {
-        Text("I3 · input + audio + free-run frame loop + perf HUD · interpreter only, no JIT")
+        Text("I3 · input + audio + free-run frame loop + perf HUD · CAMetalLayer presentation (A1) · no JIT")
             .font(.caption2)
             .foregroundColor(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)
@@ -475,6 +545,17 @@ struct ContentView: View {
     private var isShowingScreens: Bool {
         if model.topScreenImage != nil { return true }
         if case .loaded = model.phase { return true }
+        // A1: show the Metal layer while the ROM loads, so SwiftUI lays the
+        // view out and the runtime learns its drawable size before the first
+        // frame is presented.
+        if isRuntimeStarting, model.metalScreenView != nil { return true }
+        if model.displayPath.usesMetalLayer, model.metalScreenView != nil { return true }
+        return false
+    }
+
+    /// True while a ROM is being loaded (zk_create runs in the background).
+    private var isRuntimeStarting: Bool {
+        if case .starting = model.phase { return true }
         return false
     }
 

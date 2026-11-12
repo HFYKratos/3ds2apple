@@ -6,8 +6,9 @@ Rust static library that embeds the [Zakuro](https://github.com/fearkov/zakuro)
 
 The 3D is drawn by Zakuro's software PICA200 by default. An optional hardware
 path draws it on the host GPU through Vulkan, which on iOS is MoltenVK over
-Metal; the architecture, the upstream patch it needs and the A0/A1 plan are in
-[METAL.md](METAL.md).
+Metal, and can present the screens on the app's own `CAMetalLayer` instead of
+copying them back to the CPU; the architecture, the upstream patch it needs and
+the A0/A1 split are in [METAL.md](METAL.md).
 
 ## Build
 
@@ -35,18 +36,21 @@ resolved by `libgame.a` when the app is linked. The app must link
 The build disables Zakuro's optional Cranelift shader JIT: iOS does not allow
 executable memory for ordinary apps.
 
-### Hardware-rendering build (MoltenVK A0)
+### Hardware-rendering build (MoltenVK)
 
 The Vulkan renderer is already compiled into `libzakuro_ios.a`; on iOS it only
-needs a loadable MoltenVK and one small patch to where Zakuro looks for it. A
-hardware-rendering build takes two extra steps:
+needs a loadable MoltenVK and one small patch to where Zakuro looks for it. In
+order:
 
 ```bash
-# 1) after scripts/build-zakuro-ios.sh created the local checkout: fix the
-#    iOS MoltenVK lookup (see METAL.md §8.2)
+# 1) create the local Zakuro checkout (and the plain static library)
+scripts/build-zakuro-ios.sh
+
+# 2) fix the iOS MoltenVK lookup in that checkout (see METAL.md §8.2)
 git -C third_party/zakuro apply "$PWD/ios/zakuro-ios/patches/0001-vulkan-on-ios.patch"
 
-# 2) build the per-game runtime with hardware rendering on by default
+# 3) build the per-game runtime: this recompiles the runtime from the patched
+#    checkout, with hardware rendering on by default
 ZAKURO_IOS_HARDWARE=1 scripts/build-linked-ios-lib.sh <name> --title-id <16-hex-title-id>
 ```
 
@@ -59,6 +63,22 @@ setting instead.
 The built app must also contain MoltenVK (embed `MoltenVK.framework`, or link
 the static library). The binary is never committed; download it into `build/`
 as described in [METAL.md](METAL.md) §8.3.
+
+### Presentation on a CAMetalLayer (A1)
+
+The same library build serves the presented path; the presenter itself is made
+at run time from the app's `UIView` (`zk_presenter_create`). A build that embeds
+MoltenVK is enough: the app creates the presenter and loads through
+`zk_create_presented` automatically, and falls back to `zk_create` (A0/software,
+CPU readback) when the presenter cannot be made.
+
+`ZAKURO_IOS_HARDWARE` is **not** needed for A1: `zk_create_presented` asks for
+the GPU renderer itself, because the screens the renderer draws have to be the
+ones the presenter shows. Setting it only affects a plain `zk_create` load, i.e.
+the A0 fallback build.
+
+The app still has to embed MoltenVK; [METAL.md](METAL.md) §8.3 has the download
+and packaging steps.
 
 ## C ABI
 
@@ -74,6 +94,14 @@ as described in [METAL.md](METAL.md) §8.3.
 | `zk_take_audio(system, out, cap)` | Drain interleaved stereo `i16` PCM |
 | `zk_set_input(system, buttons, cx, cy, touch, tx, ty)` | Push buttons, Circle Pad and touch |
 | `zk_destroy(system)` | Release the runtime |
+| `zk_presenter_create(ui_view, width, height)` | Make a Vulkan presenter for a `UIView` whose layer is a `CAMetalLayer`; returns an opaque presenter or NULL |
+| `zk_presenter_resize(presenter, width, height)` | New drawable size in pixels (rotation/layout); the swapchain rebuilds on the next present |
+| `zk_presenter_destroy(presenter)` | Release the presenter; destroy its systems first |
+| `zk_presenter_shared_device(presenter)` | 1 when the renderer can draw on the presenter's device (no readback), 0 for upload presentation, -1 for NULL |
+| `zk_create_presented(rom, data_dir, presenter)` | `zk_create` on the presenter's device: GPU renderer requested, screens presented through the layer |
+| `zk_present(system, presenter)` | Present the frame `zk_run_frame` just drew; 0 ok, 1 swapchain out of date (continue), -1 bad handle, -2 failed |
+| `zk_present_mode(system, presenter)` | Presentation path of a loaded system: 0 readback, 1 GPU direct, 2 uploaded |
+| `zk_present_touch_map(width, height, x, y, out_x, out_y)` | Normalised touch on the presented layer → lower-screen pixels (1) or not on it (0) |
 | `zk_linked_code()` | 1 if this build contains linked AOT code |
 | `zk_linked_program_id()` | Title ID the linked code was built for |
 | `zk_recompiled(system)` | 1 if the running title is executing linked code |
@@ -81,7 +109,7 @@ as described in [METAL.md](METAL.md) §8.3.
 | `zk_set_hardware_renderer(enabled)` | Draw the 3D on the host GPU for the next `zk_create` (`0` = software). Process-wide; systems already loaded keep their renderer. Returns `0` |
 | `zk_set_vulkan_library(path)` | Name the MoltenVK framework/dylib to load (`@executable_path/…`, `@rpath/…` or absolute); `0`, or `-1` for NULL/non-UTF-8. Call before `zk_create` |
 | `zk_set_hardware_option(name, value)` | Renderer switches (`gpu_shaders`, `cpu_shaders`, `static_blend`, `float_depth`, …); NULL/empty unsets. `0`, or `-1` for an unknown name/NULL/non-UTF-8. Call before `zk_create` |
-| `zk_hardware_status(system)` | One-line renderer status: host GPU with scale, requested-but-fell-back, or software. A NULL handle reports the last probe. Pointer is library-owned like `zk_recompiled_status` |
+| `zk_hardware_status(system)` | One-line renderer + present status: host GPU with scale and whether the screens go straight to the Metal layer or are read back; requested-but-fell-back, or software. A NULL handle reports the last probe. Pointer is library-owned like `zk_recompiled_status` |
 
 Additional diagnostics used by the app's HUD/logs include
 `zk_last_frame_micros`, `zk_last_screen_read_micros`,
@@ -90,10 +118,14 @@ Additional diagnostics used by the app's HUD/logs include
 
 The hardware functions keep the same error contract as `zk_create`:
 `zk_hardware_probe` (no Vulkan device), `zk_set_vulkan_library` and
-`zk_set_hardware_option` (invalid arguments) write `zk_last_error` on the
-calling thread; `zk_set_hardware_renderer` cannot fail. Their prototypes are not
-in `ios/ZakuroBridge.h` yet, so Swift cannot call them until they are added
-there; the build-time `ZAKURO_IOS_HARDWARE` switch needs no header change.
+`zk_set_hardware_option` (invalid arguments), and the presenter calls
+(`zk_presenter_create` on a bad view/size, `zk_create_presented` on a load or
+device failure, `zk_present` on a presentation failure) write `zk_last_error` on
+the calling thread; `zk_set_hardware_renderer` cannot fail. `zk_hardware_status`
+and the presentation functions are declared in `ios/ZakuroBridge.h` (the Swift
+bridging header); the probe/setter switches are declared in `src/lib.rs` only
+and are documented here, so the app does not call them today. The build-time
+`ZAKURO_IOS_HARDWARE` switch needs no header change.
 
 ## Threading
 
@@ -106,6 +138,10 @@ there; the build-time `ZAKURO_IOS_HARDWARE` switch needs no header change.
 - The hardware switches (`zk_set_hardware_renderer`, `zk_set_vulkan_library`,
   `zk_set_hardware_option`) are process-wide and are read by the next
   `zk_create`; call them on the runtime's serial queue before loading a ROM.
+- A presenter (`zk_presenter_t`) is not thread-safe either. Create, resize and
+  destroy it on the main queue (it wraps a `UIView`); call `zk_present` on the
+  same serial queue as `zk_run_frame`, after the frame completed. Destroy the
+  systems loaded with `zk_create_presented` before the presenter.
 
 ## Linked AOT code
 
@@ -117,17 +153,26 @@ the interpreter when they do not match.
 
 ## Hardware rendering (Metal via MoltenVK)
 
-`zk_create` reads the hardware-rendering switch and asks Zakuro's loader for the
-GPU path. The loader builds the Vulkan device itself, falls back to software
-with a `zk[WARN]` log line when it cannot, and the app is unchanged: screens are
-still read back with `zk_read_screen` (the GPU→CPU readback makes the HUD's
-`read top/bottom` phases more expensive), and `zk_hardware_status` reports what
-a loaded system ended up drawing on.
+There are two levels, and the app picks the better one it can run:
 
-- **A0** (this build): renderer on the GPU, presentation stays CPU readback.
-  Needs only the patch, MoltenVK in the app, and `ZAKURO_IOS_HARDWARE=1`.
-- **A1** (not implemented): presentation on a `CAMetalLayer` swapchain, removing
-  the readback; designed in [METAL.md](METAL.md) §3.2.
+- **A1, presented** — the app owns a `UIView` whose backing layer is a
+  `CAMetalLayer`, creates a presenter for it (`zk_presenter_create`) and loads the
+  ROM with `zk_create_presented`. The renderer draws on the presenter's Vulkan
+  device (`direct` presentation), and `zk_present` shows the frames straight from
+  the GPU: no `zk_read_screen`, no `CGImage`. If the GPU renderer cannot start,
+  the loader falls back to software and the presenter uploads the pixels through
+  the same layer (`zk_present_mode` = 2), so the app still has no readback code
+  and a real Metal layer. The system Metal Performance HUD can attach to that
+  layer.
+- **A0 / readback** — plain `zk_create` (+ `ZAKURO_IOS_HARDWARE=1` for the GPU
+  renderer): screens are read back with `zk_read_screen` and shown as `CGImage`.
+  This is the fallback when no presenter can be made (for example no MoltenVK in
+  the app) and the path used by non-presented builds.
+
+The loader always falls back to software with a `zk[WARN]` log line when a
+device cannot start, and `zk_hardware_status` reports what a loaded system ended
+up drawing on (including whether the screens go straight to the layer or are
+read back).
 
 The `zk_perf` line's `gpu` field means CPU-side command-list/submit time when
 the hardware renderer is on, not software rasterisation time; compare software
@@ -150,13 +195,16 @@ ZAKURO_LINKED_PROGRAM_ID=<16-hex-title-id> cargo test -p zakuro-ios --lib --feat
 cargo test -p zakuro-ios --lib -- --ignored hardware_probe_makes_a_device
 ```
 
-The tests do not need a ROM or an iOS device. The A0 device verification steps
-are in [METAL.md](METAL.md) §8.
+The presenter FFI has its own host tests (argument validation and the
+normalised-touch → lower-screen mapping) in `src/presenter.rs`; unlike
+`hardware_probe_makes_a_device` they need no Vulkan. The device verification
+steps for hardware rendering and presentation are in [METAL.md](METAL.md) §8.
 
 ## Layout
 
 ```text
 src/lib.rs       C ABI, handle/error handling, linked table wiring, hardware FFI
+src/presenter.rs A1 CAMetalLayer presentation: presenter/swapchain FFI, touch mapping
 src/perf.rs      frame-time logging and profiler helpers
 build.rs         linked-build title ID validation
 Cargo.toml       staticlib crate; `linked` and `profiling` features
@@ -168,6 +216,9 @@ patches/         upstream Zakuro patch for the iOS MoltenVK lookup
 
 - Only the base ROM is passed to the runtime; update, DLC and mods are not yet
   exposed through the C ABI.
-- The GPU is software-rendered by default. The MoltenVK hardware path is
-  experimental and still being evaluated on device.
+- The GPU is software-rendered by default. The MoltenVK hardware path and its
+  CAMetalLayer presentation are experimental and still being evaluated on device.
+- A presented session reuses one presenter (and one Metal view) for its lifetime;
+  the swapchain is rebuilt on rotation/layout changes. 3D stereo, frame
+  interpolation and texture packs are not exposed by the app yet.
 - Generated game code is game-derived and must never be committed.
