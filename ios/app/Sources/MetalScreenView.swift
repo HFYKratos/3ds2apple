@@ -27,6 +27,21 @@ import UIKit
 /// A `UIView` whose backing layer is a `CAMetalLayer`, sized for the presenter
 /// that draws the 3DS screens into it.
 final class MetalScreenView: UIView {
+    /// Native pixel size of the two 3DS screens side by side: 400x240 (upper)
+    /// above 320x240 (lower) is 400x480. The presenter renders at this size and
+    /// Metal/CoreAnimation scales it to the view; rendering at the iPhone's
+    /// native drawable size (e.g. 2226x2671) makes the GPU do 20x the work for
+    /// no visible benefit. Bump `renderScale` to 2 for a sharper 800x960
+    /// presentation on fast devices.
+    private static let consolePixelSize = CGSize(width: 400, height: 480)
+    private static let renderScale: CGFloat = 1.0
+
+    /// Drawable size in pixels the presenter must render at.
+    static var renderPixelSize: CGSize {
+        CGSize(width: consolePixelSize.width * renderScale,
+               height: consolePixelSize.height * renderScale)
+    }
+
     /// Called on the main queue after layout when the drawable size in pixels
     /// changes, so the runtime can resize its swapchain to match.
     var onDrawableSizeChanged: ((CGSize) -> Void)?
@@ -46,13 +61,7 @@ final class MetalScreenView: UIView {
     }
 
     /// Current drawable size in pixels (what the presenter's swapchain uses).
-    var drawablePixelSize: CGSize {
-        let size = metalLayer.drawableSize
-        if size.width >= 1, size.height >= 1 {
-            return size
-        }
-        return CGSize(width: max(bounds.width, 1), height: max(bounds.height, 1))
-    }
+    var drawablePixelSize: CGSize { Self.renderPixelSize }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -69,9 +78,8 @@ final class MetalScreenView: UIView {
         isOpaque = true
         backgroundColor = .black
         isUserInteractionEnabled = true
-        let scale = currentDisplayScale()
-        contentScaleFactor = scale
-        metalLayer.contentsScale = scale
+        contentScaleFactor = 1.0
+        metalLayer.contentsScale = 1.0
         metalLayer.isOpaque = true
         // The presenter only renders into the drawable; reading it back as a
         // texture is not needed.
@@ -86,12 +94,7 @@ final class MetalScreenView: UIView {
     /// Main queue only.
     func prepareForPresentation(provisionalSize: CGSize) {
         if bounds.width < 1 || bounds.height < 1 {
-            let scale = currentDisplayScale()
-            bounds = CGRect(
-                origin: .zero,
-                size: CGSize(width: provisionalSize.width / scale,
-                             height: provisionalSize.height / scale)
-            )
+            bounds = CGRect(origin: .zero, size: Self.consolePixelSize)
         }
         updateDrawableSize(force: true)
     }
@@ -111,18 +114,17 @@ final class MetalScreenView: UIView {
     /// Keeps `contentsScale` and `drawableSize` in step with the window's screen
     /// (the presenter derives its swapchain extent from `drawableSize`).
     private func updateScaleFromWindow() {
-        guard let scale = window?.screen.nativeScale, scale > 0 else { return }
-        contentScaleFactor = scale
-        if metalLayer.contentsScale != scale {
-            metalLayer.contentsScale = scale
+        // The drawable is fixed at the 3DS resolution; CoreAnimation scales it
+        // to the view. Keep the layer's own scale at 1 so the presenter's
+        // swapchain extent never follows the iPhone's native pixels.
+        contentScaleFactor = 1.0
+        if metalLayer.contentsScale != 1.0 {
+            metalLayer.contentsScale = 1.0
         }
     }
 
     private func updateDrawableSize(force: Bool) {
-        let scale = currentDisplayScale()
-        let width = max(1, Int((bounds.width * scale).rounded()))
-        let height = max(1, Int((bounds.height * scale).rounded()))
-        let pixels = CGSize(width: CGFloat(width), height: CGFloat(height))
+        let pixels = Self.renderPixelSize
         // MoltenVK sets this again when it (re)builds the swapchain, and reads
         // it to pick the surface extent. Setting it here before the resize call
         // is what makes a rotation/new layout take effect.
