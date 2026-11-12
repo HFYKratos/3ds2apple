@@ -2,13 +2,9 @@
 //  ContentView.swift
 //  3ds2apple
 //
-//  I1 shell skeleton: proves the SwiftUI shell boots and that the Zakuro iOS
-//  static library (libzakuro_ios.a) is linked. There is deliberately no ROM
-//  import yet, so the only runtime values shown come from
-//  zk_screen_width() / zk_screen_height() — those calls are unresolved symbols
-//  unless the static library really participates in the link.
-//
-//  I2 will add zk_create() + the frame loop; see docs/plan.md.
+//  I2-T1: ROM import UI on top of the I1 shell. The frame loop is not wired
+//  yet (I2-T2 owns zk_run_frame), so a loaded ROM only proves that zk_create()
+//  succeeded and a runtime handle is alive.
 //
 
 import Foundation
@@ -16,7 +12,10 @@ import SwiftUI
 import UIKit
 
 struct ContentView: View {
-    /// Screen geometry is read once from the linked static library.
+    @StateObject private var model = ROMSession()
+    @State private var isPickerPresented = false
+
+    /// Screen geometry is read from the linked static library.
     private let topScreen = ZakuroScreen(which: 0)
     private let bottomScreen = ZakuroScreen(which: 1)
 
@@ -26,16 +25,24 @@ struct ContentView: View {
     init() {}
 
     var body: some View {
-        VStack(spacing: 16) {
-            header
-            runtimeCard
-            noROMCard
-            Spacer(minLength: 0)
-            footer
+        ScrollView {
+            VStack(spacing: 16) {
+                header
+                romCard
+                runtimeCard
+                footer
+            }
+            .padding(24)
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color(uiColor: .systemGroupedBackground))
+        .sheet(isPresented: $isPickerPresented) {
+            ROMDocumentPicker { url in
+                isPickerPresented = false
+                if let url {
+                    model.importROM(from: url)
+                }
+            }
+        }
         .onAppear(perform: logRuntimeProbe)
     }
 
@@ -52,6 +59,109 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.top, 24)
+    }
+
+    private var romCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            romStatus
+            romActions
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+        .accessibilityIdentifier("rom-card")
+    }
+
+    @ViewBuilder
+    private var romStatus: some View {
+        switch model.phase {
+        case .idle:
+            Label("No ROM loaded", systemImage: "doc.badge.plus")
+                .font(.headline)
+            Text("Import a decrypted .3ds or .cci ROM from Files. The ROM is copied "
+                 + "into this app's Documents folder and stays on the device.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+        case .importing(let name):
+            statusRow(
+                title: "Importing \(name)…",
+                detail: "Copying the file into the app container. Large ROMs take a while."
+            )
+        case .starting(let name):
+            statusRow(
+                title: "Starting Zakuro…",
+                detail: "Loading \(name). zk_create() can take several seconds."
+            )
+        case .loaded(let name):
+            Label("Loaded: \(name)", systemImage: "checkmark.circle.fill")
+                .font(.headline)
+                .foregroundColor(.green)
+                .accessibilityIdentifier("rom-loaded")
+            Text("The runtime is initialised. The frame loop arrives in I2-T2.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+        case .failed(let message):
+            Label("Could not load ROM", systemImage: "exclamationmark.triangle.fill")
+                .font(.headline)
+                .foregroundColor(.red)
+                .accessibilityIdentifier("rom-error")
+            Text(message)
+                .font(.footnote)
+                .foregroundColor(.secondary)
+                .textSelection(.enabled)
+        }
+    }
+
+    @ViewBuilder
+    private var romActions: some View {
+        switch model.phase {
+        case .idle, .failed:
+            Button {
+                isPickerPresented = true
+            } label: {
+                Label("Import ROM…", systemImage: "square.and.arrow.down")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .accessibilityIdentifier("import-rom")
+
+            if let last = model.lastROM {
+                Button("Load “\(last.name)”") {
+                    model.loadLastROM()
+                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
+            }
+
+            if case .failed = model.phase {
+                Button("Dismiss") {
+                    model.dismissFailure()
+                }
+                .buttonStyle(.borderless)
+                .font(.footnote)
+            }
+        case .importing, .starting:
+            EmptyView()
+        case .loaded:
+            Button {
+                isPickerPresented = true
+            } label: {
+                Label("Change ROM…", systemImage: "square.and.arrow.down")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+
+            Button(role: .destructive) {
+                model.unload()
+            } label: {
+                Label("Unload ROM", systemImage: "xmark.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+        }
     }
 
     private var runtimeCard: some View {
@@ -81,26 +191,24 @@ struct ContentView: View {
         .background(cardBackground)
     }
 
-    private var noROMCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("No ROM loaded", systemImage: "exclamationmark.triangle")
-                .font(.headline)
-            Text("ROM import arrives in I2. This build links the runtime and boots "
-                 + "the shell; no game data is bundled.")
-                .font(.footnote)
-                .foregroundColor(.secondary)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
-        .accessibilityIdentifier("no-rom-card")
-    }
-
     private var footer: some View {
-        Text("I1 · shell skeleton · interpreter only, no JIT")
+        Text("I2 · ROM import · interpreter only, no JIT")
             .font(.caption2)
             .foregroundColor(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func statusRow(title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                ProgressView()
+                Text(title)
+                    .font(.headline)
+            }
+            Text(detail)
+                .font(.footnote)
+                .foregroundColor(.secondary)
+        }
     }
 
     private var cardBackground: some View {
@@ -111,7 +219,7 @@ struct ContentView: View {
     // MARK: - Diagnostics
 
     /// One line in `idevicesyslog` that proves the static library was linked
-    /// and called on device (I1 acceptance).
+    /// and called on device, plus the ROM state at launch (I2 acceptance).
     private func logRuntimeProbe() {
         NSLog(
             "[3ds2apple] zk_screen_width(0)=%u zk_screen_height(0)=%u "
@@ -121,6 +229,11 @@ struct ContentView: View {
             bottomScreen.width,
             bottomScreen.height
         )
+        if let last = model.lastROM {
+            NSLog("[3ds2apple] last imported ROM: %@", last.relativePath)
+        } else {
+            NSLog("[3ds2apple] no ROM imported yet")
+        }
     }
 }
 
