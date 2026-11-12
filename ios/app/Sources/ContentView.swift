@@ -16,6 +16,8 @@ struct ContentView: View {
     @StateObject private var model = ROMSession()
     @State private var isPickerPresented = false
     @Environment(\.scenePhase) private var scenePhase
+    /// On-screen controls visibility, persisted between launches.
+    @AppStorage("I3.showTouchControls") private var showTouchControls = true
 
     /// Screen geometry is read from the linked static library.
     private let topScreen = ZakuroScreen(which: 0)
@@ -46,7 +48,10 @@ struct ContentView: View {
                 }
             }
         }
-        .onAppear(perform: logRuntimeProbe)
+        .onAppear {
+            model.startControllerSupport()
+            logRuntimeProbe()
+        }
         .onChange(of: scenePhase) { newPhase in
             // iOS may jettison a backgrounded process; release the runtime.
             if newPhase == .background {
@@ -170,6 +175,16 @@ struct ContentView: View {
             .buttonStyle(.bordered)
             .controlSize(.large)
 
+            Button(showTouchControls ? "Hide controls" : "Show controls") {
+                showTouchControls.toggle()
+                if !showTouchControls {
+                    model.clearOverlayInput()
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .accessibilityIdentifier("toggle-controls")
+
             Button(role: .destructive) {
                 model.unload()
             } label: {
@@ -199,8 +214,17 @@ struct ContentView: View {
                     placeholder: "Waiting for first frame…"
                 )
                 .accessibilityIdentifier("bottom-screen")
+                .overlay(bottomTouchOverlay)
 
                 frameStatusLine
+
+                if showTouchControls {
+                    TouchControlsView { bit, pressed in
+                        model.setOverlayButton(bit, pressed: pressed)
+                    }
+                }
+
+                inputStatusLine
             }
             .padding(12)
             .background(cardBackground)
@@ -238,6 +262,22 @@ struct ContentView: View {
         .accessibilityIdentifier("frame-status")
     }
 
+    @ViewBuilder
+    private var inputStatusLine: some View {
+        if let controllerName = model.controllerName {
+            Text("Controller: \(controllerName)")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .accessibilityIdentifier("controller-status")
+        } else {
+            Text("No controller connected — use the on-screen controls")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+
     private var runtimeCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Zakuro runtime", systemImage: "cpu")
@@ -266,7 +306,7 @@ struct ContentView: View {
     }
 
     private var footer: some View {
-        Text("I2 · ROM import + frame loop · interpreter only, no JIT")
+        Text("I3 · input + frame loop · interpreter only, no JIT")
             .font(.caption2)
             .foregroundColor(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)
@@ -288,6 +328,46 @@ struct ContentView: View {
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(Color(uiColor: .secondarySystemGroupedBackground))
+    }
+
+    // MARK: - Touchscreen
+
+    /// Drag/tap on the lower screen sends 3DS touchscreen coordinates in
+    /// bottom-screen pixels while a runtime is loaded.
+    private var bottomTouchOverlay: some View {
+        GeometryReader { geometry in
+            Color.clear
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            guard isTouchscreenEnabled else { return }
+                            let point = bottomScreenPoint(value.location, in: geometry.size)
+                            model.setTouchPoint(x: point.x, y: point.y)
+                        }
+                        .onEnded { _ in
+                            model.setTouchPoint(x: nil, y: nil)
+                        }
+                )
+        }
+    }
+
+    private var isTouchscreenEnabled: Bool {
+        if case .loaded = model.phase { return true }
+        return false
+    }
+
+    private func bottomScreenPoint(_ location: CGPoint, in size: CGSize) -> (x: UInt16, y: UInt16) {
+        let width = max(size.width, 1)
+        let height = max(size.height, 1)
+        let normalisedX = min(max(location.x / width, 0), 1)
+        let normalisedY = min(max(location.y / height, 0), 1)
+        let pixelsX = normalisedX * CGFloat(Int(bottomScreen.width))
+        let pixelsY = normalisedY * CGFloat(Int(bottomScreen.height))
+        return (
+            UInt16(clamping: Int(pixelsX.rounded())),
+            UInt16(clamping: Int(pixelsY.rounded()))
+        )
     }
 
     // MARK: - Derived state

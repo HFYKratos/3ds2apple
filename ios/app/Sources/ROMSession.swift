@@ -71,6 +71,8 @@ final class ROMSession: ObservableObject {
     @Published private(set) var bottomScreenImage: CGImage? = nil
     /// Frame-loop counters for the status line.
     @Published private(set) var frameStats = FrameStats()
+    /// Human-readable name of the connected hardware controller, if any.
+    @Published private(set) var controllerName: String? = nil
 
     /// Serial queue that owns every zk_* call.
     private let runtimeQueue = DispatchQueue(
@@ -80,6 +82,11 @@ final class ROMSession: ObservableObject {
     /// Runtime handle; only read/written on `runtimeQueue` (except deinit).
     private var system: zk_system_t?
     private let fileManager = FileManager.default
+
+    /// Merged on-screen + hardware-controller input, read once per frame.
+    private let inputState = InputState()
+    /// Hardware controller bridge; created by `startControllerSupport()`.
+    private var controllerManager: GameControllerManager?
 
     private static let lastROMPathKey = "I2.lastROMRelativePath"
 
@@ -105,6 +112,7 @@ final class ROMSession: ObservableObject {
     }
 
     deinit {
+        controllerManager?.stop()
         // The display link lives on the main run loop; invalidate it there.
         // Capturing the link (not `self`) keeps this valid after deallocation.
         if let displayLink {
@@ -131,6 +139,7 @@ final class ROMSession: ObservableObject {
         }
         // Stop ticking before the current runtime is replaced.
         stopFrameLoop()
+        inputState.clearAll()
         setPhase(.importing(name: name))
         runtimeQueue.async { [weak self] in
             guard let self else { return }
@@ -156,6 +165,7 @@ final class ROMSession: ObservableObject {
             return
         }
         stopFrameLoop()
+        inputState.clearAll()
         setPhase(.starting(name: rom.name))
         runtimeQueue.async { [weak self] in
             guard let self else { return }
@@ -167,6 +177,7 @@ final class ROMSession: ObservableObject {
     /// The imported file stays in Documents so it can be loaded again.
     func unload() {
         stopFrameLoop()
+        inputState.clearAll()
         runtimeQueue.async { [weak self] in
             guard let self else { return }
             self.destroySystem()
@@ -183,6 +194,7 @@ final class ROMSession: ObservableObject {
     /// handle must not outlive the active scene.
     func stopForBackground() {
         stopFrameLoop()
+        inputState.clearAll()
         runtimeQueue.async { [weak self] in
             guard let self else { return }
             let hadRuntime = self.system != nil
@@ -205,6 +217,36 @@ final class ROMSession: ObservableObject {
         } else if case .finished = phase {
             setPhase(.idle)
         }
+    }
+
+    // MARK: - Input (main queue)
+
+    /// Attaches the hardware-controller bridge. Safe to call repeatedly; only
+    /// the first call starts it. The view calls this from `onAppear`.
+    func startControllerSupport() {
+        guard controllerManager == nil else { return }
+        let manager = GameControllerManager(input: inputState) { [weak self] name in
+            DispatchQueue.main.async {
+                self?.controllerName = name
+            }
+        }
+        controllerManager = manager
+        manager.start()
+    }
+
+    /// On-screen button press/release.
+    func setOverlayButton(_ bit: UInt32, pressed: Bool) {
+        inputState.setOverlayButton(bit, pressed: pressed)
+    }
+
+    /// Clears on-screen buttons and the touchscreen contact (overlay hidden).
+    func clearOverlayInput() {
+        inputState.clearOverlay()
+    }
+
+    /// Touchscreen contact in lower-screen pixels; nil releases the touch.
+    func setTouchPoint(x: UInt16?, y: UInt16?) {
+        inputState.setTouch(x: x, y: y)
     }
 
     // MARK: - Runtime (runtimeQueue only)
@@ -254,6 +296,7 @@ final class ROMSession: ObservableObject {
             guard let self else { return }
             self.lastROM = rom
             UserDefaults.standard.set(rom.relativePath, forKey: Self.lastROMPathKey)
+            self.inputState.clearAll()
             self.clearScreens()
             self.setPhase(.loaded(name: rom.name))
             self.startFrameLoop()
@@ -325,6 +368,13 @@ final class ROMSession: ObservableObject {
     /// Executes one frame and publishes its screens. runtimeQueue only.
     private func renderFrame() {
         guard let system else { return }
+
+        // The only place that pushes input: same serial queue, immediately
+        // before the frame that consumes it.
+        let input = inputState.snapshot()
+        zk_set_input(system, input.buttons, input.circleX, input.circleY,
+                     input.touch ? 1 : 0, input.touchX, input.touchY)
+
         let result = zk_run_frame(system)
         framesRendered += 1
 
@@ -398,6 +448,7 @@ final class ROMSession: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.stopFrameLoopOnMain()
+            self.inputState.clearAll()
             var stats = self.frameStats
             stats.fps = 0
             stats.lastResult = isError ? -1 : 1
