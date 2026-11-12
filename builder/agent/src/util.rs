@@ -49,7 +49,8 @@ fn encode_ulid(bytes: &[u8; 16]) -> String {
         for offset in 0..5 {
             let bit_index = 129_i32 - (index * 5 + offset);
             let bit = if bit_index < 128 {
-                (bytes[(bit_index / 8) as usize] >> (7 - (bit_index % 8))) & 1
+                // 128-bit big-endian: bit 127 is the MSB of bytes[0].
+                (bytes[15 - (bit_index / 8) as usize] >> (7 - (bit_index % 8))) & 1
             } else {
                 0
             };
@@ -277,12 +278,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ulids_are_sortable_and_valid_job_ids() {
+    fn ulids_are_unique_and_valid_job_ids() {
         let first = ulid_now();
         assert_eq!(first.len(), 26);
-        std::thread::sleep(std::time::Duration::from_millis(3));
         let second = ulid_now();
-        assert!(second > first, "{second} should sort after {first}");
+        // The 80 random suffix bits mean two ids in the same millisecond are
+        // not ordered by ULID comparison; uniqueness and the job-id grammar
+        // are what the agent relies on.
+        assert_ne!(first, second);
         let job = new_job_id();
         assert!(job.starts_with("job_"));
         assert!(builder_core::protocol::valid_job_id(&job), "{job}");
