@@ -76,3 +76,11 @@ min iOS 16.0，bundle `com.kratos.3ds2apple`）；`libzakuro_ios.a` 已链接，
 - 说明：当前是**纯解释器**（未接 3dsrecomp），20 fps 属预期；I3 接 3dsrecomp 后复测。
 - 尚缺输入：停在语言选择，需要 I3 的触摸/手柄才能继续。
 - 游戏截图不入库（AGENTS.md 规则）；此处只记录文字指标。
+
+## I3-T1 输入（2026-11-12 构建通过，待真机）
+
+- `3ds2apple-I3T1.ipa`：2.3 MB，SHA256
+  `ad237e6d906a08716f822ac76ab45c79a93736ac51f43f66e00860b0508cfb7f`
+- 触摸 overlay（D-pad、A/B/X/Y、L/R、Start/Select）+ GameController 映射；
+  单一 `zk_set_input` 调用点，在每帧 `zk_run_frame` 前于 runtime 串行队列执行。
+- 待真机：Pokémon Y 语言选择 → ▼/▲ + A；再测 Start/L/R、手柄、Unload/后台无卡键。
