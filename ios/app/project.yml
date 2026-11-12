@@ -20,7 +20,6 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - path: Sources
-      - path: Assets.xcassets
     settings:
       base:
         # --- Identity -----------------------------------------------------
@@ -29,7 +28,6 @@ targets:
         PRODUCT_NAME: "3ds2apple"
         EXECUTABLE_NAME: "3ds2apple"
         PRODUCT_BUNDLE_IDENTIFIER: "com.kratos.3ds2apple"
-        ASSETCATALOG_COMPILER_APPICON_NAME: "AppIcon"
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_CFBundleDisplayName: "3ds2apple"
         INFOPLIST_KEY_CFBundleShortVersionString: "0.1.0"

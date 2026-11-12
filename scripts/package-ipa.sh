@@ -189,6 +189,50 @@ if [[ -x /usr/libexec/PlistBuddy ]]; then
   # development/self-built apps; useful while the Metal renderer is brought up.
   /usr/libexec/PlistBuddy -c 'Delete :MetalHudEnabled' "$APP_PLIST" >/dev/null 2>&1 || true
   /usr/libexec/PlistBuddy -c 'Add :MetalHudEnabled bool true' "$APP_PLIST" >/dev/null
+
+  # App icon: copy the checked-in PNGs into the bundle and declare them through
+  # CFBundleIcons/CFBundleIconFiles. The asset catalog is intentionally not
+  # compiled with actool (it is slow/unreliable in the CI macOS VM), and iOS
+  # still shows the home-screen icon for sideloaded apps.
+  ICON_DIR="$ROOT/ios/app/Assets.xcassets/AppIcon.appiconset"
+  if [[ -f "$ICON_DIR/icon-1024.png" ]]; then
+    declare -a icon_files=(
+      AppIcon20x20 AppIcon29x29 AppIcon40x40
+      AppIcon60x60 AppIcon76x76 AppIcon83.5x83.5
+    )
+    cp "$ICON_DIR/icon-20.png"     "$STAGE/Payload/$APP_BASENAME/AppIcon20x20.png"
+    cp "$ICON_DIR/icon-20@2x.png"  "$STAGE/Payload/$APP_BASENAME/AppIcon20x20@2x.png"
+    cp "$ICON_DIR/icon-20@3x.png"  "$STAGE/Payload/$APP_BASENAME/AppIcon20x20@3x.png"
+    cp "$ICON_DIR/icon-29.png"     "$STAGE/Payload/$APP_BASENAME/AppIcon29x29.png"
+    cp "$ICON_DIR/icon-29@2x.png"  "$STAGE/Payload/$APP_BASENAME/AppIcon29x29@2x.png"
+    cp "$ICON_DIR/icon-29@3x.png"  "$STAGE/Payload/$APP_BASENAME/AppIcon29x29@3x.png"
+    cp "$ICON_DIR/icon-40.png"     "$STAGE/Payload/$APP_BASENAME/AppIcon40x40.png"
+    cp "$ICON_DIR/icon-40@2x.png"  "$STAGE/Payload/$APP_BASENAME/AppIcon40x40@2x.png"
+    cp "$ICON_DIR/icon-40@3x.png"  "$STAGE/Payload/$APP_BASENAME/AppIcon40x40@3x.png"
+    cp "$ICON_DIR/icon-60@2x.png"  "$STAGE/Payload/$APP_BASENAME/AppIcon60x60@2x.png"
+    cp "$ICON_DIR/icon-60@3x.png"  "$STAGE/Payload/$APP_BASENAME/AppIcon60x60@3x.png"
+    cp "$ICON_DIR/icon-76.png"     "$STAGE/Payload/$APP_BASENAME/AppIcon76x76.png"
+    cp "$ICON_DIR/icon-76@2x.png"  "$STAGE/Payload/$APP_BASENAME/AppIcon76x76@2x.png"
+    cp "$ICON_DIR/icon-83.5@2x.png" "$STAGE/Payload/$APP_BASENAME/AppIcon83.5x83.5@2x.png"
+    cp "$ICON_DIR/icon-1024.png"   "$STAGE/Payload/$APP_BASENAME/AppIcon1024x1024.png"
+
+    /usr/libexec/PlistBuddy -c 'Delete :CFBundleIcons' "$APP_PLIST" >/dev/null 2>&1 || true
+    /usr/libexec/PlistBuddy -c 'Add :CFBundleIcons dict' "$APP_PLIST" >/dev/null
+    /usr/libexec/PlistBuddy -c 'Add :CFBundleIcons:CFBundlePrimaryIcon dict' "$APP_PLIST" >/dev/null
+    /usr/libexec/PlistBuddy -c 'Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName string AppIcon' "$APP_PLIST" >/dev/null
+    /usr/libexec/PlistBuddy -c 'Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFiles array' "$APP_PLIST" >/dev/null
+    for i in "${!icon_files[@]}"; do
+      /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFiles:$i string ${icon_files[$i]}" "$APP_PLIST" >/dev/null
+    done
+    /usr/libexec/PlistBuddy -c 'Delete :CFBundleIconFiles' "$APP_PLIST" >/dev/null 2>&1 || true
+    /usr/libexec/PlistBuddy -c 'Add :CFBundleIconFiles array' "$APP_PLIST" >/dev/null
+    for i in "${!icon_files[@]}"; do
+      /usr/libexec/PlistBuddy -c "Add :CFBundleIconFiles:$i string ${icon_files[$i]}" "$APP_PLIST" >/dev/null
+    done
+    log "injected app icon files"
+  else
+    printf '[package-ipa] warning: app icon assets missing; bundle will use the default icon\n' >&2
+  fi
 else
   printf '[package-ipa] warning: PlistBuddy not found; document-sharing keys not injected\n' >&2
 fi
