@@ -94,6 +94,15 @@ enum {
 zk_system_t zk_create(const char *rom_path, const char *data_dir);
 
 /**
+ * Returns the last zk_create() failure message for the current thread, or
+ * NULL when there is none.
+ *
+ * The pointer stays valid until the next zk_create()/zk_last_error() call on
+ * the same thread; copy the text before crossing threads or queues.
+ */
+const char *zk_last_error(void);
+
+/**
  * Runs one frame.
  *
  * @return ZK_FRAME_COMPLETED, ZK_FRAME_EXITED, ZK_FRAME_FAULTED or

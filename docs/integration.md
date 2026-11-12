@@ -38,6 +38,7 @@ scripts/build-zakuro-ios.sh
 | 函数 | 作用 |
 |---|---|
 | `zk_create(rom, data_dir)` | 加载解密后的 `.3ds` / `.cci`，返回不透明 `System*`；失败返回 NULL |
+| `zk_last_error()` | 当前线程最近一次 `zk_create` 失败的可读文本；无错误返回 NULL（同线程下一次调用前有效） |
 | `zk_run_frame(sys)` | 跑一帧；0 完成，1 退出，-1 fault，-2 空指针 |
 | `zk_screen_width/height(which)` | 0=上屏 400×240，1=下屏 320×240 |
 | `zk_read_screen(sys, which, out, cap)` | 读 RGBA8；返回完整字节数（可能大于 cap） |
