@@ -5,6 +5,7 @@
 //  I2-T1: ROM import UI.
 //  I2-T2: live frame display — upper screen (400x240) above lower screen
 //         (320x240), aspect fit, plus an fps / frames / last-result line.
+//  I3-T6: compact performance HUD (per-phase frame timings in ms).
 //
 
 import CoreGraphics
@@ -230,6 +231,7 @@ struct ContentView: View {
                 .overlay(bottomTouchOverlay)
 
                 frameStatusLine
+                performanceHUD
                 audioFailureLine
 
                 if showTouchControls {
@@ -280,6 +282,59 @@ struct ContentView: View {
         .minimumScaleFactor(0.7)
         .frame(maxWidth: .infinity, alignment: .center)
         .accessibilityIdentifier("frame-status")
+    }
+
+    /// I3-T6: where each frame's wall time goes, as measured on the runtime
+    /// serial queue — average / max (since the loop started) / last frame, in
+    /// milliseconds. See ios/app/README.md ("Performance HUD") for reading it.
+    private var performanceHUD: some View {
+        let timing = model.frameStats.timing
+        return VStack(spacing: 2) {
+            HStack(spacing: 8) {
+                Text("ms")
+                    .frame(width: 60, alignment: .leading)
+                Text("avg")
+                    .frame(width: 46, alignment: .trailing)
+                Text("max")
+                    .frame(width: 46, alignment: .trailing)
+                Text("last")
+                    .frame(width: 46, alignment: .trailing)
+            }
+            .foregroundColor(.secondary.opacity(0.75))
+
+            hudRow("total", timing.renderTotal, decimals: 1, identifier: "perf-total")
+            hudRow("run", timing.runFrame, decimals: 1, identifier: "perf-run")
+            hudRow("read top", timing.topScreenRead, decimals: 2, identifier: "perf-read-top")
+            hudRow("read bottom", timing.bottomScreenRead, decimals: 2, identifier: "perf-read-bottom")
+            hudRow("CGImage", timing.cgImage, decimals: 2, identifier: "perf-cgimage")
+            hudRow("audio", timing.audioPump, decimals: 2, identifier: "perf-audio")
+        }
+        .font(.caption2)
+        .monospacedDigit()
+        .foregroundColor(.secondary)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .accessibilityIdentifier("perf-hud")
+    }
+
+    private func hudRow(_ label: String,
+                        _ stats: FramePhaseStats,
+                        decimals: Int,
+                        identifier: String) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .frame(width: 60, alignment: .leading)
+            hudValue(stats.average, decimals: decimals, available: stats.isAvailable)
+            hudValue(stats.maximum, decimals: decimals, available: stats.isAvailable)
+            hudValue(stats.last, decimals: decimals, available: stats.isAvailable)
+        }
+        .accessibilityIdentifier(identifier)
+    }
+
+    private func hudValue(_ milliseconds: Double,
+                          decimals: Int,
+                          available: Bool) -> some View {
+        Text(available ? String(format: "%.\(decimals)f", milliseconds) : "—")
+            .frame(width: 46, alignment: .trailing)
     }
 
     @ViewBuilder
@@ -337,7 +392,7 @@ struct ContentView: View {
     }
 
     private var footer: some View {
-        Text("I3 · input + audio + frame loop · interpreter only, no JIT")
+        Text("I3 · input + audio + frame loop + perf HUD · interpreter only, no JIT")
             .font(.caption2)
             .foregroundColor(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)
