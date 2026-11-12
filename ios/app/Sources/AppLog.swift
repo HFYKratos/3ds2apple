@@ -12,6 +12,7 @@
 
 import Darwin
 import Foundation
+import UIKit
 
 final class AppLog {
     static let shared = AppLog()
