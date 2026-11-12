@@ -13,6 +13,11 @@ import SwiftUI
 
 @main
 struct ThreeDS2AppleApp: App {
+    init() {
+        // Redirect stderr and start the in-app log before the runtime loads.
+        AppLog.shared.start()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

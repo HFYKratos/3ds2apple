@@ -26,6 +26,8 @@ struct ContentView: View {
     @AppStorage("I3.showTouchControls") private var showTouchControls = true
     /// Audio mute, persisted between launches.
     @AppStorage("I3.audioMuted") private var audioMuted = false
+    /// Diagnostics file currently being shared, if any.
+    @State private var diagnosticsFile: DiagnosticsFile?
 
     /// Screen geometry is read from the linked static library.
     private let topScreen = ZakuroScreen(which: 0)
@@ -55,6 +57,9 @@ struct ContentView: View {
                     model.importROM(from: url)
                 }
             }
+        }
+        .sheet(item: $diagnosticsFile) { file in
+            ShareSheet(items: [file.url])
         }
         .onAppear {
             model.startControllerSupport()
@@ -91,6 +96,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             romStatus
             romActions
+            diagnosticsButton
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -473,6 +479,78 @@ struct ContentView: View {
         .background(cardBackground)
     }
 
+    private var diagnosticsButton: some View {
+        Button {
+            exportDiagnostics()
+        } label: {
+            Label("Export diagnostics", systemImage: "square.and.arrow.up")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .accessibilityIdentifier("export-diagnostics")
+    }
+
+    private func exportDiagnostics() {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let filename = "3ds2apple-diagnostics-\(formatter.string(from: Date())).txt"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        do {
+            try makeDiagnosticsReport().write(to: url, atomically: true, encoding: .utf8)
+            diagnosticsFile = DiagnosticsFile(url: url)
+            AppLog.log("diagnostics exported: %@", filename)
+        } catch {
+            AppLog.log("diagnostics export failed: %@", error.localizedDescription)
+        }
+    }
+
+    private func makeDiagnosticsReport() -> String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info["CFBundleVersion"] as? String ?? "?"
+        let device = UIDevice.current
+        let screen = UIScreen.main
+        let timing = model.frameStats.timing
+        let phaseText: String
+        switch model.phase {
+        case .idle: phaseText = "idle"
+        case .importing(let name): phaseText = "importing \(name)"
+        case .starting(let name): phaseText = "starting \(name)"
+        case .loaded(let name): phaseText = "loaded \(name)"
+        case .failed(let message): phaseText = "failed: \(message)"
+        case .finished(let message): phaseText = "finished: \(message)"
+        }
+        var header = """
+        3ds2apple diagnostics
+        date=\(Date())
+        app=\(version) (\(build))
+        device=\(device.model) · \(device.systemName) \(device.systemVersion)
+        screen=\(Int(screen.bounds.width * screen.scale))x\(Int(screen.bounds.height * screen.scale)) @\(screen.scale)x
+        phase=\(phaseText)
+        rom=\(model.lastROM?.name ?? "none")
+        aot=\(model.aotStatus.label)
+        display=\(model.displayPath.label)
+        loop=\(model.frameLoopLabel)
+        fps=\(String(format: "%.1f", model.frameStats.fps))
+        frames=\(model.frameStats.frames)
+        speed=\(String(format: "%.1f%%", model.frameStats.fps / 60.0 * 100))
+        last_result=\(model.frameStats.lastResult)
+        audio=\(model.audioState.label)
+        controller=\(model.controllerName ?? "none")
+        timing_ms_total=\(String(format: "%.2f/%.2f/%.2f", timing.renderTotal.average, timing.renderTotal.maximum, timing.renderTotal.last))
+        timing_ms_run=\(String(format: "%.2f/%.2f/%.2f", timing.runFrame.average, timing.runFrame.maximum, timing.runFrame.last))
+        timing_ms_present=\(String(format: "%.2f/%.2f/%.2f", timing.present.average, timing.present.maximum, timing.present.last))
+        timing_ms_read_top=\(String(format: "%.2f/%.2f/%.2f", timing.topScreenRead.average, timing.topScreenRead.maximum, timing.topScreenRead.last))
+        timing_ms_read_bottom=\(String(format: "%.2f/%.2f/%.2f", timing.bottomScreenRead.average, timing.bottomScreenRead.maximum, timing.bottomScreenRead.last))
+        timing_ms_cgimage=\(String(format: "%.2f/%.2f/%.2f", timing.cgImage.average, timing.cgImage.maximum, timing.cgImage.last))
+        timing_ms_audio=\(String(format: "%.2f/%.2f/%.2f", timing.audioPump.average, timing.audioPump.maximum, timing.audioPump.last))
+        """
+        header += "\n\n"
+        return AppLog.shared.exportReport(header: header)
+    }
+
     private var footer: some View {
         Text("I3 · input + audio + free-run frame loop + perf HUD · CAMetalLayer presentation (A1) · no JIT")
             .font(.caption2)
@@ -586,7 +664,7 @@ struct ContentView: View {
     /// One line in `idevicesyslog` that proves the static library was linked
     /// and called on device, plus the ROM state at launch.
     private func logRuntimeProbe() {
-        NSLog(
+        AppLog.log(
             "[3ds2apple] zk_screen_width(0)=%u zk_screen_height(0)=%u "
                 + "zk_screen_width(1)=%u zk_screen_height(1)=%u",
             topScreen.width,
@@ -595,9 +673,9 @@ struct ContentView: View {
             bottomScreen.height
         )
         if let last = model.lastROM {
-            NSLog("[3ds2apple] last imported ROM: %@", last.relativePath)
+            AppLog.log("[3ds2apple] last imported ROM: %@", last.relativePath)
         } else {
-            NSLog("[3ds2apple] no ROM imported yet")
+            AppLog.log("[3ds2apple] no ROM imported yet")
         }
     }
 }
@@ -613,4 +691,10 @@ private struct ZakuroScreen {
     }
 
     var label: String { "\(width) × \(height)" }
+}
+
+
+private struct DiagnosticsFile: Identifiable {
+    let id = UUID()
+    let url: URL
 }

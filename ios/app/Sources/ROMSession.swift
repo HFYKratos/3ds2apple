@@ -432,13 +432,13 @@ final class ROMSession: ObservableObject {
                                             width, height) {
             presenter = handle
             presentedDrawableSize = CGSize(width: CGFloat(width), height: CGFloat(height))
-            NSLog("[3ds2apple] zk_presenter_create: CAMetalLayer %ux%u · shared device: %@",
+            AppLog.log("[3ds2apple] zk_presenter_create: CAMetalLayer %ux%u · shared device: %@",
                   width, height, zk_presenter_shared_device(handle) == 1 ? "yes" : "no")
             return handle
         }
         // Read the thread-local error here, before anything else can replace it.
         let message = Self.currentRuntimeError()
-        NSLog("[3ds2apple] zk_presenter_create failed; using the CGImage readback path: %@",
+        AppLog.log("[3ds2apple] zk_presenter_create failed; using the CGImage readback path: %@",
               message)
         presenterUnavailable = true
         metalScreenView = nil
@@ -509,14 +509,14 @@ final class ROMSession: ObservableObject {
             // The presenter's device and the screens it showed belong to this
             // runtime: stop presenting before the system goes away.
             framePresenter = nil
-            NSLog("[3ds2apple] CAMetalLayer presentation detached (shared device: %@)",
+            AppLog.log("[3ds2apple] CAMetalLayer presentation detached (shared device: %@)",
                   zk_presenter_shared_device(presenter) == 1 ? "yes" : "no")
         }
         guard let system else { return }
         zk_destroy(system)
         self.system = nil
         presentFailures = 0
-        NSLog("[3ds2apple] zk_destroy: runtime released")
+        AppLog.log("[3ds2apple] zk_destroy: runtime released")
     }
 
     /// zk_create() for `rom`: destroy old handle, create new one, publish state
@@ -544,7 +544,7 @@ final class ROMSession: ObservableObject {
         // Replacing a ROM always releases the previous handle first.
         destroySystem()
 
-        NSLog("[3ds2apple] zk_create: loading %@ (CAMetalLayer: %@)",
+        AppLog.log("[3ds2apple] zk_create: loading %@ (CAMetalLayer: %@)",
               romURL.path, presenter == nil ? "no" : "yes")
         let startedAt = Date()
         var usedPresenter = presenter
@@ -555,7 +555,7 @@ final class ROMSession: ObservableObject {
                 // Copy the thread-local error before anything else can replace
                 // it, then fall back to the pre-A1 load path.
                 let presentedError = Self.currentRuntimeError()
-                NSLog("[3ds2apple] zk_create_presented failed; retrying with zk_create: %@",
+                AppLog.log("[3ds2apple] zk_create_presented failed; retrying with zk_create: %@",
                       presentedError)
                 usedPresenter = nil
                 handle = zk_create(romURL.path, dataDirectory.path)
@@ -569,7 +569,7 @@ final class ROMSession: ObservableObject {
             // zk_last_error() is thread-local: read and copy it here, in the
             // same block, before hopping to the main queue.
             let message = Self.currentRuntimeError()
-            NSLog("[3ds2apple] zk_create failed after %.1f s: %@", elapsed, message)
+            AppLog.log("[3ds2apple] zk_create failed after %.1f s: %@", elapsed, message)
             publishFailure(message)
             return
         }
@@ -600,11 +600,11 @@ final class ROMSession: ObservableObject {
         let recompiled = zk_recompiled(handle) == 1
         let programID = zk_linked_program_id()
         let aot: AOTStatus = linked ? (recompiled ? .linkedActive : .linkedInterpreting) : .shell
-        NSLog("[3ds2apple] AOT linked=%d recompiled=%d program=0x%016llx status=%@",
+        AppLog.log("[3ds2apple] AOT linked=%d recompiled=%d program=0x%016llx status=%@",
               linked ? 1 : 0, recompiled ? 1 : 0, programID, aot.label)
-        NSLog("[3ds2apple] display: %@", displayPath.label)
-        NSLog("[3ds2apple] hardware: %@", Self.hardwareStatusText(handle))
-        NSLog("[3ds2apple] zk_create OK after %.1f s: %@", elapsed, rom.relativePath)
+        AppLog.log("[3ds2apple] display: %@", displayPath.label)
+        AppLog.log("[3ds2apple] hardware: %@", Self.hardwareStatusText(handle))
+        AppLog.log("[3ds2apple] zk_create OK after %.1f s: %@", elapsed, rom.relativePath)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.lastROM = rom
@@ -699,12 +699,12 @@ final class ROMSession: ObservableObject {
             // runtime queue after the previous one, so at most one frame is in
             // flight and at most one continuation is queued.
             scheduleFreeRunFrame(after: 0, generation: generation)
-            NSLog("[3ds2apple] frame loop started (free-run, cap %d fps)",
+            AppLog.log("[3ds2apple] frame loop started (free-run, cap %d fps)",
                   Self.freeRunFramesPerSecond)
         case .displayLink:
             startDisplayLinkOnMain()
             frameLoopLabel = "CADisplayLink · \(Self.displayLinkFramesPerSecond) Hz"
-            NSLog("[3ds2apple] frame loop started (CADisplayLink at %d fps)",
+            AppLog.log("[3ds2apple] frame loop started (CADisplayLink at %d fps)",
                   Self.displayLinkFramesPerSecond)
         }
     }
@@ -779,7 +779,7 @@ final class ROMSession: ObservableObject {
             displayLinkProxy = nil
         }
         if wasRunning {
-            NSLog("[3ds2apple] frame loop stopped")
+            AppLog.log("[3ds2apple] frame loop stopped")
         }
     }
 
@@ -888,7 +888,7 @@ final class ROMSession: ObservableObject {
     private func presentFailed(result: Int32) {
         presentFailures += 1
         if presentFailures == 1 || presentFailures == Self.presentFailureLimit {
-            NSLog("[3ds2apple] zk_present failed (result %d, %d in a row)",
+            AppLog.log("[3ds2apple] zk_present failed (result %d, %d in a row)",
                   result, presentFailures)
         }
         guard presentFailures >= Self.presentFailureLimit else { return }
@@ -977,7 +977,7 @@ final class ROMSession: ObservableObject {
     private func logScreenReadFailure(which: UInt32, written: Int, expected: Int) {
         guard !didLogScreenReadFailure else { return }
         didLogScreenReadFailure = true
-        NSLog("[3ds2apple] zk_read_screen(which=%u) returned %ld of %ld bytes",
+        AppLog.log("[3ds2apple] zk_read_screen(which=%u) returned %ld of %ld bytes",
               which, written, expected)
     }
 
@@ -1033,13 +1033,13 @@ final class ROMSession: ObservableObject {
             timing.cgImage.average, timing.cgImage.maximum,
             timing.audioPump.average, timing.audioPump.maximum
         )
-        NSLog("[3ds2apple] %@", line)
+        AppLog.log("[3ds2apple] %@", line)
     }
 
     /// Handles zk_run_frame exit/fault: stops the loop, releases the handle and
     /// publishes a terminal state. runtimeQueue only.
     private func finishRuntime(message: String, isError: Bool) {
-        NSLog("[3ds2apple] frame loop ending: %@", message)
+        AppLog.log("[3ds2apple] frame loop ending: %@", message)
         // No further frame may be scheduled, whichever driver is running. This
         // is safe to call from the runtime queue (the state is lock-guarded).
         freeRunState.stop()
@@ -1139,7 +1139,7 @@ final class ROMSession: ObservableObject {
         let name = url.lastPathComponent
         let destination = romsDirectory.appendingPathComponent(name)
         if fileManager.fileExists(atPath: destination.path) {
-            NSLog("[3ds2apple] reusing imported ROM: %@", destination.path)
+            AppLog.log("[3ds2apple] reusing imported ROM: %@", destination.path)
             return .success(ImportedROM(name: name, relativePath: relativePath(of: destination)))
         }
 
@@ -1173,7 +1173,7 @@ final class ROMSession: ObservableObject {
             ))
         }
 
-        NSLog("[3ds2apple] imported ROM: %@", destination.path)
+        AppLog.log("[3ds2apple] imported ROM: %@", destination.path)
         return .success(ImportedROM(name: name, relativePath: relativePath(of: destination)))
     }
 
@@ -1225,7 +1225,7 @@ final class ROMSession: ObservableObject {
     }
 
     private func publishFailure(_ message: String) {
-        NSLog("[3ds2apple] ROM load failed: %@", message)
+        AppLog.log("[3ds2apple] ROM load failed: %@", message)
         setPhase(.failed(message: message))
     }
 

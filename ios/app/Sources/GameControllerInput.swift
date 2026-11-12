@@ -50,7 +50,7 @@ final class GameControllerManager {
         })
         GCController.controllers().forEach(attach)
         refresh()
-        NSLog("[3ds2apple] controller support started")
+        AppLog.log("[3ds2apple] controller support started")
     }
 
     /// Main thread.

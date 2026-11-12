@@ -198,7 +198,7 @@ final class AudioOutput {
     func startEngine() -> Bool {
         if engine != nil { return true }
         guard let format else {
-            NSLog("[3ds2apple] audio: could not create a %.0f Hz stereo format", Self.sampleRate)
+            AppLog.log("[3ds2apple] audio: could not create a %.0f Hz stereo format", Self.sampleRate)
             return false
         }
         do {
@@ -207,7 +207,7 @@ final class AudioOutput {
             try session.setPreferredIOBufferDuration(0.01)
             try session.setActive(true)
         } catch {
-            NSLog("[3ds2apple] audio session failed: %@", error.localizedDescription)
+            AppLog.log("[3ds2apple] audio session failed: %@", error.localizedDescription)
             return false
         }
 
@@ -219,7 +219,7 @@ final class AudioOutput {
         do {
             try engine.start()
         } catch {
-            NSLog("[3ds2apple] audio engine failed: %@", error.localizedDescription)
+            AppLog.log("[3ds2apple] audio engine failed: %@", error.localizedDescription)
             engine.detach(node)
             try? AVAudioSession.sharedInstance().setActive(
                 false, options: .notifyOthersOnDeactivation
@@ -229,7 +229,7 @@ final class AudioOutput {
 
         self.engine = engine
         self.sourceNode = node
-        NSLog("[3ds2apple] audio started: %.0f Hz stereo i16 → AVAudioEngine", Self.sampleRate)
+        AppLog.log("[3ds2apple] audio started: %.0f Hz stereo i16 → AVAudioEngine", Self.sampleRate)
         return true
     }
 
@@ -246,7 +246,7 @@ final class AudioOutput {
             false, options: .notifyOthersOnDeactivation
         )
         ring.setMuted(false)
-        NSLog("[3ds2apple] audio stopped")
+        AppLog.log("[3ds2apple] audio stopped")
     }
 
     /// runtimeQueue: push one frame batch of interleaved i16 samples.
