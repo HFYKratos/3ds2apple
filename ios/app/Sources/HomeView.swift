@@ -64,7 +64,7 @@ struct HomeView: View {
                 case .settings:
                     SettingsView(settings: settings, model: model)
                 case .saveManager:
-                    SaveManagerView(model: model)
+                    SaveManagerView(model: model, saveStates: model.saveStates)
                 case .about:
                     AboutView(model: model)
                 }
@@ -302,7 +302,7 @@ struct HomeView: View {
                     actionTile(
                         title: "Save Manager",
                         systemImage: "externaldrive.fill",
-                        detail: "Battery saves written by the game",
+                        detail: "Battery saves and instant save slots",
                         tint: .green
                     )
                 }

@@ -1,9 +1,9 @@
 # iOS app
 
 The SwiftUI shell for 3ds2apple. It imports the user's own ROM, displays the two
-3DS screens, drives the Zakuro runtime and exposes input, audio, frame timing
-and settings. The app is organised as a home page, the running game, a settings
-page and a few supporting pages.
+3DS screens, drives the Zakuro runtime and exposes input, audio, frame timing,
+save data and settings. The app is organised as a home page, the running game, a
+settings page and a few supporting pages.
 
 ## App structure
 
@@ -12,9 +12,9 @@ page and a few supporting pages.
 | **Home** | Current game card (ROM name), Play / Load, Import / Change ROM, and tools: Settings, Save Manager, Diagnostics export, About. |
 | **Game** | The two screens on a `CAMetalLayer` (or the screen-readback path), status line, performance HUD, on-screen controls, the "Preparing graphics" warm-up overlay and the in-game menu. |
 | **Settings** | Display, Audio, Controls, Performance, Storage and About sections. |
-| **Save Manager** | Read-only list of the battery saves the runtime has written into the per-game data directory, and the container usage. |
+| **Save Manager** | The battery save files of the current game (size, date, export as ZIP, import, delete), the three instant save-state slots (save, load, delete) and the container usage. |
 | **About** | Version, runtime state, acknowledgements and licence. |
-| **In-game menu** | Opened from the pause button over the game: pause/resume, Save State / Load State, Reset, Display settings, Save Manager, Diagnostics, Exit. |
+| **In-game menu** | Opened from the pause button over the game: pause/resume, Save State / Load State (slot 1), Reset, Display settings, Save Manager, Diagnostics, Exit. |
 
 Opening the in-game menu pauses emulation: the frame loop and the audio engine
 are stopped, the runtime handle and the last frame stay, and Resume continues the
@@ -32,6 +32,12 @@ on-screen controls, so no input or audio advances behind it.
   DualSense).
 - Audio through `zk_take_audio` and AVAudioEngine, with volume, mute and an IO
   buffer size preference.
+- Instant save states: three slots per game, one file per slot under
+  `Documents/states/<game>/`. The in-game menu saves to and loads from slot 1;
+  the Save Manager page manages all three.
+- Save-data management: export the game's battery saves as a ZIP archive through
+  the share sheet, import a ZIP archive or single save files back, and delete
+  individual files. Import and delete are disabled while a game is running.
 - Free-running frame loop capped at 60 Hz (or 30 Hz) and decoupled from the
   display refresh.
 - Presentation on a real `CAMetalLayer` (A1): Zakuro shows both screens through
@@ -127,12 +133,15 @@ Without it the app still builds and runs, on the readback path.
 | `GameView.swift` | Running game: screens, status line, performance HUD, on-screen controls, warm-up overlay, in-game menu. |
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, reset, display settings, save manager, diagnostics, exit) and quick toggles. |
 | `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. |
-| `SaveManagerView.swift` | Read-only battery-save list and container usage. |
+| `SaveManagerView.swift` | Battery save list (export as ZIP, import, delete) and the instant save-state slots (save, load, delete), with progress and errors. |
 | `AboutView.swift` | Version, runtime state, acknowledgements, licence. |
 | `AppSettings.swift` | Persisted settings model (enums for layout, aspect, orientation, buffer size, frame cap) and the UserDefaults keys. |
 | `DiagnosticsReport.swift` | Diagnostics report text, the shared diagnostics file type and screen geometry helpers. |
-| `StorageInspector.swift` | Container folder sizes, save-data file list, pipeline-cache clearing. |
-| `SaveStateSupport.swift` | Single place the UI asks whether the runtime can take/restore instant save states. |
+| `StorageInspector.swift` | Container folder sizes, save-data file list, pipeline-cache clearing, and `AtomicFileWriter` for temporary-file-then-rename writes. |
+| `SaveStateSupport.swift` | Instant save states: three slots per game, the runtime's size → copy → load protocol on the serial runtime queue, the pause/audio-drop around save and load, and the slot list. |
+| `SaveDataStore.swift` | Battery save-data folder, file list, ZIP export, ZIP/file import and delete. |
+| `ZipArchive.swift` | Small ZIP writer (stored entries) and reader (stored and deflated entries) used for save-data backups. |
+| `SaveArchivePicker.swift` | Files picker for importing a save-data ZIP or individual save files. |
 | `ROMSession.swift` | Runtime handle, ROM import, frame loop, presenter lifecycle, input/audio plumbing, pause/resume/reset and the settings that change runtime behaviour. |
 | `MetalScreenView.swift` | `UIView` with a `CAMetalLayer` the presenter draws into (A1); drawable resolution (1×/2×). |
 | `ROMDocumentPicker.swift` | Files document picker wrapper. |
@@ -203,12 +212,52 @@ The two screens are presented in one of two ways, chosen when a ROM loads:
 
 ## Save data
 
-The runtime writes battery saves into `Documents/data/<game>/`; the Save Manager
-page lists those files with sizes and dates and shows the container usage. Save
-data import/export and instant save states are not available in this build: the
-in-game menu labels the Save State / Load State buttons as unavailable instead of
-writing a file that could not be loaded back. Save files are never deleted or
-moved by the app UI.
+Two kinds of data stay on the device:
+
+| Data | Where | Managed by |
+|---|---|---|
+| Battery saves | `Documents/data/<game>/` | The game's own save menu writes them; the Save Manager lists, exports, imports and deletes them. |
+| Instant save states | `Documents/states/<game>/slot1.bin` … `slot3.bin` | Save State / Load State in the in-game menu (slot 1) and the Save Manager (all three slots). |
+
+Battery saves:
+
+- The Save Manager lists every file under the current game's data directory with
+  its size and modification date.
+- **Export battery saves as a ZIP…** packs those files into a ZIP archive and
+  opens the share sheet, so a backup can go to Files, iCloud Drive or AirDrop.
+  Paths inside the archive are relative to the game's data directory.
+- **Import battery saves from a ZIP or file…** merges an archive (or one save
+  file) back into the game's data directory. The archive may come from this app,
+  a desktop tool, or from compressing the game's folder in the Files app: the
+  folder wrapper is dropped, macOS metadata entries are skipped, and both stored
+  and deflated entries are read.
+- Import and delete are disabled while a game is running, because the runtime may
+  keep save files open; the page says so. Files are replaced through a temporary
+  file and a rename, so an interrupted import cannot leave a half-written save.
+
+Instant save states:
+
+- A slot is a snapshot of the whole console — CPU, kernel objects, services, GPU
+  state and the memories — compressed by the runtime into one file of tens of
+  MiB. The runtime's saved-state C ABI is a size → copy → load protocol; the app
+  serializes on the runtime's serial queue with the frame loop and the audio
+  engine stopped, copies the blob and writes the file through a temporary file.
+- Loading pauses the game, restores the console and drops the audio buffered
+  before the load (the DSP state jumped back too). The last frame stays on screen
+  until the restored console draws the next one, then the same session continues;
+  the in-game menu closes and resumes after a successful load.
+- The in-game menu's quick buttons use slot 1. The Save Manager page lists all
+  three slots with size and date and offers Save / Load / Delete for each.
+- A save briefly holds the runtime's snapshot and the app's copy of it — about
+  twice the compressed state, tens of MiB — and writes the app's copy straight
+  from its buffer, so no third copy is made. A load memory-maps the slot file and
+  lets the runtime check and unpack it.
+- A short copy (the state changed size between the two ABI calls) is retried once
+  with the reported length, and a failed write leaves the previous slot intact.
+- Save states are device-local and are not exported by the Save Manager. The
+  runtime checks the title, format version and console model when loading and
+  refuses a state from another game or runtime version without touching the
+  running console.
 
 ## Known limitations
 
@@ -223,8 +272,9 @@ moved by the app UI.
   A generic interpreter-only build exists but is much slower.
 - The first release does not include camera, microphone, online play or a full
   game library UI.
-- Button remapping, save-state slots and save-data import/export are not
-  available in this build.
+- Button remapping is not available in this build. Save states are not
+  interchangeable between games or runtime versions, and only battery saves are
+  exported and imported; instant states stay in the app container.
 - The first run with an empty pipeline cache waits up to 5 s on the
   "Preparing graphics" screen (skippable). A pipeline first used long after the
   warm-up still compiles on a worker thread and draws through the generic
@@ -253,7 +303,9 @@ for a software renderer. The device log carries one line per load
 (`zk_presenter_create`, `display:`, `hardware:`), the pipeline-cache state at
 launch/load/after `zk_destroy`, one `graphics warm-up:` line with the same
 timing, a `frame cap:` / `render scale:` line when those settings change, one
-line per pause/resume/reset, and a `perf:` line every ~2 s with the HUD phases.
+line per pause/resume/reset, one `save state:` line per save/load/delete, one
+`save data:` line per export/import/delete, and a `perf:` line every ~2 s with
+the HUD phases.
 
 The exported diagnostics header adds the build, device, session phase
 (`paused=`), the runtime state, the active settings (`frame_cap=`,

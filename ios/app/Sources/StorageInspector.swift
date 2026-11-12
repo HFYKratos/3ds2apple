@@ -6,9 +6,11 @@
 //  space the imported ROMs, the runtime save data, the app logs and the
 //  regenerable graphics pipeline cache use, and which save files exist.
 //
-//  Everything stays inside the app container; the app only reads the
-//  directories. The one mutation is clearing the pipeline cache, which the
-//  runtime rebuilds on the next load and which never contains save data.
+//  Everything stays inside the app container. The inspector itself only reads
+//  the directories and clears the pipeline cache (which the runtime rebuilds on
+//  the next load and which never contains save data); the save files it lists
+//  are written by the runtime and by the Save Manager through
+//  `AtomicFileWriter`.
 //
 
 import Foundation
@@ -199,4 +201,35 @@ enum StorageFormat {
         formatter.timeStyle = .short
         return formatter
     }()
+}
+
+/// File writes that must not leave a half-written file behind.
+///
+/// The Save Manager and the instant save slots replace files the game will read
+/// back later, so each write goes to a temporary file in the same directory and
+/// is renamed into place only when complete: a crash, a full disk or a killed
+/// app can then leave the old file or the new one, never half of either.
+enum AtomicFileWriter {
+    /// Writes `data` to `url` through a temporary file and then renames it over
+    /// the destination. Creates the parent directory when needed.
+    static func write(_ data: Data, to url: URL) throws {
+        let fileManager = FileManager.default
+        let directory = url.deletingLastPathComponent()
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let temporary = directory.appendingPathComponent(
+            ".\(url.lastPathComponent).\(UUID().uuidString).tmp",
+            isDirectory: false
+        )
+        do {
+            try data.write(to: temporary, options: [])
+            if fileManager.fileExists(atPath: url.path) {
+                _ = try fileManager.replaceItemAt(url, withItemAt: temporary)
+            } else {
+                try fileManager.moveItem(at: temporary, to: url)
+            }
+        } catch {
+            try? fileManager.removeItem(at: temporary)
+            throw error
+        }
+    }
 }

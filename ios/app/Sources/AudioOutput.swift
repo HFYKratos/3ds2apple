@@ -273,6 +273,15 @@ final class AudioOutput {
         ring.write(samples, frameCount: frameCount)
     }
 
+    /// Drops buffered audio without touching the engine or the mute state.
+    ///
+    /// Used after an instant save-state load: the console (and its DSP) jumped
+    /// back to the saved point, so samples produced before the load must not
+    /// play. The engine keeps running (or restarts on resume) with an empty ring.
+    func resetBuffer() {
+        ring.reset()
+    }
+
     func setMuted(_ muted: Bool) {
         self.muted = muted
         applyMuteToRing()

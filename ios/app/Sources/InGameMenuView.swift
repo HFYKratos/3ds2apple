@@ -6,7 +6,10 @@
 //  states, reset, display settings, the save manager, diagnostics and exit.
 //
 //  Opening the menu pauses the frame loop and the audio engine in ROMSession,
-//  so the game can neither advance nor receive input behind the overlay.
+//  so the game can neither advance nor receive input behind the overlay. The
+//  Save State / Load State buttons take and restore instant states through
+//  SaveStateSupport on the paused runtime; a successful load resumes the game
+//  and drops the audio buffered before it.
 //
 
 import SwiftUI
@@ -14,12 +17,16 @@ import SwiftUI
 struct InGameMenuView: View {
     let romName: String
     @ObservedObject var settings: AppSettings
+    @ObservedObject var saveStates: SaveStateSupport
     let onResume: () -> Void
     let onReset: () -> Void
     let onDisplaySettings: () -> Void
     let onSaveManager: () -> Void
     let onDiagnostics: () -> Void
     let onExit: () -> Void
+    /// Called after a state load succeeded: the game view closes the menu and
+    /// resumes the restored session.
+    let onLoadStateCompleted: () -> Void
 
     var body: some View {
         ZStack {
@@ -32,6 +39,7 @@ struct InGameMenuView: View {
                         "Resume game",
                         systemImage: "play.fill",
                         prominent: true,
+                        enabled: !saveStates.busy,
                         action: onResume
                     )
                     .accessibilityIdentifier("menu-resume")
@@ -43,6 +51,7 @@ struct InGameMenuView: View {
                     actionButton(
                         "Reset game",
                         systemImage: "arrow.counterclockwise",
+                        enabled: !saveStates.busy,
                         action: onReset
                     )
                     .accessibilityIdentifier("menu-reset")
@@ -50,6 +59,7 @@ struct InGameMenuView: View {
                     actionButton(
                         "Display settings",
                         systemImage: "display",
+                        enabled: !saveStates.busy,
                         action: onDisplaySettings
                     )
                     .accessibilityIdentifier("menu-display-settings")
@@ -57,6 +67,7 @@ struct InGameMenuView: View {
                     actionButton(
                         "Save Manager",
                         systemImage: "externaldrive.fill",
+                        enabled: !saveStates.busy,
                         action: onSaveManager
                     )
                     .accessibilityIdentifier("menu-save-manager")
@@ -64,6 +75,7 @@ struct InGameMenuView: View {
                     actionButton(
                         "Export diagnostics",
                         systemImage: "square.and.arrow.up",
+                        enabled: !saveStates.busy,
                         action: onDiagnostics
                     )
                     .accessibilityIdentifier("menu-diagnostics")
@@ -72,6 +84,7 @@ struct InGameMenuView: View {
                         "Exit to home",
                         systemImage: "xmark.circle",
                         destructive: true,
+                        enabled: !saveStates.busy,
                         action: onExit
                     )
                     .accessibilityIdentifier("menu-exit")
@@ -80,6 +93,10 @@ struct InGameMenuView: View {
                 .frame(maxWidth: 420)
                 .frame(maxWidth: .infinity)
             }
+        }
+        .onAppear {
+            saveStates.refresh()
+            saveStates.clearMessages()
         }
         .accessibilityIdentifier("in-game-menu-overlay")
     }
@@ -122,17 +139,98 @@ struct InGameMenuView: View {
         )
     }
 
+    /// Instant save states: the quick buttons act on slot 1; the Save Manager
+    /// page lists and manages all slots.
     private var saveStateControls: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                disabledButton("Save state", systemImage: "camera.on.rectangle")
-                disabledButton("Load state", systemImage: "arrow.uturn.backward")
+                stateButton(
+                    "Save state",
+                    systemImage: "camera.on.rectangle",
+                    enabled: saveStates.canSave,
+                    identifier: "menu-save-state"
+                ) {
+                    saveStates.save(slot: SaveStateSupport.quickSlot)
+                }
+                stateButton(
+                    "Load state",
+                    systemImage: "arrow.uturn.backward",
+                    enabled: saveStates.canLoad,
+                    identifier: "menu-load-state"
+                ) {
+                    saveStates.load(slot: SaveStateSupport.quickSlot) { result in
+                        if case .success = result {
+                            onLoadStateCompleted()
+                        }
+                    }
+                }
             }
-            Text(SaveStateSupport.unavailableReason)
+            saveStateStatus
+        }
+    }
+
+    @ViewBuilder
+    private var saveStateStatus: some View {
+        if saveStates.busy {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .tint(.white)
+                    .controlSize(.small)
+                Text(saveStates.statusText)
+                    .font(.caption2)
+                    .foregroundColor(.white.opacity(0.75))
+                    .lineLimit(2)
+            }
+            .padding(.horizontal, 4)
+            .accessibilityIdentifier("menu-save-state-progress")
+        } else if let error = saveStates.errorMessage {
+            Label(error, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption2)
+                .foregroundColor(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 4)
+                .accessibilityIdentifier("menu-save-state-error")
+        } else if !saveStates.isRuntimeLoaded {
+            Text("Save states are available while a game is running.")
                 .font(.caption2)
                 .foregroundColor(.white.opacity(0.6))
                 .padding(.horizontal, 4)
+        } else {
+            Text("Slot \(SaveStateSupport.quickSlot) · \(saveStates.quickSlotInfo.detail)")
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.6))
+                .padding(.horizontal, 4)
+                .accessibilityIdentifier("menu-save-state-detail")
         }
+    }
+
+    private func stateButton(
+        _ title: String,
+        systemImage: String,
+        enabled: Bool,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                Text(title)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .font(.footnote.weight(.medium))
+            .foregroundColor(.white.opacity(enabled ? 0.95 : 0.45))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white.opacity(enabled ? 0.14 : 0.06))
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .accessibilityIdentifier(identifier)
     }
 
     private func actionButton(
@@ -140,6 +238,7 @@ struct InGameMenuView: View {
         systemImage: String,
         prominent: Bool = false,
         destructive: Bool = false,
+        enabled: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -160,23 +259,7 @@ struct InGameMenuView: View {
             .foregroundColor(destructive ? Color.red : Color.white)
         }
         .buttonStyle(.plain)
-    }
-
-    private func disabledButton(_ title: String, systemImage: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: systemImage)
-            Text(title)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .font(.footnote.weight(.medium))
-        .foregroundColor(.white.opacity(0.55))
-        .padding(.horizontal, 12)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.06))
-        )
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.45)
     }
 }
