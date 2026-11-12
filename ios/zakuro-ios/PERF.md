@@ -187,7 +187,7 @@ zk_perf: 60 frames in 2.14s | frame avg 34.50ms max 41.00ms | \
 | `frame avg` / `max` | `zk_run_frame` 平均/最大墙钟耗时 | 主要判据：和 $1000/\mathrm{fps}$ 比 |
 | `read top avg/max bottom avg/max (N reads)` | `zk_read_screen` 耗时 | 呈现成本（framebuffer 读出+拷贝） |
 | `audio X ms (N takes)` | `zk_take_audio` 耗时 | 音频 pump 成本；每帧应远小于 1 ms |
-| `gpu X ms/frame` | 软件 PICA200（命令列表/光栅/传输）host 时间 | 判断是否 GPU 瓶颈 |
+| `gpu X ms/frame` | 软件 PICA200（命令列表/光栅/传输）host 时间；**硬件渲染开启后**是 CPU 端命令列表记录/提交时间（不是 GPU 时间，见 §4.5） | 判断是否 GPU 瓶颈 |
 | `non-gpu X ms/frame` | `frame avg − gpu` | 模拟 CPU + HLE 服务 + DSP 生成 + 帧边界工作 |
 | `cpu X M cyc/s (Y% of real time)` | 模拟 CPU 速度 = 每秒模拟的 3DS 周期 / 268.111856 MHz | **速度 %**；音频是否必然卡顿的判据 |
 | `draws/xfr/fills` | 每帧 draw call / 显存传输 / fill 数 | 软件 GPU 负载的量；对比场景变化 |
@@ -224,7 +224,6 @@ gap_ms       = wall_ms - emulation_ms
 | `cpu % of real time` 明显 <100% | 音频必然 underrun（按模拟时间生成、按墙钟消费） | 先提速度；`AVAudioSourceNode` 补零的 crackle 是症状不是独立 bug（见 `ios/app/README.md` 音频段） |
 
 ### 4.4 为什么 28 fps 只有 ~47% 速度，音频一定卡
-
 3DS 帧周期 4,481,136 cycles，CPU 时钟 268,111,856 Hz ⇒ **满速 59.83 fps**。
 28 fps ⇒ $28 \times 4{,}481{,}136 / 268{,}111{,}856 = 46.8\%$。DSP 按模拟时间每秒
 生成 32,728 帧音频，而 AVAudioEngine 按墙钟 32,728 Hz 消费：46.8% 速度下每秒只生产
@@ -232,29 +231,45 @@ gap_ms       = wall_ms - emulation_ms
 卡顿不是独立 bug**；如果 `cpu … % of real time` 已接近 100% 而音频仍卡，才去查
 音频路径（buffer 大小、sample rate 常量、engine 配置）。
 
-## 5. 下一步建议：软件渲染器 vs Pocket Native GLES
+### 4.5 硬件渲染（Metal/MoltenVK）开启后的读数差异
+
+A0（`hardware_renderer = true`）跑起来后，`zk_perf` 的字段含义有几处变化，对照
+软件基线时注意（完整评估见 [`METAL.md`](METAL.md)）：
+
+- `gpu`：变成**CPU 记录/提交 Vulkan 命令列表的时间**（`System::gpu.busy` 统计的是
+  host 时间），**不是** GPU 执行时间。硬件路径是否更快，看总体 `frame avg`；
+- `read top/bottom`：`zk_read_screen` 现在要把 GPU 画完的 framebuffer `sync_gpu`
+  回读到 guest 内存，通常比软件路径的纯内存拷贝贵（每帧 0.66 MiB）；
+  A1（presenter 共享 device、屏幕直接从 GPU 显示）会把它降到 ≈0；
+- `draws/xfr/fills`：仍反映模拟的 PICA 工作量，和软件路径可比；
+- 顶点着色默认可能仍在 CPU（iPhone 被识别为 integrated GPU，见 METAL.md §1.1），
+  用 `zk_set_hardware_option("gpu_shaders","1")` 对比，别把"顶点在 CPU"误判成
+  "Metal 没加速"。
+
+## 5. 下一步建议：渲染器路线（软件 / MoltenVK / Pocket Native）
 
 **先测后换。** 现有渲染路径是 Zakuro 的软件 PICA200（`hardware_renderer = false`，
-build 脚本还关掉了 shader JIT/cranelift）。换渲染器属于 I3-T4 的评估范围，代价不小：
+build 脚本还关掉了 shader JIT/cranelift）。I3-T10 重新评估后，渲染器路线如下
+（全部细节、MoltenVK 版本/许可/体积、真机 spike 步骤见 [`METAL.md`](METAL.md)）：
 
 | 方案 | 内容 | 代价/风险 | 何时才值得 |
 |---|---|---|---|
-| A. 继续软件 PICA200 + 局部优化 | 保持 vanilla Zakuro；按 §4 数据优化帧循环/读屏/HLE 热点；必要时降低内部分辨率（`Config.resolution` 目前 FFI 未暴露，需加参数） | 小；收益不确定但风险低 | `gpu` 占比高但**不到 50%**，或瓶颈在 `non-gpu`/呈现 |
-| B. Pocket Native engine（GLES 渲染器） | 整套换 fork engine + recompiler（**ABI 7**，`Linked` 6 字段、`Context` 带 fastmem）；把 EGL 渲染器适配到 iOS（`CAEAGLLayer`/`EAGLContext` 或 Metal）；补 MIT 归属与固定 commit | 大：`Config`/loader 差异、ABI 7 生成代码、iOS GLES 适配、每款重编译、许可证/归属；fork 活跃需锁版本 | `AOT active`、`interpreted%≈0`、`gpu ≥ frame avg 一半`、且 20 分钟 soak 稳定（不是崩溃/回退问题） |
-| C. MoltenVK / 硬件渲染 | Zakuro `hardware_renderer` 走 Vulkan 路径；iOS 需 MoltenVK（Metal 之上的 Vulkan）+ 打包 | 工程量与不确定性最大，v1 不建议 | 只在 A/B 都不够、且产品目标要求 60 fps 时评估 |
+| A. 继续软件 PICA200 + 局部优化 | 保持 vanilla Zakuro；按 §4 数据优化帧循环/读屏/HLE 热点；必要时降低内部分辨率（`Config.resolution` 目前 FFI 未暴露，需加参数） | 小；收益不确定但风险低 | `gpu` 占比高但**不到 40%**，或瓶颈在 `non-gpu`/呈现 |
+| B. Pocket Native engine（GLES 渲染器） | 整套换 fork engine + recompiler（**ABI 7**，`Linked` 6 字段、`Context` 带 fastmem）；把 EGL 渲染器适配到 iOS（`CAEAGLLayer`/`EAGLContext` 或 Metal）；补 MIT 归属与固定 commit | 大：`Config`/loader 差异、ABI 7 生成代码、iOS GLES 适配、每款重编译、许可证/归属；fork 活跃需锁版本 | A0/A1 的 Plan A 无法满足目标、且需要 fork 的其它收益（fastmem/profile）时；见 METAL.md §5 |
+| C. MoltenVK / 硬件渲染（**Plan A**，见 METAL.md） | Zakuro **已有的 Vulkan 渲染器** + iOS MoltenVK；A0 只换渲染器、现有回读呈现不改（20 行上游补丁，已验证可编译）；A1 再上 CAMetalLayer/swapchain 呈现 | 中：上游补丁 + App 嵌 MoltenVK（+4.6 MiB 动态/6.8 MiB 静态）+ 真机验证；MoltenVK 已被 Khronos 弃用但仍是 iOS 推荐实现；Vulkan 渲染器本来就编在 `libzakuro_ios.a` 里，**没有额外 Rust 编译成本** | `AOT active`、`interpreted%≈0`、`gpu` 占 `frame avg` ≥40%；先做 A0 把收益量出来 |
 
 推荐决策顺序：
 
 1. **第一优先**：用本次诊断确认 AOT 状态与瓶颈类别（§3/§4）。若 AOT 被回退，先修
    构建——那与渲染器无关。
 2. 若瓶颈是**呈现/主线程**：交 ios-shell（I3-T6 HUD + 缓冲复用），不动渲染器。
-3. 若瓶颈是**软件 GPU** 且差距可接受（例如 28→35 fps 就能玩）：先做 A（含
-   per-frame 读屏/音频拷贝优化），把数据记入 QA；同时让 I3-T4 开 Pocket Native
-   iOS 编译 spike（只验证 fork engine 能否在 iOS 编过 + 一个三角形），**不要**在
-   spike 成功前承诺切换。
-4. 只有当 A 的优化到顶、数据仍显示 GPU 占帧时间 >50%、且目标 fps 必须更高时，才
-   按 RECOMP.md §11 整套切到 B。切换前把 §4 的基线数据固定下来，否则换完无法
-   证明提升。
+3. 若瓶颈是**软件 GPU**（`gpu` 占 `frame avg` ≥40%）：先做 **C 的 A0**（MoltenVK
+   渲染 + 现有回读呈现，成本最低、数据最直接）；同时 B 的 Pocket Native iOS 编译
+   spike 只作为长期备选，不要并行投入。
+4. 若 A0 证明收益不够（run 仍 >16.7ms）且目标必须 60fps：先做 A2 调优与 A 的局部
+   优化；确实都不够时再按 RECOMP.md §11 评估整套切到 B，或由 I5 立项 Plan B
+   （直接 Metal 后端，见 METAL.md §5）。切换前把 §4 的基线数据固定下来，否则换完
+   无法证明提升。
 
 另外两条与性能直接相关的事实（RECOMP.md §6/§7）：
 
@@ -298,11 +313,18 @@ uint64_t zk_last_audio_take_micros(void);
 const char *zk_recompiled_status(zk_system_t system);
 int32_t zk_profiler_start(zk_system_t system);
 const char *zk_profiler_hot_spots(zk_system_t system, uint32_t count);
+/* I3-T10 硬件渲染（见 METAL.md） */
+int32_t zk_hardware_probe(void);
+int32_t zk_set_hardware_renderer(int32_t enabled);
+int32_t zk_set_vulkan_library(const char *path);
+int32_t zk_set_hardware_option(const char *name, const char *value);
+const char *zk_hardware_status(zk_system_t system);
 ```
 
-Swift 侧注意：`zk_recompiled_status` / `zk_profiler_hot_spots` 返回的指针归库所有，
-**同一线程**下一次调用前有效；立即 `String(cString:)` 复制。计时读数是整数微秒，
-适合做 HUD 的 last/avg/max。
+Swift 侧注意：`zk_recompiled_status` / `zk_profiler_hot_spots` / `zk_hardware_status`
+返回的指针归库所有，**同一线程**下一次调用前有效；立即 `String(cString:)` 复制。
+计时读数是整数微秒，适合做 HUD 的 last/avg/max。硬件渲染开关是进程级的，要在
+`zk_create` **之前**调用；`zk_hardware_probe()` 不需要 ROM，可以先验 MoltenVK。
 
 ## 8. 复现命令（摘要）
 
@@ -377,3 +399,5 @@ ZAKURO_LINKED_PROGRAM_ID=0004000000055E00 cargo test -p zakuro-ios --lib --featu
   <https://github.com/fearkov/zakuro/blob/main/crates/zakuro-core/src/lib.rs>
 - Pocket Native（评估见 `docs/pocket-native.md`）：
   <https://github.com/whovian64/pocket-native>
+- 硬件渲染（Metal/MoltenVK，I3-T10）的评估、MoltenVK 数据与 spike 步骤：
+  [`METAL.md`](METAL.md)

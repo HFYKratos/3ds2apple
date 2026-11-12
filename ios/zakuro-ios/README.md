@@ -9,9 +9,10 @@ Rust `staticlib`。Swift 只看到不透明指针和下面列出的 `zk_*` 函�
   `cargo build -p zakuro-ios --release --target aarch64-apple-ios`。产物
   `build/ios/libzakuro_ios.a` 不进仓库。完整步骤以
   [`docs/integration.md`](../../docs/integration.md) 为准。
-- **无 JIT**：iOS 不允许可执行内存。`zk_create` 固定
-  `find_recompiled = false`、`hardware_renderer = false`，只跑 AOT/HLE 代码与解释器
-  兜底；不要重新打开 `zakuro-gpu` 的 `jit` 特性。
+- **无 JIT**：iOS 不允许可执行内存。`zk_create` 固定 `find_recompiled = false`，
+  只跑 AOT/HLE 代码与解释器兜底；不要重新打开 `zakuro-gpu` 的 `jit` 特性。
+  3D 默认在软件 PICA200 上画；宿主 GPU（iOS 上是 **Metal via MoltenVK**）是
+  可选开关（见 [硬件渲染](#硬件渲染metal--moltenvk-i3-t10)），不存在 JIT 路径。
 - **调用约定**：所有 `zk_*` 调用必须串行，`System*` 不是线程安全的（见
   [线程规则](#线程规则)）。
 
@@ -42,6 +43,11 @@ uint64_t    zk_last_screen_read_micros(uint32_t which);
 uint64_t    zk_last_audio_take_micros(void);
 int32_t     zk_profiler_start(void *system);
 const char *zk_profiler_hot_spots(void *system, uint32_t count);
+int32_t     zk_hardware_probe(void);
+int32_t     zk_set_hardware_renderer(int32_t enabled);
+int32_t     zk_set_vulkan_library(const char *path);
+int32_t     zk_set_hardware_option(const char *name, const char *value);
+const char *zk_hardware_status(void *system);
 ```
 
 ### 函数表
@@ -66,8 +72,14 @@ const char *zk_profiler_hot_spots(void *system, uint32_t count);
 | `zk_last_audio_take_micros` | 无 | `uint64_t`：上一次 `zk_take_audio` 的微秒数 | 音频 pump 成本 |
 | `zk_profiler_start` | `system` | `int32_t`：`0` 成功，`-1` 空句柄 | 打开 guest PC 采样（诊断用，有少量开销；默认不开） |
 | `zk_profiler_hot_spots` | `system`；`count`：条数（上限 100） | `const char *`：最热 guest PC，`thread 0xPC hits` 每行一条；未开 profiler 时为空串 | 配合 `profiler` feature 或 `zk_profiler_start` 定位热点；指针契约同 `zk_recompiled_status` |
+| `zk_hardware_probe` | 无 | `int32_t`：`0` = 能建 Vulkan device，`-1` = 不能（原因见 `zk_last_error` / stderr） | MoltenVK spike 的先验：不需要 ROM，用来区分"设备/Vulkan 不可用"和"游戏没跑起来"；调用后 `zk_hardware_status(NULL)` 会报告结果 |
+| `zk_set_hardware_renderer` | `enabled`：`0` 软件，非 0 宿主 GPU | `int32_t`：恒为 `0` | 进程级开关，对**之后**的 `zk_create` 生效，已加载的 `System` 不变。默认值由构建期 `ZAKURO_IOS_HARDWARE` 决定（不设 = 软件） |
+| `zk_set_vulkan_library` | `path`：MoltenVK framework/dylib 路径（`@executable_path/…` 或绝对路径） | `int32_t`：`0` 成功，`-1` NULL/非法 UTF-8 | 设置 `ZAKURO_VULKAN_LIBRARY`，配合上游 iOS 补丁（METAL.md §8）；App embed 的 MoltenVK 不在默认 rpath 时用。必须在 `zk_create` 前调用 |
+| `zk_set_hardware_option` | `name`：白名单键；`value`：值，NULL/空 = 取消 | `int32_t`：`0` 成功，`-1` 未知/非法 | 渲染器调优开关（`gpu_shaders`、`cpu_shaders`、`static_blend`、`float_depth` 等，见 [METAL.md](METAL.md) §7.2）；必须在 `zk_create` 前调用 |
+| `zk_hardware_status` | `system` | `const char *`：一行状态（宿主 GPU/倍率、请求了但回退、或纯软件）；永不为 `NULL` | HUD/日志用；`system` 为 `NULL` 时报告上次 `zk_hardware_probe`；指针契约同 `zk_recompiled_status` |
 
-`zk_recompiled_status` / `zk_profiler_hot_spots` 的指针归本库所有：不要 `free`，
+`zk_recompiled_status` / `zk_profiler_hot_spots` / `zk_hardware_status` 的指针归本库
+所有：不要 `free`，
 在同一线程下一次调用前有效，Swift 侧立即复制。**新增的 6 个诊断函数需要同步到
 `ios/ZakuroBridge.h`（ios-shell 维护）**；不补头文件时日志路径仍可用
 （`zk_create` 与每 60 帧的 `zk_perf` 行走 stderr，`idevicesyslog` 能抓）。
@@ -99,7 +111,9 @@ L=`1<<9`、X=`1<<10`、Y=`1<<11`、ZL=`1<<14`、ZR=`1<<15`。
 - 错误状态是**线程局部**的：在哪个线程上 `zk_create` 失败，就要在同一个线程上读
   `zk_last_error`。用后台 `DispatchQueue` 加载时，在同一个 block 内复制错误文本，
   再切主线程展示；否则主线程读到的是 `NULL`。
-- 其他 `zk_*` 函数不会修改错误状态，也不通过它报错；它们的失败看返回码/返回值。
+- 除 `zk_create` 外，`zk_hardware_probe`（建 Vulkan device 失败）、
+  `zk_set_vulkan_library`、`zk_set_hardware_option`（参数非法）也会写这个错误槽；
+  `zk_set_hardware_renderer` 不会失败。其他 `zk_*` 函数不修改错误状态，失败看返回码/返回值。
 - 错误文本同时会以 `eprintln!` 打到 stderr（真机上可用 `idevicesyslog` 抓取），
   但不要把 stderr 当成唯一诊断途径。
 
@@ -182,6 +196,55 @@ ZAKURO_LINKED_PROGRAM_ID=0004000000055E00 \
 测量方法、`zk_perf` 字段表、CPU/软件 GPU/呈现/音频的区分、以及“软件渲染器 vs
 Pocket Native GLES”的下一步建议：见 [`PERF.md`](PERF.md)。
 
+## 硬件渲染（Metal / MoltenVK，I3-T10）
+
+3D 默认仍由软件 PICA200 画。`libzakuro_ios.a` 里**已经编进了 Zakuro 的 Vulkan
+渲染器**（`zakuro-core` 固定打开 `zakuro-gpu` 的 `vulkan` feature；ash / ash-window /
+naga 都在静态库里，JIT 仍然关闭），iOS 上它通过 **MoltenVK over Metal** 运行。
+切过去只剩两件事：
+
+1. App 里要有一个可加载的 MoltenVK（动态 framework embed，或静态库链接；**不进仓库**）；
+2. 上游 `zakuro-gpu` 的 `instance::entry()` 要认识 iOS 的 MoltenVK 路径（约 20 行
+   补丁，见 [METAL.md](METAL.md) §8，本任务已验证可编译）。
+
+两步到位后：
+
+- **A0（最小验证，不改 Swift 呈现）**：`zk_create` 把 `Config.hardware_renderer`
+  设为 true，loader 自建 Vulkan device 把 3D 画在 Metal 上；屏幕仍由 `zk_read_screen`
+  从 guest 内存回读（`sync_gpu`），现有 `CGImage`/SwiftUI 路径不变，HUD 的
+  `read top/bottom` 会变贵一点。这是推荐的第一条真机路径。
+- **A1（GPU→GPU 呈现）**：再给 `UIView`/`CAMetalLayer` + presenter FFI，屏幕直接从
+  GPU image 显示；设计见 [METAL.md](METAL.md) §2.2，本版本不实现。
+
+打开方式（二选一）：
+
+```bash
+# 1) 构建期默认开（A0 spike 用，App 不用改代码）
+ZAKURO_LINKED_PROGRAM_ID=0004000000055E00 ZAKURO_IOS_HARDWARE=1 \\
+  cargo build -p zakuro-ios --release --features linked --target aarch64-apple-ios
+# 2) 运行期开关（App 设置页/启动时；需要 bridging header 声明）
+#    _ = zk_set_hardware_renderer(1)
+```
+
+诊断：
+
+- `zk_hardware_probe()`：先验 MoltenVK 能不能建 Vulkan device（不需要 ROM）；
+- `zk_hardware_status(system)`：这个系统到底在 GPU 还是软件、倍率多少；
+- `zk_create` 额外打印 `zk_create: the 3D draws on the host GPU …`（或“请求了但回退
+  软件”的原因）；loader 自己的 `zk[INFO] drawing on <GPU> through Vulkan` /
+  `zk[WARN] …, drawing in software` 也会转发到 stderr；
+- `zk_perf` 的 `gpu` 字段在硬件渲染下含义变成 **CPU 端命令列表/提交时间**，不再等于
+  软件光栅时间；对照数据时注意（METAL.md §4.1）。
+
+注意事项：
+
+- device 创建失败（MoltenVK 没加载、缺 feature、驱动问题）时 loader **自动回退软件**
+  并打 `zk[WARN]`，不会崩；`zk_hardware_status` 会显示回退原因。
+- 不改现有 `zk_*` 签名；不开 JIT；MoltenVK 二进制/`.xcframework` 不提交（下载到
+  `build/third_party/`，见 METAL.md §6.3）。
+- 评估、MoltenVK 版本/许可/体积、A1 设计、Plan B（直接 Metal）对比：见
+  [METAL.md](METAL.md)。
+
 ## 验证
 
 本目录不能单独构建：它依赖 Zakuro workspace 里的 `zakuro-core` / `zakuro-common`。
@@ -198,11 +261,16 @@ cargo test -p zakuro-ios --lib
 
 # linked 变体的单元测试（cfg(test) 用占位表，不需要 ROM/游戏代码）
 ZAKURO_LINKED_PROGRAM_ID=0004000000055E00 cargo test -p zakuro-ios --lib --features linked
+
+# 硬件渲染探针（host 需要 Vulkan/MoltenVK；macOS VM 上 brew install molten-vk）
+cargo test -p zakuro-ios --lib -- --ignored hardware_probe_makes_a_device
 ```
 
 单元测试覆盖 `zk_last_error` 的默认值、写入/清空、文本内 NUL 转义、空 `rom`、
 非法 UTF-8 路径、错误状态的线程隔离；`linked` 构建的 title ID/接口版本接线、
 占位表 `Linked`、ABI 版本门；`zk_recompiled_status` 对“有 linked 表但未接受 / 已接受”
-与回退原因的区分；帧计时初值/清零、profiler 空句柄。不加载 ROM，也不需要 iOS
-设备。真实 `libgame.a` 的链接验证与已验证命令/结果见
+与回退原因的区分；帧计时初值/清零、profiler 空句柄；硬件渲染的开关往返、
+`zk_hardware_status` 空句柄文本、`zk_set_hardware_option` 白名单/取值/取消、
+`zk_set_vulkan_library` 的空路径报错。不加载 ROM，也不需要 iOS 设备。
+真实 `libgame.a` 的链接验证与已验证命令/结果见
 [`RECOMP.md`](RECOMP.md#8-测试计划) 与 [`PERF.md`](PERF.md) §6。

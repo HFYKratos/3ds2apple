@@ -23,6 +23,17 @@ profiling = []
 [dependencies]
 zakuro-core = { path = "../zakuro-core" }
 zakuro-common = { path = "../zakuro-common" }
+# The Vulkan device type the hardware-rendering probe makes (`SharedDevice`) and
+# the `Config.device` the loader draws on. `zakuro-core` already turns the
+# `vulkan` feature on for every build (it draws the 3D on the host GPU when
+# `Config.hardware_renderer` is set), so this dependency only makes that
+# explicit: without it this crate could not name the device at all. On iOS the
+# Vulkan implementation is MoltenVK over Metal; see METAL.md.
+#
+# `default-features = false` keeps Zakuro's Cranelift shader JIT off. iOS forbids
+# executable memory (AGENTS.md rule 4), and the desktop frontend is the only
+# thing that ever wanted the `jit` default feature.
+zakuro-gpu = { path = "../zakuro-gpu", default-features = false, features = ["vulkan"] }
 # Forward Zakuro's own `log` records (the loader's linked-code warnings, GPU
 # warnings, ...) to stderr, where `idevicesyslog` can see them. Nothing else in
 # an iOS app installs a logger, so without this those records are dropped.
