@@ -3,7 +3,7 @@
 > **Status: design.** This is the normative v1 interface between the
 > cross-platform Builder and the macOS Build Agent. No implementation exists
 > yet; the message shapes, states and error codes below are the contract the
-> work packages in [PLAN.md](PLAN.md) implement and test against.
+> work packages in [README.md](README.md) implement and test against.
 
 The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
@@ -966,7 +966,7 @@ The protocol is designed to be tested without macOS:
   restart the fake Agent; truncate the artifact download; corrupt one byte;
   replay with an old `seq`; exceed limits; malformed frames (fuzz JSON).
 - **Real end-to-end:** Linux host → SSH → macOS VM, per
-  [PLAN.md](PLAN.md) §"Local verification". ROM content is the user's own; the
+  [README.md](README.md) §"Local verification". ROM content is the user's own; the
   test uses a small test image where available and the documented sample game
   otherwise.
 

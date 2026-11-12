@@ -115,6 +115,7 @@ scripts/build-game-ipa.sh pokemon-y --display-name "Pokemon Y"
 ios/app/                 SwiftUI iOS 壳（上下屏、输入、音频、HUD）
 ios/zakuro-ios/          Zakuro 的 iOS C ABI 与 staticlib crate
 ios/ZakuroBridge.h       Swift 与 C ABI 的桥接头
+builder/                 Windows/Linux Builder + macOS Build Agent 设计
 scripts/                 静态库 / AOT / IPA 构建脚本
 docs/architecture.md     架构与设计说明
 docs/build.md            构建指南

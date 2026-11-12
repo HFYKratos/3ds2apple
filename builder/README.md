@@ -26,7 +26,6 @@ The design is split across these documents:
 | [PROTOCOL.md](PROTOCOL.md) | Wire protocol v1: transports, authentication, jobs, logs, cancellation, artifact download, isolation, failure semantics |
 | [UX.md](UX.md) | User flows: add a build host, select a ROM, build, read progress, collect and install the IPA |
 | [STACK.md](STACK.md) | Technology choice (Rust/Tauri vs Python/CLI), repository layout, packaging, release rules |
-| [PLAN.md](PLAN.md) | Work packages, build order, local test plan (Linux → macOS VM), and the Windows verification checklist |
 
 ## Why a Mac is still needed
 
@@ -47,7 +46,7 @@ libgame.a + libzakuro_ios.a + SwiftUI shell ──► xcodebuild ──► .app 
 - Rebuilding the shell and re-linking the runtime on every game is the part
   that must happen on macOS. A future "prebuilt shell + cross-compiled game
   module" spike may remove some of that, but it is a separate investigation
-  ([PLAN.md](PLAN.md) work package W4), not the v1 path.
+  (the cross-compile spike), not the v1 path.
 
 The Builder makes that macOS step a background service on a machine the user
 already owns, driven from the OS the user actually works on.
@@ -109,7 +108,7 @@ Data flow:
 | **Windows GUI** | `builder/windows/` | Windows 10/11 | Tauri desktop app over the shared core: ROM picker, host profiles, transfer/build progress, log viewer, artifact page, install guide. |
 | **Linux GUI** | `builder/linux/` | Linux desktops | Same app/UI as Windows, packaged for Linux (AppImage/deb/rpm); the CLI remains available for headless and server hosts. |
 | **Build Agent** | `builder/agent/` | macOS (Apple Silicon or Intel) | Long-lived daemon plus `ssh` dispatch and CLI: pairing, `doctor` toolchain checks, job queue with build slots, per-job runner that invokes the existing scripts, NDJSON logs, cancellation, cleanup, artifact serving, data-root GC. |
-| **Cross-compile spike** | `builder/cross/` | Any (research) | Investigates whether a prebuilt shell plus a cross-compiled game module can remove macOS from the loop. Not shipped in v1; see [PLAN.md](PLAN.md) W4. |
+| **Cross-compile spike** | `builder/cross/` | Any (research) | Investigates whether a prebuilt shell plus a cross-compiled game module can remove macOS from the loop. Not shipped in v1; see [README.md](README.md). |
 | **Tests and fixtures** | `builder/tests/` | All platforms | Protocol fixtures, a scriptable fake Agent, conformance/chaos tests, and the Linux → macOS end-to-end script. |
 
 The GUI and CLI are thin clients over the same Rust library; the Build Agent is
@@ -165,7 +164,7 @@ Constraints that follow from the scripts:
 "Supported" in this matrix means "target of the design and part of the v1
 acceptance tests", not "already verified". The Windows and macOS items that
 cannot be validated from a Linux development host are listed explicitly in
-[PLAN.md](PLAN.md).
+[README.md](README.md).
 
 ### Deployment shapes
 
@@ -294,7 +293,7 @@ machines".
   certificates or profiles; no automation of Sideloadly/AltStore.
 - **No App Store path.**
 - **No fully Mac-free build in v1.** The cross-compile route is a research
-  spike only ([PLAN.md](PLAN.md) W4); the shipped path requires a macOS host
+  spike only; the shipped path requires a macOS host
   (VM, LAN Mac or cloud Mac) at least for the compile/link/package steps.
 - **No CI builds of game data.** Public CI builds only ROM-free parts
   (shell, runtime, Builder tests) as today.
@@ -304,28 +303,6 @@ machines".
   debugging, no Instruments.** The Agent is a headless build executor.
 - **No automatic updates in v1.** The Agent and Builder are versioned and
   report their versions; updating is a manual download/replace.
-
-## Staged delivery
-
-This design is implemented in four work packages. They are tracked as separate
-work items; this directory is the shared design they build against. Each package
-writes only inside its own directory (plus tests/fixtures), so the packages can
-run in parallel after W1 lands the protocol core.
-
-| Package | Outcome | Directory scope | Depends on |
-|---|---|---|---|
-| **W1 · macOS Build Agent + shared core/CLI** | Protocol v1 core, fake Agent, macOS Agent daemon with job queue/runner/cleanup, cross-platform CLI; a Linux host builds a game on a macOS host end-to-end | `builder/core/`, `builder/cli/`, `builder/agent/`, `builder/tests/` | this design |
-| **W2 · Windows Builder MVP** | Windows GUI/installable app over the shared core; ROM picker, SSH/HTTP host setup, progress/logs, IPA download + SHA256, Sideloadly/AltStore/SideStore guidance | `builder/windows/`, `builder/ui/` | W1 |
-| **W3 · Linux Builder MVP** | Linux GUI and CLI packaging, first-class local macOS VM support (SSH forwarding, host profiles), headless build path | `builder/linux/` | W1 |
-| **W4 · Mac-free cross-compile spike** | Go/no-go report on prebuilt shell + cross-compiled game module (clang/`ld64.lld`/`rcodesign`, dylib injection), with a minimal device test and licensing risk list | `builder/cross/` | this design (independent of W1–W3) |
-
-W1 is the critical path: the Agent and protocol are what make any frontend
-useful, and they are the only part that must be verified on macOS. W2 and W3
-are thin clients and can proceed in parallel once W1's protocol module and fake
-Agent are available. W4 is independent and should not delay W1–W3.
-
-The recommended build order, the local Linux → macOS VM test plan and the
-Windows-specific verification checklist are in [PLAN.md](PLAN.md).
 
 ## Related documentation
 

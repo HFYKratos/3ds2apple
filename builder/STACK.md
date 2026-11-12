@@ -117,7 +117,7 @@ the work packages; only documentation is committed today.
 
 ```text
 builder/
-  README.md  PROTOCOL.md  UX.md  STACK.md  PLAN.md
+  README.md  PROTOCOL.md  UX.md  STACK.md
 
   Cargo.toml                     # [workspace] members = core, cli, agent
 
@@ -259,7 +259,7 @@ SHA256SUMS
 | Linux | `fmt`, `clippy`, workspace tests, fake-Agent conformance tests, build Linux CLI; no ROM, no game build. |
 | Windows | build CLI + GUI installer, run workspace tests (client side), smoke-test the GUI launch; no device, no signing. |
 | macOS | build Agent (universal), run `builder-agent doctor --json` and protocol tests against the fake Agent; no game build in CI (ROMs never enter CI). |
-| Release | tag build of the artifacts above + `SHA256SUMS`; manual e2e against a real macOS host is a release gate (see [PLAN.md](PLAN.md)). |
+| Release | tag build of the artifacts above + `SHA256SUMS`; manual e2e against a real macOS host is a release gate (see [README.md](README.md)). |
 
 Tauri's webview is a runtime dependency of the GUI only: Windows 10/11 ships
 WebView2 (Evergreen); Linux packages depend on `webkit2gtk-4.1` and

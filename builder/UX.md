@@ -182,7 +182,7 @@ Details:
   the job. Only do this if you are debugging on a machine you control."
 - Non-ASCII and CJK file names are supported (display name/labels), but the
   slug is ASCII. Windows path length and spaces are tested
-  ([PLAN.md](PLAN.md)).
+ .
 
 ### 4.2 Transfer
 

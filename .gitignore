@@ -82,3 +82,6 @@ ios/app/build/
 # --- Local-only internal notes (never publish) ------------------------------
 .internal/
 AGENTS.md
+
+# --- Builder frontends ------------------------------------------------------
+node_modules/
