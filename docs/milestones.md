@@ -32,3 +32,14 @@
 - [ ] SwiftUI 壳接入 `read_screen` + `take_audio` + `set_input`
 - [ ] 3dsrecomp 生成第一款游戏的 C 代码并链接
 - [ ] 第一款游戏在真机跑起来
+
+## I1：iOS 壳骨架（2026-11-12 构建通过，待真机确认）
+
+**结果：** `xcodegen` + `xcodebuild` 成功，产出 `3ds2apple-I1.ipa`（23 KB，arm64，
+min iOS 16.0，bundle `com.kratos.3ds2apple`）；`libzakuro_ios.a` 已链接，二进制中含
+`_zk_screen_width` / `_zk_screen_height` 符号。
+
+- 源码：`ios/app/`（SwiftUI）、`ios/ZakuroBridge.h`、`scripts/build-ios-app.sh`、
+  `scripts/package-ipa.sh`。
+- 预期 UI：标题 `3ds2apple`，Upper 400×240，Lower 320×240，`No ROM loaded` 占位。
+- 待办：真机安装确认 UI（Sideloadly）；之后进入 I2 ROM 导入 + 第一款游戏 boot。
