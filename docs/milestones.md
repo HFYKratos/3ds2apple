@@ -67,3 +67,12 @@ min iOS 16.0，bundle `com.kratos.3ds2apple`）；`libzakuro_ios.a` 已链接，
 
 > 当前是纯解释器模式（尚未接 3dsrecomp），首帧可能很慢；这是 I2 的预期，
 > 不代表最终性能。
+
+## I2 真机验收（2026-11-12，通过）
+
+- ROM：`Pokemon Y.cci`（用户自有，`ROM/` 本地，不提交）。
+- 结果：绿色 `Loaded: Pokemon Y.cci`；上屏 400×240、下屏 320×240 均正常显示；
+  状态行 `20 fps · 700 frames · last: completed`；游戏已到语言选择界面。
+- 说明：当前是**纯解释器**（未接 3dsrecomp），20 fps 属预期；I3 接 3dsrecomp 后复测。
+- 尚缺输入：停在语言选择，需要 I3 的触摸/手柄才能继续。
+- 游戏截图不入库（AGENTS.md 规则）；此处只记录文字指标。
