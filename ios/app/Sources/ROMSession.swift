@@ -430,7 +430,7 @@ final class ROMSession: ObservableObject {
 
         let runStart = FrameClock.now()
         let result = zk_run_frame(system)
-        timingWindow.record(.runFrame, FrameClock.now() - runStart)
+        timingWindow.record(.runFrame, ticks: FrameClock.now() - runStart)
         framesRendered += 1
 
         switch result {
@@ -439,26 +439,26 @@ final class ROMSession: ObservableObject {
             var cgImageTicks: UInt64 = 0
             let top = screenImage(system: system, which: 0, cgImageTicks: &cgImageTicks)
             let bottom = screenImage(system: system, which: 1, cgImageTicks: &cgImageTicks)
-            timingWindow.record(.cgImage, cgImageTicks)
+            timingWindow.record(.cgImage, ticks: cgImageTicks)
 
             // Drain audio after the frame and before publishing: both run on
             // this queue, so the timings belong to the same frame.
             let audioStart = FrameClock.now()
             pumpAudio(system: system)
-            timingWindow.record(.audioPump, FrameClock.now() - audioStart)
+            timingWindow.record(.audioPump, ticks: FrameClock.now() - audioStart)
 
-            timingWindow.record(.renderTotal, FrameClock.now() - frameStart)
+            timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
             publishFrame(top: top, bottom: bottom, result: result)
         case 1:
-            timingWindow.record(.renderTotal, FrameClock.now() - frameStart)
+            timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
             // ZK_FRAME_EXITED.
             finishRuntime(message: "The game requested exit (zk_run_frame = 1).", isError: false)
         case -1:
-            timingWindow.record(.renderTotal, FrameClock.now() - frameStart)
+            timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
             // ZK_FRAME_FAULTED.
             finishRuntime(message: "Runtime fault (zk_run_frame = -1).", isError: true)
         default:
-            timingWindow.record(.renderTotal, FrameClock.now() - frameStart)
+            timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
             // ZK_FRAME_BAD_HANDLE (-2).
             finishRuntime(message: "Invalid runtime handle (zk_run_frame = \(result)).", isError: true)
         }
@@ -494,7 +494,7 @@ final class ROMSession: ObservableObject {
 
         let readStart = FrameClock.now()
         let written: Int = zk_read_screen(system, which, buffer.address, byteCount)
-        timingWindow.record(readPhase, FrameClock.now() - readStart)
+        timingWindow.record(readPhase, ticks: FrameClock.now() - readStart)
 
         guard written >= byteCount else {
             screenBufferPool.recycle(buffer)
@@ -525,7 +525,7 @@ final class ROMSession: ObservableObject {
             guard let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return 0 }
             return zk_read_screen(system, which, base, byteCount)
         }
-        timingWindow.record(readPhase, FrameClock.now() - readStart)
+        timingWindow.record(readPhase, ticks: FrameClock.now() - readStart)
 
         guard written >= byteCount else {
             logScreenReadFailure(which: which, written: written, expected: byteCount)
