@@ -17,11 +17,17 @@ Minimal SwiftUI app that links the Zakuro iOS static library
   A/B/X/Y, Start/Select, L/R), the lower screen as the 3DS touchscreen, and
   MFi/Xbox/DualSense controllers all feed one `InputState`; `zk_set_input` runs
   on the runtime queue immediately before every `zk_run_frame`.
-- **I3-T4** (this branch): audio. The runtime queue drains `zk_take_audio`
+- **I3-T4** (merged): audio. The runtime queue drains `zk_take_audio`
   (interleaved stereo i16 at Zakuro's 32730 Hz DSP rate) into a ring buffer;
   an `AVAudioSourceNode` plays it through `AVAudioEngine` without blocking the
   frame loop. Mute is persisted and the status line shows
   `audio: on|off|muted|failed`.
+- **I3-T6** (this branch): performance HUD. Each frame is timed on the runtime
+  serial queue with `mach_absolute_time()` — `renderFrame` total,
+  `zk_run_frame`, both `zk_read_screen` calls, CGImage creation and the audio
+  pump — and shown as avg/max/last milliseconds under the status line. Screen
+  RGBA buffers and their `CGDataProvider` are reused instead of reallocated
+  every frame. See "Performance HUD (I3-T6)" below for how to read it.
 
 ## Layout
 
@@ -30,9 +36,10 @@ Minimal SwiftUI app that links the Zakuro iOS static library
 | `project.yml` | XcodeGen spec — the source of truth, do not hand-edit `*.xcodeproj` |
 | `Sources/App.swift` | `@main` SwiftUI entry point |
 | `Sources/ContentView.swift` | UI: title, ROM card, dual-screen view, fps/frames status line |
-| `Sources/ROMSession.swift` | ROM copy, `zk_create` / `zk_destroy`, `zk_last_error` text, relative-path persistence, display-link frame loop |
+| `Sources/ROMSession.swift` | ROM copy, `zk_create` / `zk_destroy`, `zk_last_error` text, relative-path persistence, display-link frame loop, per-frame timing |
 | `Sources/ROMDocumentPicker.swift` | `UIDocumentPickerViewController` wrapper (`public.data`, opens files in place) |
-| `Sources/ScreenImage.swift` | `zk_read_screen` RGBA8 buffer → `CGImage` |
+| `Sources/ScreenImage.swift` | reusable RGBA8 screen buffer pool + `CGDataProvider` recycling → `CGImage` |
+| `Sources/FrameTiming.swift` | `mach_absolute_time` phase accumulators + HUD snapshot types |
 | `Sources/InputState.swift` | thread-safe input merge + `ZK_BUTTON_*` bit mapping |
 | `Sources/GameControllerInput.swift` | MFi/Xbox/DualSense → `InputState` |
 | `Sources/TouchControlsView.swift` | semi-transparent on-screen pad (D-pad, ABXY, Start/Select, L/R) |
@@ -204,7 +211,7 @@ Only one handle exists at a time. Every `zk_*` call on it happens on the
 | importing | spinner + "Importing <name>…" | `imported ROM: …` or `reusing imported ROM: …` |
 | loading | spinner + "Starting Zakuro…" | `zk_create: loading …` |
 | loaded, before first frame | black screens + "Waiting for first frame…" | `zk_create OK after …`, `frame loop started` |
-| running | both screens + `N fps · N frames · last: completed` | frame-loop logs (see below) |
+| running | both screens + `N fps · N frames · last: completed` + perf HUD (ms table) | frame-loop logs + one `perf:` line every ~2 s (see below) |
 | input | overlay pad / touch / controller usable, "Controller: …" when a pad is connected | `controller support started` |
 | audio | status line `audio: on`; game sound while frames run | `audio started: 32730 Hz stereo i16 → AVAudioEngine` |
 | exit / fault | "Runtime stopped" or red "Could not load ROM"; last frame kept | `frame loop ending: …`, `frame loop stopped` |
@@ -228,7 +235,8 @@ builds up a backlog.
 
 Per frame (runtime queue, one handle only):
 
-1. `zk_run_frame(system)`:
+1. Snapshot `InputState` and push it with `zk_set_input` (see "Input" below).
+2. `zk_run_frame(system)`:
 
    | result | meaning | reaction |
    |---|---|---|
@@ -237,17 +245,32 @@ Per frame (runtime queue, one handle only):
    | `-1` `ZK_FRAME_FAULTED` | CPU fault | stop loop, `zk_destroy`, red error card |
    | `-2` `ZK_FRAME_BAD_HANDLE` | invalid handle | same as fault |
 
-2. `zk_read_screen(system, 0, …)` → 400 × 240 × 4 = 384 000 bytes and
+3. `zk_read_screen(system, 0, …)` → 400 × 240 × 4 = 384 000 bytes and
    `zk_read_screen(system, 1, …)` → 320 × 240 × 4 = 307 200 bytes of RGBA8.
-   Buffers are allocated per frame and handed to `CGImage`; a short read is
+   The pixel buffers come from a small pool (`ScreenFrameBufferPool`: two
+   buffers per screen, one allocated on demand while old images are still
+   alive, capped at three). A buffer is handed to `CGImage` through a
+   `CGDataProvider` whose release callback recycles it once the image is
+   gone — so a per-frame allocation and its 300–400 KB memset are avoided
+   without ever writing a buffer the screen still shows. A short read is
    logged once and skipped so the previous frame stays on screen.
-3. `CGImage` → `@Published` on the main queue; SwiftUI shows the upper screen
+4. `CGImage` → `@Published` on the main queue; SwiftUI shows the upper screen
    above the lower one with `scaledToFit`, preserving the ratio reported by
    `zk_screen_width()` / `zk_screen_height()`.
+5. `zk_take_audio` is drained after the frame and pushed into the audio ring
+   buffer (see "Audio (I3-T4)"); like every other step it runs on the runtime
+   queue, never on the main thread.
 
-Status line: `NN fps · N frames · last: completed|exited|faulted|bad handle`.
-fps is measured over a 0.5 s window and is the *emulated* frame rate — the pure
-interpreter is usually far below 60 fps, so many display-link ticks are dropped.
+Status line: `NN fps · N frames · last: completed|exited|faulted|bad handle`,
+followed by `audio:` and `AOT:` state. fps is measured over a 0.5 s window and
+is the *emulated* frame rate — the pure interpreter is usually far below 60
+fps, so many display-link ticks are dropped.
+
+I3-T6 instrumentation wraps the steps above in `mach_absolute_time()`
+timestamps on the runtime queue (`FrameTimingWindow` in
+`Sources/FrameTiming.swift`) and publishes a snapshot to the main queue every
+0.5 s, next to the fps update. Only the immutable snapshot crosses threads; the
+HUD itself does no measurement and never touches the runtime handle.
 
 Lifecycle: the loop stops **and** the handle is destroyed on **Unload**, on
 **Change ROM**, when the app goes to the **background** (`scenePhase ==
@@ -371,6 +394,101 @@ This is a speed problem, not an audio-buffer bug — AOT/3dsrecomp and the
 renderer work raise fps and the gaps shrink. Nothing outside the audio pipeline
 is affected.
 
+## Performance HUD (I3-T6)
+
+The screens card shows a compact timing table below the fps/status line as soon
+as a runtime is loaded. Every value is in **milliseconds**, measured on the
+runtime serial queue with `mach_absolute_time()` (monotonic — wall-clock or
+timezone changes cannot skew it) and refreshed twice per second together with
+the fps line.
+
+| Row | What it times |
+|---|---|
+| `total` | the whole `renderFrame` work item: input snapshot + `zk_set_input` + `zk_run_frame` + both `zk_read_screen` calls + both CGImages + the audio pump (measured up to, not including, the main-queue publish) |
+| `run` | `zk_run_frame(system)` alone — the emulated/rendered 3DS frame |
+| `read top` | `zk_read_screen(system, 0, …)`: copy of the 400 × 240 RGBA8 upper screen |
+| `read bottom` | `zk_read_screen(system, 1, …)`: copy of the 320 × 240 RGBA8 lower screen |
+| `CGImage` | both CGImage creations of the frame (data provider + image object; no pixel copy — the image borrows the RGBA buffer, or the transient `Data` on the pool-exhaustion fallback) |
+| `audio` | `zk_take_audio` drain into the audio ring buffer |
+
+Columns:
+
+- `avg` — mean over the last 0.5 s window.
+- `max` — worst single frame since the frame loop started (reset on every
+  successful load/ROM change; the whole table is cleared on Unload).
+- `last` — the most recent executed frame. `—` until a phase has a sample.
+
+The original status line (`N fps`, `N frames`, `last: completed|exited|faulted|bad handle`,
+`audio: on|off|muted|failed`, `AOT: linked, active|linked, interpreting|interpreter shell|?`)
+stays above the table and is still the first thing to check.
+
+### How to read it
+
+1. Start from `total`. At 28 fps one executed frame occupies the runtime queue
+   for ≈ 1/28 s ≈ **35 ms**, so `total` should sit near 35 ms; the 26 fps
+   interpreter baseline is ≈ 38 ms. `total` covers runtime-queue work only —
+   display-link ticks dropped by the backpressure gate are not counted, which
+   is why `fps ≈ 1000 / total` is the expected relation.
+2. Compare `run` with `total`. On Pokémon Y (AOT linked, active) `run` is
+   expected to be ~85–95 % of `total`. If `run / total` is below ~70 %,
+   presentation or the audio pump is eating the frame — that is the part a
+   renderer/audio change can still win. At ~95 %, only emulation/AOT work
+   raises fps.
+3. `read top` and `read bottom` copy 384 000 + 307 200 bytes per frame. Expect
+   well under 1 ms each; sustained > 2 ms is unusual on this hardware and worth
+   reporting together with fps.
+4. `CGImage` is normally ~0.1–0.8 ms for both screens. A sustained rise means
+   CoreGraphics setup is getting expensive; a backlog of retained images shows
+   up in the `total` gap in point 7 instead (transient buffer allocations when
+   the pool runs dry), not in this row.
+5. `audio` is normally < 0.5 ms and runs after `zk_run_frame`, so it does not
+   lengthen the emulated frame itself; it still adds to `total` (and therefore
+   to the frame interval), so a sustained rise costs fps.
+6. `total` much smaller than `1000 / fps` (e.g. 8 ms with 20 fps) means the
+   runtime queue is fast but ticks are being dropped: look at the main thread
+   (SwiftUI redrawing, another main-thread task), not at Zakuro.
+7. A sustained gap where `total` is clearly larger than
+   `run + read top + read bottom + CGImage + audio` comes from the small
+   uncounted parts of the work item: the input snapshot, the stats/log
+   bookkeeping at window boundaries, and — only when the buffer pool has no
+   free buffer left — the transient 300–400 KB allocation. Named phases plus
+   that gap should add up to `total`.
+
+The same values are logged every ~2 s as one `perf:` line for
+`idevicesyslog`, so a 20-minute soak can be analysed without screenshots:
+
+```text
+[3ds2apple] perf: fps=28.3 frames=1420 | total=35.1/41.2/34.8 run=32.4/38.9 readTop=0.42/0.61 readBottom=0.33/0.52 image=0.31/0.58 audio=0.12/0.44 ms (avg/max; total avg/max/last)
+```
+
+### Expected ranges (Pokémon Y, iPhone 14 Pro Max, first 5 minutes)
+
+| Row | 28 fps AOT (linked, active) | Notes |
+|---|---|---|
+| `total` | 33–40 ms | tracks `1000 / fps` |
+| `run` | 30–37 ms | dominates when the emulated frame is CPU-bound |
+| `read top` | 0.1–0.8 ms | 384 KB copy |
+| `read bottom` | 0.1–0.7 ms | 307 KB copy |
+| `CGImage` | 0.1–0.8 ms | both images, no pixel copy |
+| `audio` | 0.05–0.5 ms | depends on how many samples the frame produced |
+
+These are order-of-magnitude expectations, not budgets: the ratio between rows
+is what identifies the bottleneck, and thermal throttling/device generation
+shift the absolute values. When reporting a performance problem, record the
+whole row with fps and the AOT status.
+
+### What the HUD cannot tell you
+
+- It does not split `zk_run_frame` into CPU emulation vs PICA software
+  rasterisation; a slow renderer shows up inside `run`.
+- It does not time the main thread (SwiftUI `Image` drawing). Use Instruments'
+  Time Profiler for that, or compare `total` with `1000 / fps` as above.
+- It does not time `zk_create` / ROM import / audio-engine start (startup
+  one-offs, logged separately).
+- It only runs while frames execute: after a clean exit or fault the last
+  snapshot stays visible with `fps = 0`; Unload or backgrounding releases the
+  runtime and clears the screens (and therefore the table).
+
 ## Package an unsigned IPA
 
 `scripts/package-ipa.sh` (I1-T2, owned by build-infra) automates this, writing
@@ -420,7 +538,13 @@ If the repo is moved, nothing needs changing — all three are repo-relative.
 | Picking the same filename twice | The existing `Documents/roms/<name>` is reused; delete the app (or that file) to force a fresh copy. |
 | Need to inspect imported ROMs | They live in the app container under `Documents/roms/`, data under `Documents/data/`; deleting the app removes them. |
 | Screens stay black / "Waiting for first frame…" after "Loaded" | Check `idevicesyslog` for `frame loop started` and any `zk_read_screen(which=…) returned … of … bytes` line. If the log shows `frame loop ending: …` right away, `zk_run_frame` returned 1/-1/-2 — the core faulted (stderr has details). |
-| Very low fps | Expected for the pure interpreter. Record the number for qa — the I3 performance baseline. AOT/3dsrecomp comes later. |
+| Very low fps | Expected for the pure interpreter. Record fps **and the HUD row values** for qa — the I3 performance baseline. If `run` dominates `total`, the fix is AOT/3dsrecomp; if the read/CGImage/audio rows dominate, report that too. |
+| HUD shows `—` for a row | That phase has no sample yet. Everything is `—` until the first 0.5 s stats window publishes (≈13 completed frames at 26 fps); a loop that stopped earlier keeps `—` for the phases it never sampled. |
+| HUD numbers frozen while fps is 0 | Expected after a clean exit or fault: the last snapshot stays visible. Unload/background stops the runtime and clears the screens (and HUD); load again to restart the counters. |
+| HUD `total` is high but `run` is low | Time is going to presentation/bookkeeping inside `renderFrame`, not emulation: check `read top`/`read bottom`/`CGImage`/`audio`; if those are low too, the gap is the input snapshot, stats bookkeeping or a buffer-pool-exhaustion allocation — capture the `perf:` line and fps. |
+| HUD `total` is much lower than `1000 / fps` | The runtime queue is not the limiter; ticks are being dropped. Look at the main thread (SwiftUI redraw, another main-thread task) with Instruments. |
+| Memory warnings / jetsam while loaded | The screen buffer pool is capped at 3 buffers per screen (≈2 MB total) and then falls back to transient `Data`, so its memory cannot grow without bound; if memory still grows, retention is elsewhere (frames, audio ring, runtime). Capture memory numbers and the HUD rows for qa. |
+| Can't find the HUD | It lives inside the screens card, directly under the fps/status line, visible from "Loaded" onward; it refreshes twice per second. |
 | App returns from background showing "Runtime stopped" | Intentional: iOS may jettison backgrounded processes, so the runtime is released when the scene backgrounds. Tap **Load “<name>”** to restart. |
 | Red card after `frame loop ending: …` | `zk_run_frame` returned `-1`/`-2`; the last good frame stays on screen. Import or Load again to restart. |
 | Screens look stretched or letterboxed | The view keeps the aspect ratios reported by `zk_screen_width/height` (400×240, 320×240) with `scaledToFit`; bars only appear if the source frame size changes. |
