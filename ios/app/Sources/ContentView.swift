@@ -6,6 +6,8 @@
 //  I2-T2: live frame display — upper screen (400x240) above lower screen
 //         (320x240), aspect fit, plus an fps / frames / last-result line.
 //  I3-T6: compact performance HUD (per-phase frame timings in ms).
+//  I3-T9: the status line shows which frame-loop driver is active (free-run
+//         with its fps cap, or the CADisplayLink fallback).
 //
 
 import CoreGraphics
@@ -281,6 +283,10 @@ struct ContentView: View {
                 Text(String(format: "speed: %.0f%% of 60 Hz", model.frameStats.fps / 60.0 * 100))
                     .accessibilityIdentifier("speed-status")
             }
+            HStack(spacing: 10) {
+                Text("loop: \(model.frameLoopLabel)")
+                    .accessibilityIdentifier("loop-status")
+            }
         }
         .font(.caption2)
         .foregroundColor(.secondary)
@@ -398,7 +404,7 @@ struct ContentView: View {
     }
 
     private var footer: some View {
-        Text("I3 · input + audio + frame loop + perf HUD · interpreter only, no JIT")
+        Text("I3 · input + audio + free-run frame loop + perf HUD · interpreter only, no JIT")
             .font(.caption2)
             .foregroundColor(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)

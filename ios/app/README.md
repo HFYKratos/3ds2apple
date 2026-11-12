@@ -9,10 +9,10 @@ Minimal SwiftUI app that links the Zakuro iOS static library
 - **I2-T1** (merged): import a decrypted `.3ds` / `.cci` from Files, copy it
   into `Documents/roms/`, and load it with `zk_create()` on a background serial
   queue. Failures show the readable `zk_last_error()` text.
-- **I2-T2** (merged): a `CADisplayLink`-driven frame loop runs
-  `zk_run_frame()` on the same serial queue and displays the upper 400×240 and
-  lower 320×240 screens (`zk_read_screen` RGBA8 → `CGImage`) above each other,
-  with an fps / frames / last-result status line.
+- **I2-T2** (merged): a frame loop runs `zk_run_frame()` on the same serial
+  queue and displays the upper 400×240 and lower 320×240 screens
+  (`zk_read_screen` RGBA8 → `CGImage`) above each other, with an fps / frames /
+  last-result status line. It was `CADisplayLink`-driven until I3-T9.
 - **I3-T1** (merged): input. A semi-transparent on-screen pad (D-pad,
   A/B/X/Y, Start/Select, L/R), the lower screen as the 3DS touchscreen, and
   MFi/Xbox/DualSense controllers all feed one `InputState`; `zk_set_input` runs
@@ -22,12 +22,19 @@ Minimal SwiftUI app that links the Zakuro iOS static library
   an `AVAudioSourceNode` plays it through `AVAudioEngine` without blocking the
   frame loop. Mute is persisted and the status line shows
   `audio: on|off|muted|failed`.
-- **I3-T6** (this branch): performance HUD. Each frame is timed on the runtime
+- **I3-T6** (merged): performance HUD. Each frame is timed on the runtime
   serial queue with `mach_absolute_time()` — `renderFrame` total,
   `zk_run_frame`, both `zk_read_screen` calls, CGImage creation and the audio
   pump — and shown as avg/max/last milliseconds under the status line. Screen
   RGBA buffers and their `CGDataProvider` are reused instead of reallocated
   every frame. See "Performance HUD (I3-T6)" below for how to read it.
+- **I3-T9** (this branch): **free-run frame loop**. Frames now execute
+  back-to-back on the runtime serial queue and are only capped at the 3DS 60 Hz
+  timeline, instead of waiting for a `CADisplayLink` tick. A 22.6 ms frame
+  therefore runs at its real throughput (~44 fps / 73 % speed) instead of being
+  quantized to 30 fps by the 16.7 ms display refresh. The `CADisplayLink` loop is
+  kept behind one constant as a fallback. See
+  "Frame loop (I3-T9: free-run, 60 fps cap)".
 
 ## Layout
 
@@ -36,7 +43,7 @@ Minimal SwiftUI app that links the Zakuro iOS static library
 | `project.yml` | XcodeGen spec — the source of truth, do not hand-edit `*.xcodeproj` |
 | `Sources/App.swift` | `@main` SwiftUI entry point |
 | `Sources/ContentView.swift` | UI: title, ROM card, dual-screen view, fps/frames status line |
-| `Sources/ROMSession.swift` | ROM copy, `zk_create` / `zk_destroy`, `zk_last_error` text, relative-path persistence, display-link frame loop, per-frame timing |
+| `Sources/ROMSession.swift` | ROM copy, `zk_create` / `zk_destroy`, `zk_last_error` text, relative-path persistence, free-run frame loop (60 fps cap) with `CADisplayLink` fallback, per-frame timing |
 | `Sources/ROMDocumentPicker.swift` | `UIDocumentPickerViewController` wrapper (`public.data`, opens files in place) |
 | `Sources/ScreenImage.swift` | reusable RGBA8 screen buffer pool + `CGDataProvider` recycling → `CGImage` |
 | `Sources/FrameTiming.swift` | `mach_absolute_time` phase accumulators + HUD snapshot types |
@@ -210,11 +217,11 @@ Only one handle exists at a time. Every `zk_*` call on it happens on the
 | nothing imported | "No ROM loaded" + Import button | `no ROM imported yet` |
 | importing | spinner + "Importing <name>…" | `imported ROM: …` or `reusing imported ROM: …` |
 | loading | spinner + "Starting Zakuro…" | `zk_create: loading …` |
-| loaded, before first frame | black screens + "Waiting for first frame…" | `zk_create OK after …`, `frame loop started` |
-| running | both screens + `N fps · N frames · last: completed` + perf HUD (ms table) | frame-loop logs + one `perf:` line every ~2 s (see below) |
+| loaded, before first frame | black screens + "Waiting for first frame…" | `zk_create OK after …`, `frame loop started (free-run, cap 60 fps)` |
+| running | both screens + `N fps · N frames · last: completed` + `AOT:` / `speed:` / `loop:` line + perf HUD (ms table) | frame-loop logs + one `perf:` line every ~2 s (see below) |
 | input | overlay pad / touch / controller usable, "Controller: …" when a pad is connected | `controller support started` |
 | audio | status line `audio: on`; game sound while frames run | `audio started: 32730 Hz stereo i16 → AVAudioEngine` |
-| exit / fault | "Runtime stopped" or red "Could not load ROM"; last frame kept | `frame loop ending: …`, `frame loop stopped` |
+| exit / fault | "Runtime stopped" or red "Could not load ROM"; last frame kept | `frame loop ending: …` |
 | app backgrounded | "Runtime stopped … Load the ROM again" | `zk_destroy: runtime released` |
 
 Quitting or relaunching the app never crashes: the handle is released on
@@ -226,12 +233,80 @@ Unload, on replace, on background, and (best effort) in `ROMSession.deinit`.
   baseline are separate I3 tasks (see `docs/pocket-native.md`).
 - Hardware rendering (MoltenVK) is later; I2 uses the software screens.
 
-## Frame loop (I2-T2)
+## Frame loop (I3-T9: free-run, 60 fps cap)
 
-Once `zk_create()` succeeds the app starts a 60 Hz `CADisplayLink` on the main
-thread. Each tick enqueues at most one frame on the runtime serial queue — if
-the previous frame is still running, the tick is dropped, so the loop never
-builds up a backlog.
+The loop that executes 3DS frames lives on the runtime serial queue
+(`com.kratos.3ds2apple.zakuro-runtime`), not on the main thread. After a
+successful `zk_create()` it starts `renderFrame()` immediately, and after every
+executed frame schedules **exactly one** successor:
+
+- **the frame finished before its 60 Hz slot** (`frameStart + 16.67 ms`): the
+  next frame is scheduled for that deadline, so the loop never runs faster than
+  60 fps (the 3DS timeline);
+- **the frame took longer than its slot** (the normal case today, `total` ≈
+  22.6 ms): the next frame starts immediately. No display-refresh deadline is
+  involved, so the loop runs at the real throughput — ~44 fps for a 22.6 ms
+  frame.
+
+There is no sleeping on the queue: an early frame is followed by a delayed
+re-submit (`DispatchQueue.asyncAfter`), so `zk_destroy` and the other lifecycle
+work can always get in front of the next frame. Because a frame is submitted
+only after the previous one has finished (same serial queue), frames can never
+overlap and the queue can never grow: at most one frame runs and at most one
+successor is waiting. The pacing uses monotonic `mach_absolute_time()` ticks
+(`FrameClock.ticks(seconds:)`), never `Date`.
+
+### Why the old CADisplayLink loop quantized to 30 fps
+
+`CADisplayLink.preferredFramesPerSecond = 60` calls back on the main thread
+every 16.7 ms; the old loop (I2-T2) enqueued at most one frame per tick and
+dropped the tick when the previous frame was still running. With the measured
+22.6 ms AOT frame:
+
+| time (ms) | display tick | frame in flight | outcome |
+|---:|---|---|---|
+| 0 | 1 | — | frame 1 starts |
+| 16.7 | 2 | frame 1 (ends 22.6) | tick dropped |
+| 33.3 | 3 | — | frame 2 starts |
+| 50.0 | 4 | frame 2 (ends 55.9) | tick dropped |
+| 66.7 | 5 | — | frame 3 starts |
+
+→ one frame per 33.3 ms = **30 fps = 50 % of the 60 Hz 3DS timeline**, even
+though the hardware could execute ~44 frames/s. The display refresh only lines
+up with the frame rate when the frame time divides 16.7 ms; otherwise the loop
+lands on the next multiple. The screens were correct but the game and its audio
+clock ran at half speed (see `docs/qa/i3-aot-pokemon-y.md` §10).
+
+### Driver selection / how to revert
+
+The driver is a pair of constants at the top of the frame-loop section in
+`Sources/ROMSession.swift`:
+
+```swift
+private static let frameLoopDriver: FrameLoopDriver = .freeRun
+// Fallback: private static let frameLoopDriver: FrameLoopDriver = .displayLink
+private static let freeRunFramesPerSecond = 60      // free-run cap
+private static let displayLinkFramesPerSecond = 60  // fallback rate (try 120)
+```
+
+- `.freeRun` (default, this section): what I3-T9 ships.
+- `.displayLink`: restores the I2-T2 behaviour for A/B comparison — it is the
+  only code change needed; the CADisplayLink path is still compiled and goes
+  through the same lifecycle code.
+- `displayLinkFramesPerSecond = 120` is the optional I3-T9 experiment
+  (`preferredFramesPerSecond = 120`). It does **not** help Pokémon Y today: a
+  22.6 ms frame spans several 8.3 ms ticks, so the fallback still lands on the
+  same ~30 fps. It only helps once `total` is below 8.3 ms, i.e. after renderer
+  or AOT work.
+
+The active driver is visible in the status line (`loop: free-run · cap 60 fps`
+or `loop: CADisplayLink · 60 Hz`) and logged once per load:
+
+```text
+[3ds2apple] frame loop started (free-run, cap 60 fps)
+```
+
+### Per-frame work (unchanged by the driver)
 
 Per frame (runtime queue, one handle only):
 
@@ -262,21 +337,33 @@ Per frame (runtime queue, one handle only):
    queue, never on the main thread.
 
 Status line: `NN fps · N frames · last: completed|exited|faulted|bad handle`,
-followed by `audio:` and `AOT:` state. fps is measured over a 0.5 s window and
-is the *emulated* frame rate — the pure interpreter is usually far below 60
-fps, so many display-link ticks are dropped.
+followed by `audio:`, `AOT:` and `loop:` state, then `speed: NN % of 60 Hz`.
+fps is measured over a 0.5 s window and is the *executed* frame rate. With the
+free-run loop `fps ≈ 1000 / total` while `total` is above 16.7 ms (today
+`total` 22.6–22.9 ms → ~44 fps / 73 %); once `total` drops below 16.7 ms the
+60 fps cap holds `fps` at 60 even though `1000 / total` would be larger.
 
 I3-T6 instrumentation wraps the steps above in `mach_absolute_time()`
 timestamps on the runtime queue (`FrameTimingWindow` in
 `Sources/FrameTiming.swift`) and publishes a snapshot to the main queue every
-0.5 s, next to the fps update. Only the immutable snapshot crosses threads; the
-HUD itself does no measurement and never touches the runtime handle.
+0.5 s, next to the fps update. The wait until a 60 Hz deadline is loop pacing,
+not frame work, so it is **not** part of `total`. Only the immutable snapshot
+crosses threads; the HUD itself does no measurement and never touches the
+runtime handle.
 
-Lifecycle: the loop stops **and** the handle is destroyed on **Unload**, on
-**Change ROM**, when the app goes to the **background** (`scenePhase ==
-.background`), on exit/fault, and in `ROMSession.deinit`. `zk_destroy` guards a
-nil handle, so there is never a double destroy. The last frame stays visible
-after a stop until the next load or unload clears the screens.
+### Lifecycle
+
+The loop stops **and** the handle is destroyed on **Unload**, on **Change
+ROM**, when the app goes to the **background** (`scenePhase == .background`),
+on **exit/fault**, and in `ROMSession.deinit`.
+
+Stopping is generation-guarded: `stopFrameLoop()` invalidates the free-run
+generation synchronously (lock-protected) before the destroy is queued, so a
+frame that was already scheduled becomes a no-op instead of touching a
+destroyed handle. The destroy runs on the same serial queue as the frames, so
+no frame can ever run concurrently with `zk_destroy`; `zk_destroy` also
+nil-guards its handle, so there is never a double destroy. The last frame stays
+visible after a stop until the next load or unload clears the screens.
 
 ## Input (I3-T1)
 
@@ -373,8 +460,8 @@ frame loop never waits for audio and no audio work happens on the main thread.
 
 ### Lifecycle
 
-- Started after a successful `zk_create` (same main-thread hop as the display
-  link). `audio: on` appears in the status line.
+- Started after a successful `zk_create` (same main-thread hop that starts the
+  frame loop). `audio: on` appears in the status line.
 - Stopped and cleared on **Unload**, **Change ROM**, when the app goes to the
   **background**, and on runtime exit/fault; the audio session is deactivated
   with `.notifyOthersOnDeactivation`.
@@ -386,12 +473,14 @@ frame loop never waits for audio and no audio work happens on the main thread.
 
 ### Why it can sound choppy before 3dsrecomp
 
-The loop is driven by the display link, not by the audio clock. The runtime
-produces 32730 samples per **emulated** second; while emulation runs below real
-time (e.g. 20–30 fps of a 60 fps game) it produces only 30–50 % of the samples
-the device consumes, so the ring underruns and short silent gaps are expected.
-This is a speed problem, not an audio-buffer bug — AOT/3dsrecomp and the
-renderer work raise fps and the gaps shrink. Nothing outside the audio pipeline
+The loop is paced by frame throughput (capped at 60 Hz), not by the audio
+clock. The runtime produces 32730 samples per **emulated** second; while
+emulation runs below real time (e.g. 20–44 fps of a 60 fps game) it produces
+only 33–73 % of the samples the device consumes, so the ring underruns and
+short silent gaps are expected. This is a speed problem, not an audio-buffer
+bug: the I3-T9 free-run loop already shrinks the gaps compared with the 30 fps
+display-link loop (50 % → 73 % speed), and only frames faster than 16.7 ms
+close them completely (AOT/renderer work). Nothing outside the audio pipeline
 is affected.
 
 ## Performance HUD (I3-T6)
@@ -424,16 +513,17 @@ stays above the table and is still the first thing to check.
 
 ### How to read it
 
-1. Start from `total`. At 28 fps one executed frame occupies the runtime queue
-   for ≈ 1/28 s ≈ **35 ms**, so `total` should sit near 35 ms; the 26 fps
-   interpreter baseline is ≈ 38 ms. `total` covers runtime-queue work only —
-   display-link ticks dropped by the backpressure gate are not counted, which
-   is why `fps ≈ 1000 / total` is the expected relation.
+1. Start from `total`. With the free-run loop the runtime queue executes one
+   frame every ≈ `total` ms (plus a dispatch hop), so `fps ≈ 1000 / total`
+   while `total` is above 16.7 ms. The I3-T9 measurement is `total` 22.9 ms /
+   `run` 22.6 ms → ≈ 44 fps (73 % of 60 Hz); the 26 fps interpreter baseline is
+   ≈ 38 ms. `total` covers runtime-queue work only; the wait for a 60 Hz
+   deadline is loop pacing and is not counted.
 2. Compare `run` with `total`. On Pokémon Y (AOT linked, active) `run` is
-   expected to be ~85–95 % of `total`. If `run / total` is below ~70 %,
-   presentation or the audio pump is eating the frame — that is the part a
-   renderer/audio change can still win. At ~95 %, only emulation/AOT work
-   raises fps.
+   expected to be ~95–99 % of `total` (22.6 of 22.9 ms measured). If
+   `run / total` is below ~70 %, presentation or the audio pump is eating the
+   frame — that is the part a renderer/audio change can still win. At ~95 %,
+   only emulation/AOT work raises fps.
 3. `read top` and `read bottom` copy 384 000 + 307 200 bytes per frame. Expect
    well under 1 ms each; sustained > 2 ms is unusual on this hardware and worth
    reporting together with fps.
@@ -444,33 +534,38 @@ stays above the table and is still the first thing to check.
 5. `audio` is normally < 0.5 ms and runs after `zk_run_frame`, so it does not
    lengthen the emulated frame itself; it still adds to `total` (and therefore
    to the frame interval), so a sustained rise costs fps.
-6. `total` much smaller than `1000 / fps` (e.g. 8 ms with 20 fps) means the
-   runtime queue is fast but ticks are being dropped: look at the main thread
-   (SwiftUI redrawing, another main-thread task), not at Zakuro.
+6. `total` much smaller than `1000 / fps` (e.g. 8 ms with 20 fps) cannot be
+   caused by dropped display ticks in a free-run build. It means the next frame
+   is not being scheduled back-to-back — the app may be throttled/suspended, or
+   a `.displayLink` fallback build is running (then the old explanation
+   applies: ticks dropped by the backpressure gate, look at the main thread).
+   Capture the `perf:` line, the `loop:` label and fps.
 7. A sustained gap where `total` is clearly larger than
    `run + read top + read bottom + CGImage + audio` comes from the small
    uncounted parts of the work item: the input snapshot, the stats/log
    bookkeeping at window boundaries, and — only when the buffer pool has no
    free buffer left — the transient 300–400 KB allocation. Named phases plus
-   that gap should add up to `total`.
+   that gap should add up to `total` (the 60 Hz deadline wait is outside
+   `total`).
 
 The same values are logged every ~2 s as one `perf:` line for
 `idevicesyslog`, so a 20-minute soak can be analysed without screenshots:
 
 ```text
-[3ds2apple] perf: fps=28.3 frames=1420 | total=35.1/41.2/34.8 run=32.4/38.9 readTop=0.42/0.61 readBottom=0.33/0.52 image=0.31/0.58 audio=0.12/0.44 ms (avg/max; total avg/max/last)
+[3ds2apple] perf: fps=43.7 frames=1420 | total=22.9/26.4/22.7 run=22.6/26.1 readTop=0.42/0.61 readBottom=0.33/0.52 image=0.11/0.28 audio=0.05/0.14 ms (avg/max; total avg/max/last)
 ```
 
-### Expected ranges (Pokémon Y, iPhone 14 Pro Max, first 5 minutes)
+### Expected ranges (Pokémon Y AOT, iPhone 14 Pro Max, free-run loop)
 
-| Row | 28 fps AOT (linked, active) | Notes |
+| Row | Measured (I3-T9, linked active) | Notes |
 |---|---|---|
-| `total` | 33–40 ms | tracks `1000 / fps` |
-| `run` | 30–37 ms | dominates when the emulated frame is CPU-bound |
+| fps / speed | ≈ 44 fps / ≈ 73 % | real throughput; was 30 fps / 50 % under CADisplayLink |
+| `total` | 22–24 ms | `fps ≈ 1000 / total` while above 16.7 ms |
+| `run` | 21–23 ms | dominates; ~99 % of `total` → the frame is CPU/GPU-bound inside Zakuro |
 | `read top` | 0.1–0.8 ms | 384 KB copy |
-| `read bottom` | 0.1–0.7 ms | 307 KB copy |
-| `CGImage` | 0.1–0.8 ms | both images, no pixel copy |
-| `audio` | 0.05–0.5 ms | depends on how many samples the frame produced |
+| `read bottom` | 0.1–0.8 ms | 307 KB copy |
+| `CGImage` | 0.0–0.2 ms | both images, no pixel copy |
+| `audio` | 0.0–0.2 ms | depends on how many samples the frame produced |
 
 These are order-of-magnitude expectations, not budgets: the ratio between rows
 is what identifies the bottleneck, and thermal throttling/device generation
@@ -481,8 +576,10 @@ whole row with fps and the AOT status.
 
 - It does not split `zk_run_frame` into CPU emulation vs PICA software
   rasterisation; a slow renderer shows up inside `run`.
-- It does not time the main thread (SwiftUI `Image` drawing). Use Instruments'
-  Time Profiler for that, or compare `total` with `1000 / fps` as above.
+- It does not time the main thread (SwiftUI `Image` drawing). In a free-run
+  build main-thread work no longer paces the emulator, but a slow SwiftUI draw
+  still shows up as on-screen jank rather than in these numbers. Use
+  Instruments' Time Profiler.
 - It does not time `zk_create` / ROM import / audio-engine start (startup
   one-offs, logged separately).
 - It only runs while frames execute: after a clean exit or fault the last
@@ -538,11 +635,15 @@ If the repo is moved, nothing needs changing — all three are repo-relative.
 | Picking the same filename twice | The existing `Documents/roms/<name>` is reused; delete the app (or that file) to force a fresh copy. |
 | Need to inspect imported ROMs | They live in the app container under `Documents/roms/`, data under `Documents/data/`; deleting the app removes them. |
 | Screens stay black / "Waiting for first frame…" after "Loaded" | Check `idevicesyslog` for `frame loop started` and any `zk_read_screen(which=…) returned … of … bytes` line. If the log shows `frame loop ending: …` right away, `zk_run_frame` returned 1/-1/-2 — the core faulted (stderr has details). |
-| Very low fps | Expected for the pure interpreter. Record fps **and the HUD row values** for qa — the I3 performance baseline. If `run` dominates `total`, the fix is AOT/3dsrecomp; if the read/CGImage/audio rows dominate, report that too. |
-| HUD shows `—` for a row | That phase has no sample yet. Everything is `—` until the first 0.5 s stats window publishes (≈13 completed frames at 26 fps); a loop that stopped earlier keeps `—` for the phases it never sampled. |
+| Very low fps | Expected for the pure interpreter. On the Pokémon Y AOT build the free-run loop should show ≈ 44 fps with `run` ≈ 22.6 ms; record fps **and the HUD row values** for qa — the I3 performance baseline. If `run` dominates `total`, the fix is AOT/3dsrecomp or the renderer; if the read/CGImage/audio rows dominate, report that too. |
+| fps still ~30 after the I3-T9 build | The status line should read `loop: free-run · cap 60 fps` and `idevicesyslog` should contain `frame loop started (free-run, cap 60 fps)`. If it reads `CADisplayLink`, the fallback constant is switched on (see "Driver selection / how to revert"). At ~30 fps with free-run enabled check the HUD: `total` ≈ 33 ms means the device is slower/throttled, not display-quantized. |
+| fps ≈ 44 but not 60 | Expected until a frame is faster than 16.7 ms: the 60 fps cap cannot beat the emulated frame cost (`run` 22.6 ms → ~44 fps). Reduce `run` (renderer/AOT) to go higher. |
+| Device runs hotter / fps degrades after a long session | Expected: free-run executes ~44 frames/s instead of 30, so sustained CPU use is higher than before. Thermal throttling can lower fps during a long session — record fps + HUD rows over time for qa (soak checklist). |
+| Need the old CADisplayLink loop back | In `Sources/ROMSession.swift` set `frameLoopDriver = .displayLink` (optionally `displayLinkFramesPerSecond = 120`) and rebuild (`scripts/build-ios-app.sh`). The status line then shows `loop: CADisplayLink · 60 Hz` and fps drops back to the display-quantized value. |
+| HUD shows `—` for a row | That phase has no sample yet. Everything is `—` until the first 0.5 s stats window publishes (≈22 completed frames at 44 fps); a loop that stopped earlier keeps `—` for the phases it never sampled. |
 | HUD numbers frozen while fps is 0 | Expected after a clean exit or fault: the last snapshot stays visible. Unload/background stops the runtime and clears the screens (and HUD); load again to restart the counters. |
 | HUD `total` is high but `run` is low | Time is going to presentation/bookkeeping inside `renderFrame`, not emulation: check `read top`/`read bottom`/`CGImage`/`audio`; if those are low too, the gap is the input snapshot, stats bookkeeping or a buffer-pool-exhaustion allocation — capture the `perf:` line and fps. |
-| HUD `total` is much lower than `1000 / fps` | The runtime queue is not the limiter; ticks are being dropped. Look at the main thread (SwiftUI redraw, another main-thread task) with Instruments. |
+| HUD `total` is much lower than `1000 / fps` | The free-run loop is not scheduling back-to-back, or a `.displayLink` fallback build is running and dropping ticks. Check the `loop:` status, backgrounding/throttling, and capture the `perf:` line with fps. |
 | Memory warnings / jetsam while loaded | The screen buffer pool is capped at 3 buffers per screen (≈2 MB total) and then falls back to transient `Data`, so its memory cannot grow without bound; if memory still grows, retention is elsewhere (frames, audio ring, runtime). Capture memory numbers and the HUD rows for qa. |
 | Can't find the HUD | It lives inside the screens card, directly under the fps/status line, visible from "Loaded" onward; it refreshes twice per second. |
 | App returns from background showing "Runtime stopped" | Intentional: iOS may jettison backgrounded processes, so the runtime is released when the scene backgrounds. Tap **Load “<name>”** to restart. |
@@ -553,7 +654,7 @@ If the repo is moved, nothing needs changing — all three are repo-relative.
 | A button stays pressed | Should not happen — Unload, Change ROM, app background and hiding the pad all clear input. If it does, report the exact sequence. |
 | Touchscreen taps do nothing | Touch is only sent while a runtime is loaded, and only on the **lower** screen area; coordinates map to 320×240 pixels. |
 | No sound at all | Check the status line: `audio: on` means the engine started; `audio: muted` means the mute toggle is on; `audio: failed` shows why. `idevicesyslog` logs `audio session failed` / `audio engine failed` / `audio started`. The `.playback` category ignores the iPhone silent switch. |
-| Sound is choppy / cuts in and out | Expected while emulation runs below real time: samples are produced at emulated speed but consumed at wall-clock 32730 Hz, so the ring underruns and gaps are silenced. Raising fps is the fix (AOT/3dsrecomp, renderer). |
+| Sound is choppy / cuts in and out | Expected while emulation runs below real time: samples are produced at emulated speed but consumed at wall-clock 32730 Hz, so the ring underruns and gaps are silenced. The I3-T9 free-run loop already raises the typical Pokémon Y AOT speed from 50 % to ~73 %; raising fps further is the fix (AOT/3dsrecomp, renderer). |
 | Pops or clicks | Persistent popping is usually engine restarts (Change ROM / background) or a too-small IO buffer; `setPreferredIOBufferDuration(0.01)` is 10 ms. Buffer underruns themselves become silent gaps, not loud pops. |
 | Audio still playing after Unload / background | Should not happen — Unload, Change ROM, background and exit all stop the engine and deactivate the session. Report it if it does. |
 | Pitch or playback speed sounds wrong | The engine declares Zakuro's `AUDIO_SAMPLE_RATE` (`AudioOutput.sampleRate = 32730`). If `zakuro-core` changes it, update that one constant; the mixer handles the device conversion. |
