@@ -50,6 +50,19 @@
 //! renderer's tuning switches (GPU versus CPU vertex shading) before a load.
 //! `METAL.md` has the architecture, the MoltenVK findings and the spike plan.
 //!
+//! ## Presentation on a CAMetalLayer
+//!
+//! The A0 path above still copies every screen out of the GPU memory and shows
+//! it as a `CGImage`. The optional A1 path in [`presenter`] instead presents the
+//! screens on a `CAMetalLayer` the app owns: [`presenter::zk_presenter_create`]
+//! makes a Vulkan surface and swapchain from the app's `UIView`,
+//! [`presenter::zk_create_presented`] loads a system on the device the renderer
+//! shares with it, and [`presenter::zk_present`] shows each frame without a
+//! readback. A device without MoltenVK, or one where the renderer cannot start,
+//! keeps working: the app falls back to `zk_create` + `zk_read_screen`, and a
+//! presented system whose renderer stayed on the CPU presents its pixels through
+//! the same Metal layer. The existing `zk_*` signatures are unchanged.
+//!
 //! Zakuro's own `log` records (the loader's linked-code warnings, GPU warnings)
 //! are forwarded to stderr by [`zk_create`], because an iOS app installs no
 //! logger and they would otherwise be dropped.
@@ -59,15 +72,17 @@ use std::ffi::{c_char, c_void, CStr, CString};
 use std::path::PathBuf;
 use std::ptr;
 use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use zakuro_common::Screen;
 use zakuro_core::loader;
 use zakuro_core::services::hid::{InputState, PadState};
 use zakuro_core::{Config, FrameOutcome, System};
+use zakuro_gpu::SharedDevice;
 
 mod perf;
+mod presenter;
 
 thread_local! {
     /// Last `zk_create` failure on the current thread; empty when there is none.
@@ -118,7 +133,7 @@ fn read_c_string(pointer: *const c_char) -> Option<String> {
 }
 
 /// Records `message` as the calling thread's last error.
-fn set_last_error(message: impl Into<String>) {
+pub(crate) fn set_last_error(message: impl Into<String>) {
     // Escape interior NULs first so `CString::new` cannot fail: the FFI path must
     // not panic. `unwrap_or_default` is then only a belt-and-braces fallback.
     let message: String = message.into();
@@ -353,15 +368,25 @@ fn hardware_probe_result() -> Option<String> {
 fn log_hardware_outcome(system: &System) {
     let requested = system.config.hardware_renderer;
     if system.gpu.draws_on_gpu() {
+        let presentation = if system.gpu.shows_directly() {
+            "the screens go straight to the CAMetalLayer (no readback)"
+        } else {
+            "screens are read back for presentation"
+        };
         eprintln!(
             "zk_create: the 3D draws on the host GPU through Vulkan (MoltenVK over Metal on \
-             iOS) at {}x; screens are read back for presentation",
+             iOS) at {}x; {presentation}",
             system.gpu.scale()
         );
     } else if requested {
+        let presentation = if system.config.device.is_some() {
+            "; the screens are uploaded through the CAMetalLayer"
+        } else {
+            ""
+        };
         eprintln!(
             "zk_create: hardware rendering was requested but no Vulkan device started; the 3D \
-             draws in software (the zk[WARN] line above has the reason)"
+             draws in software (the zk[WARN] line above has the reason){presentation}"
         );
     } else {
         eprintln!(
@@ -369,6 +394,25 @@ fn log_hardware_outcome(system: &System) {
              (see zk_set_hardware_renderer, METAL.md)"
         );
     }
+}
+
+/// Logs how a presented system will reach the app's `CAMetalLayer`: straight
+/// from the renderer's GPU images, or uploaded from the CPU when the renderer
+/// stayed in software. A plain `zk_create` says nothing here; its display path
+/// is unchanged (readback + `CGImage`).
+fn log_presentation_outcome(system: &System, presented: bool) {
+    if !presented {
+        return;
+    }
+    let presentation = if system.gpu.shows_directly() {
+        "the screens go straight to the CAMetalLayer (no readback)"
+    } else if system.gpu.draws_on_gpu() {
+        "the renderer draws on the GPU but the screens are read back and uploaded through the \
+         CAMetalLayer"
+    } else {
+        "the renderer is software; its pixels are uploaded through the CAMetalLayer"
+    };
+    eprintln!("zk_create_presented: {presentation}");
 }
 
 /// The text [`zk_hardware_status`] returns: what this system, or the last
@@ -386,14 +430,25 @@ fn hardware_status_text(system: *mut c_void) -> String {
     };
     let scale = system.gpu.scale();
     if system.gpu.draws_on_gpu() {
+        let presentation = if system.gpu.shows_directly() {
+            "the screens go straight to the CAMetalLayer (no readback)"
+        } else {
+            "screens are read back for presentation"
+        };
         format!(
             "the 3D draws on the host GPU through Vulkan (MoltenVK over Metal on iOS) at {scale}x; \
-             screens are read back for presentation"
+             {presentation}"
         )
     } else if system.config.hardware_renderer {
-        "hardware rendering was requested but no Vulkan device started; the 3D draws in software \
-         (the zk[WARN] line in the log has the reason)"
-            .to_owned()
+        if system.config.device.is_some() {
+            "the 3D draws in software; the screens are uploaded through the CAMetalLayer (the \
+             zk[WARN] line in the log has the reason)"
+                .to_owned()
+        } else {
+            "hardware rendering was requested but no Vulkan device started; the 3D draws in \
+             software (the zk[WARN] line in the log has the reason)"
+                .to_owned()
+        }
     } else {
         "the 3D draws in software (PICA200 on the CPU); hardware rendering is off".to_owned()
     }
@@ -575,6 +630,22 @@ pub extern "C" fn zk_linked_program_id() -> u64 {
 /// [`zk_last_frame_micros`] and the periodic `zk_perf` line.
 #[no_mangle]
 pub extern "C" fn zk_create(rom: *const c_char, data_dir: *const c_char) -> *mut c_void {
+    create_system(rom, data_dir, None, false)
+}
+
+/// Shared body of [`zk_create`] and [`presenter::zk_create_presented`].
+///
+/// `device` is the Vulkan device a presenter offers for the renderer to share
+/// (`None` = no presenter: the loader makes its own and screens are read back);
+/// `presented` also forces the hardware renderer on, because a presented system
+/// must draw on the device it will show from. Everything else, including the
+/// error contract, is `zk_create`'s.
+pub(crate) fn create_system(
+    rom: *const c_char,
+    data_dir: *const c_char,
+    device: Option<Arc<SharedDevice>>,
+    presented: bool,
+) -> *mut c_void {
     let rom = match cpath(rom) {
         Ok(rom) => rom,
         Err(CPathError::Null) => {
@@ -609,14 +680,14 @@ pub extern "C" fn zk_create(rom: *const c_char, data_dir: *const c_char) -> *mut
 
     let mut config = Config::default();
     config.data_dir = data_dir;
-    // The 3D on the host GPU is opt-in (`hardware_requested`); the loader makes
-    // the Vulkan device itself and falls back to software, logging why, when it
-    // can't. On iOS that usually means MoltenVK is not where Zakuro's
-    // `instance::entry` looks: METAL.md has the small upstream patch for it.
-    config.hardware_renderer = hardware_requested();
-    // No presenter shares the device yet, so the loader makes its own and the
-    // screens are read back to the app the way the software renderer's are.
-    config.device = None;
+    // A presented load draws on the presenter's device and always asks for the
+    // GPU renderer (the app shows the screens through its Metal layer). A plain
+    // load follows the build/runtime switch above: the loader makes the Vulkan
+    // device itself and falls back to software, logging why, when it can't. On
+    // iOS that usually means MoltenVK is not where Zakuro's `instance::entry`
+    // looks: METAL.md has the small upstream patch for it.
+    config.hardware_renderer = presented || hardware_requested();
+    config.device = device;
     config.texture_packs = false;
     // iOS forbids executable memory: no JIT, no recompiled-code discovery here.
     config.find_recompiled = false;
@@ -678,6 +749,7 @@ pub extern "C" fn zk_create(rom: *const c_char, data_dir: *const c_char) -> *mut
             };
             log_linked_outcome(&system);
             log_hardware_outcome(&system);
+            log_presentation_outcome(&system, presented);
             Box::into_raw(Box::new(system)) as *mut c_void
         }
         Err(error) => {

@@ -5,10 +5,10 @@
 //  I3-T6: per-phase frame timing for the performance HUD.
 //
 //  Threading: every `record` happens on the runtime serial queue, right around
-//  the call it measures (zk_run_frame, zk_read_screen, CGImage creation, the
-//  audio pump). Only an immutable FrameTimingSnapshot is hopped to the main
-//  queue for display, so the HUD never touches the runtime handle or the
-//  timing accumulators.
+//  the call it measures (zk_run_frame, zk_present or zk_read_screen, CGImage
+//  creation, the audio pump). Only an immutable FrameTimingSnapshot is hopped
+//  to the main queue for display, so the HUD never touches the runtime handle
+//  or the timing accumulators.
 //
 //  Clock: mach_absolute_time() — monotonic, never affected by wall-clock
 //  changes, and cheaper than Date()/CACurrentMediaTime() in a per-frame path.
@@ -83,15 +83,17 @@ struct FramePhaseStats: Equatable {
 /// Publishable timing for one frame, all in milliseconds.
 struct FrameTimingSnapshot: Equatable {
     /// Entire renderFrame work item on the runtime queue up to publication:
-    /// set_input + run + screen reads + CGImages + audio pump.
+    /// set_input + run + presentation + audio pump.
     var renderTotal = FramePhaseStats()
     /// zk_run_frame() alone.
     var runFrame = FramePhaseStats()
-    /// zk_read_screen() for the upper 400x240 screen.
+    /// zk_present() (A1: swapchain present; 0 on the CGImage path).
+    var present = FramePhaseStats()
+    /// zk_read_screen() for the upper 400x240 screen (CGImage path only).
     var topScreenRead = FramePhaseStats()
-    /// zk_read_screen() for the lower 320x240 screen.
+    /// zk_read_screen() for the lower 320x240 screen (CGImage path only).
     var bottomScreenRead = FramePhaseStats()
-    /// Both CGImage creations of the frame (provider + CGImage, no pixel copy).
+    /// Both CGImage creations of the frame (CGImage path only).
     var cgImage = FramePhaseStats()
     /// zk_take_audio() + ring-buffer enqueue.
     var audioPump = FramePhaseStats()
@@ -102,6 +104,7 @@ struct FrameTimingSnapshot: Equatable {
 enum FramePhase {
     case renderTotal
     case runFrame
+    case present
     case topScreenRead
     case bottomScreenRead
     case cgImage
@@ -156,7 +159,7 @@ struct PhaseTimingWindow {
     }
 }
 
-/// Collects the six per-frame phase timings and turns them into one
+/// Collects the per-frame phase timings and turns them into one
 /// `FrameTimingSnapshot` at the 0.5 s HUD refresh boundary.
 ///
 /// `record`/`publish` run on the runtime serial queue only. `reset()` is called
@@ -165,6 +168,7 @@ struct PhaseTimingWindow {
 struct FrameTimingWindow {
     private var renderTotal = PhaseTimingWindow()
     private var runFrame = PhaseTimingWindow()
+    private var present = PhaseTimingWindow()
     private var topScreenRead = PhaseTimingWindow()
     private var bottomScreenRead = PhaseTimingWindow()
     private var cgImage = PhaseTimingWindow()
@@ -174,6 +178,7 @@ struct FrameTimingWindow {
         switch phase {
         case .renderTotal: renderTotal.record(ticks)
         case .runFrame: runFrame.record(ticks)
+        case .present: present.record(ticks)
         case .topScreenRead: topScreenRead.record(ticks)
         case .bottomScreenRead: bottomScreenRead.record(ticks)
         case .cgImage: cgImage.record(ticks)
@@ -186,6 +191,7 @@ struct FrameTimingWindow {
         FrameTimingSnapshot(
             renderTotal: renderTotal.publish(),
             runFrame: runFrame.publish(),
+            present: present.publish(),
             topScreenRead: topScreenRead.publish(),
             bottomScreenRead: bottomScreenRead.publish(),
             cgImage: cgImage.publish(),

@@ -34,6 +34,12 @@ zakuro-common = { path = "../zakuro-common" }
 # forbids executable memory for ordinary apps, and the desktop frontend is the
 # only thing that ever wanted the `jit` default feature.
 zakuro-gpu = { path = "../zakuro-gpu", default-features = false, features = ["vulkan"] }
+# The UIKit window/display handles Zakuro's Vulkan presenter takes: a UIView
+# pointer becomes `RawWindowHandle::UiKit`, which `ash-window` turns into a
+# `VkSurface` over the view's CAMetalLayer (the A1 presentation path in
+# `src/presenter.rs`). The same version `ash-window` uses, so one copy is
+# linked. See METAL.md.
+raw-window-handle = "0.6"
 # Forward Zakuro's own `log` records (the loader's linked-code warnings, GPU
 # warnings, ...) to stderr, where `idevicesyslog` can see them. Nothing else in
 # an iOS app installs a logger, so without this those records are dropped.
