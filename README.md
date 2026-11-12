@@ -1,144 +1,144 @@
 # 3ds2apple
 
-> **把你自己拥有的 Nintendo 3DS 游戏，以原生 ARM64 代码运行在 iPhone / iPad 上。**
+**English** | [简体中文](README.zh-CN.md)
 
-游戏代码在构建时由 [3dsrecomp](https://github.com/fearkov/3dsrecomp) 翻译成 C，再编译成 ARM64；运行时由 [Zakuro](https://github.com/fearkov/zakuro) 提供 3DS 系统服务、GPU 和少量解释器兜底。**没有 CPU JIT。**
+> **Run the Nintendo 3DS games you own as native ARM64 code on iPhone / iPad.**
 
-平台：iPhone / iPad（iOS 16+） · 构建：macOS + Xcode · 安装：Sideloadly / AltStore 侧载 · 许可：Apache-2.0 · **自带游戏**
+Game code is translated from ARM to C at build time by [3dsrecomp](https://github.com/fearkov/3dsrecomp) and compiled into ARM64; at runtime [Zakuro](https://github.com/fearkov/zakuro) provides the 3DS system services, GPU and a small interpreter fallback. **No CPU JIT.**
 
-> **第一个实验版本：** [v0.1.0-alpha](https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.0-alpha)（源码 + 无游戏数据的 shell IPA）。
+Platform: iPhone / iPad (iOS 16+) · Build: macOS + Xcode · Install: Sideloadly / AltStore sideload · License: Apache-2.0 · **Bring your own game**
+
+> **First experimental release:** [v0.1.0-alpha](https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.0-alpha) (source + game-data-free shell IPA); release notes are available in [English](docs/releases/v0.1.0-alpha.md) and [简体中文](docs/releases/v0.1.0-alpha.zh-CN.md).
 >
-> **状态：早期开发。** Pokémon Y（美版）已验证 AOT 代码生效、Metal 直接呈现、约 60fps；pipeline cache 可持久化，第二次启动不再重复编译。首次启动仍可能遇到 pipeline 编译尖峰，正在优化。兼容性和功能会随版本变化。
+> **Status: early development.** On Pokémon Y (US) the AOT code has been verified active, Metal presents directly and frame rates are close to 60 fps; the pipeline cache persists, so the second launch does not recompile the same pipelines. The first launch may still hit a pipeline-compilation spike, which is being optimized. Compatibility and features will change between versions.
 
-## 试用 v0.1.0-alpha（shell）
+## Try v0.1.0-alpha (shell)
 
-GitHub Release 里的 `3ds2apple-shell-v0.1.0-alpha.ipa` 是**无游戏数据的通用壳**：
+`3ds2apple-shell-v0.1.0-alpha.ipa` in the GitHub Release is a **universal shell without game data**:
 
-- 安装后可以从 Files 导入你自己的 `.3ds` / `.cci`，由 Zakuro 解释器直接运行；
-- 它**不包含**任何 per-game AOT 代码，因此只能用于验证安装、UI、兼容性和基本运行；
-- 帧率会明显低于 per-game AOT 构建，部分游戏可能非常慢；
-- IPA 未签名，用 Sideloadly / AltStore 和你的 Apple ID 安装。
+- After installing, import your own `.3ds` / `.cci` from Files and it runs directly through the Zakuro interpreter;
+- it contains **no** per-game AOT code, so it can only be used to verify installation, the UI, compatibility and basic execution;
+- frame rates are noticeably lower than a per-game AOT build, and some games may be very slow;
+- the IPA is unsigned; install it with Sideloadly / AltStore and your own Apple ID.
 
-想获得 Pokémon Y 实测的接近 60fps，需要在你自己的 Mac 上按 [docs/build.md](docs/build.md) 用你的 ROM 构建 per-game AOT IPA。该 IPA 含游戏衍生代码，**不会**随 Release 分发。
+The near-60 fps measured on Pokémon Y requires a per-game AOT IPA built on your own Mac with your own ROM, following [docs/build.md](docs/build.md). That IPA contains code derived from the game and is **not** distributed with the Release.
 
-## 原生移植，不是 CPU 模拟器
+## Native port, not a CPU emulator
 
-传统 3DS 模拟器在运行时逐条翻译 CPU 指令。3ds2apple 把这一步放到构建时：
+Traditional 3DS emulators translate CPU instructions one by one at runtime. 3ds2apple moves that step to build time:
 
-- 每款游戏用 3dsrecomp 把 ARM/Thumb/VFP 代码翻译成 C；
-- C 代码用 iOS clang 编译成 ARM64，链接进 App；
-- 运行时只保留游戏仍需要的部分：HLE 系统服务、PICA200 GPU、音频、输入；
-- 未被重编译覆盖的少量指令由 Zakuro 解释器兜底（测试游戏约 0.2%）。
+- for each game, 3dsrecomp translates ARM / Thumb / VFP code into C;
+- the C code is compiled into ARM64 with the iOS clang and linked into the app;
+- the runtime keeps only what the game still needs: HLE system services, the PICA200 GPU, audio and input;
+- the small set of instructions not covered by recompilation falls back to Zakuro's interpreter (about 0.2% on the tested games).
 
-因此设备上运行的是**普通 ARM64 代码**，不需要 JIT，也不需要调试器注入。
+As a result, the device runs **ordinary ARM64 code** — no JIT and no debugger injection.
 
-## 工作原理
+## How it works
 
 ```text
-你自己的 .3ds / .cci（不会上传或内置）
+your own .3ds / .cci (never uploaded or bundled)
         │
         ▼
-   3dsrecomp（构建机）
-        │  生成 C 代码
+   3dsrecomp (build machine)
+        │  generated C
         ▼
    clang -target arm64-apple-ios
         │  libgame.a
         ▼
-   SwiftUI 壳  +  libzakuro_ios.a（Zakuro 运行时）
+   SwiftUI shell + libzakuro_ios.a (Zakuro runtime)
         │
         ▼
-   unsigned IPA → 侧载签名 → iPhone / iPad
+   unsigned IPA → sideload signing → iPhone / iPad
 ```
 
-iOS 侧通过一个很小的 C ABI（`ios/zakuro-ios/`）调用 Zakuro：加载 ROM、跑帧、读上下屏、取音频、送输入。游戏代码与运行时都静态链接进 App，每款游戏一个 IPA。
+The iOS side calls Zakuro through a small C ABI (`ios/zakuro-ios/`): load a ROM, run frames, read the upper and lower screens, take audio and send input. Game code and runtime are statically linked into the app: one IPA per game.
 
-## 当前状态
+## Current status
 
-- iPhone / iPad 真机可以启动 SwiftUI 壳、导入自有 ROM、显示上下屏；
-- 触摸按键、GameController、下屏触摸和音频输出可用；
-- Pokémon Y（美版）的 3dsrecomp AOT 代码已静态链接，运行时确认 AOT 生效；
-- 性能 HUD 与 free-run 帧循环已接入，可在设备上查看各阶段帧时间；
-- GPU 通过 MoltenVK / Vulkan 直接呈现到 CAMetalLayer（A1），并保留软件回退；
-- Pokémon Y AOT 在 A16 上接近 60fps；pipeline cache 已持久化；
-- 首次运行的 GPU pipeline 编译放在加载页完成：ROM 载入后先在 "Preparing
-  graphics" 遮罩后跑若干帧（至少 2 秒、连续 90 帧无 >50ms 尖峰、最多 5 秒），
-  再把游戏显示出来；同一 ROM 的 cache 保存在 App 的 Caches 目录，第二次运行
-  直接读取，预热明显更短；渲染器回退到软件时跳过预热；
-- 应用内可导出诊断日志（设备/构建/AOT/帧时间）；
-- 兼容性、稳定性和更多游戏的支持仍在验证中。
+- The SwiftUI shell starts on a real iPhone / iPad, imports your own ROM and displays both screens;
+- touch controls, GameController, lower-screen touch and audio output work;
+- the 3dsrecomp AOT code for Pokémon Y (US) is statically linked, and the runtime confirms that AOT is active;
+- a performance HUD and a free-run frame loop are wired up, so frame times per stage can be inspected on device;
+- the GPU presents directly to a CAMetalLayer through MoltenVK / Vulkan, and keeps a software fallback;
+- Pokémon Y AOT is close to 60 fps on an A16 device; the pipeline cache is persisted;
+- on first launch, GPU pipeline compilation happens on the loading screen: after the ROM is loaded, a few frames run behind a "Preparing graphics" overlay (at least 2 s, 90 consecutive frames without a >50 ms spike, at most 5 s) before the game is revealed; the cache for the same ROM is stored in the app's Caches directory and read directly on the second run, so warm-up is clearly shorter; warm-up is skipped when the renderer falls back to software;
+- diagnostics can be exported from the app (device / build / AOT / frame times);
+- compatibility, stability and support for more games are still being verified.
 
-> 游戏画面和测试数据只用于本地验证，不进入仓库；本仓库不包含任何 ROM、密钥、系统文件或游戏资源。
+> Game screens and test data are used only for local verification and never enter the repository; this repository contains no ROM, key, system file or game asset.
 
-## 平台与限制
+## Platforms and limitations
 
-| 项目 | 说明 |
+| Item | Details |
 |---|---|
-| 设备 | iPhone / iPad，iOS 16 及以上（开发机：iPhone 14 Pro Max，iOS 26.7.2） |
-| 构建 | macOS + Xcode（iOS SDK）；Rust 用于 Zakuro 静态库 |
-| 安装 | 未签名 IPA，用 Sideloadly / AltStore 以你自己的 Apple ID 签名 |
-| CPU | AOT 重编译，无 JIT；少量解释器兜底 |
-| GPU | Metal via MoltenVK / CAMetalLayer（A1），带软件回退 |
-| 不在首版范围 | App Store、相机、麦克风、联机、全游戏库兼容 |
+| Device | iPhone / iPad, iOS 16 or later (development device: iPhone 14 Pro Max, iOS 26.7.2) |
+| Build | macOS + Xcode (iOS SDK); Rust for the Zakuro static library |
+| Install | unsigned IPA, signed with your own Apple ID through Sideloadly / AltStore |
+| CPU | AOT recompilation, no JIT; a small interpreter fallback |
+| GPU | Metal via MoltenVK / CAMetalLayer, with a software fallback |
+| Out of scope for the first release | App Store, camera, microphone, online play, full game-library compatibility |
 
-## 开始构建
+## Building
 
-完整步骤见 [docs/build.md](docs/build.md)。简要流程：
+See [docs/build.md](docs/build.md) for the full steps. In short:
 
 ```bash
-# 1. 构建 Zakuro iOS 静态库（macOS + Xcode + Rust + aarch64-apple-ios）
+# 1. Build the Zakuro iOS static library (macOS + Xcode + Rust + aarch64-apple-ios)
 scripts/build-zakuro-ios.sh
 
-# 2. 构建通用壳 / 无游戏的 App，产出 unsigned IPA
+# 2. Build the universal shell / game-free app and package an unsigned IPA
 scripts/build-ios-app.sh
 scripts/package-ipa.sh ios/app/build/Release-iphoneos/3ds2apple.app 3ds2apple
 
-# 3. 每款游戏：3dsrecomp → libgame.a → linked 静态库 → IPA
+# 3. Per game: 3dsrecomp → libgame.a → linked static library → IPA
 scripts/build-recomp-ios.sh "path/to/game.cci" pokemon-y --auto-serial
 scripts/build-linked-ios-lib.sh pokemon-y
 scripts/build-game-ipa.sh pokemon-y --display-name "Pokemon Y"
 ```
 
-脚本细节见 [scripts/README.md](scripts/README.md) 与 [scripts/AOT_BUILD.md](scripts/AOT_BUILD.md)。
+The desktop Builder in [builder/](builder/README.md) can drive the macOS build from a Windows or Linux machine over SSH using the same scripts. Script details are in [scripts/README.md](scripts/README.md) and [scripts/AOT_BUILD.md](scripts/AOT_BUILD.md).
 
-## 自带游戏
+## Bring your own game
 
-本项目**不提供** ROM、解密密钥、BIOS、系统文件或游戏资源，也不提供获取途径。
+This project **does not provide** ROMs, decryption keys, BIOS files, system files or game assets, nor does it provide ways to obtain them.
 
-- 只能使用你自己从自己的主机上导出、已解密的游戏；
-- 构建和运行都在你自己的机器上进行；
-- 仓库和 CI 不接收、不上传、不缓存 ROM 或由游戏生成的数据；
-- 兼容性报告只描述游戏和问题，不包含游戏文件。
+- Use only games that you have exported and decrypted yourself from your own console;
+- builds and runs happen on your own machine;
+- the repository and CI never receive, upload or cache ROMs or data generated from games;
+- compatibility reports describe games and problems only, without game files.
 
-## 项目结构
+## Repository layout
 
 ```text
-ios/app/                 SwiftUI iOS 壳（上下屏、输入、音频、HUD）
-ios/zakuro-ios/          Zakuro 的 iOS C ABI 与 staticlib crate
-ios/ZakuroBridge.h       Swift 与 C ABI 的桥接头
-builder/                 Windows/Linux Builder + macOS Build Agent 设计
-scripts/                 静态库 / AOT / IPA 构建脚本
-docs/architecture.md     架构与设计说明
-docs/build.md            构建指南
-THIRD_PARTY.md           第三方组件与许可证
-CONTRIBUTING.md          贡献指南
-NOTICE                   版权、商标与无 ROM 声明
+ios/app/                 SwiftUI iOS shell (two screens, input, audio, HUD)
+ios/zakuro-ios/          Zakuro iOS C ABI and staticlib crate
+ios/ZakuroBridge.h       Swift ↔ C ABI bridging header
+builder/                 Desktop Builder (Windows/Linux) + macOS Build Agent
+scripts/                 Static library / AOT / IPA build scripts
+docs/architecture.md     Architecture and design notes
+docs/build.md            Build guide
+docs/releases/           Release notes (English + Simplified Chinese)
+THIRD_PARTY.md           Third-party components and licenses
+CONTRIBUTING.md          Contributing guide
+NOTICE                   Copyright, trademark and no-ROM notice
 ```
 
-## 致谢
+## Credits
 
-- **[Zakuro](https://github.com/fearkov/zakuro)**（MIT）：3DS HLE 运行时，使用 AOT 代码而不是 JIT。
-- **[3dsrecomp](https://github.com/fearkov/3dsrecomp)**（MIT）：ARM / Thumb / VFP → C 静态重编译器。
-- **[Pocket Native](https://github.com/whovian64/pocket-native)**（MIT）：Zakuro + 3dsrecomp 的 AOT 分支，为本项目的 AOT 链接、渲染器和游戏配置提供了重要参考。
-- **Azahar / Citra**（GPLv3，仅行为参考）：3DS HLE、GPU、PICA200 语义的兼容性参考；没有将 GPL 代码链接进本项目。
-- **nxnative / S2Arm**（MIT / Apache-2.0）：同 ISA 游戏原生移植到 iOS 的工程与平台层参考。
-- **MoltenVK**（Apache-2.0）：Vulkan → Metal 兼容层，A1 直接呈现已使用。
+- **[Zakuro](https://github.com/fearkov/zakuro)** (MIT): 3DS HLE runtime that runs AOT code rather than a JIT.
+- **[3dsrecomp](https://github.com/fearkov/3dsrecomp)** (MIT): ARM / Thumb / VFP → C static recompiler.
+- **[Pocket Native](https://github.com/whovian64/pocket-native)** (MIT): AOT fork of Zakuro + 3dsrecomp; an important reference for AOT linking, the renderer and game profiles.
+- **Azahar / Citra** (GPL, behaviour reference only): compatibility reference for 3DS HLE, GPU and PICA200 semantics; no GPL code is linked into this project.
+- **nxnative / S2Arm** (MIT / Apache-2.0): references for same-ISA game ports to iOS, engineering and platform layers.
+- **MoltenVK** (Apache-2.0): Vulkan → Metal compatibility layer, used for direct presentation.
 
-完整许可证说明见 [THIRD_PARTY.md](THIRD_PARTY.md) 与 [NOTICE](NOTICE)。
+Full license details are in [THIRD_PARTY.md](THIRD_PARTY.md) and [NOTICE](NOTICE).
 
-## 许可与法律
+## License and legal
 
-本项目以 [Apache License 2.0](LICENSE) 开源。
+This project is open source under the [Apache License 2.0](LICENSE).
 
-本项目与 Nintendo 无关联，未获得 Nintendo 的认可或赞助。Nintendo 3DS 是 Nintendo Co., Ltd. 的商标；游戏名称与商标归各自权利人所有。
+This project is not affiliated with Nintendo and is not endorsed or sponsored by Nintendo. Nintendo 3DS is a trademark of Nintendo Co., Ltd.; game names and trademarks belong to their respective owners.
 
-本项目不包含任何 Nintendo ROM、解密密钥、系统文件、字体或游戏资源。请只使用你自己合法拥有并导出的游戏。
+This project contains no Nintendo ROM, decryption key, system file, font or game asset. Use only games you legally own and have exported yourself.
