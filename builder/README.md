@@ -13,9 +13,15 @@ macOS VM, a Mac on the LAN, or a cloud Mac rented for the project. The
 build on such a host through a small **Build Agent**, then receives the
 unsigned IPA, its SHA256 and its manifest.
 
-> **Status: design.** This directory defines the architecture and the v1
-> interface. No Builder code is implemented yet. Commands and message shapes
-> below describe the intended interface, not an executable that exists today.
+> **Status: first implementation.** The shared core, the CLI (`zkb`) and the
+> macOS Build Agent live in this directory and run end-to-end on Linux against
+> the Agent's scripted fake-build mode. The SSH binding, job queue with one
+> build slot, NDJSON log streaming, cancellation, input/build-product cleanup
+> and verified artifact download are implemented and covered by tests. The
+> optional HTTP+SSE binding, the desktop GUIs and a run of the real macOS
+> pipeline from this repository are not part of this slice; see
+> [Running it today](#running-it-today).
+>
 > The build itself is done by the existing scripts in [`scripts/`](../scripts/);
 > the Builder does not re-implement the pipeline.
 
@@ -26,6 +32,71 @@ The design is split across these documents:
 | [PROTOCOL.md](PROTOCOL.md) | Wire protocol v1: transports, authentication, jobs, logs, cancellation, artifact download, isolation, failure semantics |
 | [UX.md](UX.md) | User flows: add a build host, select a ROM, build, read progress, collect and install the IPA |
 | [STACK.md](STACK.md) | Technology choice (Rust/Tauri vs Python/CLI), repository layout, packaging, release rules |
+
+## Running it today
+
+Everything below runs from `builder/`:
+
+```bash
+cargo test --workspace          # protocol fixtures, fake-agent E2E, state machine
+cargo build --workspace         # binaries: target/debug/{zkb,builder-agent}
+```
+
+On the Mac (the Build Agent host):
+
+```bash
+builder-agent init --checkout ~/src/3ds2apple
+builder-agent serve              # daemon on <data root>/agent.sock
+# ssh-dispatch starts the daemon automatically when the SSH key is used
+```
+
+On the Windows/Linux machine with the ROM:
+
+```bash
+# 1. Pair the host once. This creates a dedicated SSH key, prints its public
+#    key, the exact restricted authorized_keys line and the host key
+#    fingerprint; the fingerprint is verified with --yes or --fingerprint.
+zkb host add --name office --ssh builder@mac-mini.local
+
+# 2. Check the host (the Agent's doctor report).
+zkb host test office
+
+# 3. Build, stream the log, download and verify the unsigned IPA.
+zkb build --host office --rom "./ROM/Pokemon Y.cci" \
+          --name pokemon-y --display-name "Pokemon Y" --out ./out
+
+# 4. Reattach, inspect, download again, cancel or clean up.
+zkb status --host office <job-id> --follow
+zkb logs   --host office <job-id> --follow
+zkb download --host office <job-id> --out ./out --verify
+zkb cancel  --host office <job-id>
+zkb jobs    --host office
+zkb delete  --host office <job-id>
+```
+
+`zkb build` prints the IPA path, its SHA256 and the manifest location on its
+last lines and exits `0`; a failed build exits `1` with the failing stage, the
+Agent's hint and the last log lines (`--json` emits the protocol objects).
+
+No Mac is needed to exercise the protocol path: the Agent's `--fake-build`
+mode replaces only the script execution, and
+[`tests/e2e/local_fake_agent.sh`](tests/e2e/local_fake_agent.sh) runs the whole
+flow (host add, upload, queue, events, artifact download, SHA256 check,
+cleanup) on Linux.
+
+| Piece | Implemented now | Verified where |
+|---|---|---|
+| `builder/core` | protocol types, framing, versioning, validation, hashing, SSH/local transports, client state, config | `cargo test -p builder-core`, golden fixtures |
+| `builder/cli` (`zkb`) | `host add/list/test/remove`, `build`, `status`, `logs`, `cancel`, `download`, `jobs`, `delete`, `doctor`, `config` | `cargo test -p builder-cli` (E2E against the real Agent) |
+| `builder/agent` | daemon + stdio sessions, `ssh-dispatch` forced command, queue with one build slot, store/recovery, NDJSON events, cancellation with process groups, cleanup, artifact verification, `doctor`, `gc`, fake-build mode | unit tests + CLI E2E on Linux |
+| Real macOS pipeline | script stages and output parsing implemented; not yet exercised on a Mac from this repository | pending a macOS run |
+| HTTP+SSE binding | not implemented (SSH is the only binding in this slice) | — |
+
+Remaining gaps in this slice, in addition to the deferrals in
+[PROTOCOL.md](PROTOCOL.md) §15: the HTTP binding, `transport.mode: "path"`,
+`heartbeat` events, automatic `input_timeout` expiry, a Builder-embedded source
+revision pin (the CLI sends one only with `--expected-revision`), and the
+desktop GUIs.
 
 ## Why a Mac is still needed
 

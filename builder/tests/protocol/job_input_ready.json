@@ -1,0 +1,7 @@
+{
+  "name": "inputs verified, job queued",
+  "request_type": "job.input_ready",
+  "request": {"type": "job.input_ready", "tag": "t-11", "job_id": "job_01J8Z3K4T9ABCDEFGHJKMNPQRS"},
+  "reply_type": "job.input_ready.result",
+  "reply": {"type": "job.input_ready.result", "tag": "t-11", "job_id": "job_01J8Z3K4T9ABCDEFGHJKMNPQRS", "state": "queued", "warnings": []}
+}

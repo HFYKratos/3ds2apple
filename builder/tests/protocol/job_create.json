@@ -1,0 +1,53 @@
+{
+  "name": "create one job",
+  "request_type": "job.create",
+  "request": {
+    "type": "job.create",
+    "tag": "t-10",
+    "request_id": "6f1c2b1e-3d1a-4b8e-9f2c-1e2d3c4b5a69",
+    "game": {
+      "name": "pokemon-y",
+      "display_name": "Pokemon Y"
+    },
+    "inputs": [
+      {
+        "role": "rom",
+        "name": "Pokemon Y.cci",
+        "bytes": 4294967296,
+        "sha256": "9f2c1e2d3c4b5a697f1c2b1e3d1a4b8e9f2c1e2d3c4b5a697f1c2b1e3d1a4b8e"
+      }
+    ],
+    "options": {
+      "embed_moltenvk": true,
+      "hardware_renderer": false,
+      "clean": false,
+      "keep_input": false
+    },
+    "source": {
+      "expected_revision": "4cc6186"
+    },
+    "transport": "upload"
+  },
+  "reply_type": "job.created",
+  "reply": {
+    "type": "job.created",
+    "tag": "t-10",
+    "job_id": "job_01J8Z3K4T9ABCDEFGHJKMNPQRS",
+    "state": "created",
+    "upload": {
+      "roles": [
+        {
+          "role": "rom",
+          "bytes": 4294967296,
+          "sha256": "9f2c1e2d3c4b5a697f1c2b1e3d1a4b8e9f2c1e2d3c4b5a697f1c2b1e3d1a4b8e"
+        }
+      ],
+      "chunk_hint": 8388608,
+      "expires_at": "2026-11-12T21:00:00Z"
+    },
+    "limits": {
+      "max_queued_jobs": 4,
+      "max_concurrent_builds": 1
+    }
+  }
+}

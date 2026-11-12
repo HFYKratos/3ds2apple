@@ -1,8 +1,10 @@
 # Builder technology and repository layout
 
-> **Status: design.** This document records the recommended stack, the
-> alternatives that were weighed, and the layout the work packages implement.
-> No crates or GUI code exist yet.
+> **Status: implemented (core, CLI, Agent).** This document records the stack,
+> the alternatives that were weighed, and the layout that now exists under
+> `builder/`: the shared library, the `zkb` CLI and the macOS Build Agent are
+> implemented in Rust and tested on Linux. The GUI frontends are still design
+> only.
 
 ## 1. Decision summary
 
@@ -112,8 +114,9 @@ versioned fixtures. This keeps the "no generated code in git" rule absolute
 
 ## 4. Repository layout
 
-The `builder/` directory is a self-contained Cargo workspace. It is created by
-the work packages; only documentation is committed today.
+The `builder/` directory is a self-contained Cargo workspace. The `core`,
+`cli` and `agent` crates exist today; `windows/`, `linux/`, `ui/` and `cross/`
+are still design-only.
 
 ```text
 builder/
@@ -169,9 +172,8 @@ builder/
     package.json
 
   tests/
-    fake-agent/                  # scriptable in-process agent (no macOS, no builds)
-    protocol/                    # golden JSON fixtures per scenario
-    e2e/                         # Linux -> macOS host scripts (manual/CI-gated, no ROM in git)
+    protocol/                    # golden JSON fixtures (control frames + data-channel lines)
+    e2e/local_fake_agent.sh      # Linux end-to-end against the Agent's fake build
 
   cross/                         # W4 spike only: report + minimal prototype, never shipped
 ```
@@ -184,8 +186,9 @@ Rules for the layout:
   commands. The CLI is the reference client and must stay feature-complete.
 - `ui/` is one codebase for both desktops; platform differences are limited to
   file dialogs, tray behaviour, credential store and installer metadata.
-- `tests/fake-agent` is the primary development tool for W2/W3: the GUIs can be
-  built and tested on any OS before a macOS host exists.
+- The Agent's `--fake-build` mode is the primary development tool for the GUI
+  frontends: it runs the real protocol path on any Unix host without macOS, so
+  the GUIs can be built and tested before a macOS host exists.
 - `cross/` is research output only; nothing in the shipped binaries depends on
   it.
 
@@ -282,8 +285,8 @@ credentials. For `builder/` specifically:
 | Tokens, SSH private keys, keychains | OS credential store / profile dir with `0600`; never git or logs |
 | Protocol codegen output | not generated: plain `serde` structs + fixtures |
 
-The `.gitignore` additions are the only change the Builder work packages need
-outside `builder/`; coordinate them with the maintainers (they are small and
+The `.gitignore` additions are the only change the Builder needs outside
+`builder/`; coordinate them with the maintainers (they are small and
 reviewable).
 
 ## 7. Security engineering notes

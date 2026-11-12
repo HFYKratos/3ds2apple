@@ -1,0 +1,64 @@
+{
+  "name": "running job status",
+  "request_type": "job.status",
+  "request": {
+    "type": "job.status",
+    "tag": "t-20",
+    "job_id": "job_01J8Z3K4T9ABCDEFGHJKMNPQRS"
+  },
+  "reply_type": "job.status.result",
+  "reply": {
+    "type": "job.status.result",
+    "tag": "t-20",
+    "job": {
+      "job_id": "job_01J8Z3K4T9ABCDEFGHJKMNPQRS",
+      "game": {
+        "name": "pokemon-y",
+        "display_name": "Pokemon Y"
+      },
+      "state": "running",
+      "stage": "recompiling",
+      "stage_state": "running",
+      "percent": 42,
+      "detail": {
+        "files_done": 318,
+        "files_total": 761
+      },
+      "created_at": "2026-11-12T19:33:10Z",
+      "started_at": "2026-11-12T19:40:55Z",
+      "updated_at": "2026-11-12T19:43:40Z",
+      "queue_position": 0,
+      "stages": [
+        {
+          "name": "preparing",
+          "state": "done",
+          "duration_ms": 2003
+        },
+        {
+          "name": "recompiling",
+          "state": "running"
+        },
+        {
+          "name": "linking",
+          "state": "pending"
+        },
+        {
+          "name": "packaging",
+          "state": "pending"
+        },
+        {
+          "name": "verifying",
+          "state": "pending"
+        }
+      ],
+      "source_revision": "4cc6186",
+      "toolchain": {
+        "xcode": "16.4",
+        "ios_sdk": "18.5",
+        "rust_target_installed": true
+      },
+      "inputs_present": true,
+      "inputs_kept": false
+    }
+  }
+}

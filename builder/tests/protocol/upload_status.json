@@ -1,0 +1,6 @@
+{
+  "name": "upload status line (data channel, not a control frame)",
+  "status": {"type": "upload.status", "received_bytes": 0, "bytes": 4294967296, "sha256_ok": false, "complete": false},
+  "progress": {"type": "upload.progress", "received_bytes": 8388608, "bytes": 4294967296},
+  "complete": {"type": "upload.complete", "received_bytes": 4294967296, "bytes": 4294967296, "sha256_ok": true}
+}

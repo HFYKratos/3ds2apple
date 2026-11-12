@@ -1,0 +1,28 @@
+{
+  "name": "hello handshake",
+  "request_type": "hello",
+  "request": {
+    "type": "hello",
+    "tag": "t-1",
+    "protocol": "3ds2apple-builder/1",
+    "client": {"name": "3ds2apple-builder", "version": "0.1.0", "os": "linux", "os_version": "6.12"},
+    "features": ["events.stream", "upload.resume"]
+  },
+  "reply_type": "hello.result",
+  "reply": {
+    "type": "hello.result",
+    "tag": "t-1",
+    "protocol": "3ds2apple-builder/1",
+    "agent": {"version": "0.1.0", "id": "mac-mini", "os": "macos", "os_version": "14.8", "arch": "arm64"},
+    "capabilities": ["events.stream", "upload.resume", "artifact.range", "keep_input", "gpu_options", "job.delete", "job.list"],
+    "toolchain": {
+      "xcode": "16.4", "ios_sdk": "18.5", "rust": "1.99.1", "rust_target_installed": true,
+      "xcodegen": "2.44.1", "python": "3.11.9", "git": "2.46.0"
+    },
+    "source": {"repo": "/Users/builder/src/3ds2apple", "revision": "4cc6186", "dirty": false, "scripts_present": true},
+    "limits": {"max_input_bytes": 8589934592, "max_queued_jobs": 4, "max_concurrent_builds": 1, "artifact_retention_hours": 168, "job_retention_hours": 168},
+    "ready": true,
+    "min_client": "0.1.0",
+    "refusals": []
+  }
+}
