@@ -19,6 +19,14 @@
 # link fail with undefined _recomp_* symbols - that is the intended guard
 # against shipping an interpreter-only "AOT" build.
 #
+# Split/incremental path (2026-11-12 VM run): when the generated C was produced
+# elsewhere (e.g. 3dsrecomp on Linux) and build/ios/<name>/{libzakuro_ios.a,
+# libgame.a} already exist, this script is the only command needed. The title ID
+# is resolved from --title-id, build-info.txt, recomp-info.txt or the generated
+# src/main.rs (see scripts/lib/aot-common.sh); a corrupted value such as
+# "0004000000055E00n" (over-escaped printf in the first run) is repaired with a
+# warning instead of being written to manifest.txt.
+#
 # The app remains unsigned (CODE_SIGNING_ALLOWED=NO); signing/installing is the
 # user's job on Windows with Sideloadly/AltStore. Nothing is committed: libs,
 # build logs, the IPA and its manifest all live in gitignored directories.
@@ -26,6 +34,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+AOT_LOG_PREFIX="build-game-ipa"
+# shellcheck source=lib/aot-common.sh
+source "${SCRIPT_DIR}/lib/aot-common.sh"
 
 CONFIGURATION="Release"
 APP_DIR_ARG="${ROOT}/ios/app"
@@ -35,10 +47,21 @@ IPA_NAME_ARG=""
 BUNDLE_ID_ARG=""
 DISPLAY_NAME_ARG=""
 NAME_ARG=""
+TITLE_ARG=""
 CLEAN_PROJECT=0
 VERBOSE=0
 
-EXPECTED_RECOMP_SYMBOLS="recomp_abi recomp_generation recomp_entry_count recomp_entries recomp_module_count recomp_modules recomp_origins"
+EXPECTED_RECOMP_SYMBOLS="$AOT_EXPECTED_RECOMP_SYMBOLS"
+
+# nm dumps are written to temp files (never piped into `grep -q`: under
+# `set -o pipefail` an early grep exit makes nm die with SIGPIPE and a present
+# symbol looks missing). The trap removes whatever is still around on failure.
+NM_DUMP=""
+NM_DUMP_UNDEF=""
+cleanup_nm_dumps() {
+  [[ -z "${NM_DUMP:-}" ]] || rm -f -- "$NM_DUMP"
+  [[ -z "${NM_DUMP_UNDEF:-}" ]] || rm -f -- "$NM_DUMP_UNDEF"
+}
 
 usage() {
   cat <<'EOF'
@@ -53,6 +76,10 @@ Arguments:
 
 Options:
   --name NAME        Same as the <name> argument
+  --title-id ID      16 hex digit ROM title ID (e.g. 0004000000055E00).
+                     Default: read from --title-id > build-info.txt >
+                     build/game/<name>/recomp-info.txt > src/main.rs. The value
+                     written to manifest.txt is always validated 16-hex hex.
   --lib-dir DIR      Per-game lib dir (default: build/ios/<name>)
   --app-dir DIR      XcodeGen project dir (default: ios/app)
   --configuration C  xcodebuild configuration (default: Release)
@@ -67,9 +94,16 @@ Options:
   --verbose          Stream xcodebuild output to the terminal as well
   -h, --help         Show this help and exit
 
+Split/incremental builds:
+  If build/ios/<name>/{libzakuro_ios.a,libgame.a} already exist (for example
+  after a manual split build: 3dsrecomp generated the C on Linux, libgame.a and
+  the linked library were built separately), just run this script - it reuses
+  them and produces the manifest-correct IPA. Only Xcode is needed; cargo and
+  the ROM are not (the ROM is still required on the device at runtime).
+
 Outputs (all gitignored):
   IPA/<name>-AOT.ipa                     unsigned AOT IPA
-  build/ios/<name>/manifest.txt          title ID, revs, SHA256 manifest
+  build/ios/<name>/manifest.txt          title ID, source, revs, SHA256 manifest
   build/logs/build-game-ipa-<name>-*.log
 
 Exit status: 0 on success, non-zero on failure (the log tail is printed).
@@ -100,20 +134,6 @@ need_tool() {
   command -v "$1" >/dev/null 2>&1 || die "'$1' not found in PATH. $2"
 }
 
-sha256_of() {
-  if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$1" | awk '{print $1}'
-  else
-    sha256sum "$1" | awk '{print $1}'
-  fi
-}
-
-info_value() {
-  local file="$1" key="$2"
-  [[ -f "$file" ]] || return 1
-  sed -n "s/^${key}=//p" "$file" | head -n 1
-}
-
 sanitize_bundle_component() {
   printf '%s\n' "$1" \
     | tr '[:upper:]' '[:lower:]' \
@@ -121,11 +141,18 @@ sanitize_bundle_component() {
     | sed -e 's/--*/-/g' -e 's/^-*//' -e 's/-*$//'
 }
 
+trap cleanup_nm_dumps EXIT
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --name)
       [[ $# -ge 2 ]] || die "--name requires a value"
       NAME_ARG="$2"
+      shift 2
+      ;;
+    --title-id)
+      [[ $# -ge 2 ]] || die "--title-id requires a value"
+      TITLE_ARG="$2"
       shift 2
       ;;
     --lib-dir)
@@ -192,12 +219,8 @@ done
 [[ -n "$NAME_ARG" ]] || die "missing <name> argument
 usage: scripts/build-game-ipa.sh <name> [options]"
 NAME="$NAME_ARG"
-case "$NAME" in
-  .|..|*/*|.*) die "invalid game name: '$NAME' (use letters, digits, '.', '_', '-')" ;;
-esac
-if ! printf '%s\n' "$NAME" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
-  die "invalid game name: '$NAME' (use letters, digits, '.', '_', '-')"
-fi
+aot_is_valid_name "$NAME" \
+  || die "invalid game name: '$NAME' (use letters, digits, '.', '_', '-')"
 [[ -n "$CONFIGURATION" ]] || die "--configuration must not be empty"
 
 APP_DIR="$(resolve_path "$APP_DIR_ARG")"
@@ -207,13 +230,18 @@ OUT_DIR="$(resolve_path "$OUT_DIR_ARG")"
 APP_DIR="$(cd "$APP_DIR" && pwd)"
 [[ -f "${APP_DIR}/project.yml" ]] || die "no project.yml in $APP_DIR (ios/app contract)"
 [[ -d "$LIB_DIR" ]] || die "per-game lib dir not found: $LIB_DIR
-       Run scripts/build-linked-ios-lib.sh $NAME first."
+       Run scripts/build-linked-ios-lib.sh $NAME first (or copy an existing
+       split-build libzakuro_ios.a + libgame.a into $LIB_DIR)."
 
 LIB_ZAKURO="${LIB_DIR}/libzakuro_ios.a"
 LIB_GAME="${LIB_DIR}/libgame.a"
 BUILD_INFO="${LIB_DIR}/build-info.txt"
-[[ -f "$LIB_ZAKURO" ]] || die "missing $LIB_ZAKURO (run scripts/build-linked-ios-lib.sh $NAME)"
-[[ -f "$LIB_GAME" ]] || die "missing $LIB_GAME (run scripts/build-linked-ios-lib.sh $NAME)"
+[[ -f "$LIB_ZAKURO" ]] || die "missing $LIB_ZAKURO
+       Run scripts/build-linked-ios-lib.sh $NAME first, or point --lib-dir at
+       the directory from the split build."
+[[ -f "$LIB_GAME" ]] || die "missing $LIB_GAME
+       Run scripts/build-linked-ios-lib.sh $NAME first, or point --lib-dir at
+       the directory from the split build."
 
 # xcodebuild receives OTHER_LDFLAGS as a space separated list, so a lib path
 # containing spaces cannot be represented safely.
@@ -229,6 +257,9 @@ case "$BUNDLE_ID" in
 esac
 DISPLAY_NAME="${DISPLAY_NAME_ARG:-$NAME}"
 [[ -n "$DISPLAY_NAME" ]] || DISPLAY_NAME="$NAME"
+case "$DISPLAY_NAME" in
+  *$'\n'*|*$'\r'*) die "--display-name must be a single line (no newlines)" ;;
+esac
 IPA_NAME="${IPA_NAME_ARG:-${NAME}-AOT}"
 IPA_NAME="${IPA_NAME%.ipa}"
 [[ -n "$IPA_NAME" ]] || die "--ipa-name must not be empty"
@@ -236,9 +267,42 @@ case "$IPA_NAME" in
   */*) die "--ipa-name must be a file name, not a path: $IPA_NAME" ;;
 esac
 
-TITLE_ID="$(info_value "$BUILD_INFO" title_id || true)"
-RECOMP_REV="$(info_value "$BUILD_INFO" recomp_rev || true)"
-ZAKURO_REV="$(info_value "$BUILD_INFO" zakuro_rev || true)"
+# --- title ID (validated, never "unknown") -----------------------------------
+# The AOT linked library is compiled for one title ID; the manifest must record
+# exactly that value (RECOMP.md §9). Resolution order: --title-id, then
+# build-info.txt (what build-linked-ios-lib.sh baked in), then recomp-info.txt,
+# then the generated src/main.rs. Corrupted values from the first VM run
+# ("...5E00n") are repaired with a warning by aot_normalize_title_id.
+if ! aot_resolve_title_id "$ROOT" "$NAME" "$TITLE_ARG"; then
+  die "could not determine a valid 16 hex digit title ID for '$NAME'.
+       Tried: --title-id, build/ios/${NAME}/build-info.txt,
+       build/game/${NAME}/recomp-info.txt, build/game/${NAME}/src/main.rs.
+       Pass --title-id 0004000000055E00 (or the ROM's real title ID) and the
+       manifest will record that value."
+fi
+TITLE_ID="$AOT_TITLE_ID"
+TITLE_ID_SOURCE="$AOT_TITLE_SOURCE"
+
+# If the caller overrides the title explicitly, compare it with what the linked
+# build claims: a mismatch means the runtime loader will fall back to the
+# interpreter ("the code linked in is for title X, not Y").
+if [[ "$TITLE_ID_SOURCE" == "--title-id" ]]; then
+  BUILD_INFO_TITLE_RAW="$(aot_info_value "$BUILD_INFO" title_id || true)"
+  if [[ -n "$BUILD_INFO_TITLE_RAW" ]]; then
+    BUILD_INFO_TITLE="$(aot_normalize_title_id "$BUILD_INFO_TITLE_RAW" 2>/dev/null || true)"
+    if [[ -n "$BUILD_INFO_TITLE" && "$BUILD_INFO_TITLE" != "$TITLE_ID" ]]; then
+      warn "linked library claims title $BUILD_INFO_TITLE ($BUILD_INFO) but
+       --title-id is $TITLE_ID; the device will likely fall back to the
+       interpreter unless the linked lib is rebuilt for the same title."
+    fi
+  fi
+fi
+
+RECOMP_REV="$(aot_info_value "$BUILD_INFO" recomp_rev || true)"
+if [[ -z "$RECOMP_REV" ]]; then
+  RECOMP_REV="$(aot_info_value "${ROOT}/build/game/${NAME}/recomp-info.txt" recomp_rev || true)"
+fi
+ZAKURO_REV="$(aot_info_value "$BUILD_INFO" zakuro_rev || true)"
 
 # --- host / tool checks ------------------------------------------------------
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -252,28 +316,29 @@ need_tool xcodegen "Install XcodeGen: brew install xcodegen"
 need_tool nm "Install the Xcode command line tools: xcode-select --install"
 
 # --- pre-flight: the libs must be the linked/AOT variants -------------------
-lipo_arch_ok() {
-  local file="$1" lipo_info
-  lipo_info="$(xcrun lipo -info "$file" 2>&1)" || return 1
-  case "$lipo_info" in
-    *arm64*) return 0 ;;
-    *) warn "not an arm64 archive: $lipo_info"; return 1 ;;
-  esac
-}
-
 check_linked_lib() {
-  local file="$1" undefined
-  lipo_arch_ok "$file" || die "libzakuro_ios.a is not arm64: $file"
-  undefined="$(nm -u "$file" 2>/dev/null | awk '{print $NF}' | grep '^_recomp_' | sort -u || true)"
+  local file="$1" undefined count missing symbol lines
+  aot_lipo_arch_ok "$file" \
+    || die "libzakuro_ios.a is not arm64: $file
+       (lipo: $AOT_LIPO_INFO)"
+  NM_DUMP="$(mktemp "${TMPDIR:-/tmp}/3ds2apple-nm.XXXXXX")"
+  aot_nm_dump "$file" "$NM_DUMP" -u \
+    || die "nm -u failed on $file (RECOMP.md §8.2)"
+  undefined="$(aot_nm_symbols_with_prefix "$NM_DUMP" '_recomp_')"
+  rm -f -- "$NM_DUMP"
+  NM_DUMP=""
   [[ -n "$undefined" ]] || die "$file has no undefined _recomp_* symbols.
        That is the interpreter-only shell library, not the linked variant.
        Run scripts/build-linked-ios-lib.sh $NAME (and make sure its build used
        --features linked). See RECOMP.md §3.3."
-  local count missing symbol
-  count="$(printf '%s\n' "$undefined" | wc -l | tr -d '[:space:]')"
+  count="$(printf '%s\n' "$undefined" | sed '/^$/d' | wc -l | tr -d '[:space:]')"
   missing=""
+  lines=$'\n'"$undefined"$'\n'
   for symbol in $EXPECTED_RECOMP_SYMBOLS; do
-    printf '%s\n' "$undefined" | grep -qx "_${symbol}" || missing="$missing _${symbol}"
+    case "$lines" in
+      *$'\n'"_${symbol}"$'\n'*) : ;;
+      *) missing="$missing _${symbol}" ;;
+    esac
   done
   [[ -z "$missing" ]] || die "$file is missing undefined symbols:$missing (RECOMP.md §8.2)"
   [[ "$count" -eq 7 ]] || die "$file has ${count} undefined _recomp_* symbols; expected 7.
@@ -281,20 +346,23 @@ check_linked_lib() {
 }
 
 check_game_archive() {
-  local file="$1" missing="" symbols_file
-  lipo_arch_ok "$file" || die "libgame.a is not arm64: $file"
-  # Under `set -o pipefail`, `nm ... | grep -q` fails with SIGPIPE as soon as
-  # grep finds a match. Dump the symbol table once and search the file, so a
-  # found symbol is not mistaken for a missing one.
-  symbols_file="$(mktemp "${TMPDIR:-/tmp}/3ds2apple-nm.XXXXXX")"
-  nm -g "$file" 2>/dev/null > "$symbols_file" || true
-  local symbol
+  local file="$1" missing="" symbol
+  aot_lipo_arch_ok "$file" \
+    || die "libgame.a is not arm64: $file (lipo: $AOT_LIPO_INFO)"
+  # One nm dump, then exact last-field matching. See aot_nm_dump for the
+  # pipefail/SIGPIPE bug this replaces, and aot_nm_has_symbol for the old
+  # prefix-matching bug.
+  NM_DUMP="$(mktemp "${TMPDIR:-/tmp}/3ds2apple-nm.XXXXXX")"
+  aot_nm_dump "$file" "$NM_DUMP" -g \
+    || die "nm -g failed on $file"
   for symbol in $EXPECTED_RECOMP_SYMBOLS; do
-    grep -q "_${symbol}\$" "$symbols_file" || missing="$missing _${symbol}"
+    aot_nm_has_symbol "$NM_DUMP" "_${symbol}" || missing="$missing _${symbol}"
   done
-  rm -f "$symbols_file"
+  rm -f -- "$NM_DUMP"
+  NM_DUMP=""
   [[ -z "$missing" ]] || die "$file does not export generated tables:$missing
-       Re-run scripts/build-recomp-ios.sh <rom> $NAME (RECOMP.md §3.2)."
+       Re-run scripts/build-recomp-ios.sh <rom> $NAME (RECOMP.md §3.2), or
+       re-run build-linked-ios-lib.sh with the right --libgame/--archive."
 }
 
 check_linked_lib "$LIB_ZAKURO"
@@ -311,7 +379,7 @@ EXPECTED_APP="${BUILD_ROOT}/${CONFIGURATION}-iphoneos/3ds2apple.app"
 
 log "repo root:     $ROOT"
 log "game name:     $NAME"
-log "title id:      ${TITLE_ID:-unknown}"
+log "title id:      $TITLE_ID (source: $TITLE_ID_SOURCE)"
 log "lib dir:       $LIB_DIR"
 log "bundle id:     $BUNDLE_ID"
 log "display name:  $DISPLAY_NAME"
@@ -371,7 +439,7 @@ log "xcodebuild: ok"
 # --- locate and validate the .app -------------------------------------------
 APP_PATH="$EXPECTED_APP"
 if [[ ! -d "$APP_PATH" ]]; then
-  FOUND_APP="$(find "$BUILD_ROOT" -maxdepth 6 -type d -name '*.app' 2>/dev/null | head -n 1 || true)"
+  FOUND_APP="$(find "$BUILD_ROOT" -maxdepth 6 -type d -name '*.app' 2>/dev/null | sed -n '1p' || true)"
   if [[ -n "$FOUND_APP" ]]; then
     APP_PATH="$FOUND_APP"
     warn "expected $EXPECTED_APP but found $APP_PATH; using the found bundle."
@@ -401,22 +469,31 @@ fi
 # The final binary must contain the generated tables (pulled from libgame.a);
 # if the OTHER_LDFLAGS override was lost, this check catches the "AOT IPA that
 # is secretly the interpreter shell" case before packaging.
-if nm -gU "$APP_EXECUTABLE" 2>/dev/null | grep -q '[[:space:]]_recomp_abi$'; then
+NM_DUMP="$(mktemp "${TMPDIR:-/tmp}/3ds2apple-nm.XXXXXX")"
+NM_DUMP_UNDEF="$(mktemp "${TMPDIR:-/tmp}/3ds2apple-nm.XXXXXX")"
+aot_nm_dump "$APP_EXECUTABLE" "$NM_DUMP" -gU \
+  || die "nm -gU failed on $APP_EXECUTABLE (is it a Mach-O binary?)"
+aot_nm_dump "$APP_EXECUTABLE" "$NM_DUMP_UNDEF" -u \
+  || warn "nm -u failed on $APP_EXECUTABLE; skipping the undefined-symbol check"
+if aot_nm_has_symbol "$NM_DUMP" '_recomp_abi'; then
   log "AOT link check: _recomp_abi present in the app binary"
 else
   die "the app binary does not contain _recomp_abi, so libgame.a was not linked.
        Check the OTHER_LDFLAGS override and the -lzakuro_ios -lgame order (RECOMP.md §3.4).
        Full build log: $LOG_FILE"
 fi
-UNDEFINED_RECOMP="$(nm -u "$APP_EXECUTABLE" 2>/dev/null | awk '{print $NF}' | grep '^_recomp_' | sort -u || true)"
-[[ -z "$UNDEFINED_RECOMP" ]] || die "the app binary still has undefined _recomp_* symbols:
-$(printf '%s\n' "$UNDEFINED_RECOMP")
-       The link must have failed instead; inspect $LOG_FILE"
-if nm -gU "$APP_EXECUTABLE" 2>/dev/null | grep -q '[[:space:]]_zk_linked_code$'; then
+if aot_nm_has_symbol "$NM_DUMP" '_zk_linked_code'; then
   log "AOT link check: zk_linked_code present (linked build diagnostics available)"
 else
   warn "zk_linked_code not found in the app binary (Swift may not call it yet; not fatal)"
 fi
+UNDEFINED_RECOMP="$(aot_nm_symbols_with_prefix "$NM_DUMP_UNDEF" '_recomp_')"
+rm -f -- "$NM_DUMP" "$NM_DUMP_UNDEF"
+NM_DUMP=""
+NM_DUMP_UNDEF=""
+[[ -z "$UNDEFINED_RECOMP" ]] || die "the app binary still has undefined _recomp_* symbols:
+$(printf '%s\n' "$UNDEFINED_RECOMP")
+       The link must have failed instead; inspect $LOG_FILE"
 
 # --- package IPA (delegates to scripts/package-ipa.sh) ----------------------
 [[ -x "${ROOT}/scripts/package-ipa.sh" ]] || die "missing executable: ${ROOT}/scripts/package-ipa.sh"
@@ -428,29 +505,39 @@ log "packaging IPA via scripts/package-ipa.sh -> $IPA_PATH"
 "${ROOT}/scripts/package-ipa.sh" "$APP_PATH" --name "$IPA_NAME" --out-dir "$OUT_DIR"
 [[ -f "$IPA_PATH" ]] || die "package-ipa.sh finished but $IPA_PATH is missing"
 
-IPA_SHA="$(sha256_of "$IPA_PATH")"
+IPA_SHA="$(aot_sha256 "$IPA_PATH")"
 IPA_BYTES="$(wc -c < "$IPA_PATH" | tr -d '[:space:]')"
 IPA_SIZE="$(du -h "$IPA_PATH" | awk '{print $1}')"
+XCODE_VERSION="$(xcodebuild -version 2>/dev/null | sed -n '1p' || echo unknown)"
 
 # --- manifest ---------------------------------------------------------------
 MANIFEST="${LIB_DIR}/manifest.txt"
 {
   printf 'name=%s\n' "$NAME"
-  printf 'title_id=%s\n' "${TITLE_ID:-unknown}"
+  printf 'title_id=%s\n' "$TITLE_ID"
+  printf 'title_id_source=%s\n' "$TITLE_ID_SOURCE"
   printf 'bundle_id=%s\n' "$BUNDLE_ID"
   printf 'display_name=%s\n' "$DISPLAY_NAME"
   printf 'configuration=%s\n' "$CONFIGURATION"
   printf 'recomp_rev=%s\n' "${RECOMP_REV:-unknown}"
   printf 'zakuro_rev=%s\n' "${ZAKURO_REV:-unknown}"
-  printf 'libzakuro_ios_sha256=%s\n' "$(sha256_of "$LIB_ZAKURO")"
-  printf 'libgame_sha256=%s\n' "$(sha256_of "$LIB_GAME")"
+  printf 'libzakuro_ios_sha256=%s\n' "$(aot_sha256 "$LIB_ZAKURO")"
+  printf 'libgame_sha256=%s\n' "$(aot_sha256 "$LIB_GAME")"
   printf 'app=%s\n' "$APP_PATH"
   printf 'ipa=%s\n' "$IPA_PATH"
   printf 'ipa_bytes=%s\n' "$IPA_BYTES"
   printf 'ipa_sha256=%s\n' "$IPA_SHA"
-  printf 'xcode=%s\n' "$(xcodebuild -version 2>/dev/null | head -n 1 || echo unknown)"
+  printf 'xcode=%s\n' "$XCODE_VERSION"
   printf 'created_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$MANIFEST"
+
+# Self-check the manifest so a future over-escaping regression cannot ship a
+# wrong title ID again: title_id must be exactly 16 hex digits.
+MANIFEST_TITLE="$(aot_info_value "$MANIFEST" title_id || true)"
+[[ "$MANIFEST_TITLE" == "$TITLE_ID" ]] || die "manifest title_id round-trip failed:
+       wrote '$MANIFEST_TITLE', expected '$TITLE_ID' (manifest: $MANIFEST)"
+aot_validate_title_id "$MANIFEST_TITLE" \
+  || die "manifest title_id is not 16 hex digits: '$MANIFEST_TITLE'"
 
 # --- generated-project hygiene ----------------------------------------------
 if [[ "$CLEAN_PROJECT" -eq 1 ]]; then
@@ -467,11 +554,10 @@ log "AOT IPA ready"
 log "  IPA:      $IPA_PATH ($IPA_SIZE, ${IPA_BYTES} bytes)"
 log "  SHA256:   $IPA_SHA"
 log "  manifest: $MANIFEST"
+log "  title:    $TITLE_ID (source: $TITLE_ID_SOURCE)"
 log "  bundle:   $BUNDLE_ID (display name: $DISPLAY_NAME)"
 log "install: sideload the unsigned IPA with Sideloadly/AltStore (user's Apple ID)."
-if [[ -n "$TITLE_ID" ]]; then
-  log "on-device checks (idevicesyslog): expect zk_linked_code()==1,"
-  log "  zk_linked_program_id()==0x${TITLE_ID}, zk_recompiled()==1 after load;"
-  log "  zk_recompiled()==0 means the loader fell back (see AOT_BUILD.md §失败诊断)."
-fi
+log "on-device checks (idevicesyslog): expect zk_linked_code()==1,"
+log "  zk_linked_program_id()==0x${TITLE_ID}, zk_recompiled()==1 after load;"
+log "  zk_recompiled()==0 means the loader fell back (see AOT_BUILD.md 失败诊断)."
 printf '%s\n' "$IPA_PATH"

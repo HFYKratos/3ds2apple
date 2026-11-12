@@ -3,9 +3,12 @@
 本目录放 3ds2apple 的构建/打包脚本：
 
 - **ROM-free 通用壳**（I1/I2）：`build-ios-app.sh`、`package-ipa.sh`；
-- **每游戏 AOT 流水线**（I3-T3，3dsrecomp）：`build-recomp-ios.sh`、
+- **每游戏 AOT 流水线**（I3，3dsrecomp）：`build-recomp-ios.sh`、
   `build-linked-ios-lib.sh`、`build-game-ipa.sh`，完整说明见
-  [AOT_BUILD.md](AOT_BUILD.md)。
+  [AOT_BUILD.md](AOT_BUILD.md)；三者共享的 title ID/nm/元数据逻辑在
+  `lib/aot-common.sh`；
+- **测试**（Linux 可跑）：`tests/aot-selfcheck.sh`（语法 + 单元自检 + 静态回归 +
+  仓库卫生）、`tests/aot-sim-harness.sh`（fake Darwin 工具链端到端模拟分机构建）。
 
 两类脚本都不会把 ROM、密钥、生成的 C、静态库或 IPA 提交进仓库：AOT 脚本只在构建机
 上读取 `ROM/` 中**用户自有**的 ROM，所有中间产物都落在 gitignored 的 `build/`、
@@ -16,14 +19,17 @@
 | `build-zakuro-ios.sh` | 构建 Zakuro iOS 静态库 → `build/ios/libzakuro_ios.a` | **macOS**（Xcode + Rust） |
 | `build-ios-app.sh` | XcodeGen 生成工程 + `xcodebuild` → unsigned `.app` | **macOS**（Xcode + XcodeGen） |
 | `package-ipa.sh` | `.app` → `Payload/` → unsigned `.ipa` + SHA256 | macOS 或 Linux（`zip` + `shasum`/`sha256sum`） |
-| `build-recomp-ios.sh` | 3dsrecomp `port` → `build/game/<name>/code/librecomp.a` | **macOS**（Xcode + Rust） |
-| `build-linked-ios-lib.sh` | linked `libzakuro_ios.a` + `libgame.a` → `build/ios/<name>/` | **macOS**（Xcode + Rust） |
-| `build-game-ipa.sh` | 链接两个静态库 → `IPA/<name>-AOT.ipa` + manifest | **macOS**（Xcode + XcodeGen） |
+| `build-recomp-ios.sh` | 3dsrecomp `port` → `build/game/<name>/code/librecomp.a`；也支持采用已有 C/archive（`--reuse`/`--archive`/`--code-dir`，不需要 ROM/Rust） | **macOS**（Xcode；完整 `port` 路径另需 Rust） |
+| `build-linked-ios-lib.sh` | linked `libzakuro_ios.a` + `libgame.a` → `build/ios/<name>/`；`--reuse`/`--libgame` 用于分机构建 | **macOS**（Xcode + Rust；`--reuse` 不需要 cargo） |
+| `build-game-ipa.sh` | 链接两个静态库 → `IPA/<name>-AOT.ipa` + manifest（可单独重出包） | **macOS**（Xcode + XcodeGen） |
+| `lib/aot-common.sh` | 共享函数：title ID 规范化/校验、build-info 解析、nm 符号匹配（SIGPIPE/前缀安全） | 任何 POSIX bash |
+| `tests/aot-selfcheck.sh` | `bash -n` + 单元自检 + 静态回归 + 仓库卫生 | Linux/macOS |
+| `tests/aot-sim-harness.sh` | fake Darwin 工具链端到端模拟（分机构建/增量/manifest） | Linux/macOS（不碰真实 `build/`） |
 
 > **macOS-only：** iOS App/静态库必须用 Apple iOS SDK 构建；`build-ios-app.sh`、
 > `build-recomp-ios.sh`、`build-linked-ios-lib.sh`、`build-game-ipa.sh` 在非 Darwin
-> 系统上会直接报错退出。Linux/Windows 只负责写脚本、文档和（可选的）IPA 打包；
-> 不要在 Linux 上尝试 iOS 链接。
+> 系统上会直接报错退出。Linux/Windows 只负责写脚本、文档、跑 `tests/` 里的检查
+> 和（可选的）IPA 打包；不要在 Linux 上尝试 iOS 链接。
 
 ## 前置条件
 
@@ -126,8 +132,28 @@ scripts/build-game-ipa.sh <name> --display-name "<Game Name>"  # -> IPA/<name>-A
 ```
 
 8 GB VM 首轮编译若被 OOM kill：给 `build-recomp-ios.sh` 加 `--auto-serial` 顺序回退
-（RECOMP.md §3.2）。完整流程、参数表、失败诊断与真机验证见
-[AOT_BUILD.md](AOT_BUILD.md)。
+（RECOMP.md §3.2）。
+
+**分机构建 / 增量复用**（C 在 Linux 生成，VM 只编译/链接/出包；不需要重跑前一步）：
+
+```bash
+# 采用别处生成的 C（--code-dir 隐含序列编译，重跑只编变化的 .c；--force 全量）
+scripts/build-recomp-ios.sh <name> --code-dir /path/to/code --title-id 0004000000055E00
+# 或采用别处编译好的 arm64 archive（不需要 ROM）
+scripts/build-recomp-ios.sh <name> --archive /path/to/librecomp.a --title-id 0004000000055E00
+# 已有 build/ios/<name>/ 两个库时，只重出包（不需要 cargo/ROM）
+scripts/build-game-ipa.sh <name> --display-name "<Game Name>"
+# 两个库已手工放好、想刷新 build-info（不需要 cargo）
+scripts/build-linked-ios-lib.sh <name> --reuse
+```
+
+> `manifest.txt` / `build-info.txt` / `recomp-info.txt` 里的 `title_id=` 一律是 16 位
+> 大写十六进制：所有来源先经 `lib/aot-common.sh` 规范化（修复历史 `...5E00n` 尾巴）
+> 并校验，manifest 写完还会 round-trip 自检。看到
+> `warning: repaired corrupted title ID` 是旧值被修好，不是错误。
+
+完整流程、参数表、失败诊断与真机验证见 [AOT_BUILD.md](AOT_BUILD.md)；分机构建与
+增量复用见其 §5，Linux 检查见 §11。
 
 ## 4. 与 `ios/app/` 的契约
 
@@ -153,20 +179,23 @@ scripts/build-game-ipa.sh <name> --display-name "<Game Name>"  # -> IPA/<name>-A
 | `zk_screen_width not found` 告警 | 静态库没链上：检查 `project.yml` 的 `OTHER_LDFLAGS` |
 | 构建失败 | 看 stderr 的日志尾部 + `ios/app/build/logs/` 下完整日志 |
 | `git status` 出现 `3ds2apple.xcodeproj` | 该目录（`ios/app/3ds2apple.xcodeproj/`）已被 `.gitignore` 覆盖；默认保留便于调试，`build-game-ipa.sh --clean-project` 可删 |
-| AOT 链路（recomp / linked / IPA）| 见 [AOT_BUILD.md](AOT_BUILD.md) §5（8 GB VM 顺序编译）与 §7（失败诊断） |
+| AOT 链路（recomp / linked / IPA）| 见 [AOT_BUILD.md](AOT_BUILD.md) §5（分机构建/增量/8 GB VM 顺序编译）、§7（失败诊断）、§11（Linux 检查） |
 
 ## 6. 检查（Linux 上可做）
 
 ```bash
-bash -n scripts/build-ios-app.sh
-bash -n scripts/package-ipa.sh
-bash -n scripts/build-recomp-ios.sh
-bash -n scripts/build-linked-ios-lib.sh
-bash -n scripts/build-game-ipa.sh
+# 推荐：一条命令覆盖语法 + 单元自检 + 静态回归 + 仓库卫生
+scripts/tests/aot-selfcheck.sh
+
+# 端到端模拟：fake Darwin 工具链跑三个真实脚本（分机构建/增量/manifest）
+scripts/tests/aot-sim-harness.sh
+
+# 或者只做语法检查
+bash -n scripts/*.sh scripts/lib/*.sh scripts/tests/*.sh
 command -v shellcheck >/dev/null && \
-  shellcheck scripts/build-ios-app.sh scripts/package-ipa.sh \
-    scripts/build-recomp-ios.sh scripts/build-linked-ios-lib.sh scripts/build-game-ipa.sh
+  shellcheck scripts/*.sh scripts/lib/*.sh scripts/tests/*.sh
 ```
 
-> 本仓库当前 Linux 环境未安装 `shellcheck`；`bash -n` 已通过。装了 shellcheck 的
-> 机器建议再跑一遍。
+> 本仓库当前 Linux 环境未安装 `shellcheck`；两个测试脚本已通过。装了 shellcheck
+> 的机器建议再跑一遍。两个测试都不需要 macOS/Xcode/ROM，也不会写真实仓库的
+> `build/`（模拟器在 `mktemp` 目录里复刻仓库）。
