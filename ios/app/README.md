@@ -22,6 +22,13 @@ timing.
   screen reads/CGImages, and audio pump, in milliseconds.
 - AOT status (`linked, active` / `linked, interpreting` / `interpreter shell`)
   and emulation speed relative to the 3DS 60 Hz timeline.
+- First-run graphics warm-up: after the ROM loads, the first frames run behind an
+  opaque "Preparing graphics" overlay until they are smooth (at least 2 s, then
+  90 consecutive frames without a >50 ms spike, capped at 5 s), so the GPU
+  pipeline compiles of a cold pipeline cache happen on a loading screen instead
+  of freezing visible play. A Skip button ends it early; a later load of the same
+  ROM (pipelines already on disk) uses a shorter run (12 quiet frames, 2 s cap),
+  and a software renderer skips it.
 
 ## Build
 
@@ -59,6 +66,7 @@ Without it the app still builds and runs, on the readback path.
 | `GameControllerInput.swift` | GameController-to-3DS button mapping |
 | `AudioOutput.swift` | Ring buffer and AVAudioEngine output |
 | `FrameTiming.swift` | Per-phase frame timing for the HUD |
+| `GraphicsWarmUp.swift` | First-run graphics warm-up state/plan, its persisted "warmed" marker and pipeline-cache filesystem stats |
 
 `ios/ZakuroBridge.h` is the C bridge; all runtime calls must run on the single
 serial queue owned by `ROMSession`.
@@ -75,7 +83,9 @@ The two screens are presented in one of two ways, chosen when a ROM loads:
 - Both screens are in the one layer: Zakuro's presenter draws the upper (3D)
   screen over the lower (2D) one in the console's 400×480 shape, so no 2D
   composition in Swift is needed. The on-screen touch surface maps a normalised
-  touch to lower-screen pixels with `zk_present_touch_map`.
+  touch to lower-screen pixels with `zk_present_touch_map`. During the first-run
+  graphics warm-up the same presenter path runs behind the opaque overlay, so
+  the warm-up frames are the real presentation workload.
 - The fallback triggers automatically when `zk_presenter_create` returns `NULL`
   (for example no MoltenVK in the app, or a device that cannot make a Vulkan
   device), when `zk_create_presented` fails (the load is retried once with
@@ -111,6 +121,12 @@ The two screens are presented in one of two ways, chosen when a ROM loads:
   A generic interpreter-only build exists but is much slower.
 - The first release does not include camera, microphone, online play or a
   full game library UI.
+- A first run with an empty pipeline cache waits up to 5 s on the
+  "Preparing graphics" screen (skippable). A pipeline first used long after the
+  warm-up still compiles on a worker thread and draws through the generic
+  fallback meanwhile; a title can hitch briefly there. Completing shader AOT is
+  out of scope: it cannot cover every runtime shader/pipeline combination, and a
+  first run has no cache to load.
 - iOS 16+ only; the app is not distributed through the App Store.
 
 ## Diagnostics
@@ -121,10 +137,19 @@ The status area includes:
 57 fps  2,247 frames  last: completed  audio: on
 AOT: linked, active   speed: 95% of 60 Hz
 loop: free-run · cap 60 fps   display: CAMetalLayer · GPU direct
+warm-up ready in 2.40 s · 146 frames · max 586 ms · 3 spiky (>50 ms)
 ```
 
 and a millisecond HUD for `total / run / present / audio` (presented) or
-`total / run / read top / read bottom / CGImage / audio` (fallback). The device
-log also carries one line per load (`zk_presenter_create`, `display:`,
-`hardware:`) and a `perf:` line every ~2 s with the same phases. These values
-make renderer, presentation and scheduler changes measurable on device.
+`total / run / read top / read bottom / CGImage / audio` (fallback). The
+`warm-up …` line appears once a load's graphics warm-up finished (it replaces
+the "Preparing graphics…" overlay); it is absent when the overlay is skipped
+for a software renderer. The device log carries one line per load
+(`zk_presenter_create`, `display:`, `hardware:`), the pipeline-cache state at
+launch/load/after `zk_destroy`, one `graphics warm-up:` line with the same
+timing, and a `perf:` line every ~2 s with the HUD phases. The exported
+diagnostics header adds `hardware=`, the `warmup_*` fields (`outcome`,
+duration, frames, max frame, spike count, plan limit, whether the pipelines
+were already cached) and the `pipeline_cache*` fields (directory, file count,
+size, newest file). These values make renderer, presentation, scheduler and
+first-run warm-up changes measurable on device.

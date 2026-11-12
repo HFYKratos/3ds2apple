@@ -110,6 +110,10 @@ final class ROMSession: ObservableObject {
         case importing(name: String)
         /// zk_create() is running on the runtime queue.
         case starting(name: String)
+        /// zk_create() succeeded and the first frames are running behind the
+        /// "Preparing graphics" overlay while the GPU pipelines compile/cache.
+        /// The game is not revealed (and input is not forwarded) yet.
+        case preparing(name: String)
         /// zk_create() succeeded and a handle is alive.
         case loaded(name: String)
         /// Import or load failed; `message` is user-readable.
@@ -144,6 +148,17 @@ final class ROMSession: ObservableObject {
     /// A1: how the loaded runtime reaches the display (status line + which
     /// screen surface the UI shows).
     @Published private(set) var displayPath: Presentation = .readback
+    /// First-run graphics warm-up: frames run behind the loading overlay while
+    /// the GPU compiles its first pipelines (GraphicsWarmUp.swift).
+    @Published private(set) var warmUp = GraphicsWarmUpStatus()
+    /// Latest `zk_hardware_status()` text: whether the 3D draws on the host GPU
+    /// via Vulkan (MoltenVK) and how the screens are presented; shown in
+    /// diagnostics next to the warm-up/cache state.
+    @Published private(set) var hardwareStatus: String = "—"
+    /// Pipeline-cache files seen at the last check (load, warm-up end,
+    /// unload/background). Used to tell a cold first run from a warmed one and
+    /// exported in diagnostics.
+    @Published private(set) var pipelineCacheStats = PipelineCacheStats.empty
     /// A1: drawable size of `metalScreenView` in pixels. Main queue only.
     private(set) var presentedDrawableSize = CGSize.zero
     /// A1: presenter handle (`zk_presenter_*`). Created and destroyed on the
@@ -205,6 +220,9 @@ final class ROMSession: ObservableObject {
     private var timingWindow = FrameTimingWindow()
     /// Reusable RGBA8 buffers for zk_read_screen + CGImage presentation.
     private let screenBufferPool = ScreenFrameBufferPool()
+    /// The warm-up running behind the loading overlay, nil when the game is
+    /// already revealed. runtimeQueue only; `warmUp` is its main-queue copy.
+    private var warmUpRun: GraphicsWarmUpRun?
 
     init() {
         if let relativePath = UserDefaults.standard.string(forKey: Self.lastROMPathKey) {
@@ -258,6 +276,7 @@ final class ROMSession: ObservableObject {
         stopFrameLoop()
         stopAudio()
         inputState.clearAll()
+        warmUp = GraphicsWarmUpStatus()
         setPhase(.importing(name: name))
         runtimeQueue.async { [weak self] in
             guard let self else { return }
@@ -285,6 +304,7 @@ final class ROMSession: ObservableObject {
         stopFrameLoop()
         stopAudio()
         inputState.clearAll()
+        warmUp = GraphicsWarmUpStatus()
         setPhase(.starting(name: rom.name))
         runtimeQueue.async { [weak self] in
             guard let self else { return }
@@ -304,6 +324,7 @@ final class ROMSession: ObservableObject {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.clearScreens()
+                self.warmUp = GraphicsWarmUpStatus()
                 self.setPhase(.idle)
             }
         }
@@ -324,10 +345,21 @@ final class ROMSession: ObservableObject {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.clearScreens()
+                self.warmUp = GraphicsWarmUpStatus()
                 self.setPhase(.finished(
                     message: "The runtime was stopped when the app went to the background. Load the ROM again to continue."
                 ))
             }
+        }
+    }
+
+    /// Ends the running graphics warm-up at the next frame. The overlay's Skip
+    /// button calls this; the game is revealed on the following frame.
+    func skipGraphicsWarmUp() {
+        guard case .preparing = phase else { return }
+        AppLog.log("[3ds2apple] graphics warm-up: skip requested by the user")
+        runtimeQueue.async { [weak self] in
+            self?.warmUpRun?.skipRequested = true
         }
     }
 
@@ -505,6 +537,8 @@ final class ROMSession: ObservableObject {
 
     /// Releases the current handle. Must run on `runtimeQueue`.
     private func destroySystem() {
+        // A warm-up cannot outlive the runtime it runs frames on.
+        warmUpRun = nil
         if let presenter = framePresenter {
             // The presenter's device and the screens it showed belong to this
             // runtime: stop presenting before the system goes away.
@@ -517,6 +551,15 @@ final class ROMSession: ObservableObject {
         self.system = nil
         presentFailures = 0
         AppLog.log("[3ds2apple] zk_destroy: runtime released")
+        // zk_destroy drops the runtime, and Zakuro writes the pipelines it
+        // compiled to Caches/zakuro/pipelines/<title>.bin on the way out: log
+        // the directory so a device log (or the exported diagnostics) proves a
+        // session's cache survived an Unload / move to the background.
+        let cache = PipelineCacheStats.read()
+        AppLog.log("[3ds2apple] pipeline cache after zk_destroy: %@", cache.summary)
+        DispatchQueue.main.async { [weak self] in
+            self?.pipelineCacheStats = cache
+        }
     }
 
     /// zk_create() for `rom`: destroy old handle, create new one, publish state
@@ -541,8 +584,14 @@ final class ROMSession: ObservableObject {
             return
         }
 
-        // Replacing a ROM always releases the previous handle first.
+        // Replacing a ROM always releases the previous handle first, and that
+        // release is when Zakuro writes the pipelines it compiled to its cache
+        // (Caches/zakuro/pipelines, one file per title). Read the directory
+        // after it so the log/plan says whether this is a cold first run or a
+        // warmed one.
         destroySystem()
+        let cacheAtLoad = PipelineCacheStats.read()
+        AppLog.log("[3ds2apple] pipeline cache at load: %@", cacheAtLoad.summary)
 
         AppLog.log("[3ds2apple] zk_create: loading %@ (CAMetalLayer: %@)",
               romURL.path, presenter == nil ? "no" : "yes")
@@ -600,11 +649,24 @@ final class ROMSession: ObservableObject {
         let recompiled = zk_recompiled(handle) == 1
         let programID = zk_linked_program_id()
         let aot: AOTStatus = linked ? (recompiled ? .linkedActive : .linkedInterpreting) : .shell
+        let hardwareStatus = Self.hardwareStatusText(handle)
         AppLog.log("[3ds2apple] AOT linked=%d recompiled=%d program=0x%016llx status=%@",
               linked ? 1 : 0, recompiled ? 1 : 0, programID, aot.label)
         AppLog.log("[3ds2apple] display: %@", displayPath.label)
-        AppLog.log("[3ds2apple] hardware: %@", Self.hardwareStatusText(handle))
+        AppLog.log("[3ds2apple] hardware: %@", hardwareStatus)
         AppLog.log("[3ds2apple] zk_create OK after %.1f s: %@", elapsed, rom.relativePath)
+
+        // A cold first run spends hundreds of milliseconds per new GPU pipeline
+        // inside a frame while the driver compiles it. Run those frames behind
+        // the loading overlay instead of showing the hitch; a software
+        // renderer has no Vulkan pipelines to warm, so it is revealed at once.
+        let plan = Self.graphicsWarmUpPlan(hardwareStatus: hardwareStatus, cache: cacheAtLoad, rom: rom)
+        if let plan {
+            AppLog.log("[3ds2apple] graphics warm-up: planned %@ (%@, max %.0f s, %ld quiet frames)",
+                  plan.fromWarmCache ? "short (pipelines cached)" : "full (cold cache)",
+                  cacheAtLoad.summary, plan.maximumSeconds, plan.requiredQuietFrames)
+        }
+
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.lastROM = rom
@@ -613,10 +675,44 @@ final class ROMSession: ObservableObject {
             self.clearScreens()
             self.aotStatus = aot
             self.displayPath = displayPath
-            self.setPhase(.loaded(name: rom.name))
-            self.startFrameLoop()
-            self.startAudio()
+            self.hardwareStatus = hardwareStatus
+            self.pipelineCacheStats = cacheAtLoad
+            if let plan {
+                self.beginGraphicsWarmUp(plan: plan, rom: rom)
+            } else {
+                self.warmUp = GraphicsWarmUpStatus.skippedForSoftware()
+                AppLog.log("[3ds2apple] graphics warm-up: %@", self.warmUp.logLine)
+                self.setPhase(.loaded(name: rom.name))
+                self.startFrameLoop(warmUp: nil, romKey: rom.relativePath)
+                self.startAudio()
+            }
         }
+    }
+
+    /// Whether (and how long) to warm the GPU pipelines for this load.
+    ///
+    /// Only a renderer drawing on the host GPU compiles Vulkan pipelines; a
+    /// software renderer is revealed immediately. A ROM whose warm-up completed
+    /// in this app install, with cache files still on disk, gets the shorter
+    /// `warm` plan: its pipelines only need to be loaded from the cache.
+    private static func graphicsWarmUpPlan(hardwareStatus: String,
+                                           cache: PipelineCacheStats,
+                                           rom: ImportedROM) -> GraphicsWarmUpPlan? {
+        guard hardwareStatus.contains("draws on the host GPU") else { return nil }
+        let alreadyWarmed = GraphicsWarmUpMarker.wasCompleted(romKey: rom.relativePath)
+        return alreadyWarmed && cache.isWarm ? .warm : .cold
+    }
+
+    /// Starts the warm-up behind the "Preparing graphics" overlay: publishes the
+    /// phase, sets the runtime queue's tracker and starts the frame loop.
+    /// Main queue only.
+    private func beginGraphicsWarmUp(plan: GraphicsWarmUpPlan, rom: ImportedROM) {
+        warmUp = GraphicsWarmUpStatus.starting(plan: plan)
+        setPhase(.preparing(name: rom.name))
+        AppLog.log("[3ds2apple] graphics warm-up: starting (%@)",
+              plan.fromWarmCache ? "cached pipelines, short run" : "cold cache, full run")
+        startFrameLoop(warmUp: plan, romKey: rom.relativePath)
+        startAudio()
     }
 
     /// Copies `zk_hardware_status()` into a Swift String. The pointer is
@@ -678,8 +774,12 @@ final class ROMSession: ObservableObject {
     private static let freeRunDispatchOverheadSeconds: TimeInterval = 0.001
 
     /// Starts the configured frame-loop driver after a successful load.
-    /// Main queue only.
-    private func startFrameLoop() {
+    ///
+    /// `warmUp` starts the first-frame warm-up behind the loading overlay; the
+    /// tracker is runtimeQueue-owned but no frame loop is running yet (this is
+    /// called after `stopFrameLoopOnMain()`), so setting it here cannot race a
+    /// frame. Main queue only.
+    private func startFrameLoop(warmUp plan: GraphicsWarmUpPlan?, romKey: String) {
         stopFrameLoopOnMain()
         framesRendered = 0
         framesSinceStats = 0
@@ -690,6 +790,15 @@ final class ROMSession: ObservableObject {
         // frame loop is running yet, so no frame can race this.
         timingWindow.reset()
         frameStats = FrameStats()
+        if let plan {
+            warmUpRun = GraphicsWarmUpRun(
+                plan: plan,
+                romKey: romKey,
+                startedTicks: FrameClock.now()
+            )
+        } else {
+            warmUpRun = nil
+        }
 
         switch Self.frameLoopDriver {
         case .freeRun:
@@ -819,8 +928,12 @@ final class ROMSession: ObservableObject {
         let frameStart = FrameClock.now()
 
         // The only place that pushes input: same serial queue, immediately
-        // before the frame that consumes it.
-        let input = inputState.snapshot()
+        // before the frame that consumes it. During the graphics warm-up the
+        // game is hidden behind the overlay and receives neutral input, so a
+        // button touched on the transparent overlay cannot move the title
+        // before the player sees it; the merged input state itself is left
+        // alone and is forwarded again from the first revealed frame.
+        let input = warmUpRun == nil ? inputState.snapshot() : InputSnapshot()
         zk_set_input(system, input.buttons, input.circleX, input.circleY,
                      input.touch ? 1 : 0, input.touchX, input.touchY)
 
@@ -861,6 +974,7 @@ final class ROMSession: ObservableObject {
 
             timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
             publishFrame(top: top, bottom: bottom, result: result)
+            advanceGraphicsWarmUp(frameMilliseconds: FrameClock.milliseconds(FrameClock.now() - frameStart))
             return true
         case 1:
             timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
@@ -877,6 +991,62 @@ final class ROMSession: ObservableObject {
             // ZK_FRAME_BAD_HANDLE (-2).
             finishRuntime(message: "Invalid runtime handle (zk_run_frame = \(result)).", isError: true)
             return false
+        }
+    }
+
+    // MARK: - Graphics warm-up (runtimeQueue advances, main queue reveals)
+
+    /// Records one completed warm-up frame and reveals the game once the run is
+    /// over. Called from `renderFrame()` for every frame; a no-op when no
+    /// warm-up is running. runtimeQueue only.
+    ///
+    /// The frame's wall time is what a hitch would be: the first-run pipeline
+    /// compiles happen inside `zk_run_frame`, so a >50 ms frame is exactly the
+    /// freeze the warm-up is hiding.
+    private func advanceGraphicsWarmUp(frameMilliseconds: Double) {
+        guard var run = warmUpRun else { return }
+        let now = FrameClock.now()
+        if let outcome = run.record(frameMilliseconds: frameMilliseconds, nowTicks: now) {
+            warmUpRun = nil
+            finishGraphicsWarmUp(run: run, outcome: outcome)
+            return
+        }
+        warmUpRun = run
+        // Progress under the overlay: a few updates a second are plenty and
+        // keep the main queue free for the screens/present path.
+        if run.frames % 3 == 0 {
+            let status = run.status(outcome: .running)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, case .preparing = self.phase else { return }
+                self.warmUp = status
+            }
+        }
+    }
+
+    /// Records the outcome, logs it with the pipeline-cache state and, for
+    /// `ready`/`maximumTime`/`skippedByUser`, reveals the game. runtimeQueue
+    /// only.
+    private func finishGraphicsWarmUp(run: GraphicsWarmUpRun, outcome: GraphicsWarmUpOutcome) {
+        let status = run.status(outcome: outcome)
+        let cache = PipelineCacheStats.read()
+        AppLog.log("[3ds2apple] graphics warm-up: %@", status.logLine)
+        AppLog.log("[3ds2apple] pipeline cache after warm-up: %@", cache.summary)
+        if outcome == .maximumTime {
+            AppLog.log("[3ds2apple] graphics warm-up: frames were still spiking at the %.0f s cap; revealing the game anyway",
+                  run.plan.maximumSeconds)
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.warmUp = status
+            self.pipelineCacheStats = cache
+            // Only a quiet run proves the pipelines are warm; a skipped or
+            // capped run leaves the next load with the full warm-up.
+            if outcome == .ready {
+                GraphicsWarmUpMarker.markCompleted(romKey: run.romKey)
+            }
+            if case .preparing = self.phase {
+                self.setPhase(.loaded(name: self.lastROM?.name ?? ""))
+            }
         }
     }
 
@@ -1040,6 +1210,10 @@ final class ROMSession: ObservableObject {
     /// publishes a terminal state. runtimeQueue only.
     private func finishRuntime(message: String, isError: Bool) {
         AppLog.log("[3ds2apple] frame loop ending: %@", message)
+        // A warm-up cannot finish once the runtime is gone: record why instead
+        // of leaving the overlay thinking it is still preparing.
+        let stoppedWarmUp = warmUpRun.map { $0.status(outcome: .runtimeStopped) }
+        warmUpRun = nil
         // No further frame may be scheduled, whichever driver is running. This
         // is safe to call from the runtime queue (the state is lock-guarded).
         freeRunState.stop()
@@ -1052,6 +1226,10 @@ final class ROMSession: ObservableObject {
             self.stopFrameLoopOnMain()
             self.stopAudio()
             self.inputState.clearAll()
+            if let stoppedWarmUp, case .preparing = self.phase {
+                self.warmUp = stoppedWarmUp
+                AppLog.log("[3ds2apple] graphics warm-up: %@", stoppedWarmUp.logLine)
+            }
             var stats = self.frameStats
             stats.fps = 0
             stats.lastResult = isError ? -1 : 1
@@ -1093,12 +1271,21 @@ final class ROMSession: ObservableObject {
     /// Mute switch, persisted by the view via @AppStorage.
     func setAudioMuted(_ muted: Bool) {
         audioOutput.setMuted(muted)
-        guard case .loaded = phase else { return }
+        // Audio runs during the warm-up too (boot sounds belong to loading),
+        // so the switch stays live in the preparing phase as well.
+        guard isRuntimeAudible else { return }
         if muted {
             audioState = .muted
         } else {
             startAudio()
         }
+    }
+
+    /// Whether the runtime is in a phase that owns the audio engine.
+    private var isRuntimeAudible: Bool {
+        if case .loaded = phase { return true }
+        if case .preparing = phase { return true }
+        return false
     }
 
     /// Drains whatever audio the runtime produced this frame into the ring
