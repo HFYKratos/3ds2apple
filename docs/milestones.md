@@ -112,3 +112,18 @@ min iOS 16.0，bundle `com.kratos.3ds2apple`）；`libzakuro_ios.a` 已链接，
 - `zk_take_audio`（32730 Hz 假设）→ ring buffer → AVAudioEngine/SourceNode；
   mute/Unload/后台停止；纯解释器 ~26 fps 下音频不连续属预期。
 - 待真机：开场有声、Mute/Unmute、Unload/后台不崩、Load last 恢复。
+
+## I3-T2 AOT 构建（2026-11-12）
+
+- 3dsrecomp 固定 rev `df82e6e`（ABI5/GEN5）生成 Pokémon Y：
+  **489 个 C 文件，约 635 MiB**；ROM title ID `0004000000055E00`
+  （product code CTR-P-EK2A）。
+- iOS clang（arm64-apple-ios16.0，-O2）编译 → `librecomp.a` 283 MB；
+  链接顺序 `-lzakuro_ios -lgame`。
+- linked `libzakuro_ios.a`（`ZAKURO_LINKED_PROGRAM_ID=0004000000055E00`，
+  `--features linked`）含 7 个未定义 `_recomp_*`，由 `libgame.a` 解析。
+- 产物：`IPA/pokemon-y-AOT.ipa`，85 MB，bundle
+  `com.kratos.3ds2apple.pokemon-y`，SHA256
+  `bb15392cbb2a01671edd4c54453ce39521e5af6a09989504cc59411b4e7360ad`
+  （含 I3-T1 输入 + I3-T4 音频）。
+- 待真机：fps 对比 26 fps 基线、`zk_recompiled()==1`、20 分钟 soak。
