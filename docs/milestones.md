@@ -43,3 +43,27 @@ min iOS 16.0，bundle `com.kratos.3ds2apple`）；`libzakuro_ios.a` 已链接，
   `scripts/package-ipa.sh`。
 - 预期 UI：标题 `3ds2apple`，Upper 400×240，Lower 320×240，`No ROM loaded` 占位。
 - 待办：真机安装确认 UI（Sideloadly）；之后进入 I2 ROM 导入 + 第一款游戏 boot。
+
+## I2：ROM 导入 + 帧循环（2026-11-12 构建通过，待真机）
+
+**I2-T1（ROM 导入 + zk_create）**
+- `3ds2apple-I2T1.ipa`：1.4 MB，`com.kratos.3ds2apple`，SHA256
+  `4775562f35b5beb420bedd9abecd7c23eb52d3cbca734ed9a82c66bd2fbb1d1b`
+- 已注入 `UIFileSharingEnabled` / `LSSupportsOpeningDocumentsInPlace`，
+  可用 iTunes/Finder 文件共享传 ROM。
+
+**I2-T2（帧循环 + 上下屏）**
+- `3ds2apple-I2T2.ipa`：2.2 MB，SHA256
+  `e766f1ad9c238a3e1b7efa97942d0bcb2ec639deedaacf9f10f9add534e5c16b`
+- CADisplayLink → runtime 串行队列 → `zk_run_frame` → `zk_read_screen(0/1)` →
+  CGImage；上下屏 400×240 / 320×240；fps/帧数/最后结果状态行。
+
+**待真机验收（Pokémon Y）**
+- [ ] 导入 ROM → `Loaded`
+- [ ] 第一帧出现在上下屏
+- [ ] 颜色/比例正确（R/B 不交换、非拉伸）
+- [ ] Unload / 后台切换 / 重启后 Load last 正常
+- [ ] 记录纯解释器下的 emulated fps（I3 再上 3dsrecomp）
+
+> 当前是纯解释器模式（尚未接 3dsrecomp），首帧可能很慢；这是 I2 的预期，
+> 不代表最终性能。
