@@ -8,7 +8,18 @@
 
 > **第一个实验版本：** [v0.1.0-alpha](https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.0-alpha)（源码 + 无游戏数据的 shell IPA）。
 >
-> **状态：早期开发。** 当前验证到 Pokémon Y（美版）可以启动、显示上下屏、AOT 代码生效；图形仍由软件 PICA200 渲染，Metal 后端在开发中。兼容性、帧率和功能会随版本变化。
+> **状态：早期开发。** Pokémon Y（美版）已验证 AOT 代码生效、Metal 直接呈现、约 60fps；pipeline cache 可持久化，第二次启动不再重复编译。首次启动仍可能遇到 pipeline 编译尖峰，正在优化。兼容性和功能会随版本变化。
+
+## 试用 v0.1.0-alpha（shell）
+
+GitHub Release 里的 `3ds2apple-shell-v0.1.0-alpha.ipa` 是**无游戏数据的通用壳**：
+
+- 安装后可以从 Files 导入你自己的 `.3ds` / `.cci`，由 Zakuro 解释器直接运行；
+- 它**不包含**任何 per-game AOT 代码，因此只能用于验证安装、UI、兼容性和基本运行；
+- 帧率会明显低于 per-game AOT 构建，部分游戏可能非常慢；
+- IPA 未签名，用 Sideloadly / AltStore 和你的 Apple ID 安装。
+
+想获得 Pokémon Y 实测的接近 60fps，需要在你自己的 Mac 上按 [docs/build.md](docs/build.md) 用你的 ROM 构建 per-game AOT IPA。该 IPA 含游戏衍生代码，**不会**随 Release 分发。
 
 ## 原生移植，不是 CPU 模拟器
 
@@ -47,7 +58,10 @@ iOS 侧通过一个很小的 C ABI（`ios/zakuro-ios/`）调用 Zakuro：加载 
 - 触摸按键、GameController、下屏触摸和音频输出可用；
 - Pokémon Y（美版）的 3dsrecomp AOT 代码已静态链接，运行时确认 AOT 生效；
 - 性能 HUD 与 free-run 帧循环已接入，可在设备上查看各阶段帧时间；
-- 图形仍由软件 PICA200 渲染，Metal / MoltenVK 后端仍在开发；
+- GPU 通过 MoltenVK / Vulkan 直接呈现到 CAMetalLayer（A1），并保留软件回退；
+- Pokémon Y AOT 在 A16 上接近 60fps；pipeline cache 已持久化；
+- 应用内可导出诊断日志（设备/构建/AOT/帧时间）；
+- 首次启动仍可能有 pipeline 编译尖峰，正在优化；
 - 兼容性、稳定性和更多游戏的支持仍在验证中。
 
 > 游戏画面和测试数据只用于本地验证，不进入仓库；本仓库不包含任何 ROM、密钥、系统文件或游戏资源。
@@ -60,7 +74,7 @@ iOS 侧通过一个很小的 C ABI（`ios/zakuro-ios/`）调用 Zakuro：加载 
 | 构建 | macOS + Xcode（iOS SDK）；Rust 用于 Zakuro 静态库 |
 | 安装 | 未签名 IPA，用 Sideloadly / AltStore 以你自己的 Apple ID 签名 |
 | CPU | AOT 重编译，无 JIT；少量解释器兜底 |
-| GPU | 当前软件 PICA200 渲染；Metal 后端开发中 |
+| GPU | Metal via MoltenVK / CAMetalLayer（A1），带软件回退 |
 | 不在首版范围 | App Store、相机、麦克风、联机、全游戏库兼容 |
 
 ## 开始构建
@@ -113,7 +127,7 @@ NOTICE                   版权、商标与无 ROM 声明
 - **[Pocket Native](https://github.com/whovian64/pocket-native)**（MIT）：Zakuro + 3dsrecomp 的 AOT 分支，为本项目的 AOT 链接、渲染器和游戏配置提供了重要参考。
 - **Azahar / Citra**（GPLv3，仅行为参考）：3DS HLE、GPU、PICA200 语义的兼容性参考；没有将 GPL 代码链接进本项目。
 - **nxnative / S2Arm**（MIT / Apache-2.0）：同 ISA 游戏原生移植到 iOS 的工程与平台层参考。
-- **MoltenVK**（Apache-2.0）：计划中的 Vulkan → Metal 兼容层。
+- **MoltenVK**（Apache-2.0）：Vulkan → Metal 兼容层，A1 直接呈现已使用。
 
 完整许可证说明见 [THIRD_PARTY.md](THIRD_PARTY.md) 与 [NOTICE](NOTICE)。
 

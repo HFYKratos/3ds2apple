@@ -105,13 +105,17 @@ with Sideloadly or AltStore and the user's own Apple ID.
 ## Performance model
 
 - The CPU side is native AOT code, with an interpreter fallback.
-- The current GPU path is Zakuro's software PICA200 renderer; it dominates
-  frame time in the tested title.
-- The project is evaluating Vulkan → Metal through MoltenVK (reusing Zakuro's
-  Vulkan backend) and, longer term, a direct PICA200 → Metal renderer using
-  Metal render pipelines and compute for TEV/shader work.
-- The UI already exposes frame-time phases, so renderer changes can be measured
-  on device rather than guessed.
+- On iOS the GPU path is Zakuro's Vulkan renderer running on MoltenVK, which
+  translates to Metal. The A1 presenter draws the two screens directly into a
+  `CAMetalLayer`; the software PICA200 renderer remains as a fallback.
+- The tested Pokémon Y build keeps steady-state run time around 6 ms and
+  reaches ~60 fps on an A16 device once the pipeline cache is warm. First-run
+  pipeline compilation is still visible as short hitches; the cache is saved
+  under the app's Caches directory and reused on later launches.
+- The UI exposes frame-time phases, so renderer/presenter changes can be
+  measured on device rather than guessed.
+- Longer term, a direct PICA200 → Metal renderer (Metal render pipelines plus
+  compute for TEV/shader work) can remove the Vulkan/MoltenVK layer.
 
 ## Non-goals for the first release
 
