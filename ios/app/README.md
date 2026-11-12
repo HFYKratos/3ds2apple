@@ -9,11 +9,15 @@ Minimal SwiftUI app that links the Zakuro iOS static library
 - **I2-T1** (merged): import a decrypted `.3ds` / `.cci` from Files, copy it
   into `Documents/roms/`, and load it with `zk_create()` on a background serial
   queue. Failures show the readable `zk_last_error()` text.
-- **I2-T2** (this branch): a `CADisplayLink`-driven frame loop runs
+- **I2-T2** (merged): a `CADisplayLink`-driven frame loop runs
   `zk_run_frame()` on the same serial queue and displays the upper 400×240 and
   lower 320×240 screens (`zk_read_screen` RGBA8 → `CGImage`) above each other,
-  with an fps / frames / last-result status line. Audio and input are still out
-  of scope (I3).
+  with an fps / frames / last-result status line.
+- **I3-T1** (this branch): input. A semi-transparent on-screen pad (D-pad,
+  A/B/X/Y, Start/Select, L/R), the lower screen as the 3DS touchscreen, and
+  MFi/Xbox/DualSense controllers all feed one `InputState`; `zk_set_input` runs
+  on the runtime queue immediately before every `zk_run_frame`. Audio
+  (`zk_take_audio`) is still out of scope — that is I3-T2.
 
 ## Layout
 
@@ -25,6 +29,9 @@ Minimal SwiftUI app that links the Zakuro iOS static library
 | `Sources/ROMSession.swift` | ROM copy, `zk_create` / `zk_destroy`, `zk_last_error` text, relative-path persistence, display-link frame loop |
 | `Sources/ROMDocumentPicker.swift` | `UIDocumentPickerViewController` wrapper (`public.data`, opens files in place) |
 | `Sources/ScreenImage.swift` | `zk_read_screen` RGBA8 buffer → `CGImage` |
+| `Sources/InputState.swift` | thread-safe input merge + `ZK_BUTTON_*` bit mapping |
+| `Sources/GameControllerInput.swift` | MFi/Xbox/DualSense → `InputState` |
+| `Sources/TouchControlsView.swift` | semi-transparent on-screen pad (D-pad, ABXY, Start/Select, L/R) |
 | `../ZakuroBridge.h` | hand-written C ABI (`zk_*`), imported via the bridging header |
 | `../../scripts/build-zakuro-ios.sh` | builds the static lib on macOS (I0) |
 
@@ -193,6 +200,7 @@ Only one handle exists at a time. Every `zk_*` call on it happens on the
 | loading | spinner + "Starting Zakuro…" | `zk_create: loading …` |
 | loaded, before first frame | black screens + "Waiting for first frame…" | `zk_create OK after …`, `frame loop started` |
 | running | both screens + `N fps · N frames · last: completed` | frame-loop logs (see below) |
+| input | overlay pad / touch / controller usable, "Controller: …" when a pad is connected | `controller support started` |
 | exit / fault | "Runtime stopped" or red "Could not load ROM"; last frame kept | `frame loop ending: …`, `frame loop stopped` |
 | app backgrounded | "Runtime stopped … Load the ROM again" | `zk_destroy: runtime released` |
 
@@ -201,7 +209,7 @@ Unload, on replace, on background, and (best effort) in `ROMSession.deinit`.
 
 ### Not in this task
 
-- Audio (`zk_take_audio`) and input (`zk_set_input`) are I3.
+- Audio (`zk_take_audio`) is I3-T2.
 - Hardware rendering (MoltenVK) is later; I2 uses the software screens.
 
 ## Frame loop (I2-T2)
@@ -239,6 +247,81 @@ Lifecycle: the loop stops **and** the handle is destroyed on **Unload**, on
 .background`), on exit/fault, and in `ROMSession.deinit`. `zk_destroy` guards a
 nil handle, so there is never a double destroy. The last frame stays visible
 after a stop until the next load or unload clears the screens.
+
+## Input (I3-T1)
+
+All input sources are merged into one lock-protected `InputState` and pushed by
+exactly one place: `ROMSession.renderFrame()` calls
+
+```c
+zk_set_input(system, buttons, circleX, circleY, touch, touchX, touchY);
+```
+
+on the runtime serial queue **immediately before** each `zk_run_frame()` — the
+same one-queue/one-handle rule as the rest of the runtime. The UI and the
+controller handlers only write into `InputState`; nothing else touches the
+handle.
+
+### Button mapping
+
+`buttons` is the 3DS HID bitmask (`ZK_BUTTON_*` in `ios/ZakuroBridge.h`):
+
+| 3DS button | Bit | On-screen control | Controller |
+|---|---|---|---|
+| A | `1 << 0` | A | A / Cross |
+| B | `1 << 1` | B | B / Circle |
+| Select | `1 << 2` | Select | Options / Share |
+| Start | `1 << 3` | Start | Menu / Options |
+| Right | `1 << 4` | ▶ | D-pad right |
+| Left | `1 << 5` | ◀ | D-pad left |
+| Up | `1 << 6` | ▲ | D-pad up |
+| Down | `1 << 7` | ▼ | D-pad down |
+| R | `1 << 8` | R | R1 / RB |
+| L | `1 << 9` | L | L1 / LB |
+| X | `1 << 10` | X | X / Square |
+| Y | `1 << 11` | Y | Y / Triangle |
+| ZL | `1 << 14` | — | L2 / LT |
+| ZR | `1 << 15` | — | R2 / RT |
+
+The overlay D-pad is the digital 3DS D-pad. The Circle Pad (analog,
+`circleX` / `circleY`, −1…1) comes from the controller's left thumbstick; the
+overlay has no analog stick yet (see limits).
+
+### On-screen controls
+
+- Semi-transparent pad below the screens: L / Select / Start / R row, D-pad on
+  the left, A/B/X/Y on the right.
+- **Hide controls / Show controls** in the ROM card; the choice persists
+  (`@AppStorage("I3.showTouchControls")`). Hiding the pad releases every
+  on-screen button so nothing stays stuck.
+- The lower screen is the 3DS touchscreen while a runtime is loaded: drag/tap
+  maps into 320×240 bottom-screen pixels and is released on lift-off.
+
+### Controllers
+
+- GameController framework; any `GCExtendedGamepad` (MFi, Xbox, DualSense).
+  Hot-plug is supported via `GCControllerDidConnect` / `…DidDisconnect`.
+- D-pad, A/B/X/Y, L1/R1, L2/R2 (→ ZL/ZR), Menu (→ Start), Options (→ Select);
+  left thumbstick → Circle Pad.
+- The connected controller's name appears under the screens.
+- Controller and on-screen pad can be used at the same time (masks are ORed).
+
+### Lifecycle / reset
+
+Input is cleared on Unload, Change ROM, app background, runtime exit/fault and
+in `deinit`, so a held button or touch never leaks into the next runtime.
+`deinit` also stops the controller observers.
+
+### Known limits
+
+- No analog Circle Pad on the on-screen pad (use a controller); no C-stick
+  (right thumbstick is ignored).
+- Touchscreen is basic: single contact, no multi-touch, and the drag competes
+  with the `ScrollView` when it starts on the lower screen.
+- No tilt/gyro, microphone, rumble or haptics yet.
+- Input is sampled once per frame (before `zk_run_frame`); a tap shorter than
+  one frame can be missed.
+- Pokémon Y language-screen check: D-pad ▼/▲ + A.
 
 ## Package an unsigned IPA
 
@@ -293,6 +376,10 @@ If the repo is moved, nothing needs changing — all three are repo-relative.
 | App returns from background showing "Runtime stopped" | Intentional: iOS may jettison backgrounded processes, so the runtime is released when the scene backgrounds. Tap **Load “<name>”** to restart. |
 | Red card after `frame loop ending: …` | `zk_run_frame` returned `-1`/`-2`; the last good frame stays on screen. Import or Load again to restart. |
 | Screens look stretched or letterboxed | The view keeps the aspect ratios reported by `zk_screen_width/height` (400×240, 320×240) with `scaledToFit`; bars only appear if the source frame size changes. |
+| On-screen buttons do nothing | Confirm a runtime is loaded ("Loaded: <name>") and frames are running (fps line); input is pushed once per frame inside `renderFrame`. With no runtime there is nothing to drive. |
+| Controller connected but ignored | Look for the "Controller: …" line. If it is absent the pad is not a `GCExtendedGamepad`, or the app was backgrounded. Reattach and check `idevicesyslog` for `controller support started`. |
+| A button stays pressed | Should not happen — Unload, Change ROM, app background and hiding the pad all clear input. If it does, report the exact sequence. |
+| Touchscreen taps do nothing | Touch is only sent while a runtime is loaded, and only on the **lower** screen area; coordinates map to 320×240 pixels. |
 
 ## Rebuild after changes
 
