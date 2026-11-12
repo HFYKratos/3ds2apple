@@ -45,6 +45,17 @@ struct FrameStats {
     var lastResult: Int32 = 0
 }
 
+/// Whether this build carries linked 3dsrecomp code and whether the loaded
+/// title is actually executing it (rather than falling back to the interpreter).
+enum AOTStatus: String {
+    case unknown = "?"
+    case shell = "interpreter shell"
+    case linkedInterpreting = "linked, interpreting"
+    case linkedActive = "linked, active"
+
+    var label: String { rawValue }
+}
+
 /// Owns the Zakuro runtime handle, the ROM import pipeline and the frame loop.
 final class ROMSession: ObservableObject {
     enum Phase {
@@ -75,6 +86,8 @@ final class ROMSession: ObservableObject {
     @Published private(set) var controllerName: String? = nil
     /// Audio path state for the status line.
     @Published private(set) var audioState: AudioState = .off
+    /// AOT/linked-code state for the status line.
+    @Published private(set) var aotStatus: AOTStatus = .unknown
 
     /// Serial queue that owns every zk_* call.
     private let runtimeQueue = DispatchQueue(
@@ -303,6 +316,12 @@ final class ROMSession: ObservableObject {
         }
 
         system = handle
+        let linked = zk_linked_code() == 1
+        let recompiled = zk_recompiled(handle) == 1
+        let programID = zk_linked_program_id()
+        let aot: AOTStatus = linked ? (recompiled ? .linkedActive : .linkedInterpreting) : .shell
+        NSLog("[3ds2apple] AOT linked=%d recompiled=%d program=0x%016llx status=%@",
+              linked ? 1 : 0, recompiled ? 1 : 0, programID, aot.label)
         NSLog("[3ds2apple] zk_create OK after %.1f s: %@", elapsed, rom.relativePath)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -310,6 +329,7 @@ final class ROMSession: ObservableObject {
             UserDefaults.standard.set(rom.relativePath, forKey: Self.lastROMPathKey)
             self.inputState.clearAll()
             self.clearScreens()
+            self.aotStatus = aot
             self.setPhase(.loaded(name: rom.name))
             self.startFrameLoop()
             self.startAudio()

@@ -271,6 +271,8 @@ struct ContentView: View {
             Text("last: \(frameResultLabel(model.frameStats.lastResult))")
             Text("audio: \(model.audioState.label)")
                 .accessibilityIdentifier("audio-status")
+            Text("AOT: \(model.aotStatus.label)")
+                .accessibilityIdentifier("aot-status")
         }
         .font(.caption2)
         .foregroundColor(.secondary)
