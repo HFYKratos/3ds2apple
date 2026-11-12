@@ -166,6 +166,19 @@ log "staging $APP_BASENAME in Payload/"
 cp -R "$APP_PATH" "$STAGE/Payload/"
 [[ -d "$STAGE/Payload/$APP_BASENAME" ]] || die "failed to stage the app bundle"
 
+# ROM transfer: expose Documents/ to Finder/iTunes and the Files app. The
+# generated Info.plist does not reliably carry these keys from XcodeGen, so
+# inject them into the staged bundle before zipping.
+APP_PLIST="$STAGE/Payload/$APP_BASENAME/Info.plist"
+if [[ -x /usr/libexec/PlistBuddy ]]; then
+  /usr/libexec/PlistBuddy -c 'Delete :UIFileSharingEnabled' "$APP_PLIST" >/dev/null 2>&1 || true
+  /usr/libexec/PlistBuddy -c 'Add :UIFileSharingEnabled bool true' "$APP_PLIST" >/dev/null
+  /usr/libexec/PlistBuddy -c 'Delete :LSSupportsOpeningDocumentsInPlace' "$APP_PLIST" >/dev/null 2>&1 || true
+  /usr/libexec/PlistBuddy -c 'Add :LSSupportsOpeningDocumentsInPlace bool true' "$APP_PLIST" >/dev/null
+else
+  printf '[package-ipa] warning: PlistBuddy not found; document-sharing keys not injected\n' >&2
+fi
+
 log "zipping Payload/ -> $NAME.ipa"
 ( cd "$STAGE" && zip -qry "$STAGE/$NAME.ipa" Payload )
 [[ -s "$STAGE/$NAME.ipa" ]] || die "zip produced an empty IPA"
