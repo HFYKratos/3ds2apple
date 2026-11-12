@@ -104,10 +104,10 @@ own Apple ID. The app is not intended for App Store distribution.
   tested revision (see [METAL.md](../ios/zakuro-ios/METAL.md) §8.2), re-apply
   the patches by hand, or update the patch file; the build continues without a
   failed patch (set `ZAKURO_STRICT_PATCHES=1` to make it fatal).
-- **First load shows "Preparing graphics…" for a while**: that is the
-  first-run graphics warm-up. It is bounded at 5 s, has a Skip button, and a
-  second load with the pipeline cache on disk finishes in well under a second.
-  A build that fell back to the software renderer has no pipelines to warm and
-  is revealed immediately; see
+- **First load shows "Preparing graphics…" for a while**: this only happens
+  when the optional graphics warm-up is enabled in Settings (off by default).
+  It is bounded at 5 s and has a Skip button; a second load with the pipeline
+  cache on disk is quicker. A build that fell back to the software renderer
+  has no pipelines to warm and is revealed immediately; see
   [METAL.md](../ios/zakuro-ios/METAL.md) §10 for the log lines and diagnostics
   fields that verify this on device.

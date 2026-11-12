@@ -62,7 +62,7 @@ The iOS side calls Zakuro through a small C ABI (`ios/zakuro-ios/`): load a ROM,
 - a performance HUD and a free-run frame loop are wired up, so frame times per stage can be inspected on device;
 - the GPU presents directly to a CAMetalLayer through MoltenVK / Vulkan, and keeps a software fallback;
 - Pokémon Y AOT is close to 60 fps on an A16 device; the pipeline cache is persisted;
-- on first launch, GPU pipeline compilation happens on the loading screen: after the ROM is loaded, a few frames run behind a "Preparing graphics" overlay (at least 2 s, 90 consecutive frames without a >50 ms spike, at most 5 s) before the game is revealed; the cache for the same ROM is stored in the app's Caches directory and read directly on the second run, so warm-up is clearly shorter; warm-up is skipped when the renderer falls back to software;
+- the pipeline cache is persisted in the app's Caches directory, so later runs do not recompile the same pipelines; the first session can still hitch when a new pipeline is compiled, and the optional "Preparing graphics" warm-up is off by default (it can be enabled in Settings);
 - diagnostics can be exported from the app (device / build / AOT / frame times);
 - compatibility, stability and support for more games are still being verified.
 
