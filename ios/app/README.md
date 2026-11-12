@@ -36,6 +36,24 @@ commit them.
 
 No iOS Simulator runtime is needed (and on this VM it is not installed).
 
+## Quick path — automated build (I1-T2 scripts)
+
+Once `scripts/build-ios-app.sh` and `scripts/package-ipa.sh` (build-infra,
+I1-T2) are merged, prefer them over the manual steps below:
+
+```bash
+# from the repo root, on the macOS VM
+scripts/build-ios-app.sh                 # xcodegen + xcodebuild; log under ios/app/build/logs/
+scripts/build-ios-app.sh --keep-project  # keep ios/app/3ds2apple.xcodeproj for Xcode
+scripts/package-ipa.sh                   # -> IPA/<name>.ipa + SHA256 (unsigned)
+```
+
+`build-ios-app.sh` fails fast when `<repo>/build/ios/libzakuro_ios.a` is missing
+or empty, and removes the generated `.xcodeproj` afterwards unless it is
+gitignored (it checks `git check-ignore`), so `git status` stays clean.
+The manual commands and the linkage verification below remain the reference for
+what the script does and the fallback when it is unavailable.
+
 ## Generate the Xcode project
 
 Run from the repo root:
@@ -48,10 +66,10 @@ xcodegen generate
 This writes `ios/app/3ds2apple.xcodeproj`. Re-run it after any edit to
 `project.yml`.
 
-> If the generated `.xcodeproj` shows up in `git status`: it is not tracked
-> (tracked-ignore entry pending in `.gitignore`). Delete it before committing
-> anything else, or ask the Lead to add `ios/app/3ds2apple.xcodeproj/` to
-> `.gitignore`.
+> The generated `.xcodeproj` is a build artifact and is not tracked yet (the
+> Lead is adding `ios/app/3ds2apple.xcodeproj/` to `.gitignore`).
+> `scripts/build-ios-app.sh` removes it after a run unless it is gitignored;
+> for manual builds delete it before committing anything else.
 
 ## Build (unsigned, device SDK)
 
@@ -109,8 +127,8 @@ idevicesyslog | grep '\[3ds2apple\]'
 
 ## Package an unsigned IPA
 
-`scripts/package-ipa.sh` (I1-T2, owned by build-infra) automates this; the
-manual equivalent:
+`scripts/package-ipa.sh` (I1-T2, owned by build-infra) automates this, writing
+`IPA/<name>.ipa` plus a SHA256; the manual equivalent:
 
 ```bash
 cd ios/app/build/Release-iphoneos
@@ -148,7 +166,7 @@ If the repo is moved, nothing needs changing — all three are repo-relative.
 | `.app` has an empty/odd name | `PRODUCT_NAME` / `EXECUTABLE_NAME` must stay explicit in `project.yml` (docs/milestones.md, M0 pitfall 6). |
 | `error: bridging header '.../ZakuroBridge.h' does not exist` | Confirm `ios/ZakuroBridge.h` exists and the build setting is `$(SRCROOT)/../ZakuroBridge.h`. |
 | `xcodegen: command not found` | `brew install xcodegen`. |
-| `git status` shows `ios/app/3ds2apple.xcodeproj/` or `ios/app/build/` | `rm -rf ios/app/3ds2apple.xcodeproj ios/app/build` (regenerated on demand). |
+| `git status` shows `ios/app/3ds2apple.xcodeproj/` | Generated project is untracked until `.gitignore` covers it; `scripts/build-ios-app.sh` auto-removes it (or keeps it deliberately with `--keep-project`). Manual: `rm -rf ios/app/3ds2apple.xcodeproj` (regenerated on demand). `ios/app/build/` is already covered by the root `build/` ignore rule. |
 
 ## Rebuild after changes
 
