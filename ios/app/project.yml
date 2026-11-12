@@ -1,0 +1,59 @@
+# XcodeGen spec for the 3ds2apple SwiftUI shell (I1 skeleton).
+#
+# Generate on macOS:   cd ios/app && xcodegen generate
+# Build:               see ios/app/README.md
+#
+# The generated 3ds2apple.xcodeproj is a build artifact: do not commit it.
+
+name: 3ds2apple
+
+options:
+  bundleIdPrefix: com.kratos
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+targets:
+  "3ds2apple":
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Sources
+    settings:
+      base:
+        # --- Identity -----------------------------------------------------
+        # PRODUCT_NAME / EXECUTABLE_NAME are explicit on purpose: without
+        # them Xcode can emit a nameless ".app" (docs/milestones.md, M0
+        # pitfall 6).
+        PRODUCT_NAME: "3ds2apple"
+        EXECUTABLE_NAME: "3ds2apple"
+        PRODUCT_BUNDLE_IDENTIFIER: "com.kratos.3ds2apple"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_KEY_CFBundleDisplayName: "3ds2apple"
+
+        # --- Info.plist ---------------------------------------------------
+        # No checked-in Info.plist: let Xcode synthesize it.
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: "YES"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+
+        # --- Signing ------------------------------------------------------
+        # Built unsigned; Sideloadly/AltStore signs on the user's machine.
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGNING_REQUIRED: "NO"
+
+        # --- Swift / C interop -------------------------------------------
+        SWIFT_VERSION: "5.0"
+        # C ABI header lives one level up (ios/ZakuroBridge.h) and is pulled
+        # in through SWIFT_OBJC_BRIDGING_HEADER, so Swift calls zk_* directly.
+        SWIFT_OBJC_BRIDGING_HEADER: "$(SRCROOT)/../ZakuroBridge.h"
+        HEADER_SEARCH_PATHS: ["$(SRCROOT)/.."]
+
+        # --- Zakuro static library ---------------------------------------
+        # build/ios/libzakuro_ios.a is produced by
+        # scripts/build-zakuro-ios.sh (repo-root build/, gitignored).
+        # SRCROOT is ios/app, so ../../build/ios is <repo>/build/ios.
+        OTHER_LDFLAGS: ["-L$(SRCROOT)/../../build/ios", "-lzakuro_ios"]
