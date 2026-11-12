@@ -31,15 +31,17 @@ final class MetalScreenView: UIView {
     /// above 320x240 (lower) is 400x480. The presenter renders at this size and
     /// Metal/CoreAnimation scales it to the view; rendering at the iPhone's
     /// native drawable size (e.g. 2226x2671) makes the GPU do 20x the work for
-    /// no visible benefit. Bump `renderScale` to 2 for a sharper 800x960
-    /// presentation on fast devices.
+    /// no visible benefit. The Settings page can raise the factor to 2 for a
+    /// sharper 800x960 presentation on fast devices.
     private static let consolePixelSize = CGSize(width: 400, height: 480)
-    private static let renderScale: CGFloat = 1.0
+
+    /// 1 = native 400x480 drawable, 2 = 800x960. Main queue only.
+    private var renderScale: CGFloat = 1.0
 
     /// Drawable size in pixels the presenter must render at.
-    static var renderPixelSize: CGSize {
-        CGSize(width: consolePixelSize.width * renderScale,
-               height: consolePixelSize.height * renderScale)
+    var drawablePixelSize: CGSize {
+        CGSize(width: Self.consolePixelSize.width * renderScale,
+               height: Self.consolePixelSize.height * renderScale)
     }
 
     /// Called on the main queue after layout when the drawable size in pixels
@@ -59,9 +61,6 @@ final class MetalScreenView: UIView {
         }
         return metalLayer
     }
-
-    /// Current drawable size in pixels (what the presenter's swapchain uses).
-    var drawablePixelSize: CGSize { Self.renderPixelSize }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -99,6 +98,16 @@ final class MetalScreenView: UIView {
         updateDrawableSize(force: true)
     }
 
+    /// Changes the resolution the presenter renders at: 1 = native 400x480,
+    /// 2 = 800x960. The layer's drawable size and the runtime's swapchain follow
+    /// through `onDrawableSizeChanged`. Main queue only.
+    func setRenderScale(_ scale: CGFloat) {
+        let factor: CGFloat = scale >= 2 ? 2 : 1
+        guard factor != renderScale else { return }
+        renderScale = factor
+        updateDrawableSize(force: true)
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         updateScaleFromWindow()
@@ -124,7 +133,7 @@ final class MetalScreenView: UIView {
     }
 
     private func updateDrawableSize(force: Bool) {
-        let pixels = Self.renderPixelSize
+        let pixels = drawablePixelSize
         // MoltenVK sets this again when it (re)builds the swapchain, and reads
         // it to pick the surface extent. Setting it here before the resize call
         // is what makes a rotation/new layout take effect.

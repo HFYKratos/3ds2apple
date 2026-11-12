@@ -14,6 +14,10 @@ import SwiftUI
 
 @main
 struct ThreeDS2AppleApp: App {
+    /// Only used for the orientation preference in Settings; the UI lives in
+    /// the SwiftUI views.
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     init() {
         // Zakuro stores its Vulkan pipeline cache under XDG_CACHE_HOME (or
         // ~/.cache). On iOS the sandbox home's .cache is not writable, which
