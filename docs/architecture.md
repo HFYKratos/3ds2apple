@@ -87,7 +87,10 @@ The shell owns the UI and the frame loop:
   `zk_set_input`;
 - plays `zk_take_audio` through AVAudioEngine;
 - shows frame time by phase (run / screen reads / image conversion / audio) for
-  performance work.
+  performance work;
+- runs a bounded graphics warm-up behind a loading screen after a first load,
+  so the GPU pipeline compiles of a cold pipeline cache happen before the game
+  is revealed, and reports the warm-up and pipeline-cache state in diagnostics.
 
 ## Build pipeline
 
@@ -112,6 +115,16 @@ with Sideloadly or AltStore and the user's own Apple ID.
   Metal render pipelines and compute for TEV/shader work.
 - The UI already exposes frame-time phases, so renderer changes can be measured
   on device rather than guessed.
+- The first frames of a first session are dominated by GPU pipeline
+  compilation: the driver compiles a pipeline the first time a draw needs it,
+  and a cold pipeline cache can cost hundreds of milliseconds in one frame.
+  Zakuro compiles new draw combinations on worker threads and draws through a
+  generic fallback pipeline meanwhile; the app additionally runs a bounded
+  warm-up behind a "Preparing graphics" screen (until frames are smooth, at
+  most 5 s) and keeps a per-title pipeline cache in the app's Caches directory,
+  saved every 5 s and on Unload/background. Later loads read the cache and
+  reveal the game quickly; see [ios/zakuro-ios/METAL.md](../ios/zakuro-ios/METAL.md)
+  §10 for the mechanism and the async-creation analysis.
 
 ## Non-goals for the first release
 

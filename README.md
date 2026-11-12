@@ -45,6 +45,10 @@ iOS 侧通过一个很小的 C ABI（`ios/zakuro-ios/`）调用 Zakuro：加载 
 - 触摸按键、GameController、下屏触摸和音频输出可用；
 - Pokémon Y（美版）的 3dsrecomp AOT 代码已静态链接，运行时确认 AOT 生效；
 - 性能 HUD 与 free-run 帧循环已接入，可在设备上查看各阶段帧时间；
+- 首次运行的 GPU pipeline 编译放在加载页完成：ROM 载入后先在 "Preparing
+  graphics" 遮罩后跑若干帧（至少 2 秒、连续 90 帧无 >50ms 尖峰、最多 5 秒），
+  再把游戏显示出来；同一 ROM 的 pipeline cache 保存在 App 的 Caches 目录，
+  第二次运行直接读取，预热明显更短。渲染器回退到软件时跳过预热；
 - 图形仍由软件 PICA200 渲染，Metal / MoltenVK 后端仍在开发；
 - 兼容性、稳定性和更多游戏的支持仍在验证中。
 

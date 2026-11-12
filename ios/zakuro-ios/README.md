@@ -43,14 +43,17 @@ needs a loadable MoltenVK and one small patch to where Zakuro looks for it. In
 order:
 
 ```bash
-# 1) create the local Zakuro checkout (and the plain static library)
+# 1) create the local Zakuro checkout (and the plain static library); the
+#    script applies ios/zakuro-ios/patches/*.patch idempotently
 scripts/build-zakuro-ios.sh
 
-# 2) fix the iOS MoltenVK lookup in that checkout (see METAL.md §8.2)
+# Existing checkout only: apply the patches by hand (see METAL.md §8.2).
 git -C third_party/zakuro apply "$PWD/ios/zakuro-ios/patches/0001-vulkan-on-ios.patch"
+git -C third_party/zakuro apply "$PWD/ios/zakuro-ios/patches/0002-pipeline-cache-save-every.patch"
 
-# 3) build the per-game runtime: this recompiles the runtime from the patched
-#    checkout, with hardware rendering on by default
+# 2) build the per-game runtime: this recompiles the runtime from the patched
+#    checkout (applying any missing patch again), with hardware rendering on
+#    by default
 ZAKURO_IOS_HARDWARE=1 scripts/build-linked-ios-lib.sh <name> --title-id <16-hex-title-id>
 ```
 
@@ -79,6 +82,40 @@ the A0 fallback build.
 
 The app still has to embed MoltenVK; [METAL.md](METAL.md) §8.3 has the download
 and packaging steps.
+
+## Pipeline cache and first-run warm-up
+
+The Vulkan renderer compiles a draw pipeline the first time a draw needs it.
+On a first run (empty cache) those driver compiles can take hundreds of
+milliseconds and land inside `zk_run_frame`; later runs read the same
+pipelines from disk and are smooth. The repository has a small upstream patch
+plus app-side behaviour that keeps the first-run cost on a loading screen:
+
+- **Cache location.** `XDG_CACHE_HOME` is pointed at the app's Caches
+  directory, so Zakuro keeps one file per title in
+  `Library/Caches/zakuro/pipelines/<title-id>.bin`. The cache is regenerable
+  data (iOS may purge it) and never contains game content that is not already
+  part of the build.
+- **Durability.** `patches/0002-pipeline-cache-save-every.patch` lowers
+  Zakuro's `SAVE_EVERY` from 60 s to 5 s, so an early exit keeps most of the
+  compiled pipelines; `zk_destroy` (Unload, Change ROM, background) also saves
+  the cache on the way out. The app logs the directory contents after
+  `zk_destroy` so this is visible in device logs and diagnostics.
+- **Warm-up.** After `zk_create` succeeds the app runs the normal frame loop
+  behind an opaque "Preparing graphics" overlay (neutral input): at least 2 s,
+  ending after 90 consecutive frames with no >50 ms spike, capped at 5 s. The
+  compile costs are absorbed before the game is revealed. The plan is shorter
+  (12 quiet frames, 2 s cap) when the ROM was already warmed in this app
+  install and its cache files are still on disk; a Skip button ends it early.
+  A software renderer has no Vulkan pipelines and is revealed immediately.
+- **Async creation.** Zakuro already compiles new draw combinations on its
+  own `shader compiler` threads and draws through a generic fallback pipeline
+  meanwhile; dropping draws until a pipeline is ready is analysed in
+  [METAL.md](METAL.md) §10 but is not enabled, because a skipped draw can be
+  observed by a title's own framebuffer/depth readbacks and change game state.
+
+The app-side thresholds, log lines and diagnostics fields are documented in
+[METAL.md](METAL.md) §10 and [ios/app/README.md](../app/README.md).
 
 ## C ABI
 
@@ -209,7 +246,8 @@ src/perf.rs      frame-time logging and profiler helpers
 build.rs         linked-build title ID validation
 Cargo.toml       staticlib crate; `linked` and `profiling` features
 METAL.md         Metal/MoltenVK evaluation, A0/A1 plan, build and device steps
-patches/         upstream Zakuro patch for the iOS MoltenVK lookup
+patches/         upstream Zakuro patches: iOS MoltenVK lookup and the
+                5 s pipeline-cache save interval
 ```
 
 ## Limitations
