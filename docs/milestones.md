@@ -104,3 +104,11 @@ min iOS 16.0，bundle `com.kratos.3ds2apple`）；`libzakuro_ios.a` 已链接，
 - 正在 macOS VM 用 iOS clang 并行（3 路）编译生成 C → `librecomp.a`；
   完成后链接 `-lzakuro_ios -lgame` 出首个 AOT IPA。
 - 预计首帧/性能对比：纯解释器 26 fps（Pokémon Y 开场）；AOT 后复测。
+
+## I3-T4 音频（2026-11-12 构建通过，待真机）
+
+- `3ds2apple-I3T4-audio.ipa`：2.3 MB，SHA256
+  `23dee490088fbc939711fcc84fffb600330ed4684959871dbd337a4ddae3200b`
+- `zk_take_audio`（32730 Hz 假设）→ ring buffer → AVAudioEngine/SourceNode；
+  mute/Unload/后台停止；纯解释器 ~26 fps 下音频不连续属预期。
+- 待真机：开场有声、Mute/Unmute、Unload/后台不崩、Load last 恢复。
