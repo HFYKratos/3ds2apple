@@ -3,7 +3,7 @@
 //! The app can read the last timings (`zk_last_frame_micros` and friends) and
 //! also gets a periodic one-line summary on stderr, which `idevicesyslog`
 //! captures without any Swift change. That line is what tells CPU emulation,
-//! the software PICA200 and presentation apart; `PERF.md` explains how to read
+//! the software PICA200 and presentation apart; `ios/zakuro-ios/README.md` explains how to read
 //! it.
 //!
 //! A `profiling` build additionally samples guest PCs and puts the hottest
@@ -320,7 +320,7 @@ fn summarize(window: &mut Window, system: &System) -> Summary {
 }
 
 /// Formats one `zk_perf` line. Function names are not available for guest
-/// addresses, so hot spots are PCs; `PERF.md` says how to read them.
+/// addresses, so hot spots are PCs; `ios/zakuro-ios/README.md` says how to read them.
 fn format_summary(summary: &Summary) -> String {
     let mut line = format!(
         "zk_perf: {} frames in {:.2}s | frame avg {:.2}ms max {:.2}ms | \

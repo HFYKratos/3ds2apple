@@ -78,3 +78,7 @@ ROM/
 # --- Generated Xcode project / build products -------------------------------
 ios/app/3ds2apple.xcodeproj/
 ios/app/build/
+
+# --- Local-only internal notes (never publish) ------------------------------
+.internal/
+AGENTS.md

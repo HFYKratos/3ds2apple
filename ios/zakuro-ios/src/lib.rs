@@ -18,7 +18,7 @@
 //! tables, which the app links in as a static archive beside this library, and
 //! [`zk_create`] hands them to Zakuro so the game runs as AOT C instead of in
 //! the interpreter. The default build is the interpreter-only shell and links
-//! nothing extra. `RECOMP.md` in this directory has the build and
+//! nothing extra. `scripts/AOT_BUILD.md` in this directory has the build and
 //! version-matching rules; [`zk_linked_code`], [`zk_linked_program_id`] and
 //! [`zk_recompiled`] report what a build and a loaded system ended up using,
 //! and [`zk_recompiled_status`] explains a fallback.
@@ -32,7 +32,7 @@
 //! frame time into emulated CPU, software GPU, screen read and audio. The
 //! optional `profiling` feature adds guest-PC hot spots to that line, and
 //! [`zk_profiler_start`] / [`zk_profiler_hot_spots`] let the app ask directly.
-//! `PERF.md` has the measurement method and how to read the numbers.
+//! `ios/zakuro-ios/README.md` has the measurement method and how to read the numbers.
 //!
 //! Zakuro's own `log` records (the loader's linked-code warnings, GPU warnings)
 //! are forwarded to stderr by [`zk_create`], because an iOS app installs no
@@ -102,7 +102,7 @@ fn clear_last_error() {
 }
 
 /// One title's code, recompiled by 3dsrecomp at build time and linked into the
-/// app instead of loaded from a library at run time. See `RECOMP.md`.
+/// app instead of loaded from a library at run time. See `scripts/AOT_BUILD.md`.
 #[cfg(feature = "linked")]
 mod linked {
     use std::ffi::c_void;
@@ -408,7 +408,7 @@ pub extern "C" fn zk_last_error() -> *const c_char {
 }
 
 /// 1 when this static library was built with one game's recompiled code linked
-/// in (`--features linked`, see `RECOMP.md`), 0 for the interpreter-only shell.
+/// in (`--features linked`, see `scripts/AOT_BUILD.md`), 0 for the interpreter-only shell.
 #[no_mangle]
 pub extern "C" fn zk_linked_code() -> i32 {
     if cfg!(feature = "linked") {
@@ -482,7 +482,7 @@ pub extern "C" fn zk_create(rom: *const c_char, data_dir: *const c_char) -> *mut
     // iOS forbids executable memory: no JIT, no recompiled-code discovery here.
     config.find_recompiled = false;
 
-    // One game's AOT code can be linked into the app instead (`RECOMP.md`). The
+    // One game's AOT code can be linked into the app instead (`scripts/AOT_BUILD.md`). The
     // loader checks its title ID and interface version, and interprets instead
     // when they do not match.
     #[cfg(feature = "linked")]

@@ -24,8 +24,7 @@ targets:
       base:
         # --- Identity -----------------------------------------------------
         # PRODUCT_NAME / EXECUTABLE_NAME are explicit on purpose: without
-        # them Xcode can emit a nameless ".app" (docs/milestones.md, M0
-        # pitfall 6).
+        # them Xcode can emit a nameless ".app".
         PRODUCT_NAME: "3ds2apple"
         EXECUTABLE_NAME: "3ds2apple"
         PRODUCT_BUNDLE_IDENTIFIER: "com.kratos.3ds2apple"

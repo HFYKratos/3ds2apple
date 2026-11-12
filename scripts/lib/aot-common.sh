@@ -26,7 +26,7 @@
 #     `_recomp_abi` (the old prefix bug).
 #
 # The seven generated tables the linked library references and libgame.a must
-# export (RECOMP.md §2.1/§8.2). Keep in sync with ios/zakuro-ios + recomp ABI.
+# export (scripts/AOT_BUILD.md §2.1/§8.2). Keep in sync with ios/zakuro-ios + recomp ABI.
 AOT_EXPECTED_RECOMP_SYMBOLS="recomp_abi recomp_generation recomp_entry_count recomp_entries recomp_module_count recomp_modules recomp_origins"
 
 # ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ aot_trim() {
 }
 
 # True for exactly 16 upper-case hex digits (no 0x prefix). The build scripts
-# and manifest.txt use the upper-case form from RECOMP.md ("0004000000055E00").
+# and manifest.txt use the upper-case form from scripts/AOT_BUILD.md ("0004000000055E00").
 aot_validate_title_id() {
   local value="$1"
   [[ "${#value}" -eq 16 ]] || return 1

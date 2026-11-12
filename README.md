@@ -1,69 +1,127 @@
 # 3ds2apple
 
-把 Nintendo 3DS 游戏以 **AOT 原生方式**带到 iPhone / iPad 的早期项目：游戏代码在构建时从 ARM 翻译为 ARM64，运行时不用 CPU JIT。
+> **把你自己拥有的 Nintendo 3DS 游戏，以原生 ARM64 代码运行在 iPhone / iPad 上。**
 
-当前阶段：**可行性评估 + 执行计划**（Phase 0 尚未开始）。
+游戏代码在构建时由 [3dsrecomp](https://github.com/fearkov/3dsrecomp) 翻译成 C，再编译成 ARM64；运行时由 [Zakuro](https://github.com/fearkov/zakuro) 提供 3DS 系统服务、GPU 和少量解释器兜底。**没有 CPU JIT。**
 
-> 仓库：<https://github.com/HFYKratos/3ds2apple> · 状态：规划中 · 许可：Apache-2.0
+平台：iPhone / iPad（iOS 16+） · 构建：macOS + Xcode · 安装：Sideloadly / AltStore 侧载 · 许可：Apache-2.0 · **自带游戏**
 
-- [执行计划 v0.5（2026-11-11）](docs/plan.md)：首发 10 款、无本地 Mac、侧载、开源的落地方案；附录 B 讨论 Windows-only 出包（S2Arm 式）。
-- [可行性评估 v0.2](docs/feasibility.md)：3dsrecomp + Zakuro 的通用 AOT 路线、iOS 缺口、工作量与风险。
-- [协作与迭代指南](AGENTS.md)（Agent 必读）
-- [里程碑](docs/milestones.md)：M0 iOS 构建链路已打通（macOS VM → IPA → 真机）。
-- [Pocket Native 评估](docs/pocket-native.md)：最接近本项目的 AOT 参考实现。
-- [iOS 集成](docs/integration.md)：Zakuro 静态库构建与 C ABI。
-- [可行性评估 v0.1](docs/feasibility-v0.1.md)：路线 A（Azahar/Cytrus）、B（AOT）、C（反编译）的横向对比。
+> **状态：早期开发。** 当前验证到 Pokémon Y（美版）可以启动、显示上下屏、AOT 代码生效；图形仍由软件 PICA200 渲染，Metal 后端在开发中。兼容性、帧率和功能会随版本变化。
 
-## 结论摘要
+## 原生移植，不是 CPU 模拟器
 
-- **可行，底座已经存在**：[3dsrecomp](https://github.com/fearkov/3dsrecomp)（ARM/Thumb/VFP → C 的静态重编译器）+ [Zakuro](https://github.com/fearkov/zakuro)（MIT 的 3DS HLE 运行时，用 AOT 代替 JIT）。
-- 3dsrecomp 在测试游戏中约 **99.8% 的指令**由重编译代码执行；Zakuro 当前 **35 款测试游戏，34 款 Playable**。
-- **缺的是 iOS 层**：Zakuro 只有 Windows/Linux/macOS；需要 Rust 静态库 + SwiftUI/UIKit + Metal/CoreAudio + 构建管线。估算 MVP 约 **9–14 人月**，产品级 **16–28 人月**。
-- **不是 100% "无模拟器"**：CPU 代码是 AOT，但仍有 HLE 服务、GPU 模拟、约 0.2% 指令的解释器兜底。纯 AOT 只能单款（TriAevum）。
-- **首发 10 款**：从 Zakuro 兼容表选 10 款（3D Land、MK7、OoT3D、ALBW、Pokémon USUM、MH4U、FE Fates、Kirby、ACNL、Smash），先跑通 1 款再扩。
+传统 3DS 模拟器在运行时逐条翻译 CPU 指令。3ds2apple 把这一步放到构建时：
 
-## 无 Mac 的工作流
+- 每款游戏用 3dsrecomp 把 ARM/Thumb/VFP 代码翻译成 C；
+- C 代码用 iOS clang 编译成 ARM64，链接进 App；
+- 运行时只保留游戏仍需要的部分：HLE 系统服务、PICA200 GPU、音频、输入；
+- 未被重编译覆盖的少量指令由 Zakuro 解释器兜底（测试游戏约 0.2%）。
 
-1. **Linux/Windows 本地**：跑 Zakuro 桌面版、3dsrecomp、ROM/资源处理、日常开发。
-2. **按需云 Mac（1–2 周/批）**：每款游戏的 AOT C 编译 + Xcode 打包 + unsigned IPA；ROM 只临时放在云 Mac，构建后删除。
-3. **Windows**：AltStore / SideStore / Sideloadly 签名安装；`idevicesyslog` / 崩溃报告调试。
-4. **GitHub Actions（macOS）**：只构建不含游戏数据的通用壳/核心，公开仓库免费；不要把 ROM 传上去。
+因此设备上运行的是**普通 ARM64 代码**，不需要 JIT，也不需要调试器注入。
 
-> **Windows-only 可行吗？** 每款游戏的打包/签名可以 Windows-only（S2Arm 式：预编译壳 + 游戏 dylib + 签名），但 **通用壳仍需 macOS 构建一次**；S2Arm 的壳也是 Mac 出的。3DS 还多一步 C→ARM64，Windows 上要用 `clang` + `ld64.lld` + `rcodesign`，需先做 spike。Metal Developer Tools for Windows 只解决 `.metal → .metallib`，不提供 iOS SDK/UIKit/链接/签名。详见 [plan.md 附录 B](docs/plan.md#附录-bwindows-only-出包s2arm-式可行吗)。
->
-> **macOS 虚拟机可以吗？** 可以，但只适合 **headless 构建**（`xcodebuild` + 打包 unsigned IPA）；VM 里不需要 GPU、Apple ID、USB，签名仍在 Windows。Linux KVM 看 `ultimate-macOS-KVM` / `OSX-KVM`，Windows VMware 看 `OC4VM`。注意 macOS EULA 限制（仅 Apple 硬件），产品化仍建议云 Mac/二手 Mac mini。详见 [plan.md 附录 C](docs/plan.md#附录-cmacos-虚拟机方案替代云-mac)。
+## 工作原理
 
-预算：云 Mac **$25–50/月**或 **$1–2/小时**；Apple Developer **$99/年**（10 个 IPA 建议付费）。
-
-## 下一步
-
-1. Phase 0（4–6 周）：Linux 跑通 Zakuro + 3dsrecomp 的 5 款游戏；租 1 小时云 Mac 出第一个 unsigned IPA；Windows 装到 iPhone 14 Pro Max。
-2. Phase 1（3–5 个月）：通用 SwiftUI 壳 + `read_screen` → Metal + CoreAudio + GameController；10 款在云 Mac 上批量出 IPA。
-3. Phase 2（4–6 个月）：MoltenVK、shader 性能、10 款兼容打磨、UI/存档/中文。
-
-## 仓库结构
-
-```
-docs/
-  plan.md              执行计划（10 款 / 无本地 Mac）
-  feasibility.md       技术可行性（v0.2）
-  feasibility-v0.1.md  三条路线横向对比
-NOTICE                 版权/商标/无 ROM 声明
-THIRD_PARTY.md         计划依赖与参考项目的许可证
-CONTRIBUTING.md        贡献指南（禁止 ROM/keys）
-AGENTS.md              Agent 协作与迭代规则
-LICENSE                Apache-2.0
-IPA/                   本地测试 IPA（.gitignore，不提交）
-ios/zakuro-ios/        Zakuro iOS staticlib 的 C ABI
-scripts/               构建脚本
+```text
+你自己的 .3ds / .cci（不会上传或内置）
+        │
+        ▼
+   3dsrecomp（构建机）
+        │  生成 C 代码
+        ▼
+   clang -target arm64-apple-ios
+        │  libgame.a
+        ▼
+   SwiftUI 壳  +  libzakuro_ios.a（Zakuro 运行时）
+        │
+        ▼
+   unsigned IPA → 侧载签名 → iPhone / iPad
 ```
 
-## 许可与声明
+iOS 侧通过一个很小的 C ABI（`ios/zakuro-ios/`）调用 Zakuro：加载 ROM、跑帧、读上下屏、取音频、送输入。游戏代码与运行时都静态链接进 App，每款游戏一个 IPA。
 
-- 本仓库自己的代码与文档：**Apache-2.0**。
-- 计划使用的 [Zakuro](https://github.com/fearkov/zakuro) 与
-  [3dsrecomp](https://github.com/fearkov/3dsrecomp)：**MIT**；见
-  [THIRD_PARTY.md](THIRD_PARTY.md)。
-- 本仓库**不包含**任何 Nintendo ROM、解密密钥、系统文件、字体或游戏资源。
-- 与 Nintendo 无关联；Nintendo 3DS 是 Nintendo Co., Ltd. 的商标。
-- 提交前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+## 当前进度
+
+- [x] iPhone 真机运行 SwiftUI 壳
+- [x] 导入自有 `.3ds` / `.cci`，加载 3DS 运行时
+- [x] 上屏 400×240 / 下屏 320×240 显示
+- [x] 触摸按键、GameController 手柄、下屏触摸
+- [x] 音频输出（AVAudioEngine）
+- [x] Pokémon Y 的 3dsrecomp AOT 代码静态链接，运行时确认 AOT 生效
+- [x] 性能 HUD（帧时间分解）与 free-run 帧循环
+- [ ] GPU 硬件渲染（Metal / MoltenVK）
+- [ ] 更多游戏兼容性与 20 分钟稳定性验证
+
+> 游戏画面和测试数据只用于本地验证，不进入仓库；本仓库不包含任何 ROM、密钥、系统文件或游戏资源。
+
+## 平台与限制
+
+| 项目 | 说明 |
+|---|---|
+| 设备 | iPhone / iPad，iOS 16 及以上（开发机：iPhone 14 Pro Max，iOS 26.7.2） |
+| 构建 | macOS + Xcode（iOS SDK）；Rust 用于 Zakuro 静态库 |
+| 安装 | 未签名 IPA，用 Sideloadly / AltStore 以你自己的 Apple ID 签名 |
+| CPU | AOT 重编译，无 JIT；少量解释器兜底 |
+| GPU | 当前软件 PICA200 渲染；Metal 后端开发中 |
+| 不在首版范围 | App Store、相机、麦克风、联机、全游戏库兼容 |
+
+## 开始构建
+
+完整步骤见 [docs/build.md](docs/build.md)。简要流程：
+
+```bash
+# 1. 构建 Zakuro iOS 静态库（macOS + Xcode + Rust + aarch64-apple-ios）
+scripts/build-zakuro-ios.sh
+
+# 2. 构建通用壳 / 无游戏的 App，产出 unsigned IPA
+scripts/build-ios-app.sh
+scripts/package-ipa.sh ios/app/build/Release-iphoneos/3ds2apple.app 3ds2apple
+
+# 3. 每款游戏：3dsrecomp → libgame.a → linked 静态库 → IPA
+scripts/build-recomp-ios.sh "path/to/game.cci" pokemon-y --auto-serial
+scripts/build-linked-ios-lib.sh pokemon-y
+scripts/build-game-ipa.sh pokemon-y --display-name "Pokemon Y"
+```
+
+脚本细节见 [scripts/README.md](scripts/README.md) 与 [scripts/AOT_BUILD.md](scripts/AOT_BUILD.md)。
+
+## 自带游戏
+
+本项目**不提供** ROM、解密密钥、BIOS、系统文件或游戏资源，也不提供获取途径。
+
+- 只能使用你自己从自己的主机上导出、已解密的游戏；
+- 构建和运行都在你自己的机器上进行；
+- 仓库和 CI 不接收、不上传、不缓存 ROM 或由游戏生成的数据；
+- 兼容性报告只描述游戏和问题，不包含游戏文件。
+
+## 项目结构
+
+```text
+ios/app/                 SwiftUI iOS 壳（上下屏、输入、音频、HUD）
+ios/zakuro-ios/          Zakuro 的 iOS C ABI 与 staticlib crate
+ios/ZakuroBridge.h       Swift 与 C ABI 的桥接头
+scripts/                 静态库 / AOT / IPA 构建脚本
+docs/architecture.md     架构与设计说明
+docs/build.md            构建指南
+THIRD_PARTY.md           第三方组件与许可证
+CONTRIBUTING.md          贡献指南
+NOTICE                   版权、商标与无 ROM 声明
+```
+
+## 致谢
+
+- **[Zakuro](https://github.com/fearkov/zakuro)**（MIT）：3DS HLE 运行时，使用 AOT 代码而不是 JIT。
+- **[3dsrecomp](https://github.com/fearkov/3dsrecomp)**（MIT）：ARM / Thumb / VFP → C 静态重编译器。
+- **[Pocket Native](https://github.com/whovian64/pocket-native)**（MIT）：Zakuro + 3dsrecomp 的 AOT 分支，为本项目的 AOT 链接、渲染器和游戏配置提供了重要参考。
+- **Azahar / Citra**（GPLv3，仅行为参考）：3DS HLE、GPU、PICA200 语义的兼容性参考；没有将 GPL 代码链接进本项目。
+- **nxnative / S2Arm**（MIT / Apache-2.0）：同 ISA 游戏原生移植到 iOS 的工程与平台层参考。
+- **MoltenVK**（Apache-2.0）：计划中的 Vulkan → Metal 兼容层。
+
+完整许可证说明见 [THIRD_PARTY.md](THIRD_PARTY.md) 与 [NOTICE](NOTICE)。
+
+## 许可与法律
+
+本项目以 [Apache License 2.0](LICENSE) 开源。
+
+本项目与 Nintendo 无关联，未获得 Nintendo 的认可或赞助。Nintendo 3DS 是 Nintendo Co., Ltd. 的商标；游戏名称与商标归各自权利人所有。
+
+本项目不包含任何 Nintendo ROM、解密密钥、系统文件、字体或游戏资源。请只使用你自己合法拥有并导出的游戏。

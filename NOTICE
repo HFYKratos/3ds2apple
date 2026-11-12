@@ -4,9 +4,10 @@ Copyright 2026 Kratos huang
 This project is not affiliated with, endorsed by, or sponsored by Nintendo.
 Nintendo 3DS is a trademark of Nintendo Co., Ltd.
 
-No Nintendo ROMs, keys, system files, or game assets are included in this
-repository. Users must supply their own legally obtained, decrypted dumps.
+No Nintendo ROMs, decryption keys, system files, fonts or game assets are
+included in this repository. Users must supply their own legally obtained,
+decrypted game dumps.
 
-This repository currently contains planning documents only. The planned
-runtime and tooling include third-party components; see THIRD_PARTY.md for
-the list and licenses.
+The project contains original source code, build scripts and documentation.
+It depends on third-party software, including Zakuro and 3dsrecomp (MIT); see
+THIRD_PARTY.md for the list and licenses.

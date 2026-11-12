@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build-game-ipa.sh — build the per-game AOT IPA (linked Zakuro + libgame.a).
 #
-# Per-game AOT pipeline (authoritative design: ios/zakuro-ios/RECOMP.md §3.4/§9):
+# Per-game AOT pipeline (authoritative design: ios/zakuro-ios/scripts/AOT_BUILD.md §3.4/§9):
 #
 #   scripts/build-zakuro-ios.sh              # once per Zakuro checkout
 #   scripts/build-recomp-ios.sh <rom> <name> # 3dsrecomp -> librecomp.a
@@ -10,7 +10,7 @@
 #
 # The XcodeGen project in ios/app is generated as usual (no ios/app changes are
 # needed); the two static archives are linked by overriding OTHER_LDFLAGS on the
-# xcodebuild command line. The order is fixed and deliberate (RECOMP.md §3.4):
+# xcodebuild command line. The order is fixed and deliberate (scripts/AOT_BUILD.md §3.4):
 #
 #   -L<repo>/build/ios/<name> -lzakuro_ios -lgame
 #
@@ -269,7 +269,7 @@ esac
 
 # --- title ID (validated, never "unknown") -----------------------------------
 # The AOT linked library is compiled for one title ID; the manifest must record
-# exactly that value (RECOMP.md §9). Resolution order: --title-id, then
+# exactly that value (scripts/AOT_BUILD.md §9). Resolution order: --title-id, then
 # build-info.txt (what build-linked-ios-lib.sh baked in), then recomp-info.txt,
 # then the generated src/main.rs. Corrupted values from the first VM run
 # ("...5E00n") are repaired with a warning by aot_normalize_title_id.
@@ -323,14 +323,14 @@ check_linked_lib() {
        (lipo: $AOT_LIPO_INFO)"
   NM_DUMP="$(mktemp "${TMPDIR:-/tmp}/3ds2apple-nm.XXXXXX")"
   aot_nm_dump "$file" "$NM_DUMP" -u \
-    || die "nm -u failed on $file (RECOMP.md §8.2)"
+    || die "nm -u failed on $file (scripts/AOT_BUILD.md §8.2)"
   undefined="$(aot_nm_symbols_with_prefix "$NM_DUMP" '_recomp_')"
   rm -f -- "$NM_DUMP"
   NM_DUMP=""
   [[ -n "$undefined" ]] || die "$file has no undefined _recomp_* symbols.
        That is the interpreter-only shell library, not the linked variant.
        Run scripts/build-linked-ios-lib.sh $NAME (and make sure its build used
-       --features linked). See RECOMP.md §3.3."
+       --features linked). See scripts/AOT_BUILD.md §3.3."
   count="$(printf '%s\n' "$undefined" | sed '/^$/d' | wc -l | tr -d '[:space:]')"
   missing=""
   lines=$'\n'"$undefined"$'\n'
@@ -340,7 +340,7 @@ check_linked_lib() {
       *) missing="$missing _${symbol}" ;;
     esac
   done
-  [[ -z "$missing" ]] || die "$file is missing undefined symbols:$missing (RECOMP.md §8.2)"
+  [[ -z "$missing" ]] || die "$file is missing undefined symbols:$missing (scripts/AOT_BUILD.md §8.2)"
   [[ "$count" -eq 7 ]] || die "$file has ${count} undefined _recomp_* symbols; expected 7.
        Run scripts/build-linked-ios-lib.sh $NAME to rebuild the linked variant."
 }
@@ -361,7 +361,7 @@ check_game_archive() {
   rm -f -- "$NM_DUMP"
   NM_DUMP=""
   [[ -z "$missing" ]] || die "$file does not export generated tables:$missing
-       Re-run scripts/build-recomp-ios.sh <rom> $NAME (RECOMP.md §3.2), or
+       Re-run scripts/build-recomp-ios.sh <rom> $NAME (scripts/AOT_BUILD.md §3.2), or
        re-run build-linked-ios-lib.sh with the right --libgame/--archive."
 }
 
@@ -408,7 +408,7 @@ do_xcodebuild() {
   local actions
   actions=("build")
 
-  # RECOMP.md §3.4: same directory holds both archives and the order is fixed.
+  # scripts/AOT_BUILD.md §3.4: same directory holds both archives and the order is fixed.
   local ldflags="-L${LIB_DIR} -lzakuro_ios -lgame"
 
   ( cd "$APP_DIR" && xcodebuild \
@@ -479,7 +479,7 @@ if aot_nm_has_symbol "$NM_DUMP" '_recomp_abi'; then
   log "AOT link check: _recomp_abi present in the app binary"
 else
   die "the app binary does not contain _recomp_abi, so libgame.a was not linked.
-       Check the OTHER_LDFLAGS override and the -lzakuro_ios -lgame order (RECOMP.md §3.4).
+       Check the OTHER_LDFLAGS override and the -lzakuro_ios -lgame order (scripts/AOT_BUILD.md §3.4).
        Full build log: $LOG_FILE"
 fi
 if aot_nm_has_symbol "$NM_DUMP" '_zk_linked_code'; then

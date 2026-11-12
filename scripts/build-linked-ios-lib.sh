@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build-linked-ios-lib.sh — build (or adopt) the per-game `linked` libs.
 #
-# Per-game AOT pipeline (authoritative design: ios/zakuro-ios/RECOMP.md §3.3/§9):
+# Per-game AOT pipeline (authoritative design: ios/zakuro-ios/scripts/AOT_BUILD.md §3.3/§9):
 #
 #   scripts/build-zakuro-ios.sh              # once: Zakuro checkout + baseline lib
 #   scripts/build-recomp-ios.sh <rom> <name> # 3dsrecomp port -> librecomp.a
@@ -95,7 +95,7 @@ Options:
                      env: ZAKURO_DIR)
   --lib-dir DIR      Output dir (default: build/ios/<name>)
   --isolated-target  Use build/cargo-target/<name> as CARGO_TARGET_DIR instead
-                     of the shared Zakuro target dir (RECOMP.md §3.3 suggests
+                     of the shared Zakuro target dir (scripts/AOT_BUILD.md §3.3 suggests
                      isolation for back-to-back multi-game builds; it costs a
                      full dependency rebuild, so the shared cache is default)
   --verbose          Stream cargo output to the terminal as well
@@ -315,7 +315,7 @@ log "lib dir:    $LIB_DIR"
 log "mode:       $([[ "$REUSE" -eq 1 ]] && echo reuse || echo cargo-build)"
 log "build log:  $LOG_FILE"
 
-# --- validation (RECOMP.md §2.1/§8.2) ----------------------------------------
+# --- validation (scripts/AOT_BUILD.md §2.1/§8.2) ----------------------------------------
 validate_linked_lib() {
   local file="$1" undefined count missing symbol lines
   [[ -s "$file" ]] || die "linked library is missing or empty: $file"
@@ -324,7 +324,7 @@ validate_linked_lib() {
 
   NM_DUMP="$(mktemp "${TMPDIR:-/tmp}/3ds2apple-nm.XXXXXX")"
   aot_nm_dump "$file" "$NM_DUMP" -u \
-    || die "nm -u failed on $file (RECOMP.md §8.2)"
+    || die "nm -u failed on $file (scripts/AOT_BUILD.md §8.2)"
   undefined="$(aot_nm_symbols_with_prefix "$NM_DUMP" '_recomp_')"
   rm -f -- "$NM_DUMP"
   NM_DUMP=""
@@ -343,7 +343,7 @@ validate_linked_lib() {
     esac
   done
   [[ -z "$missing" ]] || die "linked library is missing expected undefined symbols:$missing
-       (RECOMP.md §8.2 expects exactly 7: $EXPECTED_RECOMP_SYMBOLS)"
+       (scripts/AOT_BUILD.md §8.2 expects exactly 7: $EXPECTED_RECOMP_SYMBOLS)"
   [[ "$count" -eq 7 ]] || die "linked library has ${count} undefined _recomp_* symbols; expected exactly 7.
        Found: $(printf '%s\n' "$undefined" | tr '\n' ' ')"
 }
@@ -475,14 +475,14 @@ else
 fi
 
 # Refresh the crate copy: the checkout must build the current ios/zakuro-ios
-# (RECOMP.md §3.3 step 1 does the first copy; re-copying is idempotent).
+# (scripts/AOT_BUILD.md §3.3 step 1 does the first copy; re-copying is idempotent).
 CRATE_DST="${ZAKURO_DIR}/crates/zakuro-ios"
 mkdir -p "$(dirname "$CRATE_DST")"
 log "refreshing crate: $CRATE_DST"
 rm -rf -- "$CRATE_DST"
 cp -R "${ROOT}/ios/zakuro-ios" "$CRATE_DST"
 
-# --- choose the cargo target dir (RECOMP.md §3.3) ----------------------------
+# --- choose the cargo target dir (scripts/AOT_BUILD.md §3.3) ----------------------------
 if [[ "$ISOLATED_TARGET" -eq 1 ]]; then
   CARGO_TARGET_DIR_ABS="${ROOT}/build/cargo-target/${NAME}"
   mkdir -p "$CARGO_TARGET_DIR_ABS"
@@ -515,7 +515,7 @@ run_stage() {
 }
 
 # Force the crate (and its build.rs env check) to rebuild for this title even
-# when a previous game was built in the same target dir (RECOMP.md §3.3).
+# when a previous game was built in the same target dir (scripts/AOT_BUILD.md §3.3).
 log "cargo clean -p zakuro-ios (force per-game relink; dependency cache is kept)"
 ( cd "$ZAKURO_DIR" && cargo clean -p zakuro-ios ) >>"$LOG_FILE" 2>&1 \
   || warn "cargo clean -p zakuro-ios returned non-zero (continuing; see $LOG_FILE)"
@@ -526,7 +526,7 @@ do_linked_build() {
       cargo build -p zakuro-ios --release --features linked --target "$IOS_TARGET" )
 }
 
-log "building linked libzakuro_ios.a for ${TITLE_ID} (RECOMP.md §3.3 step 2)"
+log "building linked libzakuro_ios.a for ${TITLE_ID} (scripts/AOT_BUILD.md §3.3 step 2)"
 run_stage "cargo build (zakuro-ios --features linked)" do_linked_build
 
 [[ -f "$LIB_BUILT" ]] || die "linked library was not produced: $LIB_BUILT"

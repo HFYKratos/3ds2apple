@@ -9,7 +9,7 @@
 //! was recompiled, for example `0004000000055D00` for Pokémon Y. The default,
 //! interpreter-only build needs nothing and ignores it.
 //!
-//! See `RECOMP.md` next to this file for the whole pipeline.
+//! See `scripts/AOT_BUILD.md` next to this file for the whole pipeline.
 
 use std::env;
 
@@ -23,7 +23,7 @@ fn main() {
         panic!(
             "the `linked` feature needs ZAKURO_LINKED_PROGRAM_ID, the 16 hex digit title ID \
              of the ROM passed to 3dsrecomp port (for example 0004000000055D00). See \
-             ios/zakuro-ios/RECOMP.md"
+             ios/zakuro-ios/scripts/AOT_BUILD.md"
         )
     });
     let value = value.trim();
@@ -34,7 +34,7 @@ fn main() {
     if digits.len() != 16 || !digits.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         panic!(
             "ZAKURO_LINKED_PROGRAM_ID must be the 16 hex digit 3DS title ID, \
-             for example 0004000000055D00, got `{value}`. See ios/zakuro-ios/RECOMP.md"
+             for example 0004000000055D00, got `{value}`. See ios/zakuro-ios/scripts/AOT_BUILD.md"
         );
     }
 

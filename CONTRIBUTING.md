@@ -1,49 +1,48 @@
 # Contributing
 
-Thanks for helping. This project is at the planning / Phase 0 stage, so the
-most useful contributions right now are:
+Thanks for helping 3ds2apple. The project is an early-stage native iOS port of
+Nintendo 3DS games; the most useful contributions are:
 
-- reproducing the desktop [Zakuro](https://github.com/fearkov/zakuro) +
-  [3dsrecomp](https://github.com/fearkov/3dsrecomp) results on Windows/Linux;
-- testing the iOS build path on a cloud Mac;
-- reporting game compatibility with title, region, version, and what breaks;
-- improving the docs in `docs/`.
+- build and run instructions for macOS / Xcode versions;
+- compatibility reports: game, title ID, region, version, what works and what
+  breaks;
+- fixes to the SwiftUI shell, the Zakuro C ABI or the build scripts;
+- performance work on the software renderer or a Metal/Vulkan backend;
+- documentation that makes the build path easier to reproduce.
 
 ## Ground rules
 
-1. **No ROMs, keys, system files, or game assets.** Do not attach them to
-   issues or PRs. Use only your own legally obtained, decrypted dumps.
+1. **No ROMs, keys, system files or game assets.** Do not attach them to issues,
+   pull requests or logs. Only use your own legally obtained, decrypted games.
 2. **No piracy links or instructions.** Compatibility reports should describe
    the game and the bug, not where to obtain it.
-3. **Keep the pipeline AOT.** The iOS build must not rely on a CPU JIT. The
-   ~0.2% interpreter fallback in Zakuro is expected; adding a JIT is out of
-   scope for the first release.
-4. **Licenses.** This repository's own code is Apache-2.0. Zakuro and
-   3dsrecomp are MIT; keep their notices. Do not paste GPL code (Azahar,
-   TriAevum) into this repository.
-5. **Generated code is game-derived.** Keep the C code from 3dsrecomp, the
-   compiled dylibs, IPAs, and extracted assets out of git. Build outputs
-   belong in `out/`, `build/`, or `Payload/`, which are ignored.
-
-## Pull requests
-
-- Keep changes focused; one topic per PR.
-- For build changes, include the command you ran and the platform
-  (Windows / Linux / macOS version).
-- For compatibility fixes, include the game title ID, region, version, and a
-  short log excerpt if possible.
-- By contributing, you agree that your contribution is licensed under
-  Apache-2.0.
+3. **Keep the pipeline AOT.** The iOS build must not depend on a CPU JIT.
+   Zakuro's small interpreter fallback is expected; adding a JIT is out of
+   scope.
+4. **Licenses.** This repository is Apache-2.0. Zakuro and 3dsrecomp are MIT;
+   keep their notices. Do not paste GPL code (Azahar, Citra, TriAevum) into this
+   repository.
+5. **Generated code is game-derived.** Never commit the C produced by
+   3dsrecomp, compiled archives, IPAs or extracted game assets. Build outputs
+   belong in `build/`, `IPA/` or `third_party/`, which are ignored.
+6. **One topic per pull request.** Include the command you ran, the host
+   configuration and a short log excerpt where relevant.
 
 ## Reporting a build or game issue
 
 Please include:
 
-- host OS and version;
+- host OS and Xcode version;
 - Zakuro / 3dsrecomp commit or release;
-- game title, title ID, region, version (base / update / DLC);
-- whether the game was recompiled;
-- the last 50 lines of the log;
-- whether the same game works in desktop Zakuro.
+- game title, title ID, region and version (base / update / DLC);
+- whether the game was recompiled and whether the app shows
+  `AOT: linked, active` or `linked, interpreting`;
+- the last 50 lines of the build or device log.
 
-Do not upload the ROM or generated C code.
+Do not upload the ROM, generated C code or a signed IPA.
+
+## Pull requests
+
+By contributing, you agree that your contribution is licensed under
+Apache-2.0. Keep changes focused and update the relevant public documentation
+in `README.md`, `docs/` or `ios/*/README.md`.
