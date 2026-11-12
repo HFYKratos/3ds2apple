@@ -285,7 +285,7 @@ check_game_archive() {
   lipo_arch_ok "$file" || die "libgame.a is not arm64: $file"
   local symbol
   for symbol in $EXPECTED_RECOMP_SYMBOLS; do
-    nm -g "$file" 2>/dev/null | grep -q "[[:space:]]_${symbol}\$" || missing="$missing _${symbol}"
+    nm -g "$file" 2>/dev/null | grep -q "_${symbol}\$" || missing="$missing _${symbol}"
   done
   [[ -z "$missing" ]] || die "$file does not export generated tables:$missing
        Re-run scripts/build-recomp-ios.sh <rom> $NAME (RECOMP.md §3.2)."
