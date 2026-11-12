@@ -6,6 +6,8 @@
 
 平台：iPhone / iPad（iOS 16+） · 构建：macOS + Xcode · 安装：Sideloadly / AltStore 侧载 · 许可：Apache-2.0 · **自带游戏**
 
+> **第一个实验版本：** [v0.1.0-alpha](https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.0-alpha)（源码 + 无游戏数据的 shell IPA）。
+>
 > **状态：早期开发。** 当前验证到 Pokémon Y（美版）可以启动、显示上下屏、AOT 代码生效；图形仍由软件 PICA200 渲染，Metal 后端在开发中。兼容性、帧率和功能会随版本变化。
 
 ## 原生移植，不是 CPU 模拟器
