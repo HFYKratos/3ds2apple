@@ -1,10 +1,15 @@
 # Builder user experience
 
-> **Status: CLI implemented, GUI design.** The command line client (`zkb`) and
-> the Linux CLI frontend (`3ds2apple-builder`, see
-> [linux/README.md](linux/README.md)) exist today; the Windows/Linux GUI screens
-> are still design only. The protocol underneath is in
-> [PROTOCOL.md](PROTOCOL.md); the technology choice is in [STACK.md](STACK.md).
+> **Status: CLI and CLI-first Windows/Linux frontends implemented, GUI design.**
+> The command line client (`zkb`), the Windows frontend
+> (`builder-windows.exe`, a guided session plus the same commands) and the
+> Linux CLI frontend (`3ds2apple-builder`, see
+> [linux/README.md](linux/README.md)) exist today. The graphical screens in this
+> document — Windows/Linux GUI windows, the host wizard pages, stage list
+> widgets and log viewer — are still design only. The protocol underneath is in
+> [PROTOCOL.md](PROTOCOL.md); the technology choice is in [STACK.md](STACK.md);
+> the Windows frontend's exact behaviour is documented in
+> [windows/README.md](windows/README.md).
 
 The Builder has one job: take a ROM the user owns from a Windows or Linux
 desktop, build it on a macOS host the user controls, and hand back an unsigned
@@ -16,7 +21,7 @@ ROM is, what the Mac is doing, and what to do when a step fails.
 
 | Persona | Builder | macOS host | What they need to succeed |
 |---|---|---|---|
-| **Windows-only user** | Windows GUI | Cloud Mac (rented by the user) or a Mac on the LAN | Host setup guidance, clear "what is running where", Sideloadly/Store steps |
+| **Windows-only user** | Windows frontend (CLI-first; GUI design) | Cloud Mac (rented by the user) or a Mac on the LAN | Host setup guidance, clear "what is running where", Sideloadly/Store steps |
 | **Linux desktop user** | Linux GUI or CLI | Local macOS VM or cloud Mac | SSH host setup, big-file transfer that resumes, a signing path (Windows/macOS machine) |
 | **Headless/scripted user** | CLI | Any | `--json`, stable exit codes, resumable downloads, no GUI dependency |
 | **Repeat builder** | GUI or CLI | Same host | Job history, re-run with the same game name, cached toolchain, fast path |
@@ -375,6 +380,33 @@ zkb download --host office <job-id> --out ./out --verify
 zkb delete --host office <job-id>
 ```
 
+### 8.1 Windows frontend
+
+`builder-windows.exe` is the Windows build of the same client. It implements
+§2 (first run, BYO-ROM statement), §3.1 (SSH host pairing with fingerprint
+confirmation), §4 (ROM selection, transfer progress, stage list as text, live
+log, cancel with `c` + Enter), §4.4 (result with SHA256, manifest, artifact
+record and ROM-deletion status) and §6 (installation guide file and console
+guide) in the console, without a graphical window. The GUI screens in this
+document remain the design for a future Tauri shell over the same engine.
+
+```powershell
+builder-windows.exe                 # guided session (no arguments)
+builder-windows.exe doctor          # local checks; optional --host <name>
+builder-windows.exe self-test       # on-PC checks, no Mac or ROM needed
+builder-windows.exe host add --name office --ssh builder@mac-mini.local
+builder-windows.exe build --host office --rom ".\ROM\Pokemon Y.cci" `
+    --name pokemon-y --display-name "Pokemon Y" --out .\out
+builder-windows.exe status --host office <job-id> --follow
+builder-windows.exe cancel --host office <job-id>
+builder-windows.exe install-guide --ipa .\out\pokemon-y-AOT.ipa --sha256 <hex>
+```
+
+It reads and writes the same `config.toml` and host profiles as `zkb`, so a host
+paired with either tool works in both. Windows-specific details (extended-length
+paths, CJK names, console code page, OpenSSH optional feature, SmartScreen on the
+unsigned executable) are covered in [windows/README.md](windows/README.md).
+
 Conventions:
 
 - Exit codes: `0` success; `1` build failed; `2` usage/config; `3` host/auth/
@@ -388,7 +420,7 @@ Conventions:
   flags are usage errors.
 - The CLI never prints the token, and `zkb config` redacts it.
 
-### 8.1 Linux frontend
+### 8.2 Linux frontend
 
 `3ds2apple-builder` is the Linux frontend: a thin wrapper over `zkb` that adds
 the VM-specific steps, with the same states, exit codes and `--json`
@@ -428,6 +460,8 @@ Things the UI must do or say, and things it must never do:
 
 - **Keyboard:** every action reachable without a mouse; file drop has a picker
   fallback; focus order follows the visual flow; Escape cancels dialogs only.
+  (CLI-first today: prompts are linear, every value has a typed fallback, and
+  pasted paths may carry the quotes "Copy as path" adds.)
 - **Screen readers:** stage list is a list with status text (not colour-only);
   progress has textual values; log viewer is copyable text.
 - **Colour:** state is encoded by icon + text, not only green/red; contrast
@@ -438,7 +472,10 @@ Things the UI must do or say, and things it must never do:
   scaling on Linux.
 - **Paths:** long Windows paths (`\\?\`), spaces, Unicode and CJK file names
   are first-class; the data directory is configurable if the default is in a
-  synced folder.
+  synced folder. The CLI-first frontend implements this handling today; the GUI
+  inherits it from the same library. Console output uses text markers rather
+  than colour or emoji, so it stays readable with any code page and screen
+  reader.
 - **Offline:** the Builder works offline once a host is paired; only the build
   host needs network access for first-run provisioning (Zakuro/3dsrecomp
   clones, MoltenVK download).

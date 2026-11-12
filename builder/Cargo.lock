@@ -131,6 +131,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "builder-windows"
+version = "0.1.0"
+dependencies = [
+ "builder-core",
+ "clap",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "toml",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

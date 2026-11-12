@@ -13,12 +13,14 @@ macOS VM, a Mac on the LAN, or a cloud Mac rented for the project. The
 build on such a host through a small **Build Agent**, then receives the
 unsigned IPA, its SHA256 and its manifest.
 
-> **Status: first implementation.** The shared core, the CLI (`zkb`) and the
-> macOS Build Agent live in this directory and run end-to-end on Linux against
-> the Agent's scripted fake-build mode. The SSH binding, job queue with one
-> build slot, NDJSON log streaming, cancellation, input/build-product cleanup
-> and verified artifact download are implemented and covered by tests. The
-> optional HTTP+SSE binding, the desktop GUIs and a run of the real macOS
+> **Status: first implementation.** The shared core, the CLI (`zkb`), the
+> macOS Build Agent and the Windows frontend (`builder-windows`) live in this
+> directory and run end-to-end on Linux against the Agent's scripted fake-build
+> mode. The SSH binding, job queue with one build slot, NDJSON log streaming,
+> cancellation, input/build-product cleanup and verified artifact download are
+> implemented and covered by tests; the Windows executable has additionally been
+> run on Windows 11, including a build over real SSH to an Agent. The optional
+> HTTP+SSE binding, the graphical desktop shells and a run of the real macOS
 > pipeline from this repository are not part of this slice; see
 > [Running it today](#running-it-today).
 >
@@ -55,7 +57,8 @@ builder-agent serve              # daemon on <data root>/agent.sock
 # ssh-dispatch starts the daemon automatically when the SSH key is used
 ```
 
-On the Windows/Linux machine with the ROM:
+On the Windows/Linux machine with the ROM, either the `zkb` CLI or — on
+Windows — the dedicated frontend (same configuration file and host profiles):
 
 ```bash
 # 1. Pair the host once. This creates a dedicated SSH key, prints its public
@@ -97,6 +100,22 @@ See [builder/linux/README.md](linux/README.md) for the CachyOS + macOS VM
 walkthrough, headless usage and troubleshooting. The frontend shells out to
 `zkb` for protocol work, so the two clients behave identically.
 
+On Windows the same flow is available from `builder-windows.exe`, which adds a
+guided first-run session (host pairing, ROM selection, progress, result and the
+Sideloadly/AltStore guide) and Windows-specific handling for long paths, CJK
+names, the OpenSSH client and console encoding:
+
+```powershell
+cd builder
+cargo build -p builder-windows --release
+.\target\release\builder-windows.exe            # guided session
+.\target\release\builder-windows.exe doctor      # check this PC
+.\target\release\builder-windows.exe self-test   # no Mac needed
+```
+
+See [windows/README.md](windows/README.md) for the full command reference and
+the Windows packaging/verification details.
+
 No Mac is needed to exercise the protocol path: the Agent's `--fake-build`
 mode replaces only the script execution, and
 [`tests/e2e/local_fake_agent.sh`](tests/e2e/local_fake_agent.sh) runs the whole
@@ -106,6 +125,7 @@ cleanup) on Linux.
 | Piece | Implemented now | Verified where |
 |---|---|---|
 | `builder/core` | protocol types, framing, versioning, validation, hashing, SSH/local transports, client state, config | `cargo test -p builder-core`, golden fixtures |
+| `builder/windows` | Windows frontend: guided session, `doctor`/`self-test`, build/status/logs/cancel/download/jobs, install guide, long-path and CJK handling, portable packaging | `cargo test -p builder-windows` (unit + real-Agent E2E on Linux); run on Windows 11 incl. a build over SSH |
 | `builder/cli` (`zkb`) | `host add/list/test/remove`, `build`, `status`, `logs`, `cancel`, `download`, `jobs`, `delete`, `doctor`, `config` | `cargo test -p builder-cli` (E2E against the real Agent) |
 | `builder/agent` | daemon + stdio sessions, `ssh-dispatch` forced command, queue with one build slot, store/recovery, NDJSON events, cancellation with process groups, cleanup, artifact verification, `doctor`, `gc`, fake-build mode | unit tests + CLI E2E on Linux |
 | `builder/linux` (`3ds2apple-builder`) | Linux frontend over `zkb`: QEMU/KVM VM SSH port discovery, host pairing with fingerprint confirmation, build wrapper with local SHA256 re-verification, install guide, doctor | `cargo test -p builder-linux` (unit, local integration, fake-agent E2E) |
@@ -115,9 +135,12 @@ cleanup) on Linux.
 Remaining gaps in this slice, in addition to the deferrals in
 [PROTOCOL.md](PROTOCOL.md) §15: the HTTP binding, `transport.mode: "path"`,
 `heartbeat` events, automatic `input_timeout` expiry, a Builder-embedded source
-revision pin (the CLI sends one only with `--expected-revision`), and the
-desktop GUIs (the Linux frontend is a CLI; both Tauri GUIs remain design-only,
-see [builder/linux/README.md](linux/README.md#gui)).
+revision pin (the CLI sends one only with `--expected-revision`), the
+graphical desktop shells (the Linux and Windows frontends are CLI-first today;
+both Tauri GUIs remain design-only, see
+[linux/README.md](linux/README.md#gui) and
+[windows/README.md](windows/README.md#gui-status)) and a run of the real macOS
+pipeline from this repository.
 
 ## Why a Mac is still needed
 
@@ -197,15 +220,16 @@ Data flow:
 |---|---|---|---|
 | **Shared core** | `builder/core/` | All platforms | Protocol types and versioning, transports, job client state machine, hashing/verification, host profiles, secret storage, log redaction. No UI, no process execution. |
 | **CLI** | `builder/cli/` | Windows, Linux, macOS | `zkb` (working name): add/test build hosts, start a build, tail progress and logs, download and verify the IPA, show doctor output. The reference client and the Linux MVP. |
-| **Windows GUI** | `builder/windows/` | Windows 10/11 | Tauri desktop app over the shared core: ROM picker, host profiles, transfer/build progress, log viewer, artifact page, install guide. |
+| **Windows frontend** | `builder/windows/` | Windows 10/11 | CLI-first desktop frontend over the shared core: guided session, host profiles, transfer/build progress, log streaming, artifact page and install guide; a Tauri graphical shell over the same engine is still design only. |
 | **Linux frontend** | `builder/linux/` | Linux desktops and headless | `3ds2apple-builder`: CLI frontend over `zkb` with QEMU/KVM VM SSH discovery, host pairing, build wrapper, local SHA256 re-verification and install guide, packaged for Arch/CachyOS and Debian/Ubuntu. A Tauri GUI over the shared `builder/ui` is still planned for both desktops. |
 | **Build Agent** | `builder/agent/` | macOS (Apple Silicon or Intel) | Long-lived daemon plus `ssh` dispatch and CLI: pairing, `doctor` toolchain checks, job queue with build slots, per-job runner that invokes the existing scripts, NDJSON logs, cancellation, cleanup, artifact serving, data-root GC. |
 | **Cross-compile spike** | `builder/cross/` | Any (research) | Investigates whether a prebuilt shell plus a cross-compiled game module can remove macOS from the loop. Not shipped in v1; see [README.md](README.md). |
 | **Tests and fixtures** | `builder/tests/` | All platforms | Protocol fixtures, a scriptable fake Agent, conformance/chaos tests, and the Linux → macOS end-to-end script. |
 
-The GUI and CLI are thin clients over the same Rust library; the Build Agent is
-a separate binary from the same workspace. See [STACK.md](STACK.md) for the
-full directory layout.
+The frontends and CLI are thin clients over the same Rust library; the Build
+Agent is a separate binary from the same workspace. The Windows frontend is
+CLI-first today (a guided session plus commands) and shares its configuration
+file with `zkb`. See [STACK.md](STACK.md) for the full directory layout.
 
 ### How a build maps to the existing scripts
 
@@ -243,8 +267,8 @@ Constraints that follow from the scripts:
 
 | Piece | Supported target | Notes |
 |---|---|---|
-| Builder GUI/CLI | Windows 10 22H2+, Windows 11 (x86_64; arm64 experimental) | Needs WebView2 for the GUI (preinstalled on Windows 10/11). CLI is a single `.exe` with no runtime dependency. |
-| Builder GUI/CLI | Linux x86_64 (Arch/CachyOS, Debian/Ubuntu 22.04+, Fedora 38+); aarch64 experimental | The implemented CLI frontend has no GUI dependencies; the planned GUI needs WebKitGTK 4.1. |
+| Builder frontend/CLI | Windows 10 22H2+, Windows 11 (x86_64; arm64 experimental) | `builder-windows.exe` and `zkb.exe` are single executables with no runtime dependency. A future graphical shell also needs WebView2 (preinstalled on Windows 10/11). |
+| Builder frontend/CLI | Linux x86_64 (Arch/CachyOS, Debian/Ubuntu 22.04+, Fedora 38+); aarch64 experimental | The implemented CLI frontend has no GUI dependencies; the planned GUI needs WebKitGTK 4.1. |
 | Builder (optional) | macOS 13+ | Useful when building on the same Mac; same CLI/GUI. |
 | Build Agent | macOS 14 Sonoma or newer, Apple Silicon or Intel | Reference tested configuration: macOS 14.8, Xcode 16.4 / iOS 18.5 SDK, 4 vCPU, 8 GB RAM (the configuration the per-game pipeline has been exercised on). Headless is enough; no Apple ID, no USB device, no signing. |
 | Agent toolchain | Xcode 16.x with the iOS SDK, Rust stable with `aarch64-apple-ios`, `xcodegen`, Python 3, git, network access for the first provisioning | `builder-agent doctor` reports each item; the Builder refuses to start a job when a required item is missing. |
