@@ -18,15 +18,19 @@ struct ThreeDS2AppleApp: App {
         // Zakuro stores its Vulkan pipeline cache under XDG_CACHE_HOME (or
         // ~/.cache). On iOS the sandbox home's .cache is not writable, which
         // made every launch recompile pipelines and stutter on first use.
-        // Point it at the app's Caches directory before the runtime loads.
-        if let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
+        // Point it at the app's Caches directory before the runtime loads; the
+        // same directory is what the app reports in its diagnostics.
+        if let caches = PipelineCacheStats.cacheRootURL {
             setenv("XDG_CACHE_HOME", caches.path, 1)
         }
         // Redirect stderr and start the in-app log before the runtime loads.
         AppLog.shared.start()
-        if let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
-            AppLog.log("pipeline cache dir: %@", caches.appendingPathComponent("zakuro/pipelines").path)
+        if let directory = PipelineCacheStats.directoryURL {
+            AppLog.log("pipeline cache dir: %@", directory.path)
         }
+        // The previous session's log is part of the exported diagnostics, so
+        // this line shows a cold first run and a warmed later run side by side.
+        AppLog.log("pipeline cache at launch: %@", PipelineCacheStats.read().summary)
     }
 
     var body: some Scene {

@@ -8,7 +8,7 @@ committed.
 
 | Script | Purpose |
 |---|---|
-| `build-zakuro-ios.sh` | Clone/pin Zakuro, add `ios/zakuro-ios`, build `build/ios/libzakuro_ios.a` |
+| `build-zakuro-ios.sh` | Clone/pin Zakuro, apply `ios/zakuro-ios/patches/*.patch`, add `ios/zakuro-ios`, build `build/ios/libzakuro_ios.a` |
 | `build-ios-app.sh` | `xcodegen` + `xcodebuild` for the unsigned shell `.app` |
 | `package-ipa.sh` | Wrap an unsigned `.app` into `IPA/<name>.ipa` and print its SHA256 |
 | `build-recomp-ios.sh` | Run 3dsrecomp, compile generated C for `arm64-apple-ios` into `libgame.a` |
@@ -33,6 +33,13 @@ scripts/build-game-ipa.sh <name> --display-name "Game name"
 
 See [AOT_BUILD.md](AOT_BUILD.md) for options, incremental builds and failure
 diagnostics.
+
+The local Zakuro patches in `ios/zakuro-ios/patches/` are applied by
+`build-zakuro-ios.sh` and again by the cargo path of
+`build-linked-ios-lib.sh` (`scripts/lib/zakuro-patches.sh`). Application is
+idempotent: an already patched checkout is reported and skipped, a patch that
+no longer applies is a warning (set `ZAKURO_STRICT_PATCHES=1` to make it
+fatal). The checkout under `third_party/` stays local and gitignored.
 
 ## Requirements
 

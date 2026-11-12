@@ -1,0 +1,19 @@
+diff --git a/crates/zakuro-gpu/src/raster/hardware.rs b/crates/zakuro-gpu/src/raster/hardware.rs
+index 2257602..624862e 100644
+--- a/crates/zakuro-gpu/src/raster/hardware.rs
++++ b/crates/zakuro-gpu/src/raster/hardware.rs
+@@ -612,8 +612,12 @@ fn save_pipeline_cache(device: &ash::Device, cache: vk::PipelineCache, path: &st
+ }
+ 
+ /// how long the compiler thread waits between keeping what it compiled, a
+-/// run that does not end well losing no more than that.
+-const SAVE_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
++/// run that does not end well losing no more than that. a game's first run
++/// compiles its pipelines over the first seconds of play and can be killed at
++/// any point, so the wait is short enough to keep most of a first session
++/// (the runtime keeps the cache again when it is dropped, which a clean
++/// Unload or a move to the background does).
++const SAVE_EVERY: std::time::Duration = std::time::Duration::from_secs(5);
+ 
+ /// how much a surface holds the latest of some of its rows of memory, of
+ /// those over the same rows, what the GPU drew there and guest memory lacks

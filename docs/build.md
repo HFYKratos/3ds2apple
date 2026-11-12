@@ -26,9 +26,12 @@ xcode-select -s /Applications/Xcode.app
 scripts/build-zakuro-ios.sh
 ```
 
-The script clones/pins Zakuro into `third_party/`, adds the
-`ios/zakuro-ios` crate, disables the shader JIT, builds for
-`aarch64-apple-ios` and places `build/ios/libzakuro_ios.a`.
+The script clones/pins Zakuro into `third_party/`, applies the local patches
+from `ios/zakuro-ios/patches/` (idempotently; an already-patched checkout is
+left alone), adds the `ios/zakuro-ios` crate, disables the shader JIT, builds
+for `aarch64-apple-ios` and places `build/ios/libzakuro_ios.a`. The patches are
+the iOS MoltenVK lookup and the 5 s pipeline-cache save interval; a per-game
+rebuild with `build-linked-ios-lib.sh` applies any missing patch again.
 
 For a per-game AOT build, the linked variant is built with:
 
@@ -97,3 +100,14 @@ own Apple ID. The app is not intended for App Store distribution.
   `EXECUTABLE_NAME` explicit in `ios/app/project.yml`.
 - **No game data**: this repository never contains ROMs. The app asks for a
   ROM at runtime; the game build needs a local copy on the build machine.
+- **A local patch does not apply**: upstream `main` has moved on. Pin the
+  tested revision (see [METAL.md](../ios/zakuro-ios/METAL.md) §8.2), re-apply
+  the patches by hand, or update the patch file; the build continues without a
+  failed patch (set `ZAKURO_STRICT_PATCHES=1` to make it fatal).
+- **First load shows "Preparing graphics…" for a while**: that is the
+  first-run graphics warm-up. It is bounded at 5 s, has a Skip button, and a
+  second load with the pipeline cache on disk finishes in well under a second.
+  A build that fell back to the software renderer has no pipelines to warm and
+  is revealed immediately; see
+  [METAL.md](../ios/zakuro-ios/METAL.md) §10 for the log lines and diagnostics
+  fields that verify this on device.

@@ -502,13 +502,17 @@ Data flow: see 3.1.
   iPhone is treated as integrated GPU); `zk_set_hardware_option("gpu_shaders",
   "1")` flips it for a comparison.
 
-**First-frame/stutter risk:** the pipeline cache is written to
-`$HOME/.cache/zakuro/pipelines/<title>.bin` on the host
-(`raster/hardware.rs:550`); inside the iOS app sandbox `HOME` is writable, but
-the cache is empty on a first run/reinstall, so the first new draw combination
-may compile SPIR-V→MSL online and stutter for a few seconds. Mitigations:
-warm-up frames, move the cache path to `Library/Caches` (upstream follow-up),
-or treat A0 as an experiment build.
+**First-frame/stutter risk (handled).** The pipeline cache lives in the app's
+Caches directory (`XDG_CACHE_HOME`, one file per title, see 10.2) and the app
+runs a bounded warm-up behind a loading overlay on a first run, so the
+driver's first-use compiles happen before the game is revealed (10.3). A local
+patch lowers Zakuro's cache save interval to 5 s so a first session that ends
+early still keeps the pipelines it compiled. A software fallback has no Vulkan
+pipelines and is revealed immediately. During normal play, new draw
+combinations keep compiling on Zakuro's compiler threads and draw through the
+generic fallback pipeline meanwhile (10.1); a title can still hitch when a new
+pipeline is first used long after the warm-up, which is the remaining known
+first-use cost.
 
 **A0 acceptance:**
 
@@ -669,31 +673,43 @@ Not verified on the development host (needs the macOS build machine + a device):
 Sideloadly/AltStore, and actual on-device rendering/presentation. Section 8.3
 onward is the verification plan.
 
-### 8.2 Prepare the Zakuro checkout and apply the patch
+### 8.2 Prepare the Zakuro checkout and apply the patches
 
 Run from the repository root, on the macOS build machine:
 
 ```bash
-# 1) Clone the upstream checkout and copy this crate into it.
+# 1) Clone the upstream checkout, apply the local patches and copy this crate
+#    into it. The script applies every ios/zakuro-ios/patches/*.patch
+#    idempotently and prints one line per patch.
 scripts/build-zakuro-ios.sh
 
-# The patch was generated against upstream f54cbdb (2026-11-12); pin that
+# The patches were generated against upstream f54cbdb (2026-11-12); pin that
 # revision if the checkout moved on since.
 git -C third_party/zakuro rev-parse --short HEAD    # expect f54cbdb
 # git -C third_party/zakuro fetch --depth 1 origin f54cbdb302195193688eff8dc52844b3316c4487
 # git -C third_party/zakuro checkout f54cbdb302195193688eff8dc52844b3316c4487
-
-# 2) Apply the iOS MoltenVK lookup patch (the checkout is local, gitignored).
-git -C third_party/zakuro apply --check "$PWD/ios/zakuro-ios/patches/0001-vulkan-on-ios.patch"
-git -C third_party/zakuro apply "$PWD/ios/zakuro-ios/patches/0001-vulkan-on-ios.patch"
-
-# 3) Sanity: exactly one upstream file changed.
-git -C third_party/zakuro diff --stat
-#  crates/zakuro-gpu/src/instance.rs | 28 ++++++++++++++++++++++--
 ```
 
-If the patch was already applied, step 2 fails with "patch does not apply";
-`git -C third_party/zakuro diff --stat` shows it and you can skip to 8.3.
+For an existing checkout, apply the patches by hand (the automatic step reports
+an already-applied patch and skips it, so both orders are safe):
+
+```bash
+# 2) Apply the local patches (the checkout is local and gitignored).
+git -C third_party/zakuro apply --check "$PWD/ios/zakuro-ios/patches/0001-vulkan-on-ios.patch"
+git -C third_party/zakuro apply "$PWD/ios/zakuro-ios/patches/0001-vulkan-on-ios.patch"
+git -C third_party/zakuro apply --check "$PWD/ios/zakuro-ios/patches/0002-pipeline-cache-save-every.patch"
+git -C third_party/zakuro apply "$PWD/ios/zakuro-ios/patches/0002-pipeline-cache-save-every.patch"
+
+# 3) Sanity: the two upstream files changed.
+git -C third_party/zakuro diff --stat
+#  crates/zakuro-gpu/src/instance.rs        | 28 ++++++++++++++++++++++--
+#  crates/zakuro-gpu/src/raster/hardware.rs |  2 +-
+```
+
+If a patch is already applied, the next step fails with "patch does not
+apply"; `git -C third_party/zakuro diff --stat` shows it and you can skip to
+8.3. `build-linked-ios-lib.sh` also calls the same idempotent helper, so a
+per-game rebuild from an existing checkout picks the patches up too.
 
 ### 8.3 Build the hardware-rendering IPA (A0 and A1)
 
@@ -849,6 +865,13 @@ Then record a steady-state `zk_perf` line from the second or third window:
 - [ ] fallback: build without MoltenVK still runs on the readback path;
 - [ ] software build regression: with the switch off (and no presenter),
       behaviour is unchanged;
+- [ ] first session with an empty pipeline cache shows "Preparing graphics…",
+      then reveals the game within 5 s without a visible freeze (10.6);
+- [ ] the log shows `pipeline cache after zk_destroy: 1 file, …` after Unload
+      or background, and a later session logs `pipeline cache at load: 1 file,
+      …` with a short warm-up;
+- [ ] Skip reveals the game immediately, and the next load warms up fully
+      again;
 - [ ] `git status` clean (MoltenVK tar/framework/IPA are gitignored).
 
 ## 9. Risks and mitigations
@@ -859,7 +882,7 @@ Then record a steady-state `zk_perf` line from the second or third window:
 | R2 | the build machine's Xcode 16.4 cannot link MoltenVK 1.4.2 (built with Xcode 26.5) | medium/medium | try 1.4.2 first; fall back to 1.4.0/1.3.x (≥1.3.0) or upgrade Xcode as a build-machine decision |
 | R3 | iOS rejects `depthClamp` or another device feature | low/low | loader falls back to software and logs; upstream can make depthClamp conditional (~5 lines) |
 | R4 | embedded dynamic framework breaks under re-signing / wrong rpath | medium/medium | check `otool -L`; `ZAKURO_VULKAN_LIBRARY` absolute path fallback; else switch to static |
-| R5 | first-run pipeline compilation stutters (empty cache) | high/low | record in QA; warm-up frames; move the cache path to `Library/Caches` (upstream follow-up) |
+| R5 | first-run pipeline compilation stutters (empty cache) | high/low | handled by the Caches pipeline cache, the 5 s save interval and the loading-screen warm-up (10); a new pipeline first used long after the warm-up can still hitch (10.4). Device verification point: first session vs second session logs |
 | R6 | hardware-render emulation differences cause wrong pictures | medium/medium | keep the software build; `zk_set_hardware_renderer(0)` at run time; record per game |
 | R7 | readback cancels the win (`sync_gpu` waits on the GPU) | low/medium | measure HUD read first; A1 removes it; or lower internal resolution/fps cap |
 | R8 | MoltenVK deprecation / no more updates | high (long term)/low | pin the version; Plan B in a later release; does not block v1 |
@@ -869,6 +892,217 @@ Then record a steady-state `zk_perf` line from the second or third window:
 | R12 | first present before the `UIView` is in the window hierarchy (very fast load) | low/low | the load takes much longer than SwiftUI's layout pass, and the layer holds a provisional drawable size before layout; verify on device that the first frame appears |
 | R13 | presenter/swapchain failure leaves a black layer | low/medium | the app counts `zk_present` failures and falls back to the CGImage readback path after about a second; the Metal view stays alive for the presenter |
 | R14 | the Vulkan device/Metal layer is suspended with the app and the GPU takes it away | low/low | the frame loop and presenting stop in the background; on return the same device is used again. If the first frames after resume fail, `zk_present` errors fall back to the readback path (R13). Device verification point |
+| R15 | the graphics warm-up delays a first load by up to 5 s | medium/low | the wait is bounded and hidden behind an explicit "Preparing graphics" screen; frames still spiking at the cap reveal the game anyway; a cached later load uses a shorter plan; the overlay has a Skip button (10.3). Device verification point: perceived load time and skip behaviour |
+
+## 10. First-run pipeline compilation: warm-up, cache and async creation
+
+A first session with an empty pipeline cache is the one place where the
+hardware renderer can still freeze a visible frame: the first time a frame
+draws through a combination the driver has not compiled yet, the compile
+happens inside `zk_run_frame`, and on MoltenVK a cold SPIR-V → MSL + Metal
+pipeline compile can take hundreds of milliseconds. The tested title's first
+session showed `zk_perf` frame maxima of several hundred milliseconds; the
+second session, whose pipeline cache had been saved, stayed smooth. This
+section records the mechanism, what is implemented to keep that hitch on a
+loading screen, and why the last step (compile on a worker and skip the draw
+until it is ready) is deliberately not enabled.
+
+### 10.1 Where the first-run time goes
+
+Zakuro's Vulkan renderer already compiles *new draw combinations* away from the
+drawing thread. `crates/zakuro-gpu/src/raster/hardware.rs` runs one to three
+`shader compiler` threads (`Compiler::start`) that take translation and
+compilation jobs. When a draw needs a pipeline that is not in the in-memory
+map, `Hardware::pipeline_for`:
+
+1. probes the on-disk pipeline cache with
+   `VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED`
+   (`Hardware::cached`): a cache hit builds the pipeline without compiling;
+2. queues the pipeline compile on a compiler thread and keeps drawing the
+   frame;
+3. draws through the *generic* fragment pipeline, which draws the same PICA
+   state from the draw's registers instead of compiled constants.
+
+The generic fallback pipelines can still be compiled on the drawing thread:
+`Hardware::pipeline()` compiles synchronously when the pipeline it needs is not
+in the map, and the startup pre-compile (`generic_keys`, up to 32 combinations,
+only when the device supports dynamic blend state) runs on the compiler threads
+*while the title boots*. A first frame that draws before its generic pipeline
+is ready pays the driver compile in that frame. That is the first-session
+spike: a one-time cost per pipeline that a saved cache turns into a cache read
+(`Hardware::cached` / `Hardware::pipeline` with the driver's pipeline cache).
+
+PICA vertex programs have the same shape: `naga` translation runs on a compiler
+thread (`Job::Translate`) and the draw uses the interpreted vertex stage until
+the translated module arrives.
+
+### 10.2 Pipeline cache durability
+
+- **Location.** `App.swift` sets `XDG_CACHE_HOME` to the app's Caches directory
+  before the runtime loads. Zakuro keeps one file per title in
+  `Library/Caches/zakuro/pipelines/<title-id>.bin`
+  (`pipeline_cache()` in `hardware.rs`). The cache is regenerable data: iOS
+  may purge the Caches directory, and the files hold compiled pipeline data
+  for the user's own ROM, never game content that is not already part of the
+  build.
+- **Save interval.** Upstream saves what the compiler threads produced every
+  60 s while they are idle. The local patch
+  `patches/0002-pipeline-cache-save-every.patch` lowers the interval to 5 s,
+  so a first session that ends badly (force quit, jetsam) still keeps most of
+  the pipelines it compiled.
+- **Clean exits.** `Hardware::drop` waits for the GPU and saves the cache, so
+  Unload, Change ROM and the move to the background — all of which destroy the
+  runtime — write the latest cache. The app logs the directory contents after
+  `zk_destroy` so a device log or the exported diagnostics proves it.
+- **Size cap.** Upstream compiles from scratch again if the cache grows past
+  `MOST_PIPELINE_BYTES` (64 MiB); a normal title's cache is far smaller.
+- The app reads the directory at launch, before each load and after a warm-up,
+  and reports file count, total size and the newest file in the diagnostics
+  header. Those lines are the easiest way to see "first run cold, second run
+  warm" on a device.
+
+### 10.3 App warm-up: "Preparing graphics"
+
+After `zk_create` succeeds and before the game is revealed, the app runs the
+normal frame loop behind an opaque overlay and feeds the runtime neutral input:
+
+- Every frame's wall time is recorded. A frame over 50 ms counts as a spike
+  (that is the visible freeze). The run lasts **at least 2 s** (the background
+  generic-pipeline pre-compile needs a few seconds, and a quiet stretch between
+  two boot phases must not reveal the game just before the next compile burst),
+  and ends after **90 consecutive frames without a spike** — about 1.5 s at
+  60 Hz — once that minimum has passed.
+- **Hard cap 5 s.** If frames are still spiking at the cap, the game is
+  revealed anyway: the loading wait is bounded.
+- Audio and lifecycle are untouched. The audio engine is started as usual
+  (boot sounds belong to loading), Unload / Change ROM / background go through
+  the existing paths and cancel the warm-up, and the frame loop is the normal
+  free-run loop. `zk_set_input` receives a neutral snapshot while the overlay
+  is up; the merged controller/touch state is kept and forwarded again from
+  the first revealed frame.
+- **Skip.** The overlay has a Skip button; it ends the warm-up on the next
+  frame and does not mark the ROM as warmed, so a later load warms up again.
+- **Cached later loads.** A successful warm-up writes a per-ROM marker that
+  includes the app version/build (an update invalidates it). A later load of
+  that ROM with cache files still on disk uses a shorter plan: no minimum wait,
+  12 quiet frames and a 2 s cap, so a cached load reveals the game in well under
+  a second from the cache-hit pipeline path.
+- **Software renderer.** A session that fell back to the software PICA200
+  renderer has no Vulkan pipelines to compile; `zk_hardware_status()` says so
+  and the app reveals the game immediately
+  (`warmup_outcome=skipped-software-renderer` in diagnostics).
+
+The overlay is UI only: the runtime, frame loop, presentation and audio behave
+exactly as in normal play, which is what makes the warm-up frames a realistic
+workload for the pipeline compiler threads.
+
+### 10.4 Async pipeline creation: what is shipped, and why draws are not skipped
+
+Skipping the draws whose pipeline is still being compiled would make the
+frames during a compile nearly free instead of "just" a generic-pipeline
+compile. It is feasible in the code — `Hardware::pipeline_for` could return a
+"not ready" marker for a pipeline the compiler threads are still making, and
+`Hardware::draw` could return without recording that draw while the worker
+finishes — but it is not implemented here, for three reasons:
+
+- **Game-visible state.** 3DS titles read framebuffers and depth buffers back
+  through the GPU (`sync_gpu`, depth-buffer reads on transfer/frame
+  boundaries). If a draw is silently dropped, a readback in the same frame
+  sees the previous contents, which can change game state, not only the
+  picture: a loader that reads back color or depth could take a different
+  branch. Dropping a draw is safe only when the game cannot observe it; the
+  loading overlay gives that guarantee for the warm-up frames, normal play
+  does not.
+- **Failure and fallback.** If the driver rejects the pipeline, or the cache
+  is invalid, skipping forever would freeze the picture. The worker path would
+  need a fallback to the synchronous compile after N skipped frames, which
+  re-introduces the stall exactly when something is wrong.
+- **Verification cost.** This changes the renderer's per-draw path and can only
+  be proven safe per title on a device (picture and game state). The
+  cache + warm-up design keeps the renderer untouched, and the measured
+  first-session spikes are boot/first-use compiles that the overlay hides.
+
+The closest safe alternative is what is shipped: worker-thread compilation with
+the generic-pipeline fallback (upstream), a durable pipeline cache
+(`patches/0002-pipeline-cache-save-every.patch` plus the Caches path), and the
+loading-screen warm-up. If a title still hitches after the warm-up — a *new*
+pipeline first used minutes into play — the next step is to check the
+pipeline-compile debug log (the `zakuro_gpu::pipelines` target) and whether
+those pipelines were cached, and then to warm representative scenes per title
+during the warm-up. Dropping draws during play is not that step.
+
+### 10.5 Fallbacks and diagnostics
+
+| Situation | Behaviour |
+|---|---|
+| No MoltenVK / no Vulkan device | renderer falls back to software, logs the reason, app skips the warm-up and reveals immediately |
+| Presenter cannot be made (A1) | readback path; the warm-up still runs if the renderer draws on the GPU, because the pipelines compile either way |
+| Warm cache (serialized pipelines from an earlier run) | short warm-up; the cache-hit path builds pipelines without compiling |
+| Cache purged by iOS, or app updated | marker invalidated / cold cache → full warm-up again |
+| User presses Skip | reveal on the next frame; the next load runs the full warm-up |
+| Frames still spiking after 5 s | reveal anyway; diagnostics show `warmup_outcome=maximum-time` |
+
+Log lines that make a device run auditable (the app log and `idevicesyslog`
+carry them; the export includes the previous session as well):
+
+```text
+pipeline cache at launch: cold (no cached pipelines)
+pipeline cache at load: cold (no cached pipelines)
+graphics warm-up: starting (cold cache, full run)
+graphics warm-up: warm-up ready in 2.40 s · 146 frames · max 586 ms · 3 spiky (>50 ms)
+pipeline cache after warm-up: 1 file, 640 KB, newest 0004000000055E00.bin at ...
+pipeline cache after zk_destroy: 1 file, 640 KB, newest ...      # Unload / background
+```
+
+The diagnostics report adds:
+
+```text
+hardware=...                                 # zk_hardware_status()
+warmup_outcome=ready                         # or maximum-time / skipped-* / runtime-stopped
+warmup_frames=146
+warmup_elapsed_s=2.40
+warmup_max_frame_ms=586.0
+warmup_spike_frames=3
+warmup_quiet_frames=90/90
+warmup_limit_s=5
+warmup_from_cached_pipelines=0
+warmup_summary=...
+pipeline_cache_dir=.../Library/Caches/zakuro/pipelines
+pipeline_cache=1 file, 640 KB, newest ...
+pipeline_cache_files=1
+pipeline_cache_bytes=655360
+```
+
+The first session still reports a large `timing_ms_run` maximum / HUD max: the
+warm-up deliberately absorbs that frame *before* the game is revealed, so the
+number is the evidence that the hitch moved behind the loading screen, not a
+regression. Read the steady-state `perf:` windows after the reveal for normal
+frame time.
+
+### 10.6 Device verification
+
+1. Uninstall the app (or delete its Caches) and copy a fresh log; install the
+   build again so the first load has an empty pipeline cache.
+2. Load the ROM: the "Preparing graphics…" overlay should appear before the
+   game, with frames counting up; the log should show `planned full (cold
+   cache)` and then `warm-up ready` (or `capped`, which still reveals the
+   game). Note the warm-up duration and max frame.
+3. Play: the game must be revealed without a visible freeze; watch for a
+   second or two after the reveal and record any hitch with its log time.
+4. Unload the ROM (or send the app to the background) and check the log for
+   `pipeline cache after zk_destroy: 1 file, ...`.
+5. Load the ROM again: the log should show `pipeline cache at load: 1 file, …`
+   and `planned short (pipelines cached)`; the warm-up should finish well
+   under a second. Export diagnostics and keep both sessions' logs.
+6. Repeat with the Skip button; the game must be revealed immediately and the
+   next load must run the full warm-up again.
+7. Regression: a build without MoltenVK (software renderer) must reveal
+   immediately with `warmup_outcome=skipped-software-renderer`, and
+   background/Unload/Load-last/rotation must behave as before.
+
+Not verified on the development host: all of the above, plus `xcodebuild`. The
+patch, the native parse of the Swift sources and the host `cargo check` of the
+patched `zakuro-gpu` are the checks that run off-device.
 
 ## Appendix A: upstream file index
 
@@ -882,11 +1116,15 @@ Upstream `main` @ `f54cbdb` (2026-11-12):
 | `crates/zakuro-gpu/src/lib.rs:667`/`692`/`711`/`799` | `enable_hardware_renderer` / `draws_on_gpu` / `shows_directly` / `scale` |
 | `crates/zakuro-gpu/src/device.rs:10`/`27` | `SharedDevice` / `SharedDevice::new()` |
 | `crates/zakuro-gpu/src/instance.rs` | Vulkan library lookup (**the iOS gap**, patched in 8.2) |
-| `crates/zakuro-gpu/src/raster/hardware.rs:550`/`1577`/`1711`/`5609`/`5619`/`5714` | pipeline cache path / `with_device` / `shades` default / `can_render` / `render_device` / `own_device` |
+| `crates/zakuro-gpu/src/raster/hardware.rs:550`/`588`/`616` | pipeline cache path / save / `SAVE_EVERY` (patched to 5 s) |
+| `crates/zakuro-gpu/src/raster/hardware.rs:1080`/`1090`/`1189`/`2949`/`2996`/`3327`/`5391` | `Compiler` (worker threads) / `Compiler::start` / compile loop / `pipeline()` / `pipeline_for()` / `hand()` / `Hardware::drop` (saves the cache) |
+| `crates/zakuro-gpu/src/raster/hardware.rs:1577`/`1711`/`5609`/`5619`/`5714` | `with_device` / `shades` default / `can_render` / `render_device` / `own_device` |
 | `crates/zakuro-gpu/src/backend/mod.rs:12`/`356` | `ScreenImage` / `Presenter` trait |
 | `crates/zakuro-gpu/src/backend/vulkan.rs:140`/`425`/`607` | `VulkanPresenter::new` / swapchain / `shared_device` |
 | `crates/zakuro/src/present.rs:235` | desktop `create_vulkan` (A1 wiring reference) |
 | `crates/zakuro-gpu/shaders/*.spv` | precompiled SPIR-V (`include_bytes!` at build time) |
+| `ios/zakuro-ios/patches/0001-vulkan-on-ios.patch` | iOS MoltenVK lookup in `instance.rs` |
+| `ios/zakuro-ios/patches/0002-pipeline-cache-save-every.patch` | `SAVE_EVERY` 60 s → 5 s in `hardware.rs` (10.2) |
 
 ## Appendix B: verification log
 
@@ -902,7 +1140,9 @@ Linux development host, upstream `f54cbdb`, patch applied, 2026-11-12:
 | A1 presenter tests | part of the above (`src/presenter.rs`: NULL/zero-size argument checks, touch mapping) | pass, no Vulkan needed |
 | dependency resolution | `raw-window-handle = "0.6"` resolves with the `ash-window` copy | one version in the lock file |
 | header | `gcc -std=c11/c17 -Wall -Wextra -pedantic -Werror -fsyntax-only` with `ios/ZakuroBridge.h` | pass; C++17 include also compiles |
-| patch applies | `git apply --check patches/0001-vulkan-on-ios.patch` on pristine upstream | pass |
+| patch applies | `git apply --check` of both patches in `ios/zakuro-ios/patches/` on pristine upstream | pass; re-application is a no-op |
+| host check of the patched renderer | `cargo check -p zakuro-gpu --no-default-features --features vulkan` | pass |
+| Swift sources parse | tree-sitter Swift grammar over `ios/app/Sources/*.swift` | pass (syntax only; no `xcodebuild` here) |
 | MoltenVK binary | not downloaded, not committed | repository contains text only |
 
 Not run here: macOS links, `xcodebuild`, device tests (including the presented

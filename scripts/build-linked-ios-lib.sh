@@ -45,6 +45,8 @@ ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 AOT_LOG_PREFIX="build-linked-ios-lib"
 # shellcheck source=lib/aot-common.sh
 source "${SCRIPT_DIR}/lib/aot-common.sh"
+# shellcheck source=lib/zakuro-patches.sh
+source "${SCRIPT_DIR}/lib/zakuro-patches.sh"
 
 ZAKURO_DIR="${ZAKURO_DIR:-${ROOT}/third_party/zakuro}"
 IOS_TARGET="aarch64-apple-ios"
@@ -456,6 +458,11 @@ ensure_zakuro_checkout() {
 validate_game_archive "$GAME_SRC"
 
 ensure_zakuro_checkout
+
+# The linked runtime is rebuilt from the patched checkout: apply the local
+# patches if this checkout was not created by build-zakuro-ios.sh (or was
+# refreshed from upstream). Idempotent; see scripts/lib/zakuro-patches.sh.
+apply_zakuro_patches "$ZAKURO_DIR"
 
 if ! command -v rustup >/dev/null 2>&1; then
   warn "rustup not found; assuming the aarch64-apple-ios target is installed"

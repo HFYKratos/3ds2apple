@@ -87,7 +87,10 @@ The shell owns the UI and the frame loop:
   `zk_set_input`;
 - plays `zk_take_audio` through AVAudioEngine;
 - shows frame time by phase (run / screen reads / image conversion / audio) for
-  performance work.
+  performance work;
+- runs a bounded graphics warm-up behind a loading screen after a first load,
+  so the GPU pipeline compiles of a cold pipeline cache happen before the game
+  is revealed, and reports the warm-up and pipeline-cache state in diagnostics.
 
 ## Build pipeline
 
@@ -109,9 +112,17 @@ with Sideloadly or AltStore and the user's own Apple ID.
   translates to Metal. The A1 presenter draws the two screens directly into a
   `CAMetalLayer`; the software PICA200 renderer remains as a fallback.
 - The tested Pokémon Y build keeps steady-state run time around 6 ms and
-  reaches ~60 fps on an A16 device once the pipeline cache is warm. First-run
-  pipeline compilation is still visible as short hitches; the cache is saved
-  under the app's Caches directory and reused on later launches.
+  reaches ~60 fps on an A16 device once the pipeline cache is warm.
+- The first frames of a first session are dominated by GPU pipeline
+  compilation: the driver compiles a pipeline the first time a draw needs it,
+  and a cold pipeline cache can cost hundreds of milliseconds in one frame.
+  Zakuro compiles new draw combinations on worker threads and draws through a
+  generic fallback pipeline meanwhile; the app additionally runs a bounded
+  warm-up behind a "Preparing graphics" screen (until frames are smooth, at
+  most 5 s) and keeps a per-title pipeline cache in the app's Caches directory,
+  saved every 5 s and on Unload/background. Later loads read the cache and
+  reveal the game quickly; see [ios/zakuro-ios/METAL.md](../ios/zakuro-ios/METAL.md)
+  §10 for the mechanism and the async-creation analysis.
 - The UI exposes frame-time phases, so renderer/presenter changes can be
   measured on device rather than guessed.
 - Longer term, a direct PICA200 → Metal renderer (Metal render pipelines plus

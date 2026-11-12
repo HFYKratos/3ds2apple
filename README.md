@@ -60,8 +60,11 @@ iOS 侧通过一个很小的 C ABI（`ios/zakuro-ios/`）调用 Zakuro：加载 
 - 性能 HUD 与 free-run 帧循环已接入，可在设备上查看各阶段帧时间；
 - GPU 通过 MoltenVK / Vulkan 直接呈现到 CAMetalLayer（A1），并保留软件回退；
 - Pokémon Y AOT 在 A16 上接近 60fps；pipeline cache 已持久化；
+- 首次运行的 GPU pipeline 编译放在加载页完成：ROM 载入后先在 "Preparing
+  graphics" 遮罩后跑若干帧（至少 2 秒、连续 90 帧无 >50ms 尖峰、最多 5 秒），
+  再把游戏显示出来；同一 ROM 的 cache 保存在 App 的 Caches 目录，第二次运行
+  直接读取，预热明显更短；渲染器回退到软件时跳过预热；
 - 应用内可导出诊断日志（设备/构建/AOT/帧时间）；
-- 首次启动仍可能有 pipeline 编译尖峰，正在优化；
 - 兼容性、稳定性和更多游戏的支持仍在验证中。
 
 > 游戏画面和测试数据只用于本地验证，不进入仓库；本仓库不包含任何 ROM、密钥、系统文件或游戏资源。

@@ -124,6 +124,11 @@ struct ContentView: View {
                 title: "Starting Zakuro…",
                 detail: "Loading \(name). zk_create() can take several seconds."
             )
+        case .preparing(let name):
+            statusRow(
+                title: "Preparing graphics…",
+                detail: "\(name) is running its first frames behind the loading screen while the GPU compiles and caches its pipelines. This is a one-time cost per game."
+            )
         case .loaded(let name):
             Label("Loaded: \(name)", systemImage: "checkmark.circle.fill")
                 .font(.headline)
@@ -181,7 +186,7 @@ struct ContentView: View {
                 .buttonStyle(.borderless)
                 .font(.footnote)
             }
-        case .importing, .starting:
+        case .importing, .starting, .preparing:
             EmptyView()
         case .loaded:
             Button {
@@ -228,11 +233,15 @@ struct ContentView: View {
         if isShowingScreens {
             VStack(spacing: 10) {
                 screenSurfaces
+                    .overlay { graphicsWarmUpOverlay }
                 frameStatusLine
                 performanceHUD
                 audioFailureLine
 
-                if showTouchControls {
+                // No game input while the warm-up frames run: the title is
+                // hidden, so the on-screen controls are hidden too (the
+                // runtime also receives neutral input, see ROMSession).
+                if showTouchControls && !isPreparingGraphics {
                     TouchControlsView { bit, pressed in
                         model.setOverlayButton(bit, pressed: pressed)
                     }
@@ -243,6 +252,44 @@ struct ContentView: View {
             .padding(12)
             .background(cardBackground)
             .accessibilityIdentifier("screens")
+        }
+    }
+
+    /// Opaque cover over the screens while the first GPU pipelines compile, so
+    /// the boot-time compiles happen on a loading screen instead of a visible
+    /// freeze. It disappears when the app reveals the game (phase `.loaded`).
+    @ViewBuilder
+    private var graphicsWarmUpOverlay: some View {
+        if isPreparingGraphics {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.black.opacity(0.94))
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .tint(.white)
+                    Text("Preparing graphics…")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    Text(model.warmUp.progressText)
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(.white.opacity(0.75))
+                    Text("The first frames compile and cache the GPU pipelines so "
+                         + "gameplay starts smooth. This one-time step is skipped on later loads.")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.55))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 12)
+                    Button("Skip") {
+                        model.skipGraphicsWarmUp()
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.white)
+                    .controlSize(.small)
+                    .accessibilityIdentifier("warmup-skip")
+                }
+                .padding()
+            }
+            .accessibilityIdentifier("preparing-graphics")
         }
     }
 
@@ -356,6 +403,16 @@ struct ContentView: View {
                     .accessibilityIdentifier("loop-status")
                 Text("display: \(model.displayPath.label)")
                     .accessibilityIdentifier("display-path")
+            }
+            // First-run graphics warm-up result (why the loading screen was
+            // there, how long, and whether frames were still spiking). Exported
+            // in diagnostics so a device run proves the hitch moved off-screen.
+            if let warmUpSummary = model.warmUp.summary {
+                Text(warmUpSummary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .accessibilityIdentifier("warmup-summary")
             }
         }
         .font(.caption2)
@@ -518,10 +575,13 @@ struct ContentView: View {
         case .idle: phaseText = "idle"
         case .importing(let name): phaseText = "importing \(name)"
         case .starting(let name): phaseText = "starting \(name)"
+        case .preparing(let name): phaseText = "preparing graphics: \(name)"
         case .loaded(let name): phaseText = "loaded \(name)"
         case .failed(let message): phaseText = "failed: \(message)"
         case .finished(let message): phaseText = "finished: \(message)"
         }
+        let warmUp = model.warmUp
+        let cache = model.pipelineCacheStats
         var header = """
         3ds2apple diagnostics
         date=\(Date())
@@ -532,6 +592,7 @@ struct ContentView: View {
         rom=\(model.lastROM?.name ?? "none")
         aot=\(model.aotStatus.label)
         display=\(model.displayPath.label)
+        hardware=\(model.hardwareStatus)
         loop=\(model.frameLoopLabel)
         fps=\(String(format: "%.1f", model.frameStats.fps))
         frames=\(model.frameStats.frames)
@@ -539,6 +600,19 @@ struct ContentView: View {
         last_result=\(model.frameStats.lastResult)
         audio=\(model.audioState.label)
         controller=\(model.controllerName ?? "none")
+        warmup_outcome=\(warmUp.diagnosticsOutcome)
+        warmup_frames=\(warmUp.frames)
+        warmup_elapsed_s=\(String(format: "%.2f", warmUp.elapsedSeconds))
+        warmup_max_frame_ms=\(String(format: "%.1f", warmUp.maxFrameMilliseconds))
+        warmup_spike_frames=\(warmUp.spikeFrames)
+        warmup_quiet_frames=\(warmUp.quietFrames)/\(warmUp.plan.requiredQuietFrames)
+        warmup_limit_s=\(String(format: "%.0f", warmUp.plan.maximumSeconds))
+        warmup_from_cached_pipelines=\(warmUp.plan.fromWarmCache ? 1 : 0)
+        warmup_summary=\(warmUp.summary ?? "(running)")
+        pipeline_cache_dir=\(cache.directoryPath.isEmpty ? "unknown" : cache.directoryPath)
+        pipeline_cache=\(cache.summary)
+        pipeline_cache_files=\(cache.fileCount)
+        pipeline_cache_bytes=\(cache.byteCount)
         timing_ms_total=\(String(format: "%.2f/%.2f/%.2f", timing.renderTotal.average, timing.renderTotal.maximum, timing.renderTotal.last))
         timing_ms_run=\(String(format: "%.2f/%.2f/%.2f", timing.runFrame.average, timing.runFrame.maximum, timing.runFrame.last))
         timing_ms_present=\(String(format: "%.2f/%.2f/%.2f", timing.present.average, timing.present.maximum, timing.present.last))
@@ -552,7 +626,7 @@ struct ContentView: View {
     }
 
     private var footer: some View {
-        Text("I3 · input + audio + free-run frame loop + perf HUD · CAMetalLayer presentation (A1) · no JIT")
+        Text("I3 · input + audio + free-run frame loop + perf HUD · CAMetalLayer presentation (A1) · first-run graphics warm-up · no JIT")
             .font(.caption2)
             .foregroundColor(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)
@@ -623,6 +697,9 @@ struct ContentView: View {
     private var isShowingScreens: Bool {
         if model.topScreenImage != nil { return true }
         if case .loaded = model.phase { return true }
+        // The warm-up overlay needs the screen area even on the readback path,
+        // where no CGImage has been published yet.
+        if isPreparingGraphics { return true }
         // A1: show the Metal layer while the ROM loads, so SwiftUI lays the
         // view out and the runtime learns its drawable size before the first
         // frame is presented.
@@ -631,9 +708,17 @@ struct ContentView: View {
         return false
     }
 
-    /// True while a ROM is being loaded (zk_create runs in the background).
+    /// True while a ROM is being loaded: zk_create runs, or the first frames
+    /// run behind the "Preparing graphics" overlay.
     private var isRuntimeStarting: Bool {
         if case .starting = model.phase { return true }
+        if case .preparing = model.phase { return true }
+        return false
+    }
+
+    /// True while the graphics warm-up overlay covers the screens.
+    private var isPreparingGraphics: Bool {
+        if case .preparing = model.phase { return true }
         return false
     }
 
