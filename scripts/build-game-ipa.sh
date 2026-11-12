@@ -281,12 +281,18 @@ check_linked_lib() {
 }
 
 check_game_archive() {
-  local file="$1" missing=""
+  local file="$1" missing="" symbols_file
   lipo_arch_ok "$file" || die "libgame.a is not arm64: $file"
+  # Under `set -o pipefail`, `nm ... | grep -q` fails with SIGPIPE as soon as
+  # grep finds a match. Dump the symbol table once and search the file, so a
+  # found symbol is not mistaken for a missing one.
+  symbols_file="$(mktemp "${TMPDIR:-/tmp}/3ds2apple-nm.XXXXXX")"
+  nm -g "$file" 2>/dev/null > "$symbols_file" || true
   local symbol
   for symbol in $EXPECTED_RECOMP_SYMBOLS; do
-    nm -g "$file" 2>/dev/null | grep -q "_${symbol}\$" || missing="$missing _${symbol}"
+    grep -q "_${symbol}\$" "$symbols_file" || missing="$missing _${symbol}"
   done
+  rm -f "$symbols_file"
   [[ -z "$missing" ]] || die "$file does not export generated tables:$missing
        Re-run scripts/build-recomp-ios.sh <rom> $NAME (RECOMP.md §3.2)."
 }
