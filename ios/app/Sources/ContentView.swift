@@ -70,6 +70,12 @@ struct ContentView: View {
         .onChange(of: settings.screenLayout) { layout in
             model.setScreenLayout(layout)
         }
+        .onChange(of: settings.screenRotation) { rotation in
+            model.setScreenRotation(rotation)
+        }
+        .onChange(of: settings.integerScale) { enabled in
+            model.setIntegerScaling(enabled)
+        }
         .onChange(of: settings.orientation) { orientation in
             AppOrientation.apply(orientation)
         }
@@ -102,6 +108,8 @@ struct ContentView: View {
         model.setAudioBufferDuration(settings.audioBuffer.duration)
         model.setFrameRateCap(settings.frameCap.rawValue)
         model.setScreenLayout(settings.screenLayout)
+        model.setScreenRotation(settings.screenRotation)
+        model.setIntegerScaling(settings.integerScale)
         model.applyRenderScale(CGFloat(settings.renderScale))
         model.setPlaybackSpeed(settings.playbackSpeed.rawValue)
         model.setGraphicsWarmUpEnabled(settings.graphicsWarmUpEnabled)

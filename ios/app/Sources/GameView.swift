@@ -3,8 +3,17 @@
 //  3ds2apple
 //
 //  The running game: the two 3DS screens on the CAMetalLayer (or the CGImage
-//  readback path used by the alternate screen layouts), the performance HUD,
-//  the on-screen controls and the in-game overlay menu.
+//  readback fallback), the performance HUD, the on-screen controls and the
+//  in-game overlay menu.
+//
+//  The view is responsive:
+//
+//  - portrait: the screens in a card, the on-screen pad below it (scrollable);
+//  - landscape: a top bar (Select/Start), the shoulder buttons and the two
+//    button clusters in reserved side rails, and the screens in the space
+//    between them, so no button covers a screen. The display settings pick the
+//    layout (stacked / side by side / single screen), the rotation and how the
+//    picture fills its area; the CAMetalLayer presenter draws all of them.
 //
 //  The "Preparing graphics" overlay from the first-run warm-up stays on top of
 //  the screens while the initial GPU pipelines compile. Opening the in-game
@@ -59,40 +68,36 @@ struct GameView: View {
     private var romName: String { model.lastROM?.name ?? L10n.tr("Game") }
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        GeometryReader { geometry in
+            let isLandscape = geometry.size.width > geometry.size.height
+            ZStack {
+                Color.black.ignoresSafeArea()
 
-            ScrollView {
-                VStack(spacing: 10) {
-                    screenCard
-                    frameStatusLine
-                    if settings.showCustomHUD {
-                        performanceHUD
-                    }
+                if isLandscape {
+                    landscapeContent
+                } else {
+                    portraitContent
                 }
-                .padding(12)
-                .frame(maxWidth: 900)
-                .frame(maxWidth: .infinity)
-            }
 
-            if isMenuPresented {
-                InGameMenuView(
-                    romName: romName,
-                    settings: settings,
-                    saveStates: model.saveStates,
-                    onResume: resumeGame,
-                    onReset: { requestConfirmation(.reset) },
-                    onDisplaySettings: { sheet = .quickDisplaySettings },
-                    onSaveManager: { sheet = .saveManager },
-                    onDiagnostics: exportDiagnostics,
-                    onExit: { requestConfirmation(.exit) },
-                    onLoadStateCompleted: resumeAfterStateLoad
-                )
+                if isMenuPresented {
+                    InGameMenuView(
+                        romName: romName,
+                        settings: settings,
+                        saveStates: model.saveStates,
+                        onResume: resumeGame,
+                        onReset: { requestConfirmation(.reset) },
+                        onDisplaySettings: { sheet = .quickDisplaySettings },
+                        onSaveManager: { sheet = .saveManager },
+                        onDiagnostics: exportDiagnostics,
+                        onExit: { requestConfirmation(.exit) },
+                        onLoadStateCompleted: resumeAfterStateLoad
+                    )
+                }
             }
-        }
-        .overlay(alignment: .topTrailing) {
-            if isLoaded && !isMenuPresented {
-                menuButton
+            .overlay(alignment: .topTrailing) {
+                if isLoaded && !isMenuPresented && !isLandscape {
+                    menuButton
+                }
             }
         }
         .preferredColorScheme(.dark)
@@ -122,6 +127,131 @@ struct GameView: View {
         }
     }
 
+    // MARK: - Portrait layout
+
+    private var portraitContent: some View {
+        ScrollView {
+            VStack(spacing: 10) {
+                screenCard
+                frameStatusLine
+                if settings.showCustomHUD {
+                    performanceHUD
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: 900)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var screenCard: some View {
+        if isShowingScreens {
+            VStack(spacing: 8) {
+                portraitScreenArea
+                    .overlay { graphicsWarmUpOverlay }
+
+                audioFailureLine
+
+                if showsTouchControls {
+                    TouchControlsView(
+                        backgroundOpacity: settings.controlsBackgroundOpacity,
+                        haptics: settings.haptics
+                    ) { bit, pressed in
+                        model.setOverlayButton(bit, pressed: pressed)
+                    }
+                }
+
+                inputStatusLine
+            }
+            .accessibilityIdentifier("screens")
+        }
+    }
+
+    /// The screens in portrait: an area whose shape follows the aspect setting
+    /// (the picture's own shape for Fit, 4:3 for 4:3 and Stretch), with the
+    /// picture fitted/stretched and integer-scaled inside it.
+    private var portraitScreenArea: some View {
+        GeometryReader { geometry in
+            screenContent(available: geometry.size)
+        }
+        .aspectRatio(screenFrameAspect, contentMode: .fit)
+        .background(Color.black)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityIdentifier("screens-area")
+    }
+
+    // MARK: - Landscape layout
+
+    private var landscapeContent: some View {
+        VStack(spacing: 6) {
+            ZStack(alignment: .trailing) {
+                if showsTouchControls {
+                    LandscapeControlsTopBar(
+                        backgroundOpacity: settings.controlsBackgroundOpacity,
+                        haptics: settings.haptics
+                    ) { bit, pressed in
+                        model.setOverlayButton(bit, pressed: pressed)
+                    }
+                } else {
+                    Color.clear
+                }
+                if isLoaded && !isMenuPresented {
+                    landscapeMenuButton
+                        .padding(.trailing, 8)
+                }
+            }
+            .frame(height: LandscapeControlsLayout.topBarHeight)
+
+            HStack(alignment: .center, spacing: 8) {
+                if showsTouchControls {
+                    LandscapeControlsLeftRail(
+                        backgroundOpacity: settings.controlsBackgroundOpacity,
+                        haptics: settings.haptics
+                    ) { bit, pressed in
+                        model.setOverlayButton(bit, pressed: pressed)
+                    }
+                    .frame(width: LandscapeControlsLayout.railWidth)
+                }
+
+                GeometryReader { geometry in
+                    screenContent(available: geometry.size)
+                }
+                .background(Color.black)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay { graphicsWarmUpOverlay }
+                .accessibilityIdentifier("screens-area")
+
+                if showsTouchControls {
+                    LandscapeControlsRightRail(
+                        backgroundOpacity: settings.controlsBackgroundOpacity,
+                        haptics: settings.haptics
+                    ) { bit, pressed in
+                        model.setOverlayButton(bit, pressed: pressed)
+                    }
+                    .frame(width: LandscapeControlsLayout.railWidth)
+                }
+            }
+            .frame(maxHeight: .infinity)
+
+            landscapeStatus
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .accessibilityIdentifier("screens")
+    }
+
+    /// The compact status line in landscape: the same frame line plus a
+    /// single-row performance HUD, so the screens keep the height.
+    private var landscapeStatus: some View {
+        VStack(spacing: 1) {
+            frameStatusLine
+            if settings.showCustomHUD {
+                compactPerformanceHUD
+            }
+        }
+    }
+
     // MARK: - Menu
 
     private var menuButton: some View {
@@ -140,6 +270,25 @@ struct GameView: View {
         }
         .padding(.top, 8)
         .padding(.trailing, 14)
+        .accessibilityIdentifier("in-game-menu")
+    }
+
+    /// The same pause button, sized for the landscape top bar (the portrait
+    /// overlay sits over the screens, which would cover them here).
+    private var landscapeMenuButton: some View {
+        Button {
+            isMenuPresented = true
+            model.pauseForMenu()
+        } label: {
+            Image(systemName: "pause.circle.fill")
+                .font(.system(size: 26))
+                .foregroundColor(.white.opacity(0.9))
+                .background(
+                    Circle()
+                        .fill(Color.black.opacity(0.5))
+                        .frame(width: 36, height: 36)
+                )
+        }
         .accessibilityIdentifier("in-game-menu")
     }
 
@@ -202,149 +351,150 @@ struct GameView: View {
 
     // MARK: - Screens
 
-    @ViewBuilder
-    private var screenCard: some View {
-        if isShowingScreens {
-            VStack(spacing: 8) {
-                screenSurfaces
-                    .overlay { graphicsWarmUpOverlay }
-
-                audioFailureLine
-
-                if settings.showTouchControls && !isPreparingGraphics && !model.isPaused {
-                    TouchControlsView(
-                        backgroundOpacity: settings.controlsBackgroundOpacity,
-                        haptics: settings.haptics
-                    ) { bit, pressed in
-                        model.setOverlayButton(bit, pressed: pressed)
-                    }
-                }
-
-                inputStatusLine
-            }
-            .accessibilityIdentifier("screens")
-        }
-    }
-
-    /// True while the screens should come from the CAMetalLayer: either a
-    /// presented load is running, or one is about to and the console layout was
-    /// chosen (the layer must be laid out before the first frame).
+    /// True while the screens should come from the CAMetalLayer: a presented
+    /// load is running, or one is about to and the Metal view already exists.
     private var usesPresentedSurface: Bool {
         model.displayPath.usesMetalLayer
-            || (isRuntimeStarting && model.screenLayout.usesPresentedPath)
+            || (isRuntimeStarting && model.metalScreenView != nil)
     }
 
+    /// The screens inside `available`: the picture's box comes from the display
+    /// settings (layout, rotation, aspect, integer scaling), centred in the
+    /// available space. The CAMetalLayer draws every layout; the two screen
+    /// images are the fallback when no presenter could be made.
     @ViewBuilder
-    private var screenSurfaces: some View {
-        if let metalView = model.metalScreenView, usesPresentedSurface {
-            presentedScreenSurface(view: metalView)
+    private func screenContent(available: CGSize) -> some View {
+        if available.width >= 1, available.height >= 1 {
+            let box = contentSize(in: available)
+            ZStack {
+                if usesPresentedSurface, let metalView = model.metalScreenView {
+                    presentedSurface(view: metalView, size: box)
+                } else {
+                    readbackArrangement(in: available)
+                }
+            }
+            .frame(width: available.width, height: available.height)
         } else {
-            readbackScreens
+            Color.black
         }
     }
 
-    /// A1: Zakuro's presenter draws the upper and lower screens stacked into the
-    /// app's CAMetalLayer. The container keeps the console aspect; integer
-    /// scaling and the stretch aspect fit the content inside it.
-    private func presentedScreenSurface(view: MetalScreenView) -> some View {
-        GeometryReader { geometry in
-            let size = consoleSize(in: geometry.size)
-            MetalScreenRepresentable(view: view)
-                .frame(width: size.width, height: size.height)
-                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
-        }
-        .aspectRatio(consoleAspect, contentMode: .fit)
-        .background(Color.black)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(metalFirstFramePlaceholder)
-        .overlay(presentedTouchOverlay)
-        .accessibilityIdentifier("metal-screen")
+    /// A1: Zakuro's presenter draws the chosen arrangement into the app's
+    /// CAMetalLayer; SwiftUI centres the layer and CoreAnimation scales it into
+    /// the box. Touch is mapped to 3DS touchscreen pixels by the runtime with the
+    /// same layout the presenter uses.
+    private func presentedSurface(view: MetalScreenView, size: CGSize) -> some View {
+        MetalScreenRepresentable(view: view)
+            .frame(width: size.width, height: size.height)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay { metalFirstFramePlaceholder }
+            .overlay { presentedTouchOverlay }
+            .accessibilityIdentifier("metal-screen")
     }
 
-    /// Readback path: the two screens as separate images, arranged according to
-    /// the screen layout setting.
-    @ViewBuilder
-    private var readbackScreens: some View {
-        switch settings.screenLayout {
-        case .stacked:
-            VStack(spacing: 8) {
+    /// Readback path: the two screens as separate images, placed like the
+    /// presenter places them (same layout, rotation, fit and centring). Only
+    /// used when no presenter can be made. Stretch scales the placed
+    /// arrangement to fill the area, which is what CoreAnimation does to the
+    /// presented layer.
+    private func readbackArrangement(in area: CGSize) -> some View {
+        let stretch = settings.screenAspect == .stretch
+        let arrangementAspect = ScreenGeometry.contentAspect(
+            layout: settings.screenLayout,
+            rotation: settings.screenRotation
+        )
+        // Fit/4:3 and integer scaling: the content box from the settings, which
+        // keeps the arrangement's aspect and may be snapped to whole pixels.
+        // Stretch places the arrangement first and scales it to the area after.
+        let layoutBox = stretch
+            ? ScreenGeometry.fittedSize(aspect: arrangementAspect, in: area)
+            : contentSize(in: area)
+        let viewports = ScreenGeometry.layoutViewports(
+            available: layoutBox,
+            layout: settings.screenLayout,
+            rotation: settings.screenRotation
+        )
+        let stretchX = layoutBox.width > 0 ? area.width / layoutBox.width : 1
+        let stretchY = layoutBox.height > 0 ? area.height / layoutBox.height : 1
+        return ZStack(alignment: .topLeading) {
+            Color.clear
+            if let top = viewports.top {
                 readbackScreen(
                     image: model.topScreenImage,
                     screen: topScreen,
-                    identifier: "top-screen"
+                    identifier: "top-screen",
+                    isTouchscreen: false
                 )
+                .frame(width: top.width, height: top.height)
+                .offset(x: top.minX, y: top.minY)
+            }
+            if let bottom = viewports.bottom {
                 readbackScreen(
                     image: model.bottomScreenImage,
                     screen: bottomScreen,
                     identifier: "bottom-screen",
                     isTouchscreen: true
                 )
+                .frame(width: bottom.width, height: bottom.height)
+                .offset(x: bottom.minX, y: bottom.minY)
             }
-        case .sideBySide:
-            HStack(spacing: 8) {
-                readbackScreen(
-                    image: model.topScreenImage,
-                    screen: topScreen,
-                    identifier: "top-screen"
-                )
-                readbackScreen(
-                    image: model.bottomScreenImage,
-                    screen: bottomScreen,
-                    identifier: "bottom-screen",
-                    isTouchscreen: true
-                )
-            }
-        case .upperOnly:
-            readbackScreen(
-                image: model.topScreenImage,
-                screen: topScreen,
-                identifier: "top-screen"
-            )
-        case .lowerOnly:
-            readbackScreen(
-                image: model.bottomScreenImage,
-                screen: bottomScreen,
-                identifier: "bottom-screen",
-                isTouchscreen: true
-            )
         }
+        .frame(width: layoutBox.width, height: layoutBox.height, alignment: .topLeading)
+        .scaleEffect(x: stretchX, y: stretchY)
+        .frame(width: area.width, height: area.height)
     }
 
+    /// One screen's image in its viewport, turned with the screen rotation
+    /// setting. The gesture on the lower screen is attached inside the turn, so
+    /// the touch position is reported in the 3DS screen's own upright pixels.
     private func readbackScreen(
         image: CGImage?,
         screen: ZakuroScreen,
         identifier: String,
-        isTouchscreen: Bool = false
+        isTouchscreen: Bool
     ) -> some View {
-        let nativeRatio = screen.aspectRatio
-        let ratio: CGFloat = settings.screenAspect == .native ? nativeRatio : 4.0 / 3.0
+        let rotation = settings.screenRotation
         return ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.black)
+            Color.black
             if let image {
-                if settings.screenAspect == .native {
-                    Image(decorative: image, scale: 1.0)
-                        .resizable()
-                        .scaledToFit()
-                } else {
-                    // Stretch mode: fill the 4:3 area (the user chose to distort).
-                    Image(decorative: image, scale: 1.0)
-                        .resizable()
-                }
+                rotatedScreenImage(image, rotation: rotation)
             } else {
                 Text(isRuntimeStarting ? L10n.tr("Starting Zakuro…") : L10n.tr("Waiting for first frame…"))
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.65))
             }
-        }
-        .aspectRatio(ratio, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
             if isTouchscreen {
-                bottomTouchOverlay
+                bottomTouchOverlay(rotation: rotation)
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .accessibilityIdentifier(identifier)
+    }
+
+    /// The screen picture turned by `rotation`. The inner frame uses the
+    /// unrotated shape, so a quarter turn fills the (swapped) viewport.
+    private func rotatedScreenImage(_ image: CGImage, rotation: ScreenRotation) -> some View {
+        GeometryReader { geometry in
+            let quarterTurn = rotation == .clockwise || rotation == .counterClockwise
+            let innerWidth = quarterTurn ? geometry.size.height : geometry.size.width
+            let innerHeight = quarterTurn ? geometry.size.width : geometry.size.height
+            Image(decorative: image, scale: 1.0)
+                .resizable()
+                .scaledToFit()
+                .frame(width: innerWidth, height: innerHeight)
+                .rotationEffect(.degrees(rotationDegrees(rotation)))
+                .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+        .clipped()
+    }
+
+    private func rotationDegrees(_ rotation: ScreenRotation) -> Double {
+        switch rotation {
+        case .upright: return 0
+        case .clockwise: return 90
+        case .upsideDown: return 180
+        case .counterClockwise: return -90
+        }
     }
 
     @ViewBuilder
@@ -395,41 +545,37 @@ struct GameView: View {
 
     // MARK: - Screen geometry
 
-    /// Aspect of the area the screens occupy. Native keeps the console's
-    /// 400x480 shape; stretch uses a 4:3 box.
-    private var consoleAspect: CGFloat {
-        settings.screenAspect == .native ? 400.0 / 480.0 : 4.0 / 3.0
+    /// Aspect of the area the screens occupy in portrait. Fit keeps the
+    /// arrangement's own shape; 4:3 and Stretch use a 4:3 box (Stretch fills it).
+    private var screenFrameAspect: CGFloat {
+        switch settings.screenAspect {
+        case .fit:
+            return ScreenGeometry.contentAspect(
+                layout: settings.screenLayout,
+                rotation: settings.screenRotation
+            )
+        case .fourThree, .stretch:
+            return 4.0 / 3.0
+        }
     }
 
-    /// Size of the presented console image inside `available`. Integer scaling
-    /// snaps it to whole screen pixels (native aspect only).
-    private func consoleSize(in available: CGSize) -> CGSize {
-        guard available.width > 0, available.height > 0 else { return .zero }
-        let aspect = consoleAspect
-        let fitWidth: CGFloat
-        let fitHeight: CGFloat
-        if available.width / available.height > aspect {
-            fitHeight = available.height
-            fitWidth = fitHeight * aspect
-        } else {
-            fitWidth = available.width
-            fitHeight = fitWidth / aspect
-        }
-        guard settings.integerScale, settings.screenAspect == .native else {
-            return CGSize(width: fitWidth, height: fitHeight)
-        }
-        let scale = displayScale > 0 ? displayScale : 2
-        let pixelWidth = fitWidth * scale
-        let pixelHeight = fitHeight * scale
-        let multiple = max(1, floor(min(pixelWidth / 400, pixelHeight / 480)))
-        return CGSize(width: 400 * multiple / scale, height: 480 * multiple / scale)
+    /// The picture's box inside `available`, from the display settings.
+    private func contentSize(in available: CGSize) -> CGSize {
+        ScreenGeometry.contentSize(
+            available: available,
+            layout: settings.screenLayout,
+            rotation: settings.screenRotation,
+            aspect: settings.screenAspect,
+            integerScale: settings.integerScale,
+            displayScale: displayScale
+        )
     }
 
     // MARK: - Touchscreen
 
-    /// A1: touch on the presented layer. It shows the upper screen over the
-    /// lower one, so the runtime maps the point and ignores anything that is
-    /// not the lower screen.
+    /// A1: touch on the presented layer. The layer shows the whole arrangement
+    /// the display settings chose; the runtime maps the normalised point with the
+    /// same layout/rotation and ignores touches that are not on the lower screen.
     private var presentedTouchOverlay: some View {
         GeometryReader { geometry in
             Color.clear
@@ -452,9 +598,11 @@ struct GameView: View {
         }
     }
 
-    /// Drag/tap on the lower screen sends 3DS touchscreen coordinates in
-    /// bottom-screen pixels while a runtime is loaded.
-    private var bottomTouchOverlay: some View {
+    /// Drag/tap on a readback lower-screen image sends 3DS touchscreen
+    /// coordinates in lower-screen pixels while a runtime is loaded. `rotation`
+    /// is the screen's display turn: the touch is mapped back into the screen's
+    /// own upright pixels, like the presented path does in the runtime.
+    private func bottomTouchOverlay(rotation: ScreenRotation) -> some View {
         GeometryReader { geometry in
             Color.clear
                 .contentShape(Rectangle())
@@ -462,7 +610,11 @@ struct GameView: View {
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
                             guard isTouchscreenEnabled else { return }
-                            let point = bottomScreenPoint(value.location, in: geometry.size)
+                            let point = bottomScreenPoint(
+                                value.location,
+                                in: geometry.size,
+                                rotation: rotation
+                            )
                             model.setTouchPoint(x: point.x, y: point.y)
                         }
                         .onEnded { _ in
@@ -474,11 +626,33 @@ struct GameView: View {
 
     private var isTouchscreenEnabled: Bool { isLoaded }
 
-    private func bottomScreenPoint(_ location: CGPoint, in size: CGSize) -> (x: UInt16, y: UInt16) {
+    private func bottomScreenPoint(
+        _ location: CGPoint,
+        in size: CGSize,
+        rotation: ScreenRotation
+    ) -> (x: UInt16, y: UInt16) {
         let width = max(size.width, 1)
         let height = max(size.height, 1)
-        let normalisedX = min(max(location.x / width, 0), 1)
-        let normalisedY = min(max(location.y / height, 0), 1)
+        let shownX = min(max(location.x / width, 0), 1)
+        let shownY = min(max(location.y / height, 0), 1)
+        // Undo the display turn: the same mapping the presenter uses for a
+        // rotated screen, so a touch lands where the picture shows it.
+        let normalisedX: CGFloat
+        let normalisedY: CGFloat
+        switch rotation {
+        case .upright:
+            normalisedX = shownX
+            normalisedY = shownY
+        case .clockwise:
+            normalisedX = shownY
+            normalisedY = 1 - shownX
+        case .upsideDown:
+            normalisedX = 1 - shownX
+            normalisedY = 1 - shownY
+        case .counterClockwise:
+            normalisedX = 1 - shownY
+            normalisedY = shownX
+        }
         let pixelsX = normalisedX * CGFloat(Int(bottomScreen.width))
         let pixelsY = normalisedY * CGFloat(Int(bottomScreen.height))
         return (
@@ -591,6 +765,42 @@ struct GameView: View {
         .accessibilityIdentifier("perf-hud")
     }
 
+    /// Single-row HUD for landscape, where three columns of rows would take the
+    /// screens' height. Same phases and averages as the portrait HUD.
+    private var compactPerformanceHUD: some View {
+        let timing = model.frameStats.timing
+        return HStack(spacing: 10) {
+            compactHudItem("total", timing.renderTotal, decimals: 1)
+            compactHudItem("run", timing.runFrame, decimals: 1)
+            if model.displayPath.usesMetalLayer {
+                compactHudItem("present", timing.present, decimals: 2)
+            } else {
+                compactHudItem("read top", timing.topScreenRead, decimals: 2)
+                compactHudItem("read bottom", timing.bottomScreenRead, decimals: 2)
+                compactHudItem("CGImage", timing.cgImage, decimals: 2)
+            }
+            compactHudItem("audio", timing.audioPump, decimals: 2)
+        }
+        .font(.caption2)
+        .monospacedDigit()
+        .foregroundColor(.secondary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.6)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .accessibilityIdentifier("perf-hud")
+    }
+
+    private func compactHudItem(
+        _ label: LocalizedStringKey,
+        _ stats: FramePhaseStats,
+        decimals: Int
+    ) -> some View {
+        HStack(spacing: 3) {
+            Text(label)
+            Text(stats.isAvailable ? String(format: "%.\(decimals)f", stats.average) : "—")
+        }
+    }
+
     private func hudRow(
         _ label: LocalizedStringKey,
         _ stats: FramePhaseStats,
@@ -640,6 +850,11 @@ struct GameView: View {
     }
 
     // MARK: - Derived state
+
+    /// Whether the on-screen controls are visible right now.
+    private var showsTouchControls: Bool {
+        settings.showTouchControls && !isPreparingGraphics && !model.isPaused
+    }
 
     /// Show the screens from the moment the runtime is loaded (placeholder
     /// until the first frame) and keep the last frame visible afterwards.

@@ -54,12 +54,21 @@ struct SettingsView: View {
                 Text(settings.screenLayout.detail)
                     .font(.caption)
                     .foregroundColor(.secondary)
+                Picker("Screen rotation", selection: persistedBinding(settings, \.screenRotation)) {
+                    ForEach(ScreenRotation.allCases) { rotation in
+                        Text(rotation.title).tag(rotation)
+                    }
+                }
                 Picker("Aspect ratio", selection: persistedBinding(settings, \.screenAspect)) {
                     ForEach(ScreenAspect.allCases) { aspect in
                         Text(aspect.title).tag(aspect)
                     }
                 }
+                Text(settings.screenAspect.detail)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 Toggle("Integer scaling", isOn: persistedBinding(settings, \.integerScale))
+                    .disabled(settings.screenAspect == .stretch)
                 Picker("Render resolution", selection: persistedBinding(settings, \.renderScale)) {
                     Text("1x").tag(1)
                     Text("2x").tag(2)
@@ -70,10 +79,13 @@ struct SettingsView: View {
                         Text(lock.title).tag(lock)
                     }
                 }
+                Text(settings.orientation.detail)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             } header: {
                 Text("Display")
             } footer: {
-                Text("The screen layout is read when a game loads, so a layout change applies to the next load. The presented console layout is the fastest path; other layouts use the screen-readback path. Integer scaling snaps the presented image to whole screen pixels.")
+                Text("Display changes apply immediately, also while a game is running: the layer is resized to the new layout and the next frame uses it. Integer scaling needs Fit or 4:3 and snaps each 3DS pixel to a whole number of screen pixels; Stretch ignores it. Render resolution changes the presenter's internal drawable, not the screen space the picture takes.")
             }
 
             Section {
@@ -403,9 +415,14 @@ struct QuickDisplaySettingsView: View {
                             Text(layout.title).tag(layout)
                         }
                     }
-                    Text(settings.screenLayout.detail)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Picker(
+                        "Screen rotation",
+                        selection: persistedBinding(settings, \.screenRotation)
+                    ) {
+                        ForEach(ScreenRotation.allCases) { rotation in
+                            Text(rotation.title).tag(rotation)
+                        }
+                    }
                     Picker(
                         "Aspect ratio",
                         selection: persistedBinding(settings, \.screenAspect)
@@ -414,10 +431,14 @@ struct QuickDisplaySettingsView: View {
                             Text(aspect.title).tag(aspect)
                         }
                     }
+                    Text(settings.screenAspect.detail)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                     Toggle(
                         "Integer scaling",
                         isOn: persistedBinding(settings, \.integerScale)
                     )
+                    .disabled(settings.screenAspect == .stretch)
                     Picker(
                         "Render resolution",
                         selection: persistedBinding(settings, \.renderScale)
@@ -437,7 +458,7 @@ struct QuickDisplaySettingsView: View {
                 } header: {
                     Text("Display")
                 } footer: {
-                    Text("The screen layout is read when a game loads, so it applies to the next load. The other display changes apply immediately.")
+                    Text("Display changes apply immediately, also while a game is running. The in-game layout moves the on-screen controls out of the screens' way in landscape.")
                 }
             }
             .navigationTitle("Display settings")

@@ -8,9 +8,10 @@
 //  bindings in SettingsView.swift, which also store them in UserDefaults.
 //
 //  The audio/controls/performance values apply immediately. Display values are
-//  applied by the game screen when a game is loaded; the screen layout is read
-//  when the next game load starts, because it decides which presentation path
-//  the load uses.
+//  applied by the game screen when a game is loaded: the screen arrangement and
+//  rotation resize the presented layer and tell the presenter (the next frame
+//  uses them), while aspect, integer scaling and render scale are applied by the
+//  game screen itself. Every display change is safe while a game runs.
 //
 //  Titles and details are localized with L10n.tr() at the point they are read,
 //  so they show English or Simplified Chinese with the rest of the UI.
@@ -21,11 +22,13 @@ import Foundation
 
 /// How the upper and lower screen are arranged on screen.
 ///
-/// The CAMetalLayer presentation draws the console layout (upper above lower)
-/// in one drawable, so a different arrangement is shown from the two screen
-/// images instead (the screen-readback path, slower than direct presentation).
+/// All layouts are drawn by the CAMetalLayer presenter: the layer's drawable is
+/// the arrangement at the 3DS resolutions and the presenter places the screens
+/// in it. The readback path is only used when no presenter can be made.
 enum ScreenLayout: String, CaseIterable, Identifiable {
+    /// Upper screen above the lower one, as on the console (portrait shape).
     case stacked
+    /// Upper screen left, lower screen right (wide, for landscape).
     case sideBySide
     case upperOnly
     case lowerOnly
@@ -43,42 +46,97 @@ enum ScreenLayout: String, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
-        case .stacked: return L10n.tr("Upper screen above the lower one, as on the console. Uses the fast presented path.")
-        case .sideBySide: return L10n.tr("Both screens in one row, for landscape. Uses the screen-readback path.")
-        case .upperOnly: return L10n.tr("Only the upper (3D) screen. Uses the screen-readback path.")
-        case .lowerOnly: return L10n.tr("Only the lower (touch) screen. Uses the screen-readback path.")
+        case .stacked:
+            return L10n.tr("Upper screen above the lower one, as on the console. Fits a portrait screen; with 90° rotation it becomes two columns.")
+        case .sideBySide:
+            return L10n.tr("Both screens in one row: upper on the left, lower on the right. Fits a landscape screen.")
+        case .upperOnly:
+            return L10n.tr("Only the upper (3D) screen. The game's touchscreen is not shown.")
+        case .lowerOnly:
+            return L10n.tr("Only the lower (touch) screen.")
         }
     }
 
-    /// The CAMetalLayer presenter always draws the console layout; other
-    /// layouts are loaded through `zk_create` + `zk_read_screen`.
-    var usesPresentedPath: Bool {
+    /// The layout number the presenter and `zk_present_layout_size` take.
+    var presenterValue: UInt32 {
         switch self {
-        case .stacked: return true
-        case .sideBySide, .upperOnly, .lowerOnly: return false
+        case .stacked: return UInt32(ZK_LAYOUT_STACKED)
+        case .sideBySide: return UInt32(ZK_LAYOUT_SIDE_BY_SIDE)
+        case .upperOnly: return UInt32(ZK_LAYOUT_TOP_ONLY)
+        case .lowerOnly: return UInt32(ZK_LAYOUT_BOTTOM_ONLY)
         }
     }
 }
 
 /// How the screens fill their area.
 enum ScreenAspect: String, CaseIterable, Identifiable {
-    /// Keep the console's own aspect (upper 400x240, lower 320x240).
-    case native
-    /// Stretch the console image to a 4:3 area. Distorts the picture.
+    /// Keep the arrangement's own shape and fit it in the available space.
+    case fit
+    /// Fit the screens inside a 4:3 box, with black bars where the shapes differ.
+    case fourThree
+    /// Fill the available space, stretching the picture if the shapes differ.
     case stretch
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .native: return L10n.tr("Native (console)")
-        case .stretch: return L10n.tr("Stretch to 4:3")
+        case .fit: return L10n.tr("Fit (native)")
+        case .fourThree: return L10n.tr("4:3")
+        case .stretch: return L10n.tr("Stretch")
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .fit:
+            return L10n.tr("Keeps the 3DS picture's own shape. Black bars fill the rest of the screen.")
+        case .fourThree:
+            return L10n.tr("Fits the picture inside a 4:3 area, the classic TV shape. The extra space becomes black bars.")
+        case .stretch:
+            return L10n.tr("Fills the whole area, stretching the picture if its shape differs. The 3DS aspect ratio is not kept.")
         }
     }
 }
 
-/// Orientation preference. Rotation still follows the device when the system
-/// allows it; the app restricts the allowed orientations to this value.
+/// Which way the 3DS screens are turned inside their area.
+///
+/// This is not the device orientation: iOS already turns the app's interface
+/// with the device, and the screens stay upright in it. A rotation is for playing
+/// with the console held sideways (the stacked screens become two columns) or
+/// upside down, like a console lying on a table.
+enum ScreenRotation: String, CaseIterable, Identifiable {
+    case upright
+    case clockwise
+    case upsideDown
+    case counterClockwise
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .upright: return L10n.tr("Upright")
+        case .clockwise: return L10n.tr("90° clockwise")
+        case .upsideDown: return L10n.tr("Upside down")
+        case .counterClockwise: return L10n.tr("90° counter-clockwise")
+        }
+    }
+
+    /// The orientation number the presenter and `zk_present_layout_size` take.
+    var presenterValue: UInt32 {
+        switch self {
+        case .upright: return UInt32(ZK_ORIENTATION_NORTH)
+        case .clockwise: return UInt32(ZK_ORIENTATION_EAST)
+        case .upsideDown: return UInt32(ZK_ORIENTATION_SOUTH)
+        case .counterClockwise: return UInt32(ZK_ORIENTATION_WEST)
+        }
+    }
+}
+
+/// Orientation preference for the app's interface. Rotation still follows the
+/// device when the system allows it; the app restricts the allowed orientations
+/// to this value. The 3DS screens are drawn upright in that interface (see
+/// `ScreenRotation` for turning them).
 enum OrientationLock: String, CaseIterable, Identifiable {
     case automatic
     case portrait
@@ -91,6 +149,17 @@ enum OrientationLock: String, CaseIterable, Identifiable {
         case .automatic: return L10n.tr("Automatic")
         case .portrait: return L10n.tr("Portrait")
         case .landscape: return L10n.tr("Landscape")
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .automatic:
+            return L10n.tr("The interface follows the device. The in-game layout adapts to portrait and landscape.")
+        case .portrait:
+            return L10n.tr("The interface stays portrait.")
+        case .landscape:
+            return L10n.tr("The interface stays landscape. Side-by-side or a turned console layout uses the width best.")
         }
     }
 }
@@ -166,8 +235,11 @@ final class AppSettings: ObservableObject {
 
     @Published var screenLayout: ScreenLayout
     @Published var screenAspect: ScreenAspect
+    /// Turn the screens inside their area (see `ScreenRotation`).
+    @Published var screenRotation: ScreenRotation
     @Published var integerScale: Bool
-    /// 1 = native 400x480 drawable, 2 = 800x960 drawable.
+    /// 1 = the layout's own drawable (400x480 for the stacked console),
+    /// 2 = twice that (800x960).
     @Published var renderScale: Int
     @Published var orientation: OrientationLock
 
@@ -202,9 +274,13 @@ final class AppSettings: ObservableObject {
         screenLayout = ScreenLayout(
             rawValue: defaults.string(forKey: Keys.screenLayout) ?? ""
         ) ?? .stacked
-        screenAspect = ScreenAspect(
-            rawValue: defaults.string(forKey: Keys.screenAspect) ?? ""
-        ) ?? .native
+        // Earlier builds stored "native" for the default aspect; it is "fit"
+        // now that 4:3 is a separate choice.
+        let storedAspect = defaults.string(forKey: Keys.screenAspect) ?? ""
+        screenAspect = ScreenAspect(rawValue: storedAspect == "native" ? "fit" : storedAspect) ?? .fit
+        screenRotation = ScreenRotation(
+            rawValue: defaults.string(forKey: Keys.screenRotation) ?? ""
+        ) ?? .upright
         integerScale = Self.bool(defaults, Keys.integerScale, fallback: false)
         renderScale = Self.bool(defaults, Keys.renderScaleDoubleX, fallback: false) ? 2 : 1
         orientation = OrientationLock(
@@ -245,6 +321,7 @@ final class AppSettings: ObservableObject {
     func persist() {
         defaults.set(screenLayout.rawValue, forKey: Keys.screenLayout)
         defaults.set(screenAspect.rawValue, forKey: Keys.screenAspect)
+        defaults.set(screenRotation.rawValue, forKey: Keys.screenRotation)
         defaults.set(integerScale, forKey: Keys.integerScale)
         defaults.set(renderScale >= 2, forKey: Keys.renderScaleDoubleX)
         defaults.set(orientation.rawValue, forKey: Keys.orientation)
@@ -278,6 +355,7 @@ final class AppSettings: ObservableObject {
     private enum Keys {
         static let screenLayout = "UI.screenLayout"
         static let screenAspect = "UI.screenAspect"
+        static let screenRotation = "UI.screenRotation"
         static let integerScale = "UI.integerScale"
         static let renderScaleDoubleX = "UI.renderScaleDoubleX"
         static let orientation = "UI.orientation"

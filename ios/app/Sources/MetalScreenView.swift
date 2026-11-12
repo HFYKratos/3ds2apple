@@ -15,6 +15,14 @@
 //  uses it when it already is a CAMetalLayer; otherwise it adds a sublayer of
 //  its own, whose size nothing would keep in step with the screen.
 //
+//  The drawable is the chosen screen arrangement at the 3DS resolutions (see
+//  ScreenGeometry.swift), not the iPhone's native pixel size: the presenter
+//  renders at 400x480 for the stacked console, 720x240 side by side, or the
+//  whole arrangement turned a quarter turn, and CoreAnimation scales that image
+//  to the view's box. Rendering at the device resolution would make the GPU do
+//  20x the work for no visible benefit; the Settings render scale can raise the
+//  drawable to twice the arrangement's pixels on fast devices.
+//
 //  Threading: `UIView` objects are main-thread only, so the view, and the
 //  presenter created from it, are created/resized on the main queue. The
 //  presenter's per-frame `zk_present()` calls run on the runtime serial queue.
@@ -27,21 +35,24 @@ import UIKit
 /// A `UIView` whose backing layer is a `CAMetalLayer`, sized for the presenter
 /// that draws the 3DS screens into it.
 final class MetalScreenView: UIView {
-    /// Native pixel size of the two 3DS screens side by side: 400x240 (upper)
-    /// above 320x240 (lower) is 400x480. The presenter renders at this size and
-    /// Metal/CoreAnimation scales it to the view; rendering at the iPhone's
-    /// native drawable size (e.g. 2226x2671) makes the GPU do 20x the work for
-    /// no visible benefit. The Settings page can raise the factor to 2 for a
-    /// sharper 800x960 presentation on fast devices.
-    private static let consolePixelSize = CGSize(width: 400, height: 480)
+    /// The screen arrangement at the 3DS resolutions, in pixels, before the
+    /// render scale: 400x480 for the stacked console, 720x240 side by side,
+    /// 400x240 or 320x240 for a single screen, swapped by a quarter turn. Main
+    /// queue only; changed through `setPresentedGeometry`.
+    private var nativePixelSize = CGSize(width: 400, height: 480)
 
-    /// 1 = native 400x480 drawable, 2 = 800x960. Main queue only.
-    private var renderScale: CGFloat = 1.0
+    /// 1 = the arrangement's own pixels, 2 = twice them. Main queue only.
+    private var renderScale: CGFloat = 1
+
+    /// Whole-console-pixel scaling: the layer is magnified with nearest-pixel
+    /// filtering so each 3DS pixel stays a square block instead of a blurred
+    /// edge. Main queue only; changed through `setPresentedGeometry`.
+    private var integerScaling = false
 
     /// Drawable size in pixels the presenter must render at.
     var drawablePixelSize: CGSize {
-        CGSize(width: Self.consolePixelSize.width * renderScale,
-               height: Self.consolePixelSize.height * renderScale)
+        CGSize(width: nativePixelSize.width * renderScale,
+               height: nativePixelSize.height * renderScale)
     }
 
     /// Called on the main queue after layout when the drawable size in pixels
@@ -83,29 +94,57 @@ final class MetalScreenView: UIView {
         // The presenter only renders into the drawable; reading it back as a
         // texture is not needed.
         metalLayer.framebufferOnly = true
+        // CoreAnimation stretches the drawable into the view's box: the box has
+        // the picture's own shape for fit/4:3 (so this is a uniform scale) and
+        // the whole available space in stretch mode (deliberate distortion).
+        metalLayer.contentsGravity = .resize
+        applyPictureFilters()
     }
 
     /// Gives the layer a drawable size before the view is in the window
     /// hierarchy, so the presenter can make its surface and first swapchain
-    /// while the ROM loads. `provisionalSize` is in pixels (the same units the
-    /// presenter takes); SwiftUI replaces the view's frame with the laid-out
-    /// one and `onDrawableSizeChanged` then resizes the swapchain.
-    /// Main queue only.
-    func prepareForPresentation(provisionalSize: CGSize) {
+    /// while the ROM loads. SwiftUI replaces the view's frame with the laid-out
+    /// one; the drawable stays the arrangement's own pixels, so this only needs
+    /// to run once. Main queue only.
+    func prepareForPresentation() {
         if bounds.width < 1 || bounds.height < 1 {
-            bounds = CGRect(origin: .zero, size: Self.consolePixelSize)
+            bounds = CGRect(origin: .zero, size: drawablePixelSize)
         }
         updateDrawableSize(force: true)
     }
 
-    /// Changes the resolution the presenter renders at: 1 = native 400x480,
-    /// 2 = 800x960. The layer's drawable size and the runtime's swapchain follow
-    /// through `onDrawableSizeChanged`. Main queue only.
-    func setRenderScale(_ scale: CGFloat) {
-        let factor: CGFloat = scale >= 2 ? 2 : 1
-        guard factor != renderScale else { return }
-        renderScale = factor
+    /// Sets the arrangement the presenter draws and the layer holds: the native
+    /// pixel size comes from `ScreenGeometry`, `renderScale` is 1 or 2 and
+    /// `integerScaling` selects nearest-pixel magnification. The drawable size
+    /// change reaches the runtime through `onDrawableSizeChanged`, which resizes
+    /// the swapchain to match. Main queue only.
+    func setPresentedGeometry(
+        nativePixelSize: CGSize,
+        renderScale: CGFloat,
+        integerScaling: Bool
+    ) {
+        let factor: CGFloat = renderScale >= 2 ? 2 : 1
+        let size = CGSize(
+            width: max(nativePixelSize.width, 1),
+            height: max(nativePixelSize.height, 1)
+        )
+        guard size != self.nativePixelSize
+                || factor != self.renderScale
+                || integerScaling != self.integerScaling else {
+            return
+        }
+        self.nativePixelSize = size
+        self.renderScale = factor
+        self.integerScaling = integerScaling
+        applyPictureFilters()
         updateDrawableSize(force: true)
+    }
+
+    /// Nearest-pixel magnification for integer scaling, smooth filtering
+    /// otherwise.
+    private func applyPictureFilters() {
+        metalLayer.magnificationFilter = integerScaling ? .nearest : .linear
+        metalLayer.minificationFilter = .linear
     }
 
     /// Shows or hides the system Metal Performance HUD for this layer.
@@ -141,9 +180,9 @@ final class MetalScreenView: UIView {
     /// Keeps `contentsScale` and `drawableSize` in step with the window's screen
     /// (the presenter derives its swapchain extent from `drawableSize`).
     private func updateScaleFromWindow() {
-        // The drawable is fixed at the 3DS resolution; CoreAnimation scales it
-        // to the view. Keep the layer's own scale at 1 so the presenter's
-        // swapchain extent never follows the iPhone's native pixels.
+        // The drawable is fixed at the arrangement's pixels; CoreAnimation
+        // scales it to the view. Keep the layer's own scale at 1 so the
+        // presenter's swapchain extent never follows the iPhone's native pixels.
         contentScaleFactor = 1.0
         if metalLayer.contentsScale != 1.0 {
             metalLayer.contentsScale = 1.0
@@ -154,30 +193,13 @@ final class MetalScreenView: UIView {
         let pixels = drawablePixelSize
         // MoltenVK sets this again when it (re)builds the swapchain, and reads
         // it to pick the surface extent. Setting it here before the resize call
-        // is what makes a rotation/new layout take effect.
+        // is what makes a layout/rotation/render-scale change take effect.
         if metalLayer.drawableSize != pixels {
             metalLayer.drawableSize = pixels
         }
         guard force || pixels != reportedDrawableSize else { return }
         reportedDrawableSize = pixels
         onDrawableSizeChanged?(pixels)
-    }
-
-    /// Points-to-pixels scale: the window's screen once the view is attached,
-    /// the trait collection (the device's scale) before that. Main queue only,
-    /// like all `UIView` access.
-    private func currentDisplayScale() -> CGFloat {
-        if let scale = window?.screen.nativeScale, scale > 0 {
-            return scale
-        }
-        let traitScale = traitCollection.displayScale
-        if traitScale > 0 {
-            return traitScale
-        }
-        if contentScaleFactor > 0 {
-            return contentScaleFactor
-        }
-        return 2.0
     }
 }
 

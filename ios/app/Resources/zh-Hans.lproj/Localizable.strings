@@ -19,7 +19,10 @@
 "3ds2apple" = "3ds2apple";
 "3ds2apple is not affiliated with Nintendo. Use only game dumps you made from your own console." = "3ds2apple 与 Nintendo 无关联。请只使用你从自己主机上导出的游戏数据。";
 "3dsrecomp (MIT): ahead-of-time ARM/Thumb/VFP to C recompiler." = "3dsrecomp（MIT）：提前把 ARM/Thumb/VFP 重新编译为 C。";
+"4:3" = "4:3";
 "5 ms. Least delay, most sensitive to audio dropouts." = "5 毫秒。延迟最低，对音频中断最敏感。";
+"90° clockwise" = "顺时针 90°";
+"90° counter-clockwise" = "逆时针 90°";
 "A backup is a ZIP archive of the files above. Importing one merges its files back into this game's save-data folder." = "备份是上述文件的 ZIP 压缩包。导入会把这些文件合并回本游戏的存档数据文件夹。";
 "A save state is a snapshot of the whole console, taken between frames. Loading one restores that point, drops the audio buffered before it and continues the same game session." = "即时存档是整个主机状态的快照，在两个帧之间生成。载入会回到该时间点，丢弃载入前缓冲的音频，并继续同一个游戏会话。";
 "AOT code" = "AOT 代码";
@@ -39,7 +42,7 @@
 "Battery saves" = "电池存档";
 "Battery saves and instant save slots" = "电池存档与即时存档位";
 "Battery saves are written by the game runtime into Documents/data/<game>. Instant save slots are stored in Documents/states/<game>. Both stay on this device." = "电池存档由游戏运行时写入 Documents/data/<game>。即时存档位保存在 Documents/states/<game>。两者都只留在这台设备上。";
-"Both screens in one row, for landscape. Uses the screen-readback path." = "两块屏幕并排显示，适合横屏。使用屏幕回读路径。";
+"Both screens in one row: upper on the left, lower on the right. Fits a landscape screen." = "两块屏幕并排：上屏在左、下屏在右，适合横屏。";
 "Buffer size" = "缓冲区大小";
 "Button remapping" = "按键重映射";
 "CADisplayLink · %ld Hz" = "CADisplayLink · %ld Hz";
@@ -96,6 +99,8 @@
 "Diagnostics" = "诊断";
 "Dismiss" = "关闭";
 "Display" = "显示";
+"Display changes apply immediately, also while a game is running. The in-game layout moves the on-screen controls out of the screens' way in landscape." = "显示设置会立即生效，游戏运行中也一样。横屏时游戏内布局会把屏幕按键移到不遮挡画面的位置。";
+"Display changes apply immediately, also while a game is running: the layer is resized to the new layout and the next frame uses it. Integer scaling needs Fit or 4:3 and snaps each 3DS pixel to a whole number of screen pixels; Stretch ignores it. Render resolution changes the presenter's internal drawable, not the screen space the picture takes." = "显示设置会立即生效，游戏运行中也一样：图层会按新布局调整大小，下一帧就使用新布局。整数缩放需要“适应”或“4:3”，会把每个 3DS 像素对齐到整数个屏幕像素；“拉伸”模式下无效。渲染分辨率改变的是 presenter 的内部绘制尺寸，不是画面占用的屏幕空间。";
 "Display settings" = "显示设置";
 "Display, audio, controls, performance, storage" = "显示、音频、控制、性能、存储";
 "Done" = "完成";
@@ -113,7 +118,10 @@
 "Export diagnostics" = "导出诊断";
 "Fast-forward" = "快进";
 "Fast-forward applies when the game resumes and mutes its audio while it is active." = "快进在游戏恢复后生效，启用期间会静音游戏音频。";
+"Fills the whole area, stretching the picture if its shape differs. The 3DS aspect ratio is not kept." = "填满整个区域；比例不同时画面会被拉伸，不再保持 3DS 原始比例。";
 "First-load graphics warm-up (optional)" = "首次载入图形预热（可选）";
+"Fit (native)" = "适应（原始比例）";
+"Fits the picture inside a 4:3 area, the classic TV shape. The extra space becomes black bars." = "把画面放进 4:3（经典电视比例）区域，多出的空间留黑边。";
 "Folder" = "文件夹";
 "Frame cap" = "帧率上限";
 "Frame loop" = "帧循环";
@@ -135,6 +143,7 @@
 "Importing battery saves…" = "正在导入电池存档…";
 "Integer scaling" = "整数缩放";
 "Invalid runtime handle (zk_run_frame = %d)." = "运行时句柄无效（zk_run_frame = %d）。";
+"Keeps the 3DS picture's own shape. Black bars fill the rest of the screen." = "保持 3DS 画面原本的比例，剩余区域留黑边。";
 "Landscape" = "横屏";
 "Language" = "语言";
 "Licence" = "许可证";
@@ -150,7 +159,6 @@
 "Multi-disk ZIP archives are not supported." = "不支持多卷 ZIP 压缩包。";
 "Mute" = "静音";
 "Mute audio" = "静音音频";
-"Native (console)" = "原始比例（主机）";
 "Nintendo 3DS games as native ARM64 apps on iPhone and iPad." = "在 iPhone 与 iPad 上以原生 ARM64 应用的形式运行 Nintendo 3DS 游戏。";
 "Nintendo 3DS is a trademark of Nintendo Co., Ltd. This app is not affiliated with or endorsed by Nintendo." = "Nintendo 3DS 是 Nintendo Co., Ltd. 的商标。本应用与 Nintendo 无关联，也未获其认可。";
 "Nintendo 3DS, natively on iPhone and iPad" = "Nintendo 3DS，原生运行于 iPhone 与 iPad";
@@ -168,8 +176,8 @@
 "On-screen controls" = "屏幕按键";
 "On: the HUD is shown over the presented Metal layer." = "开启：HUD 显示在呈现的 Metal 图层上。";
 "On: the first frames of each load run behind a “Preparing graphics” screen until they stop spiking (at most 5 s). Later pipelines can still compile on first use." = "开启：每次载入的前若干帧会显示“正在准备图形”界面，直到帧时间不再出现尖峰（最多 5 秒）。之后的管线仍可能在首次使用时编译。";
-"Only the lower (touch) screen. Uses the screen-readback path." = "仅显示下屏（触摸屏）。使用屏幕回读路径。";
-"Only the upper (3D) screen. Uses the screen-readback path." = "仅显示上屏（3D）。使用屏幕回读路径。";
+"Only the lower (touch) screen." = "仅显示下屏（触摸屏）。";
+"Only the upper (3D) screen. The game's touchscreen is not shown." = "仅显示上屏（3D），不显示游戏的触摸屏。";
 "Orientation" = "方向";
 "Overlay opacity" = "按键透明度";
 "Packing battery saves into a ZIP archive…" = "正在把电池存档打包为 ZIP…";
@@ -206,6 +214,7 @@
 "Saved %@ · %@" = "已保存 %@ · %@";
 "Saving to slot %ld…" = "正在保存到存档位 %ld…";
 "Screen layout" = "屏幕布局";
+"Screen rotation" = "屏幕旋转";
 "Screens" = "屏幕";
 "Serializing the console…" = "正在序列化主机状态…";
 "Settings" = "设置";
@@ -227,7 +236,7 @@
 "Starting %@…" = "正在启动 %@…";
 "Starting Zakuro…" = "正在启动 Zakuro…";
 "Storage" = "存储";
-"Stretch to 4:3" = "拉伸到 4:3";
+"Stretch" = "拉伸";
 "Summary" = "概要";
 "System Metal HUD" = "系统 Metal HUD";
 "That file is not inside the game's save-data folder." = "该文件不在游戏的存档数据文件夹内。";
@@ -256,12 +265,13 @@
 "The game stopped before the state could be restored." = "游戏在状态恢复之前已停止。";
 "The game stopped before the state could be saved." = "游戏在状态保存之前已停止。";
 "The instant save state in Slot %ld is removed. The game's own battery saves are not touched." = "存档位 %ld 的即时存档已删除。游戏自带的电池存档不受影响。";
+"The interface follows the device. The in-game layout adapts to portrait and landscape." = "界面跟随设备；游戏内布局会自动适配竖屏和横屏。";
+"The interface stays landscape. Side-by-side or a turned console layout uses the width best." = "界面保持横屏；左右并排或旋转后的主机布局最能利用宽度。";
+"The interface stays portrait." = "界面保持竖屏。";
 "The on-screen pad and a connected controller are merged. Dragging on the lower screen is the 3DS touchscreen." = "屏幕按键与已连接的手柄会合并输入。在下屏拖动即为 3DS 触摸屏。";
 "The runtime is released and the game closes. Imported ROMs and save data stay on the device." = "运行时已释放，游戏已关闭。已导入的 ROM 与存档数据仍保留在设备上。";
 "The runtime was stopped when the app went to the background. Load the ROM again to continue." = "应用进入后台时运行时已停止。再次载入 ROM 即可继续。";
 "The save data is too large for a ZIP archive (4 GB limit)." = "存档数据太大，无法放入 ZIP 压缩包（4 GB 上限）。";
-"The screen layout is read when a game loads, so a layout change applies to the next load. The presented console layout is the fastest path; other layouts use the screen-readback path. Integer scaling snaps the presented image to whole screen pixels." = "屏幕布局在载入游戏时读取，因此布局修改会在下次载入时生效。主机叠放布局是最快的路径；其他布局使用屏幕回读路径。整数缩放会把呈现画面对齐到整屏幕像素。";
-"The screen layout is read when a game loads, so it applies to the next load. The other display changes apply immediately." = "屏幕布局在载入游戏时读取，因此会在下次载入时生效。其他显示修改立即生效。";
 "The selected file is empty." = "所选文件为空。";
 "The selected file is not a ZIP archive." = "所选文件不是 ZIP 压缩包。";
 "The selected file is too large to import." = "所选文件太大，无法导入。";
@@ -272,8 +282,10 @@
 "This app ships without any game data. It has no ROMs, decryption keys, system files or game assets. Import only dumps that you made from a console you own." = "本应用不附带任何游戏数据，不包含 ROM、解密密钥、系统文件或游戏资源。请只导入你从自己拥有的主机上导出的数据。";
 "Tools" = "工具";
 "Unsupported file “%@”. Choose a decrypted .3ds or .cci ROM." = "不支持的文件“%@”。请选择解密后的 .3ds 或 .cci ROM。";
-"Upper screen above the lower one, as on the console. Uses the fast presented path." = "上下叠放：上屏在下屏之上，与主机一致。使用快速呈现路径。";
+"Upper screen above the lower one, as on the console. Fits a portrait screen; with 90° rotation it becomes two columns." = "上屏在上、下屏在下，和主机一样。适合竖屏；旋转 90° 后变成左右两列。";
 "Upper screen only" = "仅上屏";
+"Upright" = "正置";
+"Upside down" = "倒置";
 "Version" = "版本";
 "Version %@ · build %@" = "版本 %@ · 构建 %@";
 "Version, runtime and acknowledgements" = "版本、运行时与致谢";

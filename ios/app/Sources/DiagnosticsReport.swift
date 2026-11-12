@@ -53,6 +53,27 @@ enum DiagnosticsExporter {
         }
     }
 
+    /// The two 3DS screens at the console's own resolution for the chosen
+    /// layout/rotation, e.g. "480x400" for the stacked console turned sideways.
+    private static func nativePixelSizeDescription(settings: AppSettings) -> String {
+        let size = ScreenGeometry.nativePixelSize(
+            layout: settings.screenLayout,
+            rotation: settings.screenRotation
+        )
+        return "\(Int(size.width))x\(Int(size.height))"
+    }
+
+    /// The drawable the presenter renders into (the layout's own pixels times
+    /// the render scale).
+    private static func drawablePixelSizeDescription(model: ROMSession, settings: AppSettings) -> String {
+        let size = ScreenGeometry.drawablePixelSize(
+            layout: model.screenLayout,
+            rotation: model.screenRotation,
+            renderScale: CGFloat(settings.renderScale)
+        )
+        return "\(Int(size.width))x\(Int(size.height))"
+    }
+
     /// The report text: a header with the current state and both session logs.
     static func report(model: ROMSession, settings: AppSettings) -> String {
         let info = Bundle.main.infoDictionary ?? [:]
@@ -78,9 +99,12 @@ enum DiagnosticsExporter {
         loop=\(model.frameLoopLabel)
         frame_cap=\(model.frameRateCapValue)
         screen_layout=\(model.screenLayout.rawValue)
+        screen_rotation=\(model.screenRotation.rawValue)
         screen_aspect=\(settings.screenAspect.rawValue)
         integer_scale=\(settings.integerScale ? 1 : 0)
         render_scale=\(settings.renderScale)x
+        presented_native_pixels=\(nativePixelSizeDescription(settings: settings))
+        presented_drawable_pixels=\(drawablePixelSizeDescription(model: model, settings: settings))
         orientation=\(settings.orientation.rawValue)
         fps=\(String(format: "%.1f", model.frameStats.fps))
         frames=\(model.frameStats.frames)
