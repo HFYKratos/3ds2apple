@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=3ds2apple Builder
+GenericName=3DS AOT game builder
+Comment=Build your own ROM into an unsigned IPA on a macOS host you control
+Exec=3ds2apple-builder
+Terminal=true
+Icon=utilities-terminal
+Categories=Development;
+Keywords=3ds;nintendo;ios;ipa;rom;builder;aot;
+StartupNotify=false

@@ -22,6 +22,11 @@ unsigned IPA, its SHA256 and its manifest.
 > pipeline from this repository are not part of this slice; see
 > [Running it today](#running-it-today).
 >
+> A Linux frontend (`builder/linux`, binary `3ds2apple-builder`) wraps that CLI
+> for a Linux workstation: it discovers a local QEMU/KVM macOS VM's forwarded
+> SSH port, pairs the host and runs the build end to end. See
+> [builder/linux/README.md](linux/README.md).
+>
 > The build itself is done by the existing scripts in [`scripts/`](../scripts/);
 > the Builder does not re-implement the pipeline.
 
@@ -78,6 +83,20 @@ zkb delete  --host office <job-id>
 last lines and exits `0`; a failed build exits `1` with the failing stage, the
 Agent's hint and the last log lines (`--json` emits the protocol objects).
 
+On a Linux workstation the frontend adds VM discovery, pairing and a build
+wrapper over the same client:
+
+```bash
+3ds2apple-builder vm discover                    # find the VM's forwarded SSH port
+3ds2apple-builder vm setup --name cachyos-vm --user builder
+3ds2apple-builder build --host cachyos-vm --rom "./ROM/Pokemon Y.cci"
+3ds2apple-builder install-guide --ipa <downloaded.ipa>
+```
+
+See [builder/linux/README.md](linux/README.md) for the CachyOS + macOS VM
+walkthrough, headless usage and troubleshooting. The frontend shells out to
+`zkb` for protocol work, so the two clients behave identically.
+
 No Mac is needed to exercise the protocol path: the Agent's `--fake-build`
 mode replaces only the script execution, and
 [`tests/e2e/local_fake_agent.sh`](tests/e2e/local_fake_agent.sh) runs the whole
@@ -89,6 +108,7 @@ cleanup) on Linux.
 | `builder/core` | protocol types, framing, versioning, validation, hashing, SSH/local transports, client state, config | `cargo test -p builder-core`, golden fixtures |
 | `builder/cli` (`zkb`) | `host add/list/test/remove`, `build`, `status`, `logs`, `cancel`, `download`, `jobs`, `delete`, `doctor`, `config` | `cargo test -p builder-cli` (E2E against the real Agent) |
 | `builder/agent` | daemon + stdio sessions, `ssh-dispatch` forced command, queue with one build slot, store/recovery, NDJSON events, cancellation with process groups, cleanup, artifact verification, `doctor`, `gc`, fake-build mode | unit tests + CLI E2E on Linux |
+| `builder/linux` (`3ds2apple-builder`) | Linux frontend over `zkb`: QEMU/KVM VM SSH port discovery, host pairing with fingerprint confirmation, build wrapper with local SHA256 re-verification, install guide, doctor | `cargo test -p builder-linux` (unit, local integration, fake-agent E2E) |
 | Real macOS pipeline | script stages and output parsing implemented; not yet exercised on a Mac from this repository | pending a macOS run |
 | HTTP+SSE binding | not implemented (SSH is the only binding in this slice) | — |
 
@@ -96,7 +116,8 @@ Remaining gaps in this slice, in addition to the deferrals in
 [PROTOCOL.md](PROTOCOL.md) §15: the HTTP binding, `transport.mode: "path"`,
 `heartbeat` events, automatic `input_timeout` expiry, a Builder-embedded source
 revision pin (the CLI sends one only with `--expected-revision`), and the
-desktop GUIs.
+desktop GUIs (the Linux frontend is a CLI; both Tauri GUIs remain design-only,
+see [builder/linux/README.md](linux/README.md#gui)).
 
 ## Why a Mac is still needed
 
@@ -177,7 +198,7 @@ Data flow:
 | **Shared core** | `builder/core/` | All platforms | Protocol types and versioning, transports, job client state machine, hashing/verification, host profiles, secret storage, log redaction. No UI, no process execution. |
 | **CLI** | `builder/cli/` | Windows, Linux, macOS | `zkb` (working name): add/test build hosts, start a build, tail progress and logs, download and verify the IPA, show doctor output. The reference client and the Linux MVP. |
 | **Windows GUI** | `builder/windows/` | Windows 10/11 | Tauri desktop app over the shared core: ROM picker, host profiles, transfer/build progress, log viewer, artifact page, install guide. |
-| **Linux GUI** | `builder/linux/` | Linux desktops | Same app/UI as Windows, packaged for Linux (AppImage/deb/rpm); the CLI remains available for headless and server hosts. |
+| **Linux frontend** | `builder/linux/` | Linux desktops and headless | `3ds2apple-builder`: CLI frontend over `zkb` with QEMU/KVM VM SSH discovery, host pairing, build wrapper, local SHA256 re-verification and install guide, packaged for Arch/CachyOS and Debian/Ubuntu. A Tauri GUI over the shared `builder/ui` is still planned for both desktops. |
 | **Build Agent** | `builder/agent/` | macOS (Apple Silicon or Intel) | Long-lived daemon plus `ssh` dispatch and CLI: pairing, `doctor` toolchain checks, job queue with build slots, per-job runner that invokes the existing scripts, NDJSON logs, cancellation, cleanup, artifact serving, data-root GC. |
 | **Cross-compile spike** | `builder/cross/` | Any (research) | Investigates whether a prebuilt shell plus a cross-compiled game module can remove macOS from the loop. Not shipped in v1; see [README.md](README.md). |
 | **Tests and fixtures** | `builder/tests/` | All platforms | Protocol fixtures, a scriptable fake Agent, conformance/chaos tests, and the Linux → macOS end-to-end script. |
@@ -223,7 +244,7 @@ Constraints that follow from the scripts:
 | Piece | Supported target | Notes |
 |---|---|---|
 | Builder GUI/CLI | Windows 10 22H2+, Windows 11 (x86_64; arm64 experimental) | Needs WebView2 for the GUI (preinstalled on Windows 10/11). CLI is a single `.exe` with no runtime dependency. |
-| Builder GUI/CLI | Linux x86_64 (Arch/CachyOS, Debian/Ubuntu 22.04+, Fedora 38+); aarch64 experimental | GUI needs WebKitGTK 4.1; CLI has no GUI dependencies. |
+| Builder GUI/CLI | Linux x86_64 (Arch/CachyOS, Debian/Ubuntu 22.04+, Fedora 38+); aarch64 experimental | The implemented CLI frontend has no GUI dependencies; the planned GUI needs WebKitGTK 4.1. |
 | Builder (optional) | macOS 13+ | Useful when building on the same Mac; same CLI/GUI. |
 | Build Agent | macOS 14 Sonoma or newer, Apple Silicon or Intel | Reference tested configuration: macOS 14.8, Xcode 16.4 / iOS 18.5 SDK, 4 vCPU, 8 GB RAM (the configuration the per-game pipeline has been exercised on). Headless is enough; no Apple ID, no USB device, no signing. |
 | Agent toolchain | Xcode 16.x with the iOS SDK, Rust stable with `aarch64-apple-ios`, `xcodegen`, Python 3, git, network access for the first provisioning | `builder-agent doctor` reports each item; the Builder refuses to start a job when a required item is missing. |

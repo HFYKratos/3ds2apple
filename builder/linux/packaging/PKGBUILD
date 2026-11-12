@@ -1,0 +1,62 @@
+# Maintainer: 3ds2apple contributors <https://github.com/HFYKratos/3ds2apple>
+#
+# Build the Linux Builder frontend + the shared CLI from the 3ds2apple source
+# tree. This package installs two binaries:
+#   /usr/bin/zkb                shared cross-platform Builder client
+#   /usr/bin/3ds2apple-builder  Linux frontend (VM discovery, build wrapper, guide)
+#
+# No ROM, generated code, static library, IPA or credential is ever packaged;
+# the repository contains none. The AOT build itself happens on the user's own
+# macOS host. The CLI needs the system OpenSSH client; there is no GUI/webview
+# dependency in this package (the Tauri GUI is a separate future package).
+
+pkgname=3ds2apple-builder-git
+pkgver=r1.94fe936
+pkgrel=1
+pkgdesc="Linux Builder frontend for 3ds2apple: build your own ROM into an unsigned IPA on a macOS host you control"
+arch=('x86_64' 'aarch64')
+url="https://github.com/HFYKratos/3ds2apple"
+license=('Apache-2.0')
+depends=('openssh')
+makedepends=('cargo' 'rust' 'git')
+provides=('3ds2apple-builder')
+conflicts=('3ds2apple-builder')
+options=('!lto')
+source=("$pkgname::git+https://github.com/HFYKratos/3ds2apple.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$pkgname"
+  printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd "$pkgname/builder"
+  cargo build --release --locked -p builder-cli -p builder-linux
+}
+
+check() {
+  cd "$pkgname/builder"
+  cargo test --workspace --locked
+}
+
+package() {
+  cd "$pkgname"
+
+  install -Dm755 "builder/target/release/zkb" \
+    "$pkgdir/usr/bin/zkb"
+  install -Dm755 "builder/target/release/3ds2apple-builder" \
+    "$pkgdir/usr/bin/3ds2apple-builder"
+
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 NOTICE "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
+  install -Dm644 builder/linux/README.md \
+    "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 builder/README.md \
+    "$pkgdir/usr/share/doc/$pkgname/builder-README.md"
+
+  install -Dm644 builder/linux/packaging/3ds2apple-builder.1 \
+    "$pkgdir/usr/share/man/man1/3ds2apple-builder.1"
+  install -Dm644 builder/linux/packaging/3ds2apple-builder.desktop \
+    "$pkgdir/usr/share/applications/3ds2apple-builder.desktop"
+}

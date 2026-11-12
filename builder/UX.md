@@ -1,9 +1,10 @@
 # Builder user experience
 
-> **Status: CLI implemented, GUI design.** The command line client and its
-> flows below exist today (`zkb`); the Windows/Linux GUI screens are still
-> design only. The protocol underneath is in [PROTOCOL.md](PROTOCOL.md); the
-> technology choice is in [STACK.md](STACK.md).
+> **Status: CLI implemented, GUI design.** The command line client (`zkb`) and
+> the Linux CLI frontend (`3ds2apple-builder`, see
+> [linux/README.md](linux/README.md)) exist today; the Windows/Linux GUI screens
+> are still design only. The protocol underneath is in
+> [PROTOCOL.md](PROTOCOL.md); the technology choice is in [STACK.md](STACK.md).
 
 The Builder has one job: take a ROM the user owns from a Windows or Linux
 desktop, build it on a macOS host the user controls, and hand back an unsigned
@@ -386,6 +387,27 @@ Conventions:
 - Non-interactive use never prompts: missing host credentials or confirmation
   flags are usage errors.
 - The CLI never prints the token, and `zkb config` redacts it.
+
+### 8.1 Linux frontend
+
+`3ds2apple-builder` is the Linux frontend: a thin wrapper over `zkb` that adds
+the VM-specific steps, with the same states, exit codes and `--json`
+convention.
+
+```bash
+3ds2apple-builder status                 # first screen: client, hosts, VM, next steps
+3ds2apple-builder vm discover            # find the local QEMU/KVM macOS VM's SSH port
+3ds2apple-builder vm setup --name cachyos-vm --user builder
+3ds2apple-builder build --host cachyos-vm --rom "./ROM/Pokemon Y.cci"
+3ds2apple-builder install-guide --ipa <downloaded.ipa>
+```
+
+`vm setup` shows the host-key fingerprints and requires `--yes` or
+`--fingerprint SHA256:…` (or an interactive confirmation); it never trusts a
+key by default and never asks for a password. `doctor` is the pass/fail check
+for the local machine, the config, SSH key permissions and optionally the macOS
+host. Everything else (jobs, logs, cancel, download, host list/remove) is
+reachable through `3ds2apple-builder zkb …` or `zkb` directly.
 
 ## 9. Guardrails and copy rules
 
