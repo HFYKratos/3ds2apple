@@ -39,17 +39,14 @@
 
 iOS 侧通过一个很小的 C ABI（`ios/zakuro-ios/`）调用 Zakuro：加载 ROM、跑帧、读上下屏、取音频、送输入。游戏代码与运行时都静态链接进 App，每款游戏一个 IPA。
 
-## 当前进度
+## 当前状态
 
-- [x] iPhone 真机运行 SwiftUI 壳
-- [x] 导入自有 `.3ds` / `.cci`，加载 3DS 运行时
-- [x] 上屏 400×240 / 下屏 320×240 显示
-- [x] 触摸按键、GameController 手柄、下屏触摸
-- [x] 音频输出（AVAudioEngine）
-- [x] Pokémon Y 的 3dsrecomp AOT 代码静态链接，运行时确认 AOT 生效
-- [x] 性能 HUD（帧时间分解）与 free-run 帧循环
-- [ ] GPU 硬件渲染（Metal / MoltenVK）
-- [ ] 更多游戏兼容性与 20 分钟稳定性验证
+- iPhone / iPad 真机可以启动 SwiftUI 壳、导入自有 ROM、显示上下屏；
+- 触摸按键、GameController、下屏触摸和音频输出可用；
+- Pokémon Y（美版）的 3dsrecomp AOT 代码已静态链接，运行时确认 AOT 生效；
+- 性能 HUD 与 free-run 帧循环已接入，可在设备上查看各阶段帧时间；
+- 图形仍由软件 PICA200 渲染，Metal / MoltenVK 后端仍在开发；
+- 兼容性、稳定性和更多游戏的支持仍在验证中。
 
 > 游戏画面和测试数据只用于本地验证，不进入仓库；本仓库不包含任何 ROM、密钥、系统文件或游戏资源。
 
