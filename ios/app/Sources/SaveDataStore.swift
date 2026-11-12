@@ -79,10 +79,10 @@ enum SaveDataStore {
     static func batterySaveFiles(forROMName romName: String) -> [BatterySaveFile] {
         let directory = batterySaveDirectory(forROMName: romName)
         let fileManager = FileManager.default
-        let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
         guard let enumerator = fileManager.enumerator(
             at: directory,
-            includingPropertiesForKeys: keys,
+            includingPropertiesForKeys: Array(keys),
             options: [.skipsHiddenFiles]
         ) else {
             return []
