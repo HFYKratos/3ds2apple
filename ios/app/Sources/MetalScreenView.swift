@@ -108,6 +108,24 @@ final class MetalScreenView: UIView {
         updateDrawableSize(force: true)
     }
 
+    /// Shows or hides the system Metal Performance HUD for this layer.
+    ///
+    /// `CAMetalLayer.developerHUDProperties` is the documented runtime switch
+    /// (iOS 16+): `mode` takes "default" / "main" to show the HUD and
+    /// "disabled" to hide it. The build must also enable the HUD, through
+    /// `MetalHudEnabled` in Info.plist (the packaged test IPAs do) or
+    /// Settings → Developer → Graphics HUD on the device; otherwise there is
+    /// nothing to show. Main queue only. `developerHUDProperties` is an iOS 16
+    /// API, exactly the deployment target, so no availability check is needed.
+    func applySystemMetalHUD(enabled: Bool) {
+        var properties = metalLayer.developerHUDProperties ?? [AnyHashable: Any]()
+        properties[AnyHashable("mode")] = enabled ? "default" : "disabled"
+        // The app has its own frame-time HUD; keep the system one from also
+        // spamming the device log.
+        properties[AnyHashable("logging")] = "disabled"
+        metalLayer.developerHUDProperties = properties
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         updateScaleFromWindow()

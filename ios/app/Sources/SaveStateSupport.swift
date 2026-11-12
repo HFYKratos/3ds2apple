@@ -34,11 +34,11 @@ struct SaveStateSlot: Identifiable, Equatable {
 
     var id: Int { number }
 
-    var title: String { "Slot \(number)" }
+    var title: String { L10n.format("Slot %ld", number) }
 
     /// Short row text: size and date, or that the slot is free.
     var detail: String {
-        guard exists else { return "Empty" }
+        guard exists else { return L10n.tr("Empty") }
         let sizeText = StorageFormat.size(bytes)
         guard let modified else { return sizeText }
         return "\(sizeText) · \(StorageFormat.date(modified))"
@@ -183,7 +183,7 @@ final class SaveStateSupport: ObservableObject {
             return
         }
         guard let runtime, let gameName = runtime.saveStateROMName, runtime.isRuntimeLoaded else {
-            let error = SaveStateError(message: "Start a game before saving a state.")
+            let error = SaveStateError(message: L10n.tr("Start a game before saving a state."))
             publish(error)
             completion?(.failure(error))
             return
@@ -191,7 +191,7 @@ final class SaveStateSupport: ObservableObject {
         guard !busy else { return }
         busy = true
         errorMessage = nil
-        statusText = "Saving to slot \(number)…"
+        statusText = L10n.format("Saving to slot %ld…", number)
         let suspended = runtime.suspendForStateWork()
         let slotURL = SaveStateSupport.slotURL(gameName: gameName, slot: number)
         runtime.runOnRuntimeQueue { [weak self] handle in
@@ -205,7 +205,7 @@ final class SaveStateSupport: ObservableObject {
                 )
             } else {
                 result = .failure(
-                    SaveStateError(message: "The game stopped before the state could be saved.")
+                    SaveStateError(message: L10n.tr("The game stopped before the state could be saved."))
                 )
             }
             DispatchQueue.main.async {
@@ -215,7 +215,7 @@ final class SaveStateSupport: ObservableObject {
                 switch result {
                 case .success(let slot):
                     self.errorMessage = nil
-                    self.statusText = "Saved \(slot.title) · \(StorageFormat.size(slot.bytes))"
+                    self.statusText = L10n.format("Saved %@ · %@", slot.title, StorageFormat.size(slot.bytes))
                     self.replace(slot)
                     AppLog.log(
                         "[3ds2apple] save state: saved slot %d (%llu bytes)",
@@ -239,21 +239,21 @@ final class SaveStateSupport: ObservableObject {
     ) {
         guard !busy else { return }
         guard let runtime, let gameName = runtime.saveStateROMName, runtime.isRuntimeLoaded else {
-            let error = SaveStateError(message: "Start a game before loading a state.")
+            let error = SaveStateError(message: L10n.tr("Start a game before loading a state."))
             publish(error)
             completion?(.failure(error))
             return
         }
         let slot = slotInfo(number: number)
         guard slot.exists else {
-            let error = SaveStateError(message: "\(slot.title) is empty.")
+            let error = SaveStateError(message: L10n.format("%@ is empty.", slot.title))
             publish(error)
             completion?(.failure(error))
             return
         }
         busy = true
         errorMessage = nil
-        statusText = "Loading \(slot.title)…"
+        statusText = L10n.format("Loading %@…", slot.title)
         let suspended = runtime.suspendForStateWork()
         let slotURL = SaveStateSupport.slotURL(gameName: gameName, slot: number)
         runtime.runOnRuntimeQueue { [weak self] handle in
@@ -267,7 +267,7 @@ final class SaveStateSupport: ObservableObject {
                 )
             } else {
                 result = .failure(
-                    SaveStateError(message: "The game stopped before the state could be restored.")
+                    SaveStateError(message: L10n.tr("The game stopped before the state could be restored."))
                 )
             }
             DispatchQueue.main.async {
@@ -281,7 +281,7 @@ final class SaveStateSupport: ObservableObject {
                     // screen.
                     runtime.discardBufferedAudio()
                     self.errorMessage = nil
-                    self.statusText = "Loaded \(loaded.title) · \(StorageFormat.size(loaded.bytes))"
+                    self.statusText = L10n.format("Loaded %@ · %@", loaded.title, StorageFormat.size(loaded.bytes))
                     self.replace(loaded)
                     runtime.resumeAfterStateWork(suspended)
                     AppLog.log(
@@ -306,7 +306,7 @@ final class SaveStateSupport: ObservableObject {
     ) {
         guard !busy else { return }
         guard let gameName = runtime?.saveStateROMName else {
-            let error = SaveStateError(message: "No game is selected.")
+            let error = SaveStateError(message: L10n.tr("No game is selected."))
             publish(error)
             completion?(error)
             return
@@ -318,7 +318,7 @@ final class SaveStateSupport: ObservableObject {
         }
         busy = true
         errorMessage = nil
-        statusText = "Deleting \(slot.title)…"
+        statusText = L10n.format("Deleting %@…", slot.title)
         let slotURL = SaveStateSupport.slotURL(gameName: gameName, slot: number)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             var failure: SaveStateError?
@@ -328,7 +328,7 @@ final class SaveStateSupport: ObservableObject {
                 }
             } catch {
                 failure = SaveStateError(
-                    message: "Could not delete \(slot.title): \(error.localizedDescription)"
+                    message: L10n.format("Could not delete %@: %@", slot.title, error.localizedDescription)
                 )
             }
             DispatchQueue.main.async {
@@ -338,7 +338,7 @@ final class SaveStateSupport: ObservableObject {
                     self.publish(failure)
                 } else {
                     self.errorMessage = nil
-                    self.statusText = "Deleted \(slot.title)"
+                    self.statusText = L10n.format("Deleted %@", slot.title)
                     self.slots = self.slots.map { current in
                         current.number == number
                             ? SaveStateSlot(number: number, exists: false, bytes: 0, modified: nil)
@@ -382,15 +382,15 @@ final class SaveStateSupport: ObservableObject {
     private func validate(slot number: Int, requiresLoadedRuntime: Bool) -> SlotValidation {
         guard Self.isAvailable else {
             return .failure(
-                SaveStateError(message: "Save states are not available in this build.")
+                SaveStateError(message: L10n.tr("Save states are not available in this build."))
             )
         }
         guard (1...Self.slotCount).contains(number) else {
-            return .failure(SaveStateError(message: "There is no save-state slot \(number)."))
+            return .failure(SaveStateError(message: L10n.format("There is no save-state slot %ld.", number)))
         }
         if requiresLoadedRuntime {
             guard isRuntimeLoaded else {
-                return .failure(SaveStateError(message: "Start a game before using save states."))
+                return .failure(SaveStateError(message: L10n.tr("Start a game before using save states.")))
             }
         }
         return .success
@@ -452,13 +452,16 @@ final class SaveStateSupport: ObservableObject {
         number: Int,
         progress: (String) -> Void
     ) -> Result<SaveStateSlot, SaveStateError> {
-        progress("Serializing the console…")
+        progress(L10n.tr("Serializing the console…"))
         let measured = zk_save_state_size(handle)
         guard measured > 0 else {
             zk_save_state_discard(handle)
             return .failure(
                 SaveStateError(
-                    message: "Could not save the state: \(currentRuntimeError(fallback: "the runtime could not serialize the console"))"
+                    message: L10n.format(
+                        "Could not save the state: %@",
+                        currentRuntimeError(fallback: L10n.tr("the runtime could not serialize the console"))
+                    )
                 )
             )
         }
@@ -466,12 +469,15 @@ final class SaveStateSupport: ObservableObject {
             zk_save_state_discard(handle)
             return .failure(
                 SaveStateError(
-                    message: "Could not save the state: the runtime reported \(StorageFormat.size(UInt64(measured))), larger than a save state can be."
+                    message: L10n.format(
+                        "Could not save the state: the runtime reported %@, larger than a save state can be.",
+                        StorageFormat.size(UInt64(measured))
+                    )
                 )
             )
         }
 
-        progress("Copying \(StorageFormat.size(UInt64(measured)))…")
+        progress(L10n.format("Copying %@…", StorageFormat.size(UInt64(measured))))
         var buffer = UnsafeMutableRawPointer.allocate(
             byteCount: measured,
             alignment: MemoryLayout<UInt8>.alignment
@@ -491,11 +497,14 @@ final class SaveStateSupport: ObservableObject {
                 zk_save_state_discard(handle)
                 return .failure(
                     SaveStateError(
-                        message: "Could not save the state: it changed to \(StorageFormat.size(UInt64(copied))), larger than a save state can be."
+                        message: L10n.format(
+                            "Could not save the state: it changed to %@, larger than a save state can be.",
+                            StorageFormat.size(UInt64(copied))
+                        )
                     )
                 )
             }
-            progress("Copying \(StorageFormat.size(UInt64(copied)))…")
+            progress(L10n.format("Copying %@…", StorageFormat.size(UInt64(copied))))
             buffer = UnsafeMutableRawPointer.allocate(
                 byteCount: copied,
                 alignment: MemoryLayout<UInt8>.alignment
@@ -510,7 +519,10 @@ final class SaveStateSupport: ObservableObject {
                 zk_save_state_discard(handle)
                 return .failure(
                     SaveStateError(
-                        message: "Could not copy the state: \(currentRuntimeError(fallback: "the runtime did not return a stable state"))"
+                        message: L10n.format(
+                            "Could not copy the state: %@",
+                            currentRuntimeError(fallback: L10n.tr("the runtime did not return a stable state"))
+                        )
                     )
                 )
             }
@@ -520,7 +532,10 @@ final class SaveStateSupport: ObservableObject {
             zk_save_state_discard(handle)
             return .failure(
                 SaveStateError(
-                    message: "Could not copy the state: \(currentRuntimeError(fallback: "the runtime returned no state data"))"
+                    message: L10n.format(
+                        "Could not copy the state: %@",
+                        currentRuntimeError(fallback: L10n.tr("the runtime returned no state data"))
+                    )
                 )
             )
         }
@@ -532,13 +547,13 @@ final class SaveStateSupport: ObservableObject {
             count: copied,
             deallocator: .custom { pointer, _ in pointer.deallocate() }
         )
-        progress("Writing slot \(number)…")
+        progress(L10n.format("Writing slot %ld…", number))
         do {
             try AtomicFileWriter.write(data, to: url)
         } catch {
             return .failure(
                 SaveStateError(
-                    message: "Could not write slot \(number): \(error.localizedDescription)"
+                    message: L10n.format("Could not write slot %ld: %@", number, error.localizedDescription)
                 )
             )
         }
@@ -564,28 +579,28 @@ final class SaveStateSupport: ObservableObject {
         guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
               let size = (attributes[.size] as? NSNumber)?.uint64Value,
               size > 0 else {
-            return .failure(SaveStateError(message: "Slot \(number) has no state file."))
+            return .failure(SaveStateError(message: L10n.format("Slot %ld has no state file.", number)))
         }
         guard size <= UInt64(maximumStateBytes) else {
             return .failure(
-                SaveStateError(message: "Slot \(number) is too large to be a save state.")
+                SaveStateError(message: L10n.format("Slot %ld is too large to be a save state.", number))
             )
         }
-        progress("Reading slot \(number) (\(StorageFormat.size(size)))…")
+        progress(L10n.format("Reading slot %ld (%@)…", number, StorageFormat.size(size)))
         let data: Data
         do {
             data = try Data(contentsOf: url, options: [.mappedIfSafe])
         } catch {
             return .failure(
                 SaveStateError(
-                    message: "Could not read slot \(number): \(error.localizedDescription)"
+                    message: L10n.format("Could not read slot %ld: %@", number, error.localizedDescription)
                 )
             )
         }
         guard data.count > 0 else {
-            return .failure(SaveStateError(message: "Slot \(number) has no state data."))
+            return .failure(SaveStateError(message: L10n.format("Slot %ld has no state data.", number)))
         }
-        progress("Restoring the console…")
+        progress(L10n.tr("Restoring the console…"))
         let result: Int32 = data.withUnsafeBytes { raw in
             guard let base = raw.bindMemory(to: UInt8.self).baseAddress else {
                 return -2
@@ -595,7 +610,7 @@ final class SaveStateSupport: ObservableObject {
         guard result == 0 else {
             let reason = currentRuntimeError(fallback: loadFailureFallback(result))
             return .failure(
-                SaveStateError(message: "Could not load slot \(number): \(reason)")
+                SaveStateError(message: L10n.format("Could not load slot %ld: %@", number, reason))
             )
         }
         return .success(
@@ -620,13 +635,13 @@ final class SaveStateSupport: ObservableObject {
     private static func loadFailureFallback(_ result: Int32) -> String {
         switch result {
         case -1:
-            return "the game is no longer running"
+            return L10n.tr("the game is no longer running")
         case -2:
-            return "the file cannot be passed to the runtime"
+            return L10n.tr("the file cannot be passed to the runtime")
         case -3:
-            return "the state was made by another game, another runtime version or another console model, or the file is damaged"
+            return L10n.tr("the state was made by another game, another runtime version or another console model, or the file is damaged")
         default:
-            return "the runtime refused the state (code \(result))"
+            return L10n.format("the runtime refused the state (code %d)", result)
         }
     }
 }

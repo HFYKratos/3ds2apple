@@ -2,19 +2,24 @@
 
 The SwiftUI shell for 3ds2apple. It imports the user's own ROM, displays the two
 3DS screens, drives the Zakuro runtime and exposes input, audio, frame timing,
-save data and settings. The app is organised as a home page, the running game, a
-settings page and a few supporting pages.
+fast-forward, save data and settings. The app is organised as a home page, the
+running game, a settings page and a few supporting pages.
+
+The UI follows the system language: Simplified Chinese gets Chinese, every other
+language gets English. Static text lives in `Resources/<lang>.lproj/
+Localizable.strings`; run-time text goes through the small `L10n` helper, so the
+views do not carry duplicated strings.
 
 ## App structure
 
 | Page | Contents |
 |---|---|
 | **Home** | Current game card (ROM name), Play / Load, Import / Change ROM, and tools: Settings, Save Manager, Diagnostics export, About. |
-| **Game** | The two screens on a `CAMetalLayer` (or the screen-readback path), status line, performance HUD, on-screen controls, the "Preparing graphics" warm-up overlay and the in-game menu. |
-| **Settings** | Display, Audio, Controls, Performance, Storage and About sections. |
+| **Game** | The two screens on a `CAMetalLayer` (or the screen-readback path), status line (including the active fast-forward speed), performance HUD, on-screen controls, the optional "Preparing graphics" warm-up overlay and the in-game menu. |
+| **Settings** | Display, Audio, Controls, Performance (frame cap, fast-forward, system Metal HUD, optional graphics warm-up), Storage and About sections. |
 | **Save Manager** | The battery save files of the current game (size, date, export as ZIP, import, delete), the three instant save-state slots (save, load, delete) and the container usage. |
 | **About** | Version, runtime state, acknowledgements and licence. |
-| **In-game menu** | Opened from the pause button over the game: pause/resume, Save State / Load State (slot 1), Reset, Display settings, Save Manager, Diagnostics, Exit. |
+| **In-game menu** | Opened from the pause button over the game: pause/resume, quick toggles (on-screen controls, mute, 1×/2×/4× fast-forward), Save State / Load State (slot 1), Reset, Display settings, Save Manager, Diagnostics, Exit. |
 
 Opening the in-game menu pauses emulation: the frame loop and the audio engine
 are stopped, the runtime handle and the last frame stay, and Resume continues the
@@ -40,10 +45,16 @@ on-screen controls, so no input or audio advances behind it.
   individual files. Import and delete are disabled while a game is running.
 - Free-running frame loop capped at 60 Hz (or 30 Hz) and decoupled from the
   display refresh.
+- Fast-forward at 1× / 2× / 4× from Settings and the in-game menu: each
+  presented frame advances the console 2 or 4 frames. See "Fast-forward" below
+  for the presentation/audio policy and the automatic fallback.
 - Presentation on a real `CAMetalLayer` (A1): Zakuro shows both screens through
-  MoltenVK over Metal, with the system Metal Performance HUD (FPS / GPU /
-  memory) able to attach to it. When a presenter cannot be made the app falls
-  back to the `zk_read_screen` + `CGImage` path.
+  MoltenVK over Metal. When a presenter cannot be made the app falls back to the
+  `zk_read_screen` + `CGImage` path.
+- System Metal Performance HUD (FPS / GPU time / memory): a Settings switch
+  shows or hides it on the presented layer at run time
+  (`CAMetalLayer.developerHUDProperties`, iOS 16), off by default. See "System
+  Metal HUD" below.
 - Display settings: screen layout, aspect, integer scaling, render resolution
   (1×/2×) and orientation. See "Display settings" below for what applies
   immediately.
@@ -54,13 +65,18 @@ on-screen controls, so no input or audio advances behind it.
 - Storage page: save-data / ROM / log / pipeline-cache usage and a "clear
   graphics pipeline cache" action (only while no game is running).
 - Settings are persisted in `UserDefaults` and restored at launch.
-- First-run graphics warm-up: after the ROM loads, the first frames run behind an
-  opaque "Preparing graphics" overlay until they are smooth (at least 2 s, then
-  90 consecutive frames without a >50 ms spike, capped at 5 s), so the GPU
-  pipeline compiles of a cold pipeline cache happen on a loading screen instead
-  of freezing visible play. A Skip button ends it early; a later load of the same
-  ROM (pipelines already on disk) uses a shorter run (12 quiet frames, 2 s cap),
-  and a software renderer skips it.
+- Optional first-load graphics warm-up, **off by default**: when enabled, the
+  first frames after a load run behind an opaque "Preparing graphics" overlay
+  until they are smooth (at least 2 s, then 90 consecutive frames without a
+  >50 ms spike, capped at 5 s), with a Skip button; a later load of the same ROM
+  uses a shorter run and a software renderer skips it. By default the game is
+  revealed as soon as the ROM is loaded, because pipelines first used later
+  still compile on a worker thread. In both modes the runtime keeps writing its
+  pipeline cache while you play (the cache is saved every ~5 s and on exit), so
+  later loads start warm.
+- Language: the app follows the system language (Simplified Chinese or English)
+  and re-renders if iOS reports a locale change while it runs. See
+  "Localization" below.
 - Diagnostics export from the home page and the in-game menu.
 
 ## Display settings
@@ -78,8 +94,8 @@ on-screen controls, so no input or audio advances behind it.
 Volume and mute are applied to the running mixer immediately. The buffer size
 preference (low latency 5 ms / balanced 10 ms / stable 20 ms) is passed to
 `AVAudioSession`; changing it while a game is running restarts the audio engine
-once. Audio runs during the graphics warm-up too, because the boot sounds belong
-to loading.
+once. Audio runs during the optional graphics warm-up too, because the boot
+sounds belong to loading. Fast-forward is silent: see "Fast-forward" below.
 
 ## Controls settings
 
@@ -87,6 +103,103 @@ The opacity slider controls the on-screen pad's background; haptics adds a light
 impact on each button press. The controller row shows the connected
 `GCController` name. Button remapping is not available in this build; the fixed
 mapping is documented in the input section below.
+
+## Performance settings
+
+| Setting | Values | Behaviour |
+|---|---|---|
+| Custom frame-time HUD | On / off | Immediately; shows the per-phase milliseconds under the screens. |
+| Frame cap | 60 / 30 fps | Immediately; the free-run loop never starts presented frames closer than 1/60 s (or 1/30 s). It is a cap, not a target. |
+| Fast-forward | 1× / 2× / 4× | Immediately (also from the in-game menu); the next presented frame uses the new value. |
+| System Metal HUD | On / off | Immediately on the presented `CAMetalLayer`; remembered for later loads. |
+| First-load graphics warm-up (optional) | On / off, default off | Read when the next ROM load starts. The runtime's pipeline-cache persistence is unaffected. |
+
+## Fast-forward
+
+`1×` is normal speed. At `2×` or `4×` the frame loop runs the extra console
+frames with `zk_run_frame` before the frame that is presented:
+
+- Only the last frame of the group is presented and published (a `2×` presented
+  frame shows the console after two frames), so the UI keeps receiving frames
+  and input/pause/reset keep working on the same serial runtime queue.
+- The extra frames do not read the screens and do not present, so fast-forward
+  costs no screen copies and no swapchain presents.
+- **Audio is muted while fast-forwarding**: the samples produced for every frame
+  are drained from the runtime and dropped rather than queued for playback, so
+  no stale audio is left to play when normal speed resumes. Returning to `1×`
+  drops anything buffered and starts feeding audio again from the next frame.
+- **Automatic fallback**: if the presented frame rate stays below 20 fps for two
+  consecutive half-second windows, the app lowers the effective speed one step
+  (4× → 2× → 1×) for the rest of the session, so a heavy scene cannot make the
+  menu or input unresponsive. The Settings page and the status line show the
+  effective speed (`fast-forward: 2× (auto)`), and choosing a speed again
+  clears the fallback.
+- The status line shows the effective speed and a game-time percentage
+  (`speed: 190% of 60 Hz`, `fast-forward: 2×`), and the exported diagnostics
+  record both the requested and the effective speed.
+- Pause, Save State / Load State, Reset, Unload and moving to the background all
+  stop the frame loop before touching the runtime, so a fast-forward group can
+  never straddle a state change.
+
+## Graphics warm-up (optional)
+
+A cold pipeline cache makes the driver compile pipelines while the game runs.
+The app can run the first frames after a load behind an opaque "Preparing
+graphics" screen until frame times stop spiking (at least 2 s, 90 consecutive
+frames without a >50 ms spike, at most 5 s; Skip ends it early). It is **off by
+default** because a pipeline first used later still compiles on a worker thread
+and can hitch, so the loading wait was judged not worth it. The 5-second
+pipeline-cache persistence in the runtime is independent of this setting and
+always runs: the cache is written while you play and on unload, so the second
+load of a title starts warm. Enable the toggle in Settings → Performance to use
+the overlay again; its result appears in the diagnostics (`warmup_*` fields) and
+in the status line after the load.
+
+## System Metal HUD
+
+The system Metal Performance HUD (FPS, GPU time, memory) attaches to the
+`CAMetalLayer` the presented screens draw into. Settings → Performance → System
+Metal HUD sets `CAMetalLayer.developerHUDProperties["mode"]` to `"default"` or
+`"disabled"` at run time (iOS 16 API), and the preference is persisted and
+re-applied whenever the layer is reused, so it survives page navigation and ROM
+reloads. The app also keeps HUD logging off, because it has its own frame-time
+HUD.
+
+The HUD can only appear when something enables it for the build: the packaged
+test IPA sets `MetalHudEnabled` in `Info.plist` (`scripts/package-ipa.sh`), or the
+device's Settings → Developer → Graphics HUD turns it on. When the build does not
+enable it, the Settings row says so instead of pretending the switch worked. On
+the screen-readback path there is no `CAMetalLayer`, so the switch has no visible
+effect until a presented load runs.
+
+## Localization
+
+The UI follows the system language:
+
+- a system language of Simplified Chinese (`zh-Hans`, `zh-CN`, `zh-SG`) shows
+  Simplified Chinese;
+- every other language, including Traditional Chinese, shows English (the
+  development language).
+
+All user-facing text comes from `Resources/en.lproj/Localizable.strings` and
+`Resources/zh-Hans.lproj/Localizable.strings`. Static SwiftUI literals are
+localizable keys by themselves; text built at run time (status lines, errors,
+enum labels, formatted numbers) goes through `L10n.tr()`/`L10n.format()`, which
+read the same tables, so there is one place per string rather than scattered
+duplicates. A missing translation falls back to the English key.
+
+`L10n` resolves the language from `Bundle.preferredLocalizations`; adding a
+language means adding `Resources/<language>.lproj/Localizable.strings` (all keys
+must keep the same format specifiers). iOS restarts an app when the system
+language changes; `LocalizationStore` still watches for a locale change while the
+app runs and rebuilds the UI for new formatting. The Settings → About → Language
+row shows the table in use, and the exported diagnostics include
+`app_language=` / `system_language=`, so a device run proves which table iOS
+picked.
+
+The device log and the diagnostics report keep their technical keys and values
+in English where they are meant for tooling; the UI text around them is
+localized.
 
 ## Screen layout and pause behaviour
 
@@ -100,6 +213,9 @@ mapping is documented in the input section below.
   data stay in the app container.
 - Moving the app to the background releases the runtime (iOS may jettison a
   backgrounded process); the home page then offers to load the ROM again.
+- Fast-forward is a property of the frame loop, so pause, save states, reset and
+  unload suspend it together with the loop; resuming continues at the setting's
+  speed. The in-game menu's speed control applies on resume.
 
 ## Build
 
@@ -112,9 +228,30 @@ scripts/build-ios-app.sh         # xcodegen + xcodebuild
 scripts/package-ipa.sh ios/app/build/Release-iphoneos/3ds2apple.app 3ds2apple
 ```
 
-The project is generated by XcodeGen; new source files are picked up when
-`xcodegen generate` runs. The app is built unsigned and signed later on the
-user's machine with Sideloadly or AltStore.
+The project is generated by XcodeGen; new source files and the `Resources`
+folder are picked up when `xcodegen generate` runs. Do not edit the generated
+`.xcodeproj`: it is ignored by git.
+
+Localization resources: `Resources/en.lproj/Localizable.strings` and
+`Resources/zh-Hans.lproj/Localizable.strings` are listed in `project.yml`
+(`developmentLanguage: en`). XcodeGen turns the two `.lproj` folders into one
+localized resource; Xcode compiles the tables into the app bundle. After a build
+the bundle should contain `en.lproj/Localizable.strings` and
+`zh-Hans.lproj/Localizable.strings`:
+
+```bash
+ls build/Release-iphoneos/3ds2apple.app/*.lproj
+plutil -p build/Release-iphoneos/3ds2apple.app/zh-Hans.lproj/Localizable.strings | head
+```
+
+If the bundle has no `.lproj` folders, the app still builds and runs in English,
+but no language switch happens; check that `xcodegen generate` picked up
+`Resources` (its output lists the files it added) and that the `.strings` files
+are valid UTF-8. The app's Settings → About → Language row and the diagnostics'
+`app_language=` field show which table iOS selected.
+
+The app is built unsigned and signed later on the user's machine with Sideloadly
+or AltStore.
 
 The presented path additionally needs `MoltenVK.framework` inside the app (it is
 loaded at run time, not linked; the binary is never committed). The build and
@@ -134,8 +271,8 @@ Without it the app still builds and runs, on the readback path.
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, reset, display settings, save manager, diagnostics, exit) and quick toggles. |
 | `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. |
 | `SaveManagerView.swift` | Battery save list (export as ZIP, import, delete) and the instant save-state slots (save, load, delete), with progress and errors. |
-| `AboutView.swift` | Version, runtime state, acknowledgements, licence. |
-| `AppSettings.swift` | Persisted settings model (enums for layout, aspect, orientation, buffer size, frame cap) and the UserDefaults keys. |
+| `AboutView.swift` | Version, runtime state, acknowledgements, licence, language in use. |
+| `AppSettings.swift` | Persisted settings model (enums for layout, aspect, orientation, buffer size, frame cap, playback speed, Metal HUD and warm-up switches) and the UserDefaults keys. |
 | `DiagnosticsReport.swift` | Diagnostics report text, the shared diagnostics file type and screen geometry helpers. |
 | `StorageInspector.swift` | Container folder sizes, save-data file list, pipeline-cache clearing, and `AtomicFileWriter` for temporary-file-then-rename writes. |
 | `SaveStateSupport.swift` | Instant save states: three slots per game, the runtime's size → copy → load protocol on the serial runtime queue, the pause/audio-drop around save and load, and the slot list. |
@@ -151,9 +288,12 @@ Without it the app still builds and runs, on the readback path.
 | `GameControllerInput.swift` | GameController-to-3DS button mapping. |
 | `AudioOutput.swift` | Ring buffer and AVAudioEngine output (volume, mute, buffer duration). |
 | `FrameTiming.swift` | Per-phase frame timing for the HUD. |
-| `GraphicsWarmUp.swift` | First-run graphics warm-up state/plan, its persisted "warmed" marker and pipeline-cache filesystem stats. |
+| `GraphicsWarmUp.swift` | Optional first-load graphics warm-up state/plan (off by default), its persisted "warmed" marker and pipeline-cache filesystem stats. |
+| `Localization.swift` | `L10n` lookup/format helpers, the resolved display language, and the locale-change observer that rebuilds the UI. |
 | `AppLog.swift` | In-app log capture and the diagnostics report assembly. |
 | `ShareSheet.swift` | System share sheet for exported diagnostics. |
+| `Resources/en.lproj/Localizable.strings` | English UI strings (development language; keys are the English text). |
+| `Resources/zh-Hans.lproj/Localizable.strings` | Simplified Chinese translations of the same keys. |
 
 `ios/ZakuroBridge.h` is the C bridge; all calls that take a runtime handle must
 run on the single serial queue owned by `ROMSession`.
@@ -170,9 +310,9 @@ The two screens are presented in one of two ways, chosen when a ROM loads:
 - Both screens are in the one layer: Zakuro's presenter draws the upper (3D)
   screen over the lower (2D) one in the console's 400×480 shape, so no 2D
   composition in Swift is needed. The on-screen touch surface maps a normalised
-  touch to lower-screen pixels with `zk_present_touch_map`. During the first-run
-  graphics warm-up the same presenter path runs behind the opaque overlay, so
-  the warm-up frames are the real presentation workload.
+  touch to lower-screen pixels with `zk_present_touch_map`. When the optional
+  first-load graphics warm-up is enabled, the same presenter path runs behind
+  the opaque overlay, so the warm-up frames are the real presentation workload.
 - The fallback triggers automatically when `zk_presenter_create` returns `NULL`
   (for example no MoltenVK in the app, or a device that cannot make a Vulkan
   device), when `zk_create_presented` fails (the load is retried once with
@@ -185,9 +325,12 @@ The two screens are presented in one of two ways, chosen when a ROM loads:
   exit/fault); the presenter is released with the app. The swapchain rebuilds
   after a size change (render resolution, rotation, split view), which costs one
   out-of-date present.
-- Because there is a real Metal layer, the system Metal Performance HUD
-  (`MetalHudEnabled` in the test IPA's `Info.plist`, or Settings → Developer →
-  Graphics HUD) overlays the app. On the readback path it does not appear.
+- Because there is a real Metal layer, the system Metal Performance HUD can
+  attach to it: Settings → Performance → System Metal HUD sets
+  `developerHUDProperties` on the layer (`mode: "default"` / `"disabled"`) at run
+  time, and the build's `MetalHudEnabled` (or the device's Developer settings)
+  must also enable it. On the readback path there is no layer, so the HUD does
+  not appear.
 
 ## Input
 
@@ -275,12 +418,21 @@ Instant save states:
 - Button remapping is not available in this build. Save states are not
   interchangeable between games or runtime versions, and only battery saves are
   exported and imported; instant states stay in the app container.
-- The first run with an empty pipeline cache waits up to 5 s on the
-  "Preparing graphics" screen (skippable). A pipeline first used long after the
-  warm-up still compiles on a worker thread and draws through the generic
-  fallback meanwhile; a title can hitch briefly there. Completing shader AOT is
-  out of scope: it cannot cover every runtime shader/pipeline combination, and a
-  first run has no cache to load.
+- The "Preparing graphics" warm-up is off by default. A pipeline first used
+  during play compiles on a worker thread and draws through the generic fallback
+  meanwhile, so a title can hitch briefly on first use; enabling the optional
+  warm-up moves the first-load compiles behind a loading screen but cannot cover
+  pipelines first used later. Completing shader AOT is out of scope: it cannot
+  cover every runtime shader/pipeline combination, and a first run has no cache
+  to load.
+- Fast-forward mutes the game audio while it is active, and the automatic
+  fallback gives up extra frames when a scene is too slow (see
+  "Fast-forward"). It cannot make a game that already runs below 20 fps
+  faster.
+- The system Metal HUD switch only works when the build or the device enables
+  the HUD, and only on the presented `CAMetalLayer` path.
+- Only English and Simplified Chinese are included. Traditional Chinese and
+  other languages use English.
 - iOS 16+ only; the app is not distributed through the App Store.
 
 ## Diagnostics
@@ -288,8 +440,8 @@ Instant save states:
 The status line in the game view includes:
 
 ```text
-57 fps  2,247 frames  last: completed  audio: on
-AOT: linked, active   speed: 95% of 60 Hz
+57 fps  4,494 frames  last: completed  audio: on
+AOT: linked, active   speed: 190% of 60 Hz   fast-forward: 2×
 loop: free-run · cap 60 fps   display: CAMetalLayer · GPU direct
 warm-up ready in 2.40 s · 146 frames · max 586 ms · 3 spiky (>50 ms)
 ```
@@ -297,9 +449,11 @@ warm-up ready in 2.40 s · 146 frames · max 586 ms · 3 spiky (>50 ms)
 and, when the custom HUD is enabled, a millisecond HUD for
 `total / run / present / audio` (presented) or
 `total / run / read top / read bottom / CGImage / audio` (fallback). The
-`warm-up …` line appears once a load's graphics warm-up finished (it replaces
-the "Preparing graphics…" overlay); it is absent when the overlay is skipped
-for a software renderer. The device log carries one line per load
+`fast-forward: 2×` and `(auto)` markers appear only above 1×. The `warm-up …`
+line appears once an enabled warm-up finished (it replaces the "Preparing
+graphics…" overlay), or says it was not needed for a software renderer; it is
+absent by default because the optional warm-up setting is off. The device log
+carries one line per load
 (`zk_presenter_create`, `display:`, `hardware:`), the pipeline-cache state at
 launch/load/after `zk_destroy`, one `graphics warm-up:` line with the same
 timing, a `frame cap:` / `render scale:` line when those settings change, one
@@ -311,9 +465,13 @@ The exported diagnostics header adds the build, device, session phase
 (`paused=`), the runtime state, the active settings (`frame_cap=`,
 `screen_layout=`, `screen_aspect=`, `integer_scale=`, `render_scale=`,
 `orientation=`, `audio_volume=`, `audio_muted=`, `audio_buffer_ms=`,
-`touch_controls=`, `controls_opacity=`, `haptics=`, `custom_hud=`), the
+`touch_controls=`, `controls_opacity=`, `haptics=`, `custom_hud=`,
+`playback_speed=`, `playback_speed_effective=`,
+`playback_speed_auto_reduced=`, `warmup_enabled=`, `system_metal_hud=`,
+`system_metal_hud_build_enabled=`, `app_language=`, `system_language=`), the
 `warmup_*` fields (`outcome`, duration, frames, max frame, spike count, plan
 limit, whether the pipelines were already cached) and the `pipeline_cache*`
 fields (directory, file count, size, newest file), followed by the previous and
 current session logs. These values make renderer, presentation, scheduler,
-settings and first-run warm-up changes measurable on device.
+settings, fast-forward, language and graphics warm-up changes measurable on
+device.

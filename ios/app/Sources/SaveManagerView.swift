@@ -13,6 +13,9 @@
 //  successful load resumes the game when the page was opened from the in-game
 //  menu.
 //
+//  User-facing text: static SwiftUI literals localize through
+//  Localizable.strings; strings built at run time go through L10n.
+//
 
 import Foundation
 import SwiftUI
@@ -116,26 +119,32 @@ struct SaveManagerView: View {
 
     private var summarySection: some View {
         Section {
-            infoRow("Game", model.lastROM?.name ?? "No game imported")
+            infoRow("Game", model.lastROM?.name ?? L10n.tr("No game imported"))
             infoRow(
                 "Battery saves",
-                "\(files.count) file\(files.count == 1 ? "" : "s") · \(StorageFormat.size(batterySaveBytes))"
+                L10n.format(
+                    "%@ · %@",
+                    L10n.fileCount(files.count),
+                    StorageFormat.size(batterySaveBytes)
+                )
             )
             infoRow(
                 "Save states",
-                "\(savedSlotCount) of \(SaveStateSupport.slotCount) slots · \(StorageFormat.size(saveStates.totalBytes))"
+                L10n.format(
+                    "%@ · %@",
+                    L10n.slotCount(savedSlotCount, of: SaveStateSupport.slotCount),
+                    StorageFormat.size(saveStates.totalBytes)
+                )
             )
             infoRow("App storage", snapshot.totalText)
         } header: {
             Text("Summary")
         } footer: {
-            Text("Battery saves are written by the game runtime into "
-                 + "Documents/data/<game>. Instant save slots are stored in "
-                 + "Documents/states/<game>. Both stay on this device.")
+            Text("Battery saves are written by the game runtime into Documents/data/<game>. Instant save slots are stored in Documents/states/<game>. Both stay on this device.")
         }
     }
 
-    private func infoRow(_ title: String, _ value: String) -> some View {
+    private func infoRow(_ title: LocalizedStringKey, _ value: String) -> some View {
         HStack {
             Text(title)
             Spacer(minLength: 12)
@@ -155,8 +164,7 @@ struct SaveManagerView: View {
                     .font(.footnote)
                     .foregroundColor(.secondary)
             } else if files.isEmpty {
-                Text("No battery save data yet. Save from the game's own menu and "
-                     + "the files appear here.")
+                Text("No battery save data yet. Save from the game's own menu and the files appear here.")
                     .font(.footnote)
                     .foregroundColor(.secondary)
             } else {
@@ -168,8 +176,7 @@ struct SaveManagerView: View {
         } header: {
             Text("Battery saves")
         } footer: {
-            Text("A backup is a ZIP archive of the files above. Importing one merges "
-                 + "its files back into this game's save-data folder.")
+            Text("A backup is a ZIP archive of the files above. Importing one merges its files back into this game's save-data folder.")
         }
     }
 
@@ -226,8 +233,7 @@ struct SaveManagerView: View {
             .accessibilityIdentifier("save-data-import")
 
             if model.isRuntimeActive {
-                Text("Exit to the home page before importing or deleting save data: "
-                     + "the running game may hold these files open.")
+                Text("Exit to the home page before importing or deleting save data: the running game may hold these files open.")
                     .font(.caption2)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -252,9 +258,7 @@ struct SaveManagerView: View {
                     .foregroundColor(.secondary)
             }
         } footer: {
-            Text("A save state is a snapshot of the whole console, taken between "
-                 + "frames. Loading one restores that point, drops the audio buffered "
-                 + "before it and continues the same game session.")
+            Text("A save state is a snapshot of the whole console, taken between frames. Loading one restores that point, drops the audio buffered before it and continues the same game session.")
         }
     }
 
@@ -303,7 +307,7 @@ struct SaveManagerView: View {
     }
 
     private func stateButton(
-        _ title: String,
+        _ title: LocalizedStringKey,
         systemImage: String,
         enabled: Bool,
         action: @escaping () -> Void
@@ -337,8 +341,7 @@ struct SaveManagerView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("save-state-error")
         } else if !saveStates.isRuntimeLoaded {
-            Text("Load a game to save or restore a state. Slots already on disk "
-                 + "can be deleted here.")
+            Text("Load a game to save or restore a state. Slots already on disk can be deleted here.")
                 .font(.footnote)
                 .foregroundColor(.secondary)
         }
@@ -391,12 +394,12 @@ struct SaveManagerView: View {
     }
 
     private var deleteConfirmationTitle: String {
-        guard let pendingDeletion else { return "Delete?" }
+        guard let pendingDeletion else { return L10n.tr("Delete?") }
         switch pendingDeletion {
         case .batterySave:
-            return "Delete this save file?"
+            return L10n.tr("Delete this save file?")
         case .state(let number):
-            return "Delete Slot \(number)?"
+            return L10n.format("Delete Slot %ld?", number)
         }
     }
 
@@ -404,10 +407,9 @@ struct SaveManagerView: View {
         guard let pendingDeletion else { return "" }
         switch pendingDeletion {
         case .batterySave(let file):
-            return "“\(file.name)” is removed from this device. This cannot be undone."
+            return L10n.format("“%@” is removed from this device. This cannot be undone.", file.name)
         case .state(let number):
-            return "The instant save state in Slot \(number) is removed. "
-                + "The game's own battery saves are not touched."
+            return L10n.format("The instant save state in Slot %ld is removed. The game's own battery saves are not touched.", number)
         }
     }
 
@@ -440,7 +442,7 @@ struct SaveManagerView: View {
             guard let gameName else { return }
             do {
                 try SaveDataStore.remove(file, forROMName: gameName)
-                statusMessage = "Deleted “\(file.name)”."
+                statusMessage = L10n.format("Deleted “%@”.", file.name)
                 refresh()
             } catch {
                 errorMessage = error.localizedDescription
@@ -463,13 +465,13 @@ struct SaveManagerView: View {
         guard let gameName, !isBusy else { return }
         errorMessage = nil
         statusMessage = nil
-        busyMessage = "Packing battery saves into a ZIP archive…"
+        busyMessage = L10n.tr("Packing battery saves into a ZIP archive…")
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let url = try SaveDataStore.exportArchive(forROMName: gameName)
                 DispatchQueue.main.async {
                     self.busyMessage = nil
-                    self.statusMessage = "The backup is ready to share."
+                    self.statusMessage = L10n.tr("The backup is ready to share.")
                     self.sheet = .share(url)
                 }
             } catch {
@@ -485,17 +487,23 @@ struct SaveManagerView: View {
         guard let gameName, !model.isRuntimeActive, !isBusy else { return }
         errorMessage = nil
         statusMessage = nil
-        busyMessage = "Importing battery saves…"
+        busyMessage = L10n.tr("Importing battery saves…")
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let summary = try SaveDataStore.importSaveData(from: url, forROMName: gameName)
                 let skipped = summary.skippedEntries
                 DispatchQueue.main.async {
                     self.busyMessage = nil
-                    self.statusMessage = "Imported \(summary.fileCount) "
-                        + "file\(summary.fileCount == 1 ? "" : "s") "
-                        + "(\(StorageFormat.size(summary.bytes)))"
-                        + (skipped > 0 ? ", skipped \(skipped) archive metadata entries." : ".")
+                    var message = L10n.format(
+                        "Imported %@ (%@).",
+                        L10n.fileCount(summary.fileCount),
+                        StorageFormat.size(summary.bytes)
+                    )
+                    if skipped > 0 {
+                        message += " "
+                            + L10n.format("Skipped %ld archive metadata entries.", skipped)
+                    }
+                    self.statusMessage = message
                     self.refresh()
                 }
             } catch {

@@ -76,7 +76,11 @@ enum AOTStatus: String {
     case linkedInterpreting = "linked, interpreting"
     case linkedActive = "linked, active"
 
+    /// Stable English label for the device log and the diagnostics report.
     var label: String { rawValue }
+
+    /// Localized label for the status line and the About/Settings pages.
+    var title: String { L10n.tr(rawValue) }
 }
 
 /// A1: how the frame loop reaches the display.
@@ -91,12 +95,21 @@ enum Presentation: Equatable {
     /// Whether the screens are shown through a CAMetalLayer at all.
     var usesMetalLayer: Bool { self != .readback }
 
-    /// One line for the status area and the device log.
+    /// Stable English label for the device log and the diagnostics report.
     var label: String {
         switch self {
         case .readback: return "CGImage readback"
         case .metalDirect: return "CAMetalLayer · GPU direct"
         case .metalUploaded: return "CAMetalLayer · uploaded"
+        }
+    }
+
+    /// Localized label for the status line and the About/Settings pages.
+    var title: String {
+        switch self {
+        case .readback: return L10n.tr("CGImage readback")
+        case .metalDirect: return L10n.tr("CAMetalLayer · GPU direct")
+        case .metalUploaded: return L10n.tr("CAMetalLayer · uploaded")
         }
     }
 }
@@ -138,9 +151,17 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// AOT/linked-code state for the status line.
     @Published private(set) var aotStatus: AOTStatus = .unknown
     /// Active frame-loop driver (`free-run · cap 60 fps` or
-    /// `CADisplayLink · 60 Hz`). Shown in the status line so a device
-    /// screenshot records which loop is running (I3-T9).
+    /// `CADisplayLink · 60 Hz`). Stable English for logs and diagnostics.
     @Published private(set) var frameLoopLabel: String = "—"
+    /// Localized copy of `frameLoopLabel` for the status line and About page.
+    @Published private(set) var frameLoopDisplayLabel: String = "—"
+    /// Fast-forward the frame loop is actually using: the setting from
+    /// Settings, possibly reduced by the automatic fallback when frames take
+    /// too long (`playbackSpeedAutoReduced`).
+    @Published private(set) var effectivePlaybackSpeed: Int = 1
+    /// True when the automatic fallback lowered `effectivePlaybackSpeed` below
+    /// the value requested in Settings during this session.
+    @Published private(set) var playbackSpeedAutoReduced = false
     /// A1: the Metal view the presenter draws into, nil while the Metal path is
     /// off or unavailable. The session keeps it for the app's lifetime: the
     /// presenter's swapchain references its layer.
@@ -175,7 +196,14 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// as it exists, and remembered for the first load.
     private var requestedRenderScale: CGFloat = 1
     /// Free-run frame cap (frames per second). Mutable while playing.
-    private let frameRateCap = FrameRateCapState()
+    private let frameRateCap = LockedIntState(initialValue: 60)
+    /// Fast-forward target the frame loop currently uses (1, 2 or 4). Written
+    /// from the settings page on the main queue, read before every frame on the
+    /// runtime queue; the automatic fallback lowers it from the runtime queue.
+    private let playbackSpeedState = LockedIntState(initialValue: 1)
+    /// Optional first-load graphics warm-up (Settings, off by default). Read
+    /// when a load starts, so it can be toggled without re-loading a ROM.
+    private let graphicsWarmUpSetting = LockedIntState(initialValue: 0)
     /// A1: drawable size of `metalScreenView` in pixels. Main queue only.
     private(set) var presentedDrawableSize = CGSize.zero
     /// A1: presenter handle (`zk_presenter_*`). Created and destroyed on the
@@ -225,6 +253,17 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// `runtimeQueue`, so a frame that was queued before a stop/Unload can
     /// never touch a destroyed handle.
     private let freeRunState = FreeRunLoopState()
+    /// Fast-forward value requested in Settings (main queue only). Kept apart
+    /// from `playbackSpeedState` so diagnostics can show both the requested and
+    /// the effective speed after an automatic fallback.
+    private var requestedPlaybackSpeed = 1
+    /// Consecutive 0.5 s windows in which fast-forward kept missing the speed
+    /// floor; two in a row lower the speed one step. runtimeQueue only.
+    private var slowPlaybackSpeedWindows = 0
+    /// System Metal Performance HUD preference (main queue only); applied to
+    /// the Metal view whenever it exists and when it is created.
+    private var systemMetalHUDEnabled = false
+
     /// runtimeQueue only.
     private var framesRendered: UInt64 = 0
     private var framesSinceStats = 0
@@ -286,7 +325,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     func importROM(from url: URL) {
         let name = url.lastPathComponent
         guard Self.isSupportedROM(name) else {
-            setPhase(.failed(message: "Unsupported file “\(name)”. Choose a decrypted .3ds or .cci ROM."))
+            setPhase(.failed(message: L10n.format("Unsupported file “%@”. Choose a decrypted .3ds or .cci ROM.", name)))
             return
         }
         // Stop ticking/audio before the current runtime is replaced.
@@ -302,7 +341,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             case .success(let rom):
                 self.beginLoad(rom)
             case .failure(let failure):
-                self.publishFailure("Could not import “\(name)”: \(failure.message)")
+                self.publishFailure(L10n.format("Could not import “%@”: %@", name, failure.message))
             }
         }
     }
@@ -310,13 +349,13 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Loads the last successfully imported ROM from Documents again.
     func loadLastROM() {
         guard let rom = lastROM else {
-            setPhase(.failed(message: "No ROM has been imported yet. Tap “Import ROM…” first."))
+            setPhase(.failed(message: L10n.tr("No ROM has been imported yet. Tap “Import ROM…” first.")))
             return
         }
         let url = documentsDirectory.appendingPathComponent(rom.relativePath)
         guard fileManager.fileExists(atPath: url.path) else {
             clearLastROM()
-            setPhase(.failed(message: "“\(rom.name)” is no longer in this app's Documents folder. Import it again."))
+            setPhase(.failed(message: L10n.format("“%@” is no longer in this app's Documents folder. Import it again.", rom.name)))
             return
         }
         stopFrameLoop()
@@ -368,7 +407,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
                 self.clearScreens()
                 self.warmUp = GraphicsWarmUpStatus()
                 self.setPhase(.finished(
-                    message: "The runtime was stopped when the app went to the background. Load the ROM again to continue."
+                    message: L10n.tr("The runtime was stopped when the app went to the background. Load the ROM again to continue.")
                 ))
             }
         }
@@ -447,13 +486,83 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         let cap = framesPerSecond <= 30 ? 30 : 60
         frameRateCap.set(cap)
         if isRuntimeActive, !isPaused {
-            frameLoopLabel = "free-run · cap \(cap) fps"
+            setFrameLoopLabels(isFreeRun: Self.frameLoopDriver == .freeRun, cap: cap)
         }
         AppLog.log("[3ds2apple] frame cap: %d fps", cap)
     }
 
     /// The current free-run cap, for the diagnostics report.
     var frameRateCapValue: Int { frameRateCap.current }
+
+    /// Updates the English (log/diagnostics) and localized (UI) frame-loop
+    /// labels together. Main queue only.
+    private func setFrameLoopLabels(isFreeRun: Bool, cap: Int) {
+        if isFreeRun {
+            frameLoopLabel = "free-run · cap \(cap) fps"
+            frameLoopDisplayLabel = L10n.format("free-run · cap %ld fps", cap)
+        } else {
+            frameLoopLabel = "CADisplayLink · \(Self.displayLinkFramesPerSecond) Hz"
+            frameLoopDisplayLabel = L10n.format("CADisplayLink · %ld Hz", Self.displayLinkFramesPerSecond)
+        }
+    }
+
+    // MARK: - Fast-forward (main queue sets, runtimeQueue runs)
+
+    /// Sets the fast-forward target from Settings (1 = 1×, 2 = 2×, 4 = 4×).
+    /// Safe while playing: the next scheduled frame uses the new value. `1×`
+    /// restores normal speed (and sound). A change also clears an automatic
+    /// fallback, so the requested speed is tried again.
+    func setPlaybackSpeed(_ speed: Int) {
+        let clamped = speed >= 4 ? 4 : (speed >= 2 ? 2 : 1)
+        requestedPlaybackSpeed = clamped
+        playbackSpeedState.set(clamped)
+        effectivePlaybackSpeed = clamped
+        playbackSpeedAutoReduced = false
+        slowPlaybackSpeedWindows = 0
+        // Fast-forward does not feed audio (see renderFrame); drop whatever the
+        // previous mode buffered so switching never replays stale samples.
+        audioOutput.resetBuffer()
+        AppLog.log("[3ds2apple] playback speed: %dx", clamped)
+    }
+
+    /// The speed asked for in Settings, for diagnostics (the effective value is
+    /// in `effectivePlaybackSpeed`).
+    var requestedPlaybackSpeedValue: Int { requestedPlaybackSpeed }
+
+    // MARK: - System Metal HUD (main queue)
+
+    /// Shows or hides the system Metal Performance HUD on the presented layer.
+    /// Applies immediately when the layer exists and is re-applied whenever the
+    /// Metal view is (re)used, so the choice survives menu navigation and ROM
+    /// reloads. The readback path has no CAMetalLayer, so the setting only
+    /// matters there once a presented load runs.
+    func setSystemMetalHUD(_ enabled: Bool) {
+        systemMetalHUDEnabled = enabled
+        if let view = metalScreenView {
+            view.applySystemMetalHUD(enabled: enabled)
+        }
+        AppLog.log("[3ds2apple] system Metal HUD: %@", enabled ? "on" : "off")
+    }
+
+    /// Whether the build's Info.plist enables the system Metal HUD. The runtime
+    /// dictionary can only show/hide a HUD the build (or the device's Developer
+    /// settings) enables.
+    var buildEnablesSystemMetalHUD: Bool {
+        Bundle.main.object(forInfoDictionaryKey: "MetalHudEnabled") as? Bool ?? false
+    }
+
+    // MARK: - Graphics warm-up (main queue sets, runtimeQueue reads)
+
+    /// Turns the optional first-load graphics warm-up on or off. Off (the
+    /// default) reveals the game as soon as the ROM is loaded; the runtime's
+    /// pipeline-cache persistence is not affected either way.
+    func setGraphicsWarmUpEnabled(_ enabled: Bool) {
+        graphicsWarmUpSetting.set(enabled ? 1 : 0)
+        AppLog.log("[3ds2apple] graphics warm-up: %@", enabled ? "on" : "off")
+    }
+
+    /// Whether the optional graphics warm-up is on, for diagnostics.
+    var graphicsWarmUpEnabled: Bool { graphicsWarmUpSetting.current == 1 }
 
     /// Drawable resolution factor for the presented screens (1 or 2). The swapchain
     /// is resized on the runtime queue by the Metal view's size callback.
@@ -479,7 +588,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         } else if audioOutput.startEngine() {
             audioState = .running
         } else {
-            audioState = .failed("the audio engine could not start")
+            audioState = .failed(L10n.tr("the audio engine could not start"))
         }
     }
 
@@ -589,6 +698,11 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// back to the CGImage readback path (≈ a second at 30-60 fps).
     private static let presentFailureLimit = 30
 
+    /// Presented frames per second below which fast-forward lowers its speed
+    /// (two consecutive 0.5 s windows). A 20 fps presentation means each frame
+    /// takes about 50 ms, so 4× would spend 200 ms per presented frame.
+    private static let speedFloorFPS: Double = 20
+
     /// A presented load is started from `runtimeQueue`; the Metal view and its
     /// presenter are main-queue objects, so this hops over, creates them if
     /// needed, and starts the load back on the runtime queue. runtimeQueue only
@@ -641,6 +755,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             metalScreenView = created
             view = created
         }
+        // The setting applies to the layer, which lives for the app run: apply
+        // it again on every load so it also survives app navigation/reloads.
+        view.applySystemMetalHUD(enabled: systemMetalHUDEnabled)
 
         let size = view.drawablePixelSize
         let width = UInt32(max(1, size.width.rounded()))
@@ -765,7 +882,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         do {
             try fileManager.createDirectory(at: dataDirectory, withIntermediateDirectories: true)
         } catch {
-            publishFailure("Could not create the save-data directory: \(error.localizedDescription)")
+            publishFailure(L10n.format("Could not create the save-data directory: %@", error.localizedDescription))
             return
         }
 
@@ -842,11 +959,18 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         AppLog.log("[3ds2apple] zk_create OK after %.1f s: %@", elapsed, rom.relativePath)
 
         // A cold first run spends hundreds of milliseconds per new GPU pipeline
-        // inside a frame while the driver compiles it. Run those frames behind
-        // the loading overlay instead of showing the hitch; a software
-        // renderer has no Vulkan pipelines to warm, so it is revealed at once.
-        let plan = Self.graphicsWarmUpPlan(hardwareStatus: hardwareStatus, cache: cacheAtLoad, rom: rom)
-        if let plan {
+        // inside a frame while the driver compiles it. The optional warm-up runs
+        // those frames behind a loading overlay; it is OFF by default because
+        // later pipelines still compile on first use, so the wait was judged
+        // not worth it. The runtime's pipeline-cache persistence runs
+        // regardless. A software renderer has no pipelines to warm.
+        let warmUpSettingOn = graphicsWarmUpSetting.current == 1
+        let plan = warmUpSettingOn
+            ? Self.graphicsWarmUpPlan(hardwareStatus: hardwareStatus, cache: cacheAtLoad, rom: rom)
+            : nil
+        if !warmUpSettingOn {
+            AppLog.log("[3ds2apple] graphics warm-up: off in Settings; revealing the game as soon as the ROM loads")
+        } else if let plan {
             AppLog.log("[3ds2apple] graphics warm-up: planned %@ (%@, max %.0f s, %ld quiet frames)",
                   plan.fromWarmCache ? "short (pipelines cached)" : "full (cold cache)",
                   cacheAtLoad.summary, plan.maximumSeconds, plan.requiredQuietFrames)
@@ -865,7 +989,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             if let plan {
                 self.beginGraphicsWarmUp(plan: plan, rom: rom)
             } else {
-                self.warmUp = GraphicsWarmUpStatus.skippedForSoftware()
+                // Disabled by the setting, or a software renderer: reveal now.
+                self.warmUp = warmUpSettingOn
+                    ? GraphicsWarmUpStatus.skippedForSoftware()
+                    : GraphicsWarmUpStatus.skippedForDisabledSetting()
                 AppLog.log("[3ds2apple] graphics warm-up: %@", self.warmUp.logLine)
                 self.setPhase(.loaded(name: rom.name))
                 self.startFrameLoop(warmUp: nil, romKey: rom.relativePath)
@@ -912,10 +1039,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// that just saw `zk_create()` fail (the error slot is thread-local).
     private static func currentRuntimeError() -> String {
         guard let pointer = zk_last_error() else {
-            return "The Zakuro runtime could not load this ROM (no error text was reported)."
+            return L10n.tr("The Zakuro runtime could not load this ROM (no error text was reported).")
         }
         let text = String(cString: pointer)
-        return text.isEmpty ? "The Zakuro runtime could not load this ROM (empty error text)." : text
+        return text.isEmpty ? L10n.tr("The Zakuro runtime could not load this ROM (empty error text).") : text
     }
 
     // MARK: - Frame loop (main thread starts/stops, runtimeQueue executes)
@@ -990,7 +1117,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         case .freeRun:
             let generation = freeRunState.start()
             let cap = frameRateCap.current
-            frameLoopLabel = "free-run · cap \(cap) fps"
+            setFrameLoopLabels(isFreeRun: true, cap: cap)
             // First frame right away; every later frame is scheduled by the
             // runtime queue after the previous one, so at most one frame is in
             // flight and at most one continuation is queued.
@@ -998,7 +1125,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             AppLog.log("[3ds2apple] frame loop started (free-run, cap %d fps)", cap)
         case .displayLink:
             startDisplayLinkOnMain()
-            frameLoopLabel = "CADisplayLink · \(Self.displayLinkFramesPerSecond) Hz"
+            setFrameLoopLabels(isFreeRun: false, cap: frameRateCap.current)
             AppLog.log("[3ds2apple] frame loop started (CADisplayLink at %d fps)",
                   Self.displayLinkFramesPerSecond)
         }
@@ -1105,14 +1232,24 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         }
     }
 
-    /// Executes one frame, times every phase and publishes screens + stats.
-    /// runtimeQueue only. Returns `false` when the runtime was stopped by an
-    /// exit/fault (the caller must not schedule another frame); `true` when the
-    /// frame completed and the loop may continue.
+    /// Executes one presented frame, times every phase and publishes screens +
+    /// stats. runtimeQueue only.
+    ///
+    /// Fast-forward: at 2×/4× the runtime advances `speed` console frames per
+    /// presented frame. The extra frames call `zk_run_frame` without presenting
+    /// or reading the screens, and their audio is drained and discarded: sound
+    /// is muted while fast-forwarding. The final frame is presented and
+    /// published as usual, so input, pause, save states and unload keep working
+    /// at the same serial-queue frame boundaries.
+    ///
+    /// Returns `false` when the runtime was stopped by an exit/fault (the caller
+    /// must not schedule another frame); `true` when the frame completed and the
+    /// loop may continue.
     @discardableResult
     private func renderFrame() -> Bool {
         guard let system else { return false }
         let frameStart = FrameClock.now()
+        let speed = playbackSpeedState.current
 
         // The only place that pushes input: same serial queue, immediately
         // before the frame that consumes it. During the graphics warm-up the
@@ -1121,6 +1258,19 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         // before the player sees it; the merged input state itself is left
         // alone and is forwarded again from the first revealed frame.
         let input = warmUpRun == nil ? inputState.snapshot() : InputSnapshot()
+
+        // Fast-forward: advance the console-only frames first. They produce no
+        // visible frame and no audible samples.
+        if speed > 1 {
+            var fastForwarded = 1
+            while fastForwarded < speed {
+                if !runFastForwardFrame(system: system, input: input, frameStart: frameStart) {
+                    return false
+                }
+                fastForwarded += 1
+            }
+        }
+
         zk_set_input(system, input.buttons, input.circleX, input.circleY,
                      input.touch ? 1 : 0, input.touchX, input.touchY)
 
@@ -1129,55 +1279,103 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         timingWindow.record(.runFrame, ticks: FrameClock.now() - runStart)
         framesRendered += 1
 
-        switch result {
-        case 0:
-            // ZK_FRAME_COMPLETED. Audio first: it does not depend on the
-            // display, and in Metal mode a present can wait for a drawable,
-            // which must not delay draining the ring buffer.
-            let audioStart = FrameClock.now()
+        guard result == 0 else {
+            timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
+            return finishForRunFrameResult(result)
+        }
+
+        // ZK_FRAME_COMPLETED. Audio first: it does not depend on the display,
+        // and in Metal mode a present can wait for a drawable, which must not
+        // delay draining the ring buffer. Fast-forward is silent: the samples
+        // are drained and dropped so they cannot pile up and play later.
+        let audioStart = FrameClock.now()
+        if speed > 1 {
+            discardAudio(system: system)
+        } else {
             pumpAudio(system: system)
-            timingWindow.record(.audioPump, ticks: FrameClock.now() - audioStart)
+        }
+        timingWindow.record(.audioPump, ticks: FrameClock.now() - audioStart)
 
-            var top: CGImage?
-            var bottom: CGImage?
-            if let presenter = framePresenter {
-                // A1: the screens go to the CAMetalLayer (straight from the
-                // renderer's GPU images when the device is shared).
-                let presentStart = FrameClock.now()
-                let presented = zk_present(system, presenter)
-                timingWindow.record(.present, ticks: FrameClock.now() - presentStart)
-                if presented <= -2 {
-                    presentFailed(result: presented)
-                } else {
-                    presentFailures = 0
-                }
+        var top: CGImage?
+        var bottom: CGImage?
+        if let presenter = framePresenter {
+            // A1: the screens go to the CAMetalLayer (straight from the
+            // renderer's GPU images when the device is shared).
+            let presentStart = FrameClock.now()
+            let presented = zk_present(system, presenter)
+            timingWindow.record(.present, ticks: FrameClock.now() - presentStart)
+            if presented <= -2 {
+                presentFailed(result: presented)
             } else {
-                // Pre-A1 path: copy both screens to the CPU and build CGImages.
-                var cgImageTicks: UInt64 = 0
-                top = screenImage(system: system, which: 0, cgImageTicks: &cgImageTicks)
-                bottom = screenImage(system: system, which: 1, cgImageTicks: &cgImageTicks)
-                timingWindow.record(.cgImage, ticks: cgImageTicks)
+                presentFailures = 0
             }
+        } else {
+            // Pre-A1 path: copy both screens to the CPU and build CGImages.
+            var cgImageTicks: UInt64 = 0
+            top = screenImage(system: system, which: 0, cgImageTicks: &cgImageTicks)
+            bottom = screenImage(system: system, which: 1, cgImageTicks: &cgImageTicks)
+            timingWindow.record(.cgImage, ticks: cgImageTicks)
+        }
 
+        timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
+        publishFrame(top: top, bottom: bottom, result: result)
+        advanceGraphicsWarmUp(frameMilliseconds: FrameClock.milliseconds(FrameClock.now() - frameStart))
+        return true
+    }
+
+    /// One extra console frame while fast-forwarding: advances the game without
+    /// presenting or reading the screens, and drops the audio it produced.
+    /// runtimeQueue only. Returns false when the runtime stopped.
+    private func runFastForwardFrame(system: zk_system_t,
+                                     input: InputSnapshot,
+                                     frameStart: UInt64) -> Bool {
+        zk_set_input(system, input.buttons, input.circleX, input.circleY,
+                     input.touch ? 1 : 0, input.touchX, input.touchY)
+        let runStart = FrameClock.now()
+        let result = zk_run_frame(system)
+        timingWindow.record(.runFrame, ticks: FrameClock.now() - runStart)
+        framesRendered += 1
+        // Drain the samples this frame produced; nothing is enqueued for
+        // playback while fast-forwarding.
+        discardAudio(system: system)
+        guard result == 0 else {
             timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
-            publishFrame(top: top, bottom: bottom, result: result)
-            advanceGraphicsWarmUp(frameMilliseconds: FrameClock.milliseconds(FrameClock.now() - frameStart))
-            return true
+            return finishForRunFrameResult(result)
+        }
+        return true
+    }
+
+    /// Handles a non-zero `zk_run_frame` result (exit, fault, bad handle): stops
+    /// the loop, releases the runtime and publishes the terminal state.
+    /// runtimeQueue only; always returns false for the frame loop.
+    private func finishForRunFrameResult(_ result: Int32) -> Bool {
+        switch result {
         case 1:
-            timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
-            // ZK_FRAME_EXITED.
-            finishRuntime(message: "The game requested exit (zk_run_frame = 1).", isError: false)
-            return false
+            finishRuntime(
+                message: L10n.tr("The game requested exit (zk_run_frame = 1)."),
+                isError: false
+            )
         case -1:
-            timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
-            // ZK_FRAME_FAULTED.
-            finishRuntime(message: "Runtime fault (zk_run_frame = -1).", isError: true)
-            return false
+            finishRuntime(
+                message: L10n.tr("Runtime fault (zk_run_frame = -1)."),
+                isError: true
+            )
         default:
-            timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
-            // ZK_FRAME_BAD_HANDLE (-2).
-            finishRuntime(message: "Invalid runtime handle (zk_run_frame = \(result)).", isError: true)
-            return false
+            finishRuntime(
+                message: L10n.format("Invalid runtime handle (zk_run_frame = %d).", result),
+                isError: true
+            )
+        }
+        return false
+    }
+
+    /// Drains the samples the runtime produced for frames that are not
+    /// presented (fast-forward), dropping them instead of queueing playback.
+    /// runtimeQueue only.
+    private func discardAudio(system: zk_system_t) {
+        _ = audioScratch.withUnsafeMutableBufferPointer { buffer -> Int in
+            guard let base = buffer.baseAddress else { return 0 }
+            return zk_take_audio(system, base, buffer.count)
         }
     }
 
@@ -1349,6 +1547,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         if windowMilliseconds >= 500 {
             let windowSeconds = windowMilliseconds / 1000
             let fps = windowSeconds > 0 ? Double(framesSinceStats) / windowSeconds : 0
+            considerPlaybackSpeedFallback(presentedFPS: fps)
             var snapshot = FrameStats(fps: fps, frames: framesRendered, lastResult: result)
             snapshot.timing = timingWindow.publish()
             stats = snapshot
@@ -1368,6 +1567,39 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             if let top { self.topScreenImage = top }
             if let bottom { self.bottomScreenImage = bottom }
             if let stats { self.frameStats = stats }
+        }
+    }
+
+    /// Lowers the fast-forward target when the device cannot keep up: two
+    /// consecutive 0.5 s windows below `speedFloorFPS` presented frames per
+    /// second step 4× down to 2× and 2× down to 1×. The fallback is one-way for
+    /// the session, so a heavy scene cannot turn the menu/input unresponsive;
+    /// changing the speed in Settings (or a new load) resets it.
+    /// runtimeQueue only.
+    private func considerPlaybackSpeedFallback(presentedFPS: Double) {
+        let speed = playbackSpeedState.current
+        guard speed > 1 else {
+            slowPlaybackSpeedWindows = 0
+            return
+        }
+        guard presentedFPS > 0, presentedFPS < Self.speedFloorFPS else {
+            slowPlaybackSpeedWindows = 0
+            return
+        }
+        slowPlaybackSpeedWindows += 1
+        guard slowPlaybackSpeedWindows >= 2 else { return }
+        slowPlaybackSpeedWindows = 0
+        let reduced = speed >= 4 ? 2 : 1
+        playbackSpeedState.set(reduced)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.effectivePlaybackSpeed = reduced
+            self.playbackSpeedAutoReduced = true
+            self.audioOutput.resetBuffer()
+            AppLog.log(
+                "[3ds2apple] fast-forward auto-reduced to %dx: the presented frame rate stayed below %.0f fps",
+                reduced, ROMSession.speedFloorFPS
+            )
         }
     }
 
@@ -1432,6 +1664,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         topScreenImage = nil
         bottomScreenImage = nil
         frameLoopLabel = "—"
+        frameLoopDisplayLabel = "—"
         frameStats = FrameStats()
         isPaused = false
     }
@@ -1445,7 +1678,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             return
         }
         guard audioOutput.startEngine() else {
-            audioState = .failed("the audio engine could not start")
+            audioState = .failed(L10n.tr("the audio engine could not start"))
             return
         }
         audioState = .running
@@ -1510,7 +1743,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             try fileManager.createDirectory(at: romsDirectory, withIntermediateDirectories: true)
         } catch {
             return .failure(ROMImportFailure(
-                message: "Could not create Documents/roms: \(error.localizedDescription)"
+                message: L10n.format("Could not create Documents/roms: %@", error.localizedDescription)
             ))
         }
 
@@ -1535,7 +1768,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         } catch {
             try? fileManager.removeItem(at: temporary)
             return .failure(ROMImportFailure(
-                message: "Could not read the selected file: \(error.localizedDescription)"
+                message: L10n.format("Could not read the selected file: %@", error.localizedDescription)
             ))
         }
         do {
@@ -1547,7 +1780,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
                 return .success(ImportedROM(name: name, relativePath: relativePath(of: destination)))
             }
             return .failure(ROMImportFailure(
-                message: "Could not store the ROM in Documents: \(error.localizedDescription)"
+                message: L10n.format("Could not store the ROM in Documents: %@", error.localizedDescription)
             ))
         }
 
@@ -1657,11 +1890,17 @@ private final class FreeRunLoopState {
     }
 }
 
-/// Lock-protected free-run cap (frames per second). Changed from the settings UI
-/// on the main queue; read by every scheduled frame on the runtime queue.
-private final class FrameRateCapState {
+/// Lock-protected integer preference read on the runtime queue: the free-run
+/// frame cap, the fast-forward speed and the optional graphics warm-up switch.
+/// The settings UI writes them on the main queue; every scheduled frame reads
+/// the current value without touching the main thread.
+private final class LockedIntState {
     private let lock = NSLock()
-    private var value = 60
+    private var value: Int
+
+    init(initialValue: Int) {
+        value = initialValue
+    }
 
     var current: Int {
         lock.lock()
@@ -1669,9 +1908,9 @@ private final class FrameRateCapState {
         return value
     }
 
-    func set(_ framesPerSecond: Int) {
+    func set(_ newValue: Int) {
         lock.lock()
-        value = framesPerSecond
+        value = newValue
         lock.unlock()
     }
 }

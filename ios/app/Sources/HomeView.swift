@@ -133,15 +133,14 @@ struct HomeView: View {
     }
 
     private var gameTitle: String {
-        model.lastROM?.name ?? "No game imported"
+        model.lastROM?.name ?? L10n.tr("No game imported")
     }
 
     private var gameSubtitle: String {
         if let rom = model.lastROM {
-            return "Imported game · \(rom.relativePath)"
+            return L10n.format("Imported game · %@", rom.relativePath)
         }
-        return "Import a decrypted .3ds or .cci from the Files app. "
-            + "The file is copied into this app's Documents folder and stays on the device."
+        return L10n.tr("Import a decrypted .3ds or .cci from the Files app. The file is copied into this app's Documents folder and stays on the device.")
     }
 
     private var coverPlaceholder: some View {
@@ -167,30 +166,30 @@ struct HomeView: View {
         switch model.phase {
         case .idle:
             Text(model.lastROM == nil
-                 ? "No game imported yet."
-                 : "Ready to load the imported game.")
+                 ? L10n.tr("No game imported yet.")
+                 : L10n.tr("Ready to load the imported game."))
                 .font(.footnote)
                 .foregroundColor(.secondary)
         case .importing(let name):
             HStack(spacing: 8) {
                 ProgressView()
-                Text("Importing \(name)…")
+                Text(L10n.format("Importing %@…", name))
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }
         case .starting(let name):
             HStack(spacing: 8) {
                 ProgressView()
-                Text("Starting \(name)…")
+                Text(L10n.format("Starting %@…", name))
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }
         case .preparing(let name):
-            Text("Preparing graphics for \(name)…")
+            Text(L10n.format("Preparing graphics for %@…", name))
                 .font(.footnote)
                 .foregroundColor(.secondary)
         case .loaded(let name):
-            Label("Loaded: \(name)", systemImage: "checkmark.circle.fill")
+            Label(L10n.format("Loaded: %@", name), systemImage: "checkmark.circle.fill")
                 .font(.footnote)
                 .foregroundColor(.green)
         case .failed(let message):
@@ -337,9 +336,9 @@ struct HomeView: View {
     }
 
     private func actionTile(
-        title: String,
+        title: LocalizedStringKey,
         systemImage: String,
-        detail: String,
+        detail: LocalizedStringKey,
         tint: Color
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -364,8 +363,7 @@ struct HomeView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Games run as native ARM64 code (AOT) — no CPU JIT. "
-                 + "Your ROM and save data stay on this device.")
+            Text("Games run as native ARM64 code (AOT) — no CPU JIT. Your ROM and save data stay on this device.")
             Text("3ds2apple is not affiliated with Nintendo. Use only game dumps you made from your own console.")
         }
         .font(.caption2)

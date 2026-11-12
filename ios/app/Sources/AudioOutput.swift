@@ -24,12 +24,23 @@ enum AudioState {
     case muted
     case failed(String)
 
+    /// Stable English value for the diagnostics report and the device log.
     var label: String {
         switch self {
         case .off: return "off"
         case .running: return "on"
         case .muted: return "muted"
         case .failed: return "failed"
+        }
+    }
+
+    /// Localized value for the status line.
+    var title: String {
+        switch self {
+        case .off: return L10n.tr("off")
+        case .running: return L10n.tr("on")
+        case .muted: return L10n.tr("muted")
+        case .failed: return L10n.tr("failed")
         }
     }
 
