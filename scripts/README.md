@@ -1,15 +1,27 @@
 # 构建与打包脚本
 
-本目录放 **ROM-free** 的 3ds2apple 构建/打包脚本。它们只构建通用 iOS 壳（SwiftUI
-外壳 + `libzakuro_ios.a`），不读取、不打包任何 ROM、密钥或游戏数据。
+本目录放 3ds2apple 的构建/打包脚本：
+
+- **ROM-free 通用壳**（I1/I2）：`build-ios-app.sh`、`package-ipa.sh`；
+- **每游戏 AOT 流水线**（I3-T3，3dsrecomp）：`build-recomp-ios.sh`、
+  `build-linked-ios-lib.sh`、`build-game-ipa.sh`，完整说明见
+  [AOT_BUILD.md](AOT_BUILD.md)。
+
+两类脚本都不会把 ROM、密钥、生成的 C、静态库或 IPA 提交进仓库：AOT 脚本只在构建机
+上读取 `ROM/` 中**用户自有**的 ROM，所有中间产物都落在 gitignored 的 `build/`、
+`third_party/`、`IPA/`。
 
 | 脚本 | 作用 | 运行环境 |
 |---|---|---|
 | `build-zakuro-ios.sh` | 构建 Zakuro iOS 静态库 → `build/ios/libzakuro_ios.a` | **macOS**（Xcode + Rust） |
 | `build-ios-app.sh` | XcodeGen 生成工程 + `xcodebuild` → unsigned `.app` | **macOS**（Xcode + XcodeGen） |
 | `package-ipa.sh` | `.app` → `Payload/` → unsigned `.ipa` + SHA256 | macOS 或 Linux（`zip` + `shasum`/`sha256sum`） |
+| `build-recomp-ios.sh` | 3dsrecomp `port` → `build/game/<name>/code/librecomp.a` | **macOS**（Xcode + Rust） |
+| `build-linked-ios-lib.sh` | linked `libzakuro_ios.a` + `libgame.a` → `build/ios/<name>/` | **macOS**（Xcode + Rust） |
+| `build-game-ipa.sh` | 链接两个静态库 → `IPA/<name>-AOT.ipa` + manifest | **macOS**（Xcode + XcodeGen） |
 
-> **macOS-only：** iOS App 必须用 Apple iOS SDK 构建，`build-ios-app.sh` 在非 Darwin
+> **macOS-only：** iOS App/静态库必须用 Apple iOS SDK 构建；`build-ios-app.sh`、
+> `build-recomp-ios.sh`、`build-linked-ios-lib.sh`、`build-game-ipa.sh` 在非 Darwin
 > 系统上会直接报错退出。Linux/Windows 只负责写脚本、文档和（可选的）IPA 打包；
 > 不要在 Linux 上尝试 iOS 链接。
 
@@ -104,6 +116,19 @@ scripts/package-ipa.sh \
 把 IPA 拷到 Windows，用 Sideloadly / AltStore 以**你自己的** Apple ID 签名安装；
 Apple ID、证书、设备 UDID 不进仓库、不写日志、不在 Agent 之间传递。
 
+### 3.1 每游戏 AOT（I3-T3，需要用户自有 ROM）
+
+```bash
+scripts/build-zakuro-ios.sh                                    # 一次性：Zakuro checkout
+scripts/build-recomp-ios.sh "ROM/<your-game>.3ds" <name>       # 3dsrecomp -> librecomp.a
+scripts/build-linked-ios-lib.sh <name>                         # linked 库 + libgame.a
+scripts/build-game-ipa.sh <name> --display-name "<Game Name>"  # -> IPA/<name>-AOT.ipa
+```
+
+8 GB VM 首轮编译若被 OOM kill：给 `build-recomp-ios.sh` 加 `--auto-serial` 顺序回退
+（RECOMP.md §3.2）。完整流程、参数表、失败诊断与真机验证见
+[AOT_BUILD.md](AOT_BUILD.md)。
+
 ## 4. 与 `ios/app/` 的契约
 
 脚本依赖 `ios-shell` 维护的 XcodeGen 工程约定（I1-T1）：
@@ -127,14 +152,20 @@ Apple ID、证书、设备 UDID 不进仓库、不写日志、不在 Agent 之�
 | 链接报 `library not found for -lzakuro_ios` | 检查 `build/ios/libzakuro_ios.a` 是否存在；`--staticlib` 传对 |
 | `zk_screen_width not found` 告警 | 静态库没链上：检查 `project.yml` 的 `OTHER_LDFLAGS` |
 | 构建失败 | 看 stderr 的日志尾部 + `ios/app/build/logs/` 下完整日志 |
-| `git status` 出现 `3ds2apple.xcodeproj` | 用 `--keep-project` 之外的默认行为会删除；长期方案是 Lead 在 `.gitignore` 加 `ios/app/3ds2apple.xcodeproj/` |
+| `git status` 出现 `3ds2apple.xcodeproj` | 该目录（`ios/app/3ds2apple.xcodeproj/`）已被 `.gitignore` 覆盖；默认保留便于调试，`build-game-ipa.sh --clean-project` 可删 |
+| AOT 链路（recomp / linked / IPA）| 见 [AOT_BUILD.md](AOT_BUILD.md) §5（8 GB VM 顺序编译）与 §7（失败诊断） |
 
 ## 6. 检查（Linux 上可做）
 
 ```bash
 bash -n scripts/build-ios-app.sh
 bash -n scripts/package-ipa.sh
-command -v shellcheck >/dev/null && shellcheck scripts/build-ios-app.sh scripts/package-ipa.sh
+bash -n scripts/build-recomp-ios.sh
+bash -n scripts/build-linked-ios-lib.sh
+bash -n scripts/build-game-ipa.sh
+command -v shellcheck >/dev/null && \
+  shellcheck scripts/build-ios-app.sh scripts/package-ipa.sh \
+    scripts/build-recomp-ios.sh scripts/build-linked-ios-lib.sh scripts/build-game-ipa.sh
 ```
 
 > 本仓库当前 Linux 环境未安装 `shellcheck`；`bash -n` 已通过。装了 shellcheck 的
