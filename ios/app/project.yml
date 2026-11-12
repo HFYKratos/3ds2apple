@@ -12,6 +12,10 @@ options:
   deploymentTarget:
     iOS: "16.0"
   createIntermediateGroups: true
+  # English is the development language; Localizable.strings also ships
+  # Simplified Chinese (Resources/zh-Hans.lproj). iOS picks the table from the
+  # system language and falls back to English for every other language.
+  developmentLanguage: en
 
 targets:
   "3ds2apple":
@@ -20,6 +24,11 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - path: Sources
+      # Localized text: Resources/en.lproj and Resources/zh-Hans.lproj each hold
+      # a Localizable.strings table. XcodeGen groups the two into one localized
+      # resource and adds both languages to the project's known regions.
+      - path: Resources
+        buildPhase: resources
     settings:
       base:
         # --- Identity -----------------------------------------------------

@@ -12,6 +12,9 @@
 //  when the next game load starts, because it decides which presentation path
 //  the load uses.
 //
+//  Titles and details are localized with L10n.tr() at the point they are read,
+//  so they show English or Simplified Chinese with the rest of the UI.
+//
 
 import Combine
 import Foundation
@@ -31,19 +34,19 @@ enum ScreenLayout: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .stacked: return "Stacked (console)"
-        case .sideBySide: return "Side by side"
-        case .upperOnly: return "Upper screen only"
-        case .lowerOnly: return "Lower screen only"
+        case .stacked: return L10n.tr("Stacked (console)")
+        case .sideBySide: return L10n.tr("Side by side")
+        case .upperOnly: return L10n.tr("Upper screen only")
+        case .lowerOnly: return L10n.tr("Lower screen only")
         }
     }
 
     var detail: String {
         switch self {
-        case .stacked: return "Upper screen above the lower one, as on the console. Uses the fast presented path."
-        case .sideBySide: return "Both screens in one row, for landscape. Uses the screen-readback path."
-        case .upperOnly: return "Only the upper (3D) screen. Uses the screen-readback path."
-        case .lowerOnly: return "Only the lower (touch) screen. Uses the screen-readback path."
+        case .stacked: return L10n.tr("Upper screen above the lower one, as on the console. Uses the fast presented path.")
+        case .sideBySide: return L10n.tr("Both screens in one row, for landscape. Uses the screen-readback path.")
+        case .upperOnly: return L10n.tr("Only the upper (3D) screen. Uses the screen-readback path.")
+        case .lowerOnly: return L10n.tr("Only the lower (touch) screen. Uses the screen-readback path.")
         }
     }
 
@@ -68,8 +71,8 @@ enum ScreenAspect: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .native: return "Native (console)"
-        case .stretch: return "Stretch to 4:3"
+        case .native: return L10n.tr("Native (console)")
+        case .stretch: return L10n.tr("Stretch to 4:3")
         }
     }
 }
@@ -85,9 +88,9 @@ enum OrientationLock: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .automatic: return "Automatic"
-        case .portrait: return "Portrait"
-        case .landscape: return "Landscape"
+        case .automatic: return L10n.tr("Automatic")
+        case .portrait: return L10n.tr("Portrait")
+        case .landscape: return L10n.tr("Landscape")
         }
     }
 }
@@ -102,9 +105,9 @@ enum AudioBufferSize: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .low: return "Low latency"
-        case .balanced: return "Balanced"
-        case .stable: return "Stable"
+        case .low: return L10n.tr("Low latency")
+        case .balanced: return L10n.tr("Balanced")
+        case .stable: return L10n.tr("Stable")
         }
     }
 
@@ -119,9 +122,9 @@ enum AudioBufferSize: String, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
-        case .low: return "5 ms. Least delay, most sensitive to audio dropouts."
-        case .balanced: return "10 ms. The default."
-        case .stable: return "20 ms. Fewer dropouts, slightly more delay."
+        case .low: return L10n.tr("5 ms. Least delay, most sensitive to audio dropouts.")
+        case .balanced: return L10n.tr("10 ms. The default.")
+        case .stable: return L10n.tr("20 ms. Fewer dropouts, slightly more delay.")
         }
     }
 }
@@ -135,6 +138,25 @@ enum FrameRateCap: Int, CaseIterable, Identifiable {
     var id: Int { rawValue }
 
     var title: String { "\(rawValue) fps" }
+}
+
+/// Fast-forward target: how many 3DS frames the runtime advances per presented
+/// frame. 1× is normal speed; 2× and 4× run extra `zk_run_frame` calls before
+/// the frame that is presented, so the game time advances that many times
+/// faster (as long as the device keeps up; see the frame loop in ROMSession).
+enum PlaybackSpeed: Int, CaseIterable, Identifiable {
+    case normal = 1
+    case double = 2
+    case quadruple = 4
+
+    var id: Int { rawValue }
+
+    /// "1×", "2×", "4×": the same in both languages.
+    var title: String { L10n.speedLabel(rawValue) }
+
+    /// Whether this setting asks the runtime to advance more than one frame per
+    /// presented frame.
+    var isFastForward: Bool { rawValue > 1 }
 }
 
 /// Persisted shell settings. One shared instance is injected through the view
@@ -159,6 +181,18 @@ final class AppSettings: ObservableObject {
 
     @Published var showCustomHUD: Bool
     @Published var frameCap: FrameRateCap
+
+    /// Show the system Metal Performance HUD (FPS / GPU time / memory) over the
+    /// presented CAMetalLayer. Off by default; applied to the layer at run time
+    /// and remembered across loads.
+    @Published var systemMetalHUD: Bool
+    /// Optional first-load graphics warm-up behind the "Preparing graphics"
+    /// overlay. Off by default: the pipeline cache is still written, so a later
+    /// per-scene compile can hitch anyway, and the overlay was judged not worth
+    /// the wait. The runtime's pipeline-cache persistence is not affected.
+    @Published var graphicsWarmUpEnabled: Bool
+    /// Fast-forward target: 1×, 2× or 4× (see `PlaybackSpeed`).
+    @Published var playbackSpeed: PlaybackSpeed
 
     private let defaults: UserDefaults
 
@@ -199,6 +233,12 @@ final class AppSettings: ObservableObject {
         frameCap = FrameRateCap(
             rawValue: defaults.integer(forKey: Keys.frameCap)
         ) ?? .sixty
+
+        systemMetalHUD = Self.bool(defaults, Keys.systemMetalHUD, fallback: false)
+        graphicsWarmUpEnabled = Self.bool(defaults, Keys.graphicsWarmUpEnabled, fallback: false)
+        playbackSpeed = PlaybackSpeed(
+            rawValue: defaults.integer(forKey: Keys.playbackSpeed)
+        ) ?? .normal
     }
 
     /// Stores the current values. Called by the settings UI after a change.
@@ -216,6 +256,9 @@ final class AppSettings: ObservableObject {
         defaults.set(haptics, forKey: Keys.haptics)
         defaults.set(showCustomHUD, forKey: Keys.showCustomHUD)
         defaults.set(frameCap.rawValue, forKey: Keys.frameCap)
+        defaults.set(systemMetalHUD, forKey: Keys.systemMetalHUD)
+        defaults.set(graphicsWarmUpEnabled, forKey: Keys.graphicsWarmUpEnabled)
+        defaults.set(playbackSpeed.rawValue, forKey: Keys.playbackSpeed)
     }
 
     // MARK: - Derived values
@@ -226,6 +269,9 @@ final class AppSettings: ObservableObject {
     var audioVolumeFloat: Float { Float(audioVolume) }
 
     var controlsBackgroundOpacity: Double { Self.clampOpacity(controlsOpacity) }
+
+    /// Fast-forward target as a plain number for the session and diagnostics.
+    var playbackSpeedValue: Int { playbackSpeed.rawValue }
 
     // MARK: - Keys
 
@@ -241,6 +287,9 @@ final class AppSettings: ObservableObject {
         static let controlsOpacity = "UI.controlsOpacity"
         static let haptics = "UI.haptics"
         static let frameCap = "UI.frameCap"
+        static let systemMetalHUD = "UI.systemMetalHUD"
+        static let graphicsWarmUpEnabled = "UI.graphicsWarmUpEnabled"
+        static let playbackSpeed = "UI.playbackSpeed"
         // Keys already used by earlier builds; kept so existing installs keep
         // their preference.
         static let showTouchControls = "I3.showTouchControls"

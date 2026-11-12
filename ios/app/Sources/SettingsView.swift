@@ -10,6 +10,9 @@
 //  Form sections (rather than grouped in helper view types) so a Form renders
 //  each control as its own row.
 //
+//  User-facing text: static SwiftUI literals localize through
+//  Localizable.strings; strings built at run time go through L10n.
+//
 
 import Foundation
 import SwiftUI
@@ -70,17 +73,14 @@ struct SettingsView: View {
             } header: {
                 Text("Display")
             } footer: {
-                Text("The screen layout is read when a game loads, so a layout change applies "
-                     + "to the next load. The presented console layout is the fastest path; "
-                     + "other layouts use the screen-readback path. Integer scaling snaps the "
-                     + "presented image to whole screen pixels.")
+                Text("The screen layout is read when a game loads, so a layout change applies to the next load. The presented console layout is the fastest path; other layouts use the screen-readback path. Integer scaling snaps the presented image to whole screen pixels.")
             }
 
             Section {
                 HStack {
                     Text("Volume")
                     Spacer()
-                    Text("\(Int((settings.audioVolume * 100).rounded()))%")
+                    Text(L10n.format("%ld%%", Int((settings.audioVolume * 100).rounded())))
                         .foregroundColor(.secondary)
                         .monospacedDigit()
                 }
@@ -101,8 +101,7 @@ struct SettingsView: View {
             } header: {
                 Text("Audio")
             } footer: {
-                Text("Changes apply immediately. A different buffer size restarts the audio "
-                     + "engine once while a game is running.")
+                Text("Changes apply immediately. A different buffer size restarts the audio engine once while a game is running.")
             }
 
             Section {
@@ -113,7 +112,7 @@ struct SettingsView: View {
                 HStack {
                     Text("Overlay opacity")
                     Spacer()
-                    Text("\(Int((settings.controlsOpacity * 100).rounded()))%")
+                    Text(L10n.format("%ld%%", Int((settings.controlsOpacity * 100).rounded())))
                         .foregroundColor(.secondary)
                         .monospacedDigit()
                 }
@@ -129,7 +128,7 @@ struct SettingsView: View {
                 HStack {
                     Text("Controller")
                     Spacer()
-                    Text(model.controllerName ?? "Not connected")
+                    Text(model.controllerName ?? L10n.tr("Not connected"))
                         .foregroundColor(.secondary)
                 }
                 HStack {
@@ -141,8 +140,7 @@ struct SettingsView: View {
             } header: {
                 Text("Controls")
             } footer: {
-                Text("The on-screen pad and a connected controller are merged. Dragging on the "
-                     + "lower screen is the 3DS touchscreen.")
+                Text("The on-screen pad and a connected controller are merged. Dragging on the lower screen is the 3DS touchscreen.")
             }
 
             Section {
@@ -159,21 +157,50 @@ struct SettingsView: View {
                 HStack {
                     Text("Frame loop")
                     Spacer()
-                    Text(model.frameLoopLabel)
+                    Text(model.frameLoopDisplayLabel)
                         .foregroundColor(.secondary)
                 }
+                Picker(
+                    "Fast-forward",
+                    selection: persistedBinding(settings, \.playbackSpeed)
+                ) {
+                    ForEach(PlaybackSpeed.allCases) { speed in
+                        Text(speed.title).tag(speed)
+                    }
+                }
+                .pickerStyle(.segmented)
                 HStack {
-                    Text("System Metal HUD")
+                    Text("Running at")
                     Spacer()
-                    Text(metalHUDText)
+                    Text(L10n.speedLabel(model.effectivePlaybackSpeed))
                         .foregroundColor(.secondary)
+                        .monospacedDigit()
+                        .accessibilityIdentifier("effective-playback-speed")
                 }
+                Text(fastForwardStatusText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Toggle(
+                    "System Metal HUD",
+                    isOn: persistedBinding(settings, \.systemMetalHUD)
+                )
+                Text(systemHUDStatusText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Toggle(
+                    "First-load graphics warm-up (optional)",
+                    isOn: persistedBinding(settings, \.graphicsWarmUpEnabled)
+                )
+                Text(warmUpStatusText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             } header: {
                 Text("Performance")
             } footer: {
-                Text("The custom HUD shows the per-phase frame times. The system Metal HUD is "
-                     + "enabled by the build's Info.plist (or Settings → Developer → Graphics HUD "
-                     + "on the device), so it is not a runtime switch.")
+                Text("The custom HUD shows the per-phase frame times. Fast-forward runs extra console frames per displayed frame and mutes audio while it is active; if presented frames stay below 20 fps the app lowers the speed automatically. The graphics warm-up is optional and off by default: the pipeline cache is still written while you play either way.")
             }
 
             Section {
@@ -221,9 +248,7 @@ struct SettingsView: View {
             } header: {
                 Text("Storage")
             } footer: {
-                Text("Everything stays in the app's Documents and Caches folders on this device. "
-                     + "The pipeline cache only holds compiled shader pipelines and is rebuilt "
-                     + "automatically.")
+                Text("Everything stays in the app's Documents and Caches folders on this device. The pipeline cache only holds compiled shader pipelines and is rebuilt automatically.")
             }
 
             Section {
@@ -244,8 +269,15 @@ struct SettingsView: View {
                 HStack {
                     Text("AOT code")
                     Spacer()
-                    Text(model.aotStatus.label)
+                    Text(model.aotStatus.title)
                         .foregroundColor(.secondary)
+                }
+                HStack {
+                    Text("Language")
+                    Spacer()
+                    Text(L10n.languageSummary)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.trailing)
                 }
                 if let url = URL(string: "https://github.com/HFYKratos/3ds2apple") {
                     Link(destination: url) {
@@ -261,8 +293,7 @@ struct SettingsView: View {
             } header: {
                 Text("About")
             } footer: {
-                Text("Apache-2.0. 3ds2apple ships without game data; use only your own "
-                     + "decrypted dumps.")
+                Text("Apache-2.0. 3ds2apple ships without game data; use only your own decrypted dumps. The app follows the system language: Simplified Chinese and English are included, and every other language uses English.")
             }
         }
         .navigationTitle("Settings")
@@ -276,8 +307,7 @@ struct SettingsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The cache is rebuilt on the next load, so that first load is slower. "
-                 + "Save data is not touched.")
+            Text("The cache is rebuilt on the next load, so that first load is slower. Save data is not touched.")
         }
     }
 
@@ -295,12 +325,41 @@ struct SettingsView: View {
         return "\(device.model) · \(device.systemName) \(device.systemVersion)"
     }
 
-    /// The system Metal Performance HUD comes from the packaged Info.plist
-    /// (`MetalHudEnabled`) or the device's Developer settings; it cannot be
-    /// toggled by the running app.
-    private var metalHUDText: String {
-        let enabled = Bundle.main.object(forInfoDictionaryKey: "MetalHudEnabled") as? Bool ?? false
-        return enabled ? "Enabled by this build" : "Not enabled in this build"
+    /// Fast-forward state, including the automatic fallback when it happened.
+    private var fastForwardStatusText: String {
+        let effective = L10n.speedLabel(model.effectivePlaybackSpeed)
+        if model.playbackSpeedAutoReduced {
+            return L10n.format(
+                "Running at %@: lowered automatically from %@ because presented frames stayed below 20 fps.",
+                effective,
+                L10n.speedLabel(settings.playbackSpeed.rawValue)
+            )
+        }
+        return L10n.format("Running at %@.", effective)
+    }
+
+    /// What the system Metal HUD switch does right now, including the note when
+    /// the build does not enable the HUD the runtime tries to show.
+    private var systemHUDStatusText: String {
+        let buildEnablesHUD = Bundle.main.object(forInfoDictionaryKey: "MetalHudEnabled") as? Bool ?? false
+        if settings.systemMetalHUD {
+            if buildEnablesHUD {
+                return L10n.tr("On: the HUD is shown over the presented Metal layer.")
+            }
+            return L10n.tr("The switch is on, but this build must also enable the HUD (MetalHudEnabled in Info.plist), or turn on Developer → Graphics HUD on the device, then relaunch.")
+        }
+        if buildEnablesHUD {
+            return L10n.tr("Off: the HUD is hidden for this app even though the build enables it.")
+        }
+        return L10n.tr("Off: the build does not enable the system HUD.")
+    }
+
+    /// What the optional first-load graphics warm-up does.
+    private var warmUpStatusText: String {
+        if settings.graphicsWarmUpEnabled {
+            return L10n.tr("On: the first frames of each load run behind a “Preparing graphics” screen until they stop spiking (at most 5 s). Later pipelines can still compile on first use.")
+        }
+        return L10n.tr("Off by default: the game appears as soon as the ROM loads. The runtime still writes its pipeline cache while you play, so later loads start warm.")
     }
 
     // MARK: - Actions
@@ -378,8 +437,7 @@ struct QuickDisplaySettingsView: View {
                 } header: {
                     Text("Display")
                 } footer: {
-                    Text("The screen layout is read when a game loads, so it applies to the "
-                         + "next load. The other display changes apply immediately.")
+                    Text("The screen layout is read when a game loads, so it applies to the next load. The other display changes apply immediately.")
                 }
             }
             .navigationTitle("Display settings")

@@ -35,9 +35,9 @@ struct AboutView: View {
             Section {
                 infoRow(title: "Screens", value: "\(topScreen.label) · \(bottomScreen.label)")
                     .accessibilityIdentifier("zk-screen-width")
-                infoRow(title: "AOT code", value: model.aotStatus.label)
-                infoRow(title: "Presentation", value: model.displayPath.label)
-                infoRow(title: "Frame loop", value: model.frameLoopLabel)
+                infoRow(title: "AOT code", value: model.aotStatus.title)
+                infoRow(title: "Presentation", value: model.displayPath.title)
+                infoRow(title: "Frame loop", value: model.frameLoopDisplayLabel)
                 if model.hardwareStatus != "—" {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Graphics")
@@ -47,18 +47,15 @@ struct AboutView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                infoRow(title: "Controller", value: model.controllerName ?? "Not connected")
+                infoRow(title: "Controller", value: model.controllerName ?? L10n.tr("Not connected"))
             } header: {
                 Text("Runtime")
             } footer: {
-                Text("Games are recompiled ahead of time on a Mac with your own game dump; "
-                     + "the app runs the AOT code and never enables a CPU JIT.")
+                Text("Games are recompiled ahead of time on a Mac with your own game dump; the app runs the AOT code and never enables a CPU JIT.")
             }
 
             Section {
-                Text("This app ships without any game data. It has no ROMs, decryption keys, "
-                     + "system files or game assets. Import only dumps that you made from a "
-                     + "console you own.")
+                Text("This app ships without any game data. It has no ROMs, decryption keys, system files or game assets. Import only dumps that you made from a console you own.")
             } header: {
                 Text("Your game")
             }
@@ -68,8 +65,7 @@ struct AboutView: View {
                 Text("3dsrecomp (MIT): ahead-of-time ARM/Thumb/VFP to C recompiler.")
                 Text("Pocket Native (MIT): AOT linking and renderer reference.")
                 Text("MoltenVK (Apache-2.0): Vulkan over Metal, used by the presented renderer.")
-                Text("Azahar / Citra (GPLv3, behaviour reference only): emulation semantics "
-                     + "references. No GPL code is linked into this app.")
+                Text("Azahar / Citra (GPLv3, behaviour reference only): emulation semantics references. No GPL code is linked into this app.")
             } header: {
                 Text("Acknowledgements")
             }
@@ -87,8 +83,7 @@ struct AboutView: View {
                     }
                 }
                 infoRow(title: "Licence", value: "Apache-2.0")
-                Text("Nintendo 3DS is a trademark of Nintendo Co., Ltd. This app is not "
-                     + "affiliated with or endorsed by Nintendo.")
+                Text("Nintendo 3DS is a trademark of Nintendo Co., Ltd. This app is not affiliated with or endorsed by Nintendo.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -101,10 +96,10 @@ struct AboutView: View {
         let info = Bundle.main.infoDictionary ?? [:]
         let version = info["CFBundleShortVersionString"] as? String ?? "?"
         let build = info["CFBundleVersion"] as? String ?? "?"
-        return "Version \(version) · build \(build)"
+        return L10n.format("Version %@ · build %@", version, build)
     }
 
-    private func infoRow(title: String, value: String) -> some View {
+    private func infoRow(title: LocalizedStringKey, value: String) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title)
             Spacer(minLength: 12)

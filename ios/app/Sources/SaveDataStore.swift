@@ -129,7 +129,7 @@ enum SaveDataStore {
         let url = directory.appendingPathComponent(file.relativePath, isDirectory: false)
         let basePath = directory.standardizedFileURL.path
         guard url.standardizedFileURL.path.hasPrefix(basePath + "/") else {
-            throw SaveDataError(message: "That file is not inside the game's save-data folder.")
+            throw SaveDataError(message: L10n.tr("That file is not inside the game's save-data folder."))
         }
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: url.path) else { return }
@@ -137,7 +137,7 @@ enum SaveDataStore {
             try fileManager.removeItem(at: url)
         } catch {
             throw SaveDataError(
-                message: "Could not delete “\(file.name)”: \(error.localizedDescription)"
+                message: L10n.format("Could not delete “%@”: %@", file.name, error.localizedDescription)
             )
         }
         AppLog.log("[3ds2apple] save data: deleted %@", file.relativePath)
@@ -151,7 +151,7 @@ enum SaveDataStore {
         let files = batterySaveFiles(forROMName: romName)
         guard !files.isEmpty else {
             throw SaveDataError(
-                message: "There is no battery save data to export yet. Save in the game's own menu first."
+                message: L10n.tr("There is no battery save data to export yet. Save in the game's own menu first.")
             )
         }
         let directory = batterySaveDirectory(forROMName: romName)
@@ -166,7 +166,7 @@ enum SaveDataStore {
             writer = try ZipArchiveWriter(url: archiveURL)
         } catch {
             throw SaveDataError(
-                message: "Could not prepare the ZIP archive: \(error.localizedDescription)"
+                message: L10n.format("Could not prepare the ZIP archive: %@", error.localizedDescription)
             )
         }
         do {
@@ -182,7 +182,7 @@ enum SaveDataStore {
                 throw SaveDataError(message: zipError.message)
             }
             throw SaveDataError(
-                message: "Could not export the battery save data: \(error.localizedDescription)"
+                message: L10n.format("Could not export the battery save data: %@", error.localizedDescription)
             )
         }
         AppLog.log("[3ds2apple] save data: exported %d files to %@", files.count, archiveURL.lastPathComponent)
@@ -206,16 +206,16 @@ enum SaveDataStore {
         let attributes = try? fileManager.attributesOfItem(atPath: source.path)
         let size = UInt64((attributes?[.size] as? NSNumber)?.int64Value ?? 0)
         guard size > 0 else {
-            throw SaveDataError(message: "The selected file is empty.")
+            throw SaveDataError(message: L10n.tr("The selected file is empty."))
         }
         guard size <= maximumImportBytes else {
-            throw SaveDataError(message: "The selected file is too large to import.")
+            throw SaveDataError(message: L10n.tr("The selected file is too large to import."))
         }
         do {
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         } catch {
             throw SaveDataError(
-                message: "Could not create the game's save-data folder: \(error.localizedDescription)"
+                message: L10n.format("Could not create the game's save-data folder: %@", error.localizedDescription)
             )
         }
 
@@ -231,7 +231,7 @@ enum SaveDataStore {
                 throw SaveDataError(message: zipError.message)
             } catch {
                 throw SaveDataError(
-                    message: "Could not import the archive: \(error.localizedDescription)"
+                    message: L10n.format("Could not import the archive: %@", error.localizedDescription)
                 )
             }
             AppLog.log("[3ds2apple] save data: imported %d files from %@", summary.fileCount, source.lastPathComponent)
@@ -245,7 +245,7 @@ enum SaveDataStore {
         // A single save file: keep its name and copy it in next to the others.
         guard let name = sanitizedImportFileName(source.lastPathComponent) else {
             throw SaveDataError(
-                message: "“\(source.lastPathComponent)” is not a save file this app can import."
+                message: L10n.format("“%@” is not a save file this app can import.", source.lastPathComponent)
             )
         }
         let data: Data
@@ -253,17 +253,17 @@ enum SaveDataStore {
             data = try Data(contentsOf: source, options: [.mappedIfSafe])
         } catch {
             throw SaveDataError(
-                message: "Could not read “\(source.lastPathComponent)”: \(error.localizedDescription)"
+                message: L10n.format("Could not read “%@”: %@", source.lastPathComponent, error.localizedDescription)
             )
         }
         guard UInt64(data.count) <= maximumImportBytes else {
-            throw SaveDataError(message: "The selected file is too large to import.")
+            throw SaveDataError(message: L10n.tr("The selected file is too large to import."))
         }
         do {
             try AtomicFileWriter.write(data, to: directory.appendingPathComponent(name, isDirectory: false))
         } catch {
             throw SaveDataError(
-                message: "Could not import “\(name)”: \(error.localizedDescription)"
+                message: L10n.format("Could not import “%@”: %@", name, error.localizedDescription)
             )
         }
         AppLog.log("[3ds2apple] save data: imported %@", name)

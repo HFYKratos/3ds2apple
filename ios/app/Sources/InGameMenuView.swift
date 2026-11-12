@@ -3,7 +3,8 @@
 //  3ds2apple
 //
 //  The in-game overlay menu: it dims the (paused) game and offers resume, save
-//  states, reset, display settings, the save manager, diagnostics and exit.
+//  states, quick toggles (on-screen controls, mute, fast-forward), reset,
+//  display settings, the save manager, diagnostics and exit.
 //
 //  Opening the menu pauses the frame loop and the audio engine in ROMSession,
 //  so the game can neither advance nor receive input behind the overlay. The
@@ -128,6 +129,21 @@ struct InGameMenuView: View {
                 isOn: persistedBinding(settings, \.audioMuted)
             )
             .tint(.accentColor)
+            Text("Fast-forward")
+                .padding(.top, 2)
+            Picker(
+                "Fast-forward",
+                selection: persistedBinding(settings, \.playbackSpeed)
+            ) {
+                ForEach(PlaybackSpeed.allCases) { speed in
+                    Text(speed.title).tag(speed)
+                }
+            }
+            .pickerStyle(.segmented)
+            Text("Fast-forward applies when the game resumes and mutes its audio while it is active.")
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.6))
+                .fixedSize(horizontal: false, vertical: true)
         }
         .font(.subheadline)
         .foregroundColor(.white)
@@ -196,7 +212,7 @@ struct InGameMenuView: View {
                 .foregroundColor(.white.opacity(0.6))
                 .padding(.horizontal, 4)
         } else {
-            Text("Slot \(SaveStateSupport.quickSlot) · \(saveStates.quickSlotInfo.detail)")
+            Text(L10n.format("Slot %ld · %@", SaveStateSupport.quickSlot, saveStates.quickSlotInfo.detail))
                 .font(.caption2)
                 .foregroundColor(.white.opacity(0.6))
                 .padding(.horizontal, 4)
@@ -205,7 +221,7 @@ struct InGameMenuView: View {
     }
 
     private func stateButton(
-        _ title: String,
+        _ title: LocalizedStringKey,
         systemImage: String,
         enabled: Bool,
         identifier: String,
@@ -234,7 +250,7 @@ struct InGameMenuView: View {
     }
 
     private func actionButton(
-        _ title: String,
+        _ title: LocalizedStringKey,
         systemImage: String,
         prominent: Bool = false,
         destructive: Bool = false,

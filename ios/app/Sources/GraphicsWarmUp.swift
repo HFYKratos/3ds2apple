@@ -13,13 +13,17 @@
 //  translations and the cache write still land on the boot / first-screen
 //  frames of a first run.
 //
-//  The app therefore runs a bounded number of frames behind an opaque
-//  "Preparing graphics" overlay before revealing the game. The frames that
-//  compile and cache the warm pipelines are never shown to the player; the
-//  run ends once consecutive frames are smooth (no frame over
-//  `spikeMilliseconds`) or after a hard time limit. A button lets the user
-//  skip it, and a later load of the same ROM (its pipelines already saved on
-//  disk) uses a shorter limit.
+//  The app can therefore run a bounded number of frames behind an opaque
+//  "Preparing graphics" overlay before revealing the game. This warm-up is
+//  optional and off by default: a pipeline first used later still compiles on
+//  a worker thread, so the loading wait was judged not worth it. The runtime's
+//  pipeline-cache persistence (it writes the cache while the game runs) is
+//  independent of this setting, so later loads start warm either way. When the
+//  setting is on, the frames that compile and cache the warm pipelines are
+//  never shown to the player; the run ends once consecutive frames are smooth
+//  (no frame over `spikeMilliseconds`) or after a hard time limit. A button
+//  lets the user skip it, and a later load of the same ROM (its pipelines
+//  already saved on disk) uses a shorter limit.
 //
 //  Threading: `GraphicsWarmUpRun` is advanced only on the runtime serial
 //  queue. `GraphicsWarmUpStatus` is the immutable snapshot copied to the main
@@ -50,6 +54,10 @@ enum GraphicsWarmUpOutcome: String, Equatable {
     /// The renderer fell back to software, so there are no GPU pipelines to
     /// warm; the warm-up is skipped and the game is revealed immediately.
     case skippedSoftware = "skipped-software-renderer"
+    /// The optional warm-up setting is off (the default): the game is revealed
+    /// as soon as zk_create succeeds. The runtime still writes its pipeline
+    /// cache while the game runs, so later loads start from the same cache.
+    case skippedDisabled = "skipped-disabled-setting"
     /// The runtime exited or faulted during the warm-up.
     case runtimeStopped = "runtime-stopped"
 
@@ -188,8 +196,8 @@ struct GraphicsWarmUpStatus: Equatable {
 
     /// Live progress under the "Preparing graphics" title.
     var progressText: String {
-        String(
-            format: "%ld frames · %.1f s / %.0f s · max %.0f ms",
+        L10n.format(
+            "%ld frames · %.1f s / %.0f s · max %.0f ms",
             frames,
             elapsedSeconds,
             plan.maximumSeconds,
@@ -197,15 +205,17 @@ struct GraphicsWarmUpStatus: Equatable {
         )
     }
 
-    /// One line for the HUD / diagnostics once the run is over.
+    /// One line for the HUD / diagnostics once the run is over. Nil while a run
+    /// is in progress and when the optional warm-up is off (the default), so a
+    /// normal load adds no extra status line.
     var summary: String? {
         switch outcome {
-        case .notStarted, .running:
+        case .notStarted, .running, .skippedDisabled:
             return nil
         case .ready, .maximumTime, .skippedByUser, .runtimeStopped:
-            var text = String(
-                format: "warm-up %@ in %.2f s · %ld frames · max %.0f ms · %ld spiky (>%.0f ms)",
-                outcome == .ready ? "ready" : "ended",
+            var text = L10n.format(
+                "warm-up %@ in %.2f s · %ld frames · max %.0f ms · %ld spiky (>%.0f ms)",
+                outcome == .ready ? L10n.tr("ready") : L10n.tr("ended"),
                 elapsedSeconds,
                 frames,
                 maxFrameMilliseconds,
@@ -214,20 +224,34 @@ struct GraphicsWarmUpStatus: Equatable {
             )
             switch outcome {
             case .maximumTime:
-                text = String(format: "warm-up capped at %.0f s · %ld frames · max %.0f ms", plan.maximumSeconds, frames, maxFrameMilliseconds)
+                text = L10n.format(
+                    "warm-up capped at %.0f s · %ld frames · max %.0f ms",
+                    plan.maximumSeconds,
+                    frames,
+                    maxFrameMilliseconds
+                )
             case .skippedByUser:
-                text = String(format: "warm-up skipped · %.1f s · %ld frames · max %.0f ms", elapsedSeconds, frames, maxFrameMilliseconds)
+                text = L10n.format(
+                    "warm-up skipped · %.1f s · %ld frames · max %.0f ms",
+                    elapsedSeconds,
+                    frames,
+                    maxFrameMilliseconds
+                )
             case .runtimeStopped:
-                text = String(format: "warm-up ended with the runtime · %.1f s · %ld frames", elapsedSeconds, frames)
+                text = L10n.format(
+                    "warm-up ended with the runtime · %.1f s · %ld frames",
+                    elapsedSeconds,
+                    frames
+                )
             default:
                 break
             }
             if plan.fromWarmCache {
-                text += " · cached pipelines"
+                text += " · " + L10n.tr("cached pipelines")
             }
             return text
         case .skippedSoftware:
-            return "warm-up not needed: the 3D draws in software (no GPU pipelines to compile)"
+            return L10n.tr("warm-up not needed: the 3D draws in software (no GPU pipelines to compile)")
         }
     }
 
@@ -236,7 +260,13 @@ struct GraphicsWarmUpStatus: Equatable {
 
     /// The log line for `idevicesyslog` / the in-app log.
     var logLine: String {
-        summary ?? String(format: "warm-up running: %@", progressText)
+        if let summary {
+            return summary
+        }
+        if outcome == .skippedDisabled {
+            return "warm-up skipped: the optional first-load warm-up is off"
+        }
+        return String(format: "warm-up running: %@", progressText)
     }
 
     /// Starts a run on the main queue (published immediately, before the loop).
@@ -248,6 +278,13 @@ struct GraphicsWarmUpStatus: Equatable {
     static func skippedForSoftware() -> GraphicsWarmUpStatus {
         var status = GraphicsWarmUpStatus()
         status.outcome = .skippedSoftware
+        return status
+    }
+
+    /// A run skipped because the optional warm-up setting is off (default).
+    static func skippedForDisabledSetting() -> GraphicsWarmUpStatus {
+        var status = GraphicsWarmUpStatus()
+        status.outcome = .skippedDisabled
         return status
     }
 }

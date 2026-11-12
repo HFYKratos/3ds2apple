@@ -56,7 +56,7 @@ struct GameView: View {
         return false
     }
 
-    private var romName: String { model.lastROM?.name ?? "Game" }
+    private var romName: String { model.lastROM?.name ?? L10n.tr("Game") }
 
     var body: some View {
         ZStack {
@@ -179,24 +179,24 @@ struct GameView: View {
 
     private var confirmationTitle: String {
         switch confirmationKind {
-        case .reset: return "Reset the game?"
-        case .exit: return "Exit to home?"
+        case .reset: return L10n.tr("Reset the game?")
+        case .exit: return L10n.tr("Exit to home?")
         }
     }
 
     private var confirmationButtonTitle: String {
         switch confirmationKind {
-        case .reset: return "Reset"
-        case .exit: return "Exit"
+        case .reset: return L10n.tr("Reset")
+        case .exit: return L10n.tr("Exit")
         }
     }
 
     private var confirmationMessage: String {
         switch confirmationKind {
         case .reset:
-            return "The game restarts from the beginning with the current ROM. Battery saves are kept."
+            return L10n.tr("The game restarts from the beginning with the current ROM. Battery saves are kept.")
         case .exit:
-            return "The runtime is released and the game closes. Imported ROMs and save data stay on the device."
+            return L10n.tr("The runtime is released and the game closes. Imported ROMs and save data stay on the device.")
         }
     }
 
@@ -332,7 +332,7 @@ struct GameView: View {
                         .resizable()
                 }
             } else {
-                Text(isRuntimeStarting ? "Starting Zakuro…" : "Waiting for first frame…")
+                Text(isRuntimeStarting ? L10n.tr("Starting Zakuro…") : L10n.tr("Waiting for first frame…"))
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.65))
             }
@@ -350,7 +350,7 @@ struct GameView: View {
     @ViewBuilder
     private var metalFirstFramePlaceholder: some View {
         if model.frameStats.frames == 0 {
-            Text(isRuntimeStarting ? "Starting Zakuro…" : "Waiting for first frame…")
+            Text(isRuntimeStarting ? L10n.tr("Starting Zakuro…") : L10n.tr("Waiting for first frame…"))
                 .font(.caption)
                 .foregroundColor(.white.opacity(0.65))
         }
@@ -374,8 +374,7 @@ struct GameView: View {
                     Text(model.warmUp.progressText)
                         .font(.caption.monospacedDigit())
                         .foregroundColor(.white.opacity(0.75))
-                    Text("The first frames compile and cache the GPU pipelines so "
-                         + "gameplay starts smooth. This one-time step is skipped on later loads.")
+                    Text("The first frames compile and cache the GPU pipelines so gameplay starts smooth. This optional step is skipped on later loads when the cache is warm.")
                         .font(.caption2)
                         .foregroundColor(.white.opacity(0.55))
                         .multilineTextAlignment(.center)
@@ -493,10 +492,10 @@ struct GameView: View {
     private var frameStatusLine: some View {
         VStack(spacing: 2) {
             HStack(spacing: 10) {
-                Text(String(format: "%.0f fps", model.frameStats.fps))
-                Text("\(model.frameStats.frames) frames")
-                Text("last: \(DiagnosticsExporter.frameResultLabel(model.frameStats.lastResult))")
-                Text("audio: \(model.audioState.label)")
+                Text(L10n.format("%.0f fps", model.frameStats.fps))
+                Text(L10n.frameCount(model.frameStats.frames))
+                Text(L10n.format("last: %@", DiagnosticsExporter.frameResultLabel(model.frameStats.lastResult)))
+                Text(L10n.format("audio: %@", model.audioState.title))
                     .accessibilityIdentifier("audio-status")
                 if model.isPaused {
                     Text("paused")
@@ -505,15 +504,20 @@ struct GameView: View {
                 }
             }
             HStack(spacing: 10) {
-                Text("AOT: \(model.aotStatus.label)")
+                Text(L10n.format("AOT: %@", model.aotStatus.title))
                     .accessibilityIdentifier("aot-status")
-                Text(String(format: "speed: %.0f%% of 60 Hz", model.frameStats.fps / 60.0 * 100))
+                Text(L10n.format("speed: %.0f%% of 60 Hz", speedPercent))
                     .accessibilityIdentifier("speed-status")
+                if model.effectivePlaybackSpeed > 1 {
+                    Text(fastForwardStatus)
+                        .foregroundColor(.yellow)
+                        .accessibilityIdentifier("playback-speed-status")
+                }
             }
             HStack(spacing: 10) {
-                Text("loop: \(model.frameLoopLabel)")
+                Text(L10n.format("loop: %@", model.frameLoopDisplayLabel))
                     .accessibilityIdentifier("loop-status")
-                Text("display: \(model.displayPath.label)")
+                Text(L10n.format("display: %@", model.displayPath.title))
                     .accessibilityIdentifier("display-path")
             }
             // First-run graphics warm-up result (why the loading screen was
@@ -533,6 +537,23 @@ struct GameView: View {
         .minimumScaleFactor(0.7)
         .frame(maxWidth: .infinity, alignment: .center)
         .accessibilityIdentifier("frame-status")
+    }
+
+    /// Emulation speed as a percentage of the 3DS 60 Hz timeline, including
+    /// the fast-forward multiplier (presented frames × frames per presented
+    /// frame).
+    private var speedPercent: Double {
+        model.frameStats.fps * Double(model.effectivePlaybackSpeed) / 60.0 * 100
+    }
+
+    /// "fast-forward: 2×" (with "(auto)" when the automatic fallback lowered
+    /// the speed).
+    private var fastForwardStatus: String {
+        let label = L10n.speedLabel(model.effectivePlaybackSpeed)
+        if model.playbackSpeedAutoReduced {
+            return L10n.format("fast-forward: %@ (auto)", label)
+        }
+        return L10n.format("fast-forward: %@", label)
     }
 
     /// Per-phase frame timing: average / max (since the loop started) / last
@@ -571,7 +592,7 @@ struct GameView: View {
     }
 
     private func hudRow(
-        _ label: String,
+        _ label: LocalizedStringKey,
         _ stats: FramePhaseStats,
         decimals: Int,
         identifier: String
@@ -594,7 +615,7 @@ struct GameView: View {
     @ViewBuilder
     private var audioFailureLine: some View {
         if let failure = model.audioState.failureMessage {
-            Text("Audio: \(failure)")
+            Text(L10n.format("Audio: %@", failure))
                 .font(.caption2)
                 .foregroundColor(.red)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -605,7 +626,7 @@ struct GameView: View {
     @ViewBuilder
     private var inputStatusLine: some View {
         if let controllerName = model.controllerName {
-            Text("Controller: \(controllerName)")
+            Text(L10n.format("Controller: %@", controllerName))
                 .font(.caption2)
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, alignment: .center)

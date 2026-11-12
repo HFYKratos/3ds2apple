@@ -84,14 +84,14 @@ final class ZipArchiveWriter {
         let fileManager = FileManager.default
         try? fileManager.removeItem(at: url)
         guard fileManager.createFile(atPath: url.path, contents: nil) else {
-            throw ZipArchiveError(message: "Could not create the ZIP archive.")
+            throw ZipArchiveError(message: L10n.tr("Could not create the ZIP archive."))
         }
         do {
             self.handle = try FileHandle(forWritingTo: url)
         } catch {
             try? fileManager.removeItem(at: url)
             throw ZipArchiveError(
-                message: "Could not write the ZIP archive: \(error.localizedDescription)"
+                message: L10n.format("Could not write the ZIP archive: %@", error.localizedDescription)
             )
         }
     }
@@ -106,26 +106,26 @@ final class ZipArchiveWriter {
     /// relative); it must be a safe relative path.
     func addFile(name: String, contents: Data) throws {
         guard !isClosed else {
-            throw ZipArchiveError(message: "The ZIP archive was already closed.")
+            throw ZipArchiveError(message: L10n.tr("The ZIP archive was already closed."))
         }
         guard let nameData = ZipArchiveWriter.validatedName(name) else {
             throw ZipArchiveError(
-                message: "Could not store “\(name)” in the archive: the name is not a safe relative path."
+                message: L10n.format("Could not store “%@” in the archive: the name is not a safe relative path.", name)
             )
         }
         guard entries.count < Int(UInt16.max) else {
             throw ZipArchiveError(
-                message: "There are too many files to include in one save-data archive."
+                message: L10n.tr("There are too many files to include in one save-data archive.")
             )
         }
         guard contents.count <= ZipArchiveWriter.maximumEntryBytes else {
             throw ZipArchiveError(
-                message: "“\(name)” is too large to include in a save-data archive."
+                message: L10n.format("“%@” is too large to include in a save-data archive.", name)
             )
         }
         guard let size = UInt32(exactly: contents.count) else {
             throw ZipArchiveError(
-                message: "“\(name)” is too large to include in a save-data archive."
+                message: L10n.format("“%@” is too large to include in a save-data archive.", name)
             )
         }
         let entryOffset = offset
@@ -173,7 +173,7 @@ final class ZipArchiveWriter {
         try append(central)
         guard let centralSize = UInt32(exactly: central.count) else {
             throw ZipArchiveError(
-                message: "The save data is too large for a ZIP archive (4 GB limit)."
+                message: L10n.tr("The save data is too large for a ZIP archive (4 GB limit).")
             )
         }
         var end = Data()
@@ -190,7 +190,7 @@ final class ZipArchiveWriter {
             try handle.close()
         } catch {
             throw ZipArchiveError(
-                message: "Could not finish the ZIP archive: \(error.localizedDescription)"
+                message: L10n.format("Could not finish the ZIP archive: %@", error.localizedDescription)
             )
         }
     }
@@ -200,14 +200,14 @@ final class ZipArchiveWriter {
     private func append(_ data: Data) throws {
         guard UInt64(offset) + UInt64(data.count) <= UInt64(UInt32.max) else {
             throw ZipArchiveError(
-                message: "The save data is too large for a ZIP archive (4 GB limit)."
+                message: L10n.tr("The save data is too large for a ZIP archive (4 GB limit).")
             )
         }
         do {
             try handle.write(contentsOf: data)
         } catch {
             throw ZipArchiveError(
-                message: "Could not write the ZIP archive: \(error.localizedDescription)"
+                message: L10n.format("Could not write the ZIP archive: %@", error.localizedDescription)
             )
         }
         offset += UInt32(data.count)
@@ -345,7 +345,7 @@ enum ZipArchiveReader {
             handle = try FileHandle(forReadingFrom: archiveURL)
         } catch {
             throw ZipArchiveError(
-                message: "Could not open the archive: \(error.localizedDescription)"
+                message: L10n.format("Could not open the archive: %@", error.localizedDescription)
             )
         }
         defer { try? handle.close() }
@@ -355,11 +355,11 @@ enum ZipArchiveReader {
             fileSize = try handle.seekToEnd()
         } catch {
             throw ZipArchiveError(
-                message: "Could not read the archive: \(error.localizedDescription)"
+                message: L10n.format("Could not read the archive: %@", error.localizedDescription)
             )
         }
         guard fileSize >= 22 else {
-            throw ZipArchiveError(message: "The selected file is not a ZIP archive.")
+            throw ZipArchiveError(message: L10n.tr("The selected file is not a ZIP archive."))
         }
 
         // The end record sits at the end, before an optional comment of up to
@@ -368,20 +368,20 @@ enum ZipArchiveReader {
         let tailStart = fileSize - UInt64(tailSize)
         let tail = try readBytes(handle: handle, offset: tailStart, count: tailSize, fileSize: fileSize)
         guard let endRecord = findEndOfCentralDirectory(in: tail) else {
-            throw ZipArchiveError(message: "The selected file is not a ZIP archive.")
+            throw ZipArchiveError(message: L10n.tr("The selected file is not a ZIP archive."))
         }
         let entryCount = Int(try readUInt16(tail, endRecord + 10))
         let centralSize = UInt64(try readUInt32(tail, endRecord + 12))
         let centralOffset = UInt64(try readUInt32(tail, endRecord + 16))
         guard entryCount <= maximumEntries else {
             throw ZipArchiveError(
-                message: "The archive has too many entries to import (limit \(maximumEntries))."
+                message: L10n.format("The archive has too many entries to import (limit %ld).", maximumEntries)
             )
         }
         guard centralSize <= 32 * 1024 * 1024,
               centralOffset <= fileSize,
               centralSize <= fileSize - centralOffset else {
-            throw ZipArchiveError(message: "The ZIP archive is damaged (bad central directory).")
+            throw ZipArchiveError(message: L10n.tr("The ZIP archive is damaged (bad central directory)."))
         }
         let central = try readBytes(
             handle: handle,
@@ -394,7 +394,7 @@ enum ZipArchiveReader {
         var position = 0
         for _ in 0..<entryCount {
             guard try readUInt32(central, position) == 0x0201_4B50 else {
-                throw ZipArchiveError(message: "The ZIP archive is damaged (bad central directory).")
+                throw ZipArchiveError(message: L10n.tr("The ZIP archive is damaged (bad central directory)."))
             }
             let flags = try readUInt16(central, position + 8)
             let method = try readUInt16(central, position + 10)
@@ -408,21 +408,21 @@ enum ZipArchiveReader {
             let localOffset = UInt64(try readUInt32(central, position + 42))
             let recordLength = 46 + nameLength + extraLength + commentLength
             guard position + recordLength <= central.count else {
-                throw ZipArchiveError(message: "The ZIP archive is damaged (bad central directory).")
+                throw ZipArchiveError(message: L10n.tr("The ZIP archive is damaged (bad central directory)."))
             }
             if flags & 0x0001 != 0 {
-                throw ZipArchiveError(message: "Encrypted ZIP archives are not supported.")
+                throw ZipArchiveError(message: L10n.tr("Encrypted ZIP archives are not supported."))
             }
             guard diskStart == 0 else {
-                throw ZipArchiveError(message: "Multi-disk ZIP archives are not supported.")
+                throw ZipArchiveError(message: L10n.tr("Multi-disk ZIP archives are not supported."))
             }
             guard compressedSize != 0xFFFF_FFFF, uncompressedSize != 0xFFFF_FFFF,
                   localOffset != 0xFFFF_FFFF else {
-                throw ZipArchiveError(message: "ZIP64 archives are not supported.")
+                throw ZipArchiveError(message: L10n.tr("ZIP64 archives are not supported."))
             }
             guard method == 0 || method == 8 else {
                 throw ZipArchiveError(
-                    message: "The archive uses a compression method this app cannot read."
+                    message: L10n.tr("The archive uses a compression method this app cannot read.")
                 )
             }
             let nameData = central.subdata(in: (position + 46)..<(position + 46 + nameLength))
@@ -468,19 +468,19 @@ enum ZipArchiveReader {
                   components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }),
                   !relativeName.hasPrefix("/") else {
                 throw ZipArchiveError(
-                    message: "The archive contains an unsafe file name (“\(entry.name)”)."
+                    message: L10n.format("The archive contains an unsafe file name (“%@”).", entry.name)
                 )
             }
             guard entry.uncompressedSize <= maximumEntryBytes else {
                 throw ZipArchiveError(
-                    message: "“\(entry.name)” is too large to import."
+                    message: L10n.format("“%@” is too large to import.", entry.name)
                 )
             }
             let target = directory.appendingPathComponent(relativeName, isDirectory: false)
             let basePath = directory.standardizedFileURL.path
             guard target.standardizedFileURL.path.hasPrefix(basePath + "/") else {
                 throw ZipArchiveError(
-                    message: "The archive contains an unsafe file name (“\(entry.name)”)."
+                    message: L10n.format("The archive contains an unsafe file name (“%@”).", entry.name)
                 )
             }
 
@@ -493,13 +493,13 @@ enum ZipArchiveReader {
                 fileSize: fileSize
             )
             guard try readUInt32(localHeader, 0) == 0x0403_4B50 else {
-                throw ZipArchiveError(message: "The ZIP archive is damaged (bad local header).")
+                throw ZipArchiveError(message: L10n.tr("The ZIP archive is damaged (bad local header)."))
             }
             let localNameLength = UInt64(try readUInt16(localHeader, 26))
             let localExtraLength = UInt64(try readUInt16(localHeader, 28))
             let dataOffset = entry.localOffset + 30 + localNameLength + localExtraLength
             guard dataOffset <= fileSize, entry.compressedSize <= fileSize - dataOffset else {
-                throw ZipArchiveError(message: "The ZIP archive is damaged (truncated file).")
+                throw ZipArchiveError(message: L10n.tr("The ZIP archive is damaged (truncated file)."))
             }
             let compressed = try readBytes(
                 handle: handle,
@@ -511,21 +511,21 @@ enum ZipArchiveReader {
             switch entry.method {
             case 0:
                 guard entry.compressedSize == entry.uncompressedSize else {
-                    throw ZipArchiveError(message: "The ZIP archive is damaged (wrong size).")
+                    throw ZipArchiveError(message: L10n.tr("The ZIP archive is damaged (wrong size)."))
                 }
                 payload = compressed
             default:
                 payload = try inflate(compressed, uncompressedSize: Int(entry.uncompressedSize))
             }
             guard UInt64(payload.count) == entry.uncompressedSize else {
-                throw ZipArchiveError(message: "The ZIP archive is damaged (wrong size).")
+                throw ZipArchiveError(message: L10n.tr("The ZIP archive is damaged (wrong size)."))
             }
             guard CRC32.checksum(payload) == entry.crc else {
-                throw ZipArchiveError(message: "The ZIP archive is damaged (checksum mismatch).")
+                throw ZipArchiveError(message: L10n.tr("The ZIP archive is damaged (checksum mismatch)."))
             }
             totalBytes += UInt64(payload.count)
             guard totalBytes <= maximumTotalBytes else {
-                throw ZipArchiveError(message: "The archive is too large to import.")
+                throw ZipArchiveError(message: L10n.tr("The archive is too large to import."))
             }
             do {
                 try FileManager.default.createDirectory(
@@ -535,7 +535,7 @@ enum ZipArchiveReader {
                 try AtomicFileWriter.write(payload, to: target)
             } catch {
                 throw ZipArchiveError(
-                    message: "Could not write “\(relativeName)”: \(error.localizedDescription)"
+                    message: L10n.format("Could not write “%@”: %@", relativeName, error.localizedDescription)
                 )
             }
             summary.fileCount += 1
@@ -543,7 +543,7 @@ enum ZipArchiveReader {
         }
 
         guard summary.fileCount > 0 else {
-            throw ZipArchiveError(message: "The archive does not contain any save-data files.")
+            throw ZipArchiveError(message: L10n.tr("The archive does not contain any save-data files."))
         }
         return summary
     }
@@ -599,7 +599,7 @@ enum ZipArchiveReader {
     private static func inflate(_ data: Data, uncompressedSize: Int) throws -> Data {
         guard uncompressedSize > 0 else {
             guard data.isEmpty else {
-                throw ZipArchiveError(message: "The ZIP archive is damaged (empty entry).")
+                throw ZipArchiveError(message: L10n.tr("The ZIP archive is damaged (empty entry)."))
             }
             return Data()
         }
@@ -622,7 +622,7 @@ enum ZipArchiveReader {
         }
         guard decoded == uncompressedSize else {
             throw ZipArchiveError(
-                message: "The ZIP archive contains a file this device could not decompress."
+                message: L10n.tr("The ZIP archive contains a file this device could not decompress.")
             )
         }
         return output
@@ -635,23 +635,23 @@ enum ZipArchiveReader {
         fileSize: UInt64
     ) throws -> Data {
         guard count >= 0, offset <= fileSize, UInt64(count) <= fileSize - offset else {
-            throw ZipArchiveError(message: "The ZIP archive is damaged (truncated file).")
+            throw ZipArchiveError(message: L10n.tr("The ZIP archive is damaged (truncated file)."))
         }
         if count == 0 { return Data() }
         do {
             try handle.seek(toOffset: offset)
         } catch {
-            throw ZipArchiveError(message: "Could not read the ZIP archive.")
+            throw ZipArchiveError(message: L10n.tr("Could not read the ZIP archive."))
         }
         guard let data = try? handle.read(upToCount: count), data.count == count else {
-            throw ZipArchiveError(message: "Could not read the ZIP archive.")
+            throw ZipArchiveError(message: L10n.tr("Could not read the ZIP archive."))
         }
         return data
     }
 
     private static func readUInt16(_ data: Data, _ offset: Int) throws -> UInt16 {
         guard offset >= 0, offset + 2 <= data.count else {
-            throw ZipArchiveError(message: "The ZIP archive is damaged (truncated header).")
+            throw ZipArchiveError(message: L10n.tr("The ZIP archive is damaged (truncated header)."))
         }
         let base = data.startIndex + offset
         return UInt16(data[base]) | (UInt16(data[base + 1]) << 8)
@@ -659,7 +659,7 @@ enum ZipArchiveReader {
 
     private static func readUInt32(_ data: Data, _ offset: Int) throws -> UInt32 {
         guard offset >= 0, offset + 4 <= data.count else {
-            throw ZipArchiveError(message: "The ZIP archive is damaged (truncated header).")
+            throw ZipArchiveError(message: L10n.tr("The ZIP archive is damaged (truncated header)."))
         }
         let base = data.startIndex + offset
         return UInt32(data[base])
