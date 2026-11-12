@@ -23,6 +23,22 @@ fn default_connect_timeout() -> u32 {
     10
 }
 
+/// Render an ssh `-o` value, quoting it when it contains whitespace.
+///
+/// The ssh client tokenises `-o option=value` with its config tokeniser, which
+/// splits on whitespace. On Windows the profile directory is under `%APPDATA%`,
+/// so a user name with a space (`C:\Users\John Smith\...`) silently truncates
+/// `UserKnownHostsFile` and host key verification then fails; quoting keeps the
+/// path intact. Paths without whitespace keep the old byte-for-byte form.
+fn option_value(value: &str) -> String {
+    let needs_quotes = value.contains(' ') || value.contains('\t');
+    if needs_quotes && !value.contains('"') {
+        format!("\"{value}\"")
+    } else {
+        value.to_string()
+    }
+}
+
 /// Connection parameters for a macOS host running the Build Agent behind
 /// OpenSSH with a forced command.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,7 +100,10 @@ impl SshSpec {
         if let Some(known_hosts) = &self.known_hosts {
             command.args([
                 "-o",
-                &format!("UserKnownHostsFile={}", known_hosts.to_string_lossy()),
+                &format!(
+                    "UserKnownHostsFile={}",
+                    option_value(&known_hosts.to_string_lossy())
+                ),
             ]);
             command.args(["-o", "GlobalKnownHostsFile=/dev/null"]);
         }
@@ -97,7 +116,7 @@ impl SshSpec {
             let rendered = control_path.to_string_lossy().to_string();
             if rendered.len() < 90 {
                 command.args(["-o", "ControlMaster=auto"]);
-                command.args(["-o", &format!("ControlPath={rendered}")]);
+                command.args(["-o", &format!("ControlPath={}", option_value(&rendered))]);
                 command.args(["-o", "ControlPersist=60"]);
             }
         }
@@ -385,6 +404,36 @@ mod tests {
         let destination = args.len() - 2;
         assert_eq!(args[destination], "builder@mac-mini.local");
         assert_eq!(args[destination + 1], "stdio");
+    }
+
+    #[test]
+    fn paths_with_spaces_are_quoted_in_options() {
+        // Windows profiles live under %APPDATA%, so a user name with a space
+        // produces a path like C:\Users\John Smith\...; the ssh config
+        // tokeniser would split it without the quotes.
+        let mut spaced = spec();
+        spaced.identity = Some(PathBuf::from("/home/u/keys/id ed25519"));
+        spaced.known_hosts = Some(PathBuf::from("/home/u/User Name/known_hosts"));
+        spaced.control_path = Some(PathBuf::from("/tmp/ctl dir/ssh-%r@%h-%p"));
+        let args = argv(&spaced, "stdio");
+        let joined = args.join(" ");
+        assert!(
+            joined.contains(r#"UserKnownHostsFile="/home/u/User Name/known_hosts""#),
+            "{joined}"
+        );
+        assert!(
+            joined.contains(r#"ControlPath="/tmp/ctl dir/ssh-%r@%h-%p""#),
+            "{joined}"
+        );
+        // The identity file is a separate argument and needs no quoting.
+        assert!(
+            args.contains(&"/home/u/keys/id ed25519".to_string()),
+            "{args:?}"
+        );
+        // Paths without whitespace are unchanged (byte-for-byte compatibility).
+        assert!(argv(&spec(), "stdio")
+            .join(" ")
+            .contains("UserKnownHostsFile=/home/u/.config/3ds2apple/known_hosts"));
     }
 
     #[test]

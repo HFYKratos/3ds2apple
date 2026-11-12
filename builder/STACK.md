@@ -1,10 +1,11 @@
 # Builder technology and repository layout
 
-> **Status: implemented (core, CLI, Agent, Linux frontend).** This document
-> records the stack, the alternatives that were weighed, and the layout that
-> now exists under `builder/`: the shared library, the `zkb` CLI, the macOS
-> Build Agent and the Linux CLI frontend (`builder/linux`, binary
-> `3ds2apple-builder`) are implemented in Rust and tested on Linux. The
+> **Status: implemented (core, CLI, Agent, Windows frontend, Linux frontend).**
+> This document records the stack, the alternatives that were weighed, and the
+> layout that now exists under `builder/`: the shared library, the `zkb` CLI,
+> the macOS Build Agent, the CLI-first Windows frontend and the Linux CLI
+> frontend (`builder/linux`, binary `3ds2apple-builder`) are implemented in Rust
+> and tested on Linux; the Windows executable is also run on Windows 11. The
 > Windows/Linux Tauri GUIs are still design only.
 
 ## 1. Decision summary
@@ -14,6 +15,7 @@
 | Implementation language | **Rust 2021**, one Cargo workspace under `builder/` | One toolchain for Agent, CLI and GUI backends; single static binaries on Windows/Linux without a Python/Node runtime; the build pipeline already uses Rust (Zakuro); strong process, IO and crypto ecosystem. |
 | Shared client | `builder/core` library crate | Protocol, transports, hashing, config/secrets and log redaction are used by the CLI and both GUIs; no duplicated client logic. |
 | First client | `builder/cli` (`zkb`) | Fastest way to prove the protocol end-to-end on Linux → macOS VM; headless and scriptable; the Linux MVP. |
+| Windows frontend | `builder/windows` binary+library crate (`builder-windows`), CLI-first | Delivers the Windows user flow (guided session, doctor, build, install guide) over the shared core without requiring a webview; reuses the same config file and host profiles as `zkb`. A Tauri shell over the same library is the planned GUI, once it can be built and runtime-tested on a Windows host. |
 | Linux frontend | `builder/linux` (`3ds2apple-builder`), a CLI shelling out to `zkb` | The remaining Linux work is VM-specific: finding a local QEMU/KVM macOS VM's forwarded SSH port, fingerprint-confirmed pairing, ROM selection and a local SHA256 re-verification plus installation guide. Reusing `zkb` keeps behaviour identical to the shared client instead of forking the protocol code. |
 | GUI | **Tauri 2** (Rust backend + TypeScript web UI) for Windows and Linux | Small installers, uses the OS web view (WebView2 / WebKitGTK), reuses the `core` crate, one UI codebase for both desktops. CLI remains available when a webview is not desired. |
 | Agent | `builder-agent` Rust binary, daemon + `ssh-dispatch` | Owns jobs, processes, cleanup and logs; runs only on macOS; no runtime dependencies beyond the OS and the existing toolchain. |
@@ -117,14 +119,15 @@ versioned fixtures. This keeps the "no generated code in git" rule absolute
 ## 4. Repository layout
 
 The `builder/` directory is a self-contained Cargo workspace. The `core`,
-`cli`, `agent` and `linux` crates exist today; the Windows Tauri app, the
-shared `ui/`, the Linux Tauri GUI and `cross/` are still design-only.
+`cli`, `agent`, `windows` and `linux` crates exist today. The Windows and Linux
+frontends are CLI-first today (their graphical shells are design-only), and the
+shared `ui/` and `cross/` are still design-only.
 
 ```text
 builder/
   README.md  PROTOCOL.md  UX.md  STACK.md
 
-  Cargo.toml                     # [workspace] members = core, cli, agent
+  Cargo.toml                     # [workspace] members = core, cli, agent, windows, linux
 
   core/                          # library crate: builder-core  (no UI, no process exec)
     src/lib.rs
@@ -161,9 +164,24 @@ builder/
     src/ssh_dispatch.rs          # forced-command entry point; subcommand allowlist
     tests/                       # stage parser + cleanup tests (host-runnable, no builds)
 
-  windows/                       # Tauri app (Windows packaging, installer); design only
-    src-tauri/
-    ...
+  windows/                       # Windows frontend crate: builder-windows
+    Cargo.toml
+    src/
+      main.rs                    # clap commands: app/doctor/host/build/status/...
+      lib.rs
+      app.rs                     # build orchestration over builder-core, Progress trait
+      hosts.rs                   # SSH pairing + profile management (shared config)
+      preflight.rs               # ROM validation, names, disk checks
+      events.rs                  # protocol events -> console lines
+      install_guide.rs           # Sideloadly/AltStore guidance with SHA256
+      artifacts.rs               # checksum verification, record, opener
+      paths.rs                   # extended-length paths, reserved names, CJK
+      probe.rs                   # OpenSSH/WebView2/code page/disk probes
+      doctor.rs  selftest.rs  wizard.rs  errors.rs
+    tests/e2e.rs                 # real Agent (fake-build) end-to-end, Unix-gated
+    README.md
+    packaging/                   # portable ZIP + SHA256SUMS; MSI/NSIS pending
+
   linux/                         # Linux frontend: CLI implemented, Tauri GUI planned
     Cargo.toml                   # crate builder-linux, binary 3ds2apple-builder
     src/                         # VM discovery, host pairing, build wrapper, doctor, guide, zkb bridge
@@ -220,8 +238,11 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace            # includes protocol fixtures + fake agent
 cargo build --release -p builder-cli            # zkb
+cargo build --release -p builder-cli            # zkb
+cargo build --release -p builder-windows        # builder-windows.exe (built on Windows)
 cargo build --release -p builder-linux          # 3ds2apple-builder (Linux frontend)
 cargo build --release -p builder-agent          # builder-agent (compile on macOS for real use)
+# on Windows: .\windows\packaging\package.ps1 -ExePath ... -Version 0.1.0 -OutDir .\dist
 cd ui && npm ci && npm run build
 cd ../windows && cargo tauri build             # MSI/NSIS on Windows
 cd ../linux && cargo tauri build               # AppImage/deb/rpm on Linux
@@ -244,7 +265,8 @@ Per release, in GitHub Releases:
 
 ```text
 zkb-<version>-windows-x86_64.zip        (exe + licence + README snippet)
-3ds2apple-builder-<version>-windows-x86_64-setup.exe   (Tauri NSIS/MSI)
+builder-windows-<version>-windows-x86_64.zip  (portable frontend + SHA256SUMS)
+3ds2apple-builder-<version>-windows-x86_64-setup.exe   (Tauri NSIS/MSI; when the GUI ships)
 zkb-<version>-linux-x86_64.tar.gz       (static or old-glibc binary)
 3ds2apple-builder-<version>-linux-x86_64.AppImage / .deb / .rpm
 builder-agent-<version>-macos-universal.tar.gz
@@ -267,7 +289,7 @@ SHA256SUMS
 | Runner | Jobs |
 |---|---|
 | Linux | `fmt`, `clippy`, workspace tests, fake-Agent conformance tests, build Linux CLI; no ROM, no game build. |
-| Windows | build CLI + GUI installer, run workspace tests (client side), smoke-test the GUI launch; no device, no signing. |
+| Windows | build the CLI and the Windows frontend, run workspace tests (client side), run `builder-windows self-test`; build the portable ZIP; no device, no signing. GUI installer job starts when the Tauri shell ships. |
 | macOS | build Agent (universal), run `builder-agent doctor --json` and protocol tests against the fake Agent; no game build in CI (ROMs never enter CI). |
 | Release | tag build of the artifacts above + `SHA256SUMS`; manual e2e against a real macOS host is a release gate (see [README.md](README.md)). |
 
@@ -332,7 +354,9 @@ reviewable).
 ## 9. Open technology questions (resolved by W1/W2, not blocking this design)
 
 1. Tauri 2 vs a native Rust GUI after the first Windows build (webview
-   availability on target machines, installer size, accessibility tooling).
+   availability on target machines, installer size, accessibility tooling). The
+   CLI-first Windows frontend covers the user flow today; the graphical shell
+   remains deferred until it can be built and runtime-tested on Windows.
 2. System `ssh` subprocess vs an embedded SSH library — v1 uses the system
    client; revisit only if Windows OpenSSH proves unreliable in testing.
 3. Windows MSVC vs a cross-built CLI — decide by which produces a smaller,
