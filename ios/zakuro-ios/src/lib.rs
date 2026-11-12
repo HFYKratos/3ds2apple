@@ -34,6 +34,22 @@
 //! [`zk_profiler_start`] / [`zk_profiler_hot_spots`] let the app ask directly.
 //! `ios/zakuro-ios/README.md` has the measurement method and how to read the numbers.
 //!
+//! ## Hardware rendering
+//!
+//! The 3D is drawn by Zakuro's software PICA200 unless the app asks for the
+//! host GPU, which on iOS is Metal through MoltenVK: [`zk_set_hardware_renderer`]
+//! turns it on for the systems [`zk_create`] makes afterwards, and a library
+//! built with `ZAKURO_IOS_HARDWARE=1` has it on by default (the spike switch,
+//! so a device test needs no Swift change). A system whose Vulkan device fails
+//! to start falls back to software by itself and logs why.
+//!
+//! [`zk_hardware_probe`] says whether a Vulkan device can be made at all,
+//! [`zk_hardware_status`] says what a loaded system ended up drawing on,
+//! [`zk_set_vulkan_library`] names the MoltenVK library when the app keeps it
+//! somewhere the lookup does not expect, and [`zk_set_hardware_option`] sets the
+//! renderer's tuning switches (GPU versus CPU vertex shading) before a load.
+//! `METAL.md` has the architecture, the MoltenVK findings and the spike plan.
+//!
 //! Zakuro's own `log` records (the loader's linked-code warnings, GPU warnings)
 //! are forwarded to stderr by [`zk_create`], because an iOS app installs no
 //! logger and they would otherwise be dropped.
@@ -42,6 +58,7 @@ use std::cell::RefCell;
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::path::PathBuf;
 use std::ptr;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -83,6 +100,21 @@ fn cpath(p: *const c_char) -> Result<PathBuf, CPathError> {
         .to_str()
         .map(PathBuf::from)
         .map_err(|_| CPathError::NotUtf8)
+}
+
+/// Reads a NUL-terminated C string as UTF-8, or `None` for a NULL pointer or
+/// bytes that are not valid UTF-8.
+fn read_c_string(pointer: *const c_char) -> Option<String> {
+    if pointer.is_null() {
+        return None;
+    }
+    // SAFETY: the FFI contract requires a non-NULL argument to be a
+    // NUL-terminated string that stays valid for the duration of this call; it
+    // is copied out and not retained.
+    unsafe { CStr::from_ptr(pointer) }
+        .to_str()
+        .ok()
+        .map(str::to_owned)
 }
 
 /// Records `message` as the calling thread's last error.
@@ -265,6 +297,106 @@ fn clear_linked_refusal() {
     *LINKED_REFUSAL
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+}
+
+/// Hardware rendering: whether the systems [`zk_create`] makes draw the 3D on
+/// the host GPU (Vulkan; MoltenVK over Metal on iOS) instead of in software.
+///
+/// The switch is process-wide and applies to the next [`zk_create`] call, not
+/// to systems already loaded. `ZAKURO_IOS_HARDWARE` at build time makes it the
+/// default, so the device spike can be a plain `cargo build` (see `METAL.md`).
+const HARDWARE_AUTO: u8 = 0;
+const HARDWARE_ON: u8 = 1;
+const HARDWARE_OFF: u8 = 2;
+
+/// What [`zk_set_hardware_renderer`] last asked for.
+static HARDWARE_SETTING: AtomicU8 = AtomicU8::new(HARDWARE_AUTO);
+
+/// What the last [`zk_hardware_probe`] found, for [`zk_hardware_status`] with a
+/// `NULL` handle (there is no `System` to ask then).
+static HARDWARE_PROBE: Mutex<Option<String>> = Mutex::new(None);
+
+/// Whether [`zk_create`] should pass `Config.hardware_renderer = true`: the
+/// run-time setting when one was made, else whether the library was built with
+/// `ZAKURO_IOS_HARDWARE` set.
+fn hardware_requested() -> bool {
+    match HARDWARE_SETTING.load(Ordering::Relaxed) {
+        HARDWARE_ON => true,
+        HARDWARE_OFF => false,
+        _ => matches!(
+            option_env!("ZAKURO_IOS_HARDWARE").map(str::trim),
+            Some("1" | "on" | "true" | "yes")
+        ),
+    }
+}
+
+/// Stores `text` as the last [`zk_hardware_probe`] result.
+fn set_hardware_probe(text: impl Into<String>) {
+    *HARDWARE_PROBE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(text.into());
+}
+
+/// The last [`zk_hardware_probe`] result, if it ran.
+fn hardware_probe_result() -> Option<String> {
+    HARDWARE_PROBE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+}
+
+/// Logs what a freshly loaded system ended up drawing the 3D on.
+///
+/// [`zk_create`] prints this once per load, next to the linked-code lines, so
+/// `idevicesyslog` answers "did the spike take the GPU path?" without an app
+/// change. `METAL.md` explains the build and device steps.
+fn log_hardware_outcome(system: &System) {
+    let requested = system.config.hardware_renderer;
+    if system.gpu.draws_on_gpu() {
+        eprintln!(
+            "zk_create: the 3D draws on the host GPU through Vulkan (MoltenVK over Metal on \
+             iOS) at {}x; screens are read back for presentation",
+            system.gpu.scale()
+        );
+    } else if requested {
+        eprintln!(
+            "zk_create: hardware rendering was requested but no Vulkan device started; the 3D \
+             draws in software (the zk[WARN] line above has the reason)"
+        );
+    } else {
+        eprintln!(
+            "zk_create: the 3D draws in software (PICA200 on the CPU); hardware rendering is off \
+             (see zk_set_hardware_renderer, METAL.md)"
+        );
+    }
+}
+
+/// The text [`zk_hardware_status`] returns: what this system, or the last
+/// probe, says about drawing on the host GPU.
+fn hardware_status_text(system: *mut c_void) -> String {
+    // SAFETY: `system` is either NULL or a live handle from `zk_create`; only
+    // read here, on the caller's serial queue.
+    let Some(system) = (unsafe { (system as *mut System).as_ref() }) else {
+        return match hardware_probe_result() {
+            Some(result) => format!("no system: the last zk_hardware_probe reported {result}"),
+            None => "no system: zk_hardware_status needs a handle returned by zk_create, or a \
+                 zk_hardware_probe first"
+                .to_owned(),
+        };
+    };
+    let scale = system.gpu.scale();
+    if system.gpu.draws_on_gpu() {
+        format!(
+            "the 3D draws on the host GPU through Vulkan (MoltenVK over Metal on iOS) at {scale}x; \
+             screens are read back for presentation"
+        )
+    } else if system.config.hardware_renderer {
+        "hardware rendering was requested but no Vulkan device started; the 3D draws in software \
+         (the zk[WARN] line in the log has the reason)"
+            .to_owned()
+    } else {
+        "the 3D draws in software (PICA200 on the CPU); hardware rendering is off".to_owned()
+    }
 }
 
 /// Stores `text` as the calling thread's last status text and returns a pointer
@@ -477,7 +609,14 @@ pub extern "C" fn zk_create(rom: *const c_char, data_dir: *const c_char) -> *mut
 
     let mut config = Config::default();
     config.data_dir = data_dir;
-    config.hardware_renderer = false;
+    // The 3D on the host GPU is opt-in (`hardware_requested`); the loader makes
+    // the Vulkan device itself and falls back to software, logging why, when it
+    // can't. On iOS that usually means MoltenVK is not where Zakuro's
+    // `instance::entry` looks: METAL.md has the small upstream patch for it.
+    config.hardware_renderer = hardware_requested();
+    // No presenter shares the device yet, so the loader makes its own and the
+    // screens are read back to the app the way the software renderer's are.
+    config.device = None;
     config.texture_packs = false;
     // iOS forbids executable memory: no JIT, no recompiled-code discovery here.
     config.find_recompiled = false;
@@ -538,6 +677,7 @@ pub extern "C" fn zk_create(rom: *const c_char, data_dir: *const c_char) -> *mut
                 system
             };
             log_linked_outcome(&system);
+            log_hardware_outcome(&system);
             Box::into_raw(Box::new(system)) as *mut c_void
         }
         Err(error) => {
@@ -655,6 +795,158 @@ pub extern "C" fn zk_profiler_hot_spots(system: *mut c_void, count: u32) -> *con
         perf::format_hot_spots(system, (count as usize).min(100))
     });
     set_status_text(text)
+}
+
+/// Makes a Vulkan device the way [`zk_create`] will with hardware rendering on,
+/// and drops it again: the preflight for the MoltenVK spike.
+///
+/// Returns 0 when a device was made, -1 when it wasn't. The reason goes to
+/// [`zk_last_error`] and the log; on iOS it is usually that MoltenVK is not
+/// linked, not where Zakuro's `instance::entry` looks, or that the app's
+/// `ZAKURO_VULKAN_LIBRARY` names a library that does not load. No game and no
+/// `System` are needed. Call it before [`zk_create`], on the same serial queue
+/// as every other handle call, and treat the device it makes as a diagnostic:
+/// each system makes its own when it loads.
+#[no_mangle]
+pub extern "C" fn zk_hardware_probe() -> i32 {
+    match zakuro_gpu::SharedDevice::new() {
+        Ok(device) => {
+            drop(device);
+            clear_last_error();
+            set_hardware_probe("a Vulkan device was made");
+            eprintln!(
+                "zk_hardware_probe: a Vulkan device was made, the 3D can draw on the host GPU"
+            );
+            0
+        }
+        Err(error) => {
+            let message = format!("zk_hardware_probe: no Vulkan device: {error}");
+            eprintln!("{message}");
+            set_last_error(message);
+            set_hardware_probe("no Vulkan device (METAL.md has the spike steps)");
+            -1
+        }
+    }
+}
+
+/// Draws the 3D on the host GPU (Vulkan; MoltenVK over Metal on iOS) for the
+/// systems [`zk_create`] makes from now on, or in software again with
+/// `enabled = 0`.
+///
+/// The switch is process-wide and does not touch a system already loaded: pass
+/// it before the load. Even when on, a device that cannot start (no MoltenVK,
+/// a GPU without what the renderer needs) falls back to software by itself,
+/// logging why. Returns 0. [`zk_hardware_status`] says what a loaded system
+/// actually ended up using; `METAL.md` covers the paths and the spike.
+#[no_mangle]
+pub extern "C" fn zk_set_hardware_renderer(enabled: i32) -> i32 {
+    HARDWARE_SETTING.store(
+        if enabled != 0 {
+            HARDWARE_ON
+        } else {
+            HARDWARE_OFF
+        },
+        Ordering::Relaxed,
+    );
+    eprintln!(
+        "zk_set_hardware_renderer: hardware rendering {} for the next zk_create",
+        if enabled != 0 { "on" } else { "off" }
+    );
+    0
+}
+
+/// Names the Vulkan library (on iOS: MoltenVK) to load, for when the app keeps
+/// it where Zakuro's bundled lookup does not try.
+///
+/// Sets `ZAKURO_VULKAN_LIBRARY`, which the iOS build of Zakuro's
+/// `instance::entry` reads before its own candidates (a small upstream patch;
+/// `METAL.md` has the diff). Pass a `@rpath/`, `@executable_path/` or absolute
+/// path, for example `@executable_path/Frameworks/MoltenVK.framework/MoltenVK`.
+/// Call before [`zk_create`]. Returns 0, or -1 for a NULL or non-UTF-8 path.
+#[no_mangle]
+pub extern "C" fn zk_set_vulkan_library(path: *const c_char) -> i32 {
+    let Some(path) = read_c_string(path) else {
+        set_last_error("zk_set_vulkan_library: path is NULL or not valid UTF-8");
+        return -1;
+    };
+    // SAFETY: `set_var` has no memory-safety preconditions on this target; the
+    // environment is read by Zakuro's renderer on the next `zk_create`, which
+    // the caller must not have started yet (the ABI is serial anyway).
+    std::env::set_var("ZAKURO_VULKAN_LIBRARY", &path);
+    eprintln!("zk_set_vulkan_library: Vulkan/MoltenVK will be loaded from {path}");
+    0
+}
+
+/// The renderer's own switches this ABI lets the app set before a load, so a
+/// device can A/B them without rebuilding the IPA.
+///
+/// `name` is one of the keys here; `value` is the string the renderer reads
+/// (NULL or empty unsets it again). They map to the environment variables
+/// Zakuro's Vulkan renderer checks while it makes its device and draws. The
+/// ones worth a spike run: `gpu_shaders` (`ZAKURO_GPU_SHADERS=1`) shades
+/// vertices on the GPU instead of on the CPU, which is the default on a GPU it
+/// takes for integrated, as an iPhone's is; `cpu_shaders` forces the CPU side
+/// back; `static_blend` and `float_depth` compare the fallbacks. Returns 0, or
+/// -1 for a NULL name, a name not in this table, or a non-UTF-8 string.
+///
+/// Call before [`zk_create`]: the renderer reads these once per load.
+#[no_mangle]
+pub extern "C" fn zk_set_hardware_option(name: *const c_char, value: *const c_char) -> i32 {
+    /// The switches a device spike wants, by the name the app passes and the
+    /// environment variable Zakuro's Vulkan renderer reads.
+    const OPTIONS: [(&str, &str); 10] = [
+        ("gpu_shaders", "ZAKURO_GPU_SHADERS"),
+        ("cpu_shaders", "ZAKURO_CPU_SHADERS"),
+        ("interpret_shaders", "ZAKURO_INTERPRET_SHADERS"),
+        ("copy_screens", "ZAKURO_COPY_SCREENS"),
+        ("present_mode", "ZAKURO_PRESENT_MODE"),
+        ("gpu_times", "ZAKURO_GPU_TIMES"),
+        ("wait_for_shaders", "ZAKURO_WAIT_FOR_SHADERS"),
+        ("static_blend", "ZAKURO_STATIC_BLEND"),
+        ("float_depth", "ZAKURO_FLOAT_DEPTH"),
+        ("depth_blits", "ZAKURO_DEPTH_BLITS"),
+    ];
+    let Some(name) = read_c_string(name) else {
+        set_last_error("zk_set_hardware_option: name is NULL or not valid UTF-8");
+        return -1;
+    };
+    // A NULL or empty value means "unset, use the renderer's default".
+    let value = read_c_string(value).filter(|value| !value.is_empty());
+    let Some((_, variable)) = OPTIONS.iter().find(|(key, _)| *key == name) else {
+        set_last_error(format!(
+            "zk_set_hardware_option: unknown option {name:?} (known: gpu_shaders, cpu_shaders, \
+             interpret_shaders, copy_screens, present_mode, gpu_times, wait_for_shaders, \
+             static_blend, float_depth, depth_blits)"
+        ));
+        return -1;
+    };
+    // SAFETY: as in `zk_set_vulkan_library`, only before the renderer reads the
+    // environment.
+    match value {
+        Some(value) => {
+            std::env::set_var(variable, &value);
+            eprintln!("zk_set_hardware_option: {variable} = {value}");
+        }
+        None => {
+            std::env::remove_var(variable);
+            eprintln!("zk_set_hardware_option: {variable} unset");
+        }
+    }
+    0
+}
+
+/// Describes what this system draws the 3D on, in one line, for the HUD or the
+/// log: the host GPU (Vulkan; MoltenVK over Metal on iOS) with the resolution
+/// scale, a request that fell back to software, or software by choice.
+///
+/// With a `NULL` handle it reports the last [`zk_hardware_probe`] instead,
+/// which is what the spike checks before a ROM is loaded. The pointer is owned
+/// by this library like [`zk_recompiled_status`]'s: copy it (`String(cString:)`
+/// in Swift), do not free it, and do not keep it across the next status call on
+/// the same thread.
+#[no_mangle]
+pub extern "C" fn zk_hardware_status(system: *mut c_void) -> *const c_char {
+    set_status_text(hardware_status_text(system))
 }
 
 #[no_mangle]
@@ -798,9 +1090,11 @@ mod tests {
     use zakuro_core::{Config, System};
 
     use super::{
-        clear_last_error, set_last_error, zk_create, zk_last_audio_take_micros, zk_last_error,
-        zk_last_frame_micros, zk_last_screen_read_micros, zk_linked_code, zk_linked_program_id,
-        zk_profiler_hot_spots, zk_profiler_start, zk_recompiled, zk_recompiled_status,
+        clear_last_error, set_last_error, zk_create, zk_hardware_status, zk_last_audio_take_micros,
+        zk_last_error, zk_last_frame_micros, zk_last_screen_read_micros, zk_linked_code,
+        zk_linked_program_id, zk_profiler_hot_spots, zk_profiler_start, zk_recompiled,
+        zk_recompiled_status, zk_set_hardware_option, zk_set_hardware_renderer,
+        zk_set_vulkan_library,
     };
     #[cfg(feature = "linked")]
     use super::{clear_linked_refusal, set_linked_refusal};
@@ -836,6 +1130,16 @@ mod tests {
     fn hot_spots_text(system: *mut c_void, count: u32) -> String {
         let pointer = zk_profiler_hot_spots(system, count);
         assert!(!pointer.is_null(), "hot spots text is never NULL");
+        // SAFETY: as in `status_text`.
+        unsafe { CStr::from_ptr(pointer) }
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    /// Copies the text `zk_hardware_status` just wrote for `system`.
+    fn hardware_status(system: *mut c_void) -> String {
+        let pointer = zk_hardware_status(system);
+        assert!(!pointer.is_null(), "hardware status text is never NULL");
         // SAFETY: as in `status_text`.
         unsafe { CStr::from_ptr(pointer) }
             .to_string_lossy()
@@ -977,6 +1281,73 @@ mod tests {
     fn null_handle_status_is_readable() {
         let text = status_text(ptr::null_mut());
         assert!(text.contains("no system"), "unexpected: {text}");
+    }
+
+    #[test]
+    fn hardware_switch_round_trips() {
+        // The build default (AUTO) is whatever `ZAKURO_IOS_HARDWARE` said at
+        // compile time; a run-time call pins it either way for the next load.
+        assert_eq!(zk_set_hardware_renderer(1), 0);
+        assert!(super::hardware_requested());
+        assert_eq!(zk_set_hardware_renderer(0), 0);
+        assert!(!super::hardware_requested());
+        // Leave the build default for the other tests, which need no device.
+        super::HARDWARE_SETTING.store(super::HARDWARE_AUTO, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    #[test]
+    fn hardware_status_without_a_system_is_readable() {
+        let text = hardware_status(ptr::null_mut());
+        assert!(text.contains("no system"), "unexpected: {text}");
+    }
+
+    /// The cheapest proof that `ash` can make a Vulkan device at all on the
+    /// build that ships to the device: run it on a machine with Vulkan or
+    /// MoltenVK installed, before an IPA, with
+    /// `cargo test -p zakuro-ios --lib -- --ignored hardware_probe_makes_a_device`.
+    /// A machine without Vulkan fails it by design, which is why it is ignored.
+    #[test]
+    #[ignore = "needs Vulkan/MoltenVK on the host"]
+    fn hardware_probe_makes_a_device() {
+        assert_eq!(
+            super::zk_hardware_probe(),
+            0,
+            "{}",
+            last_error_text().unwrap_or_default()
+        );
+    }
+
+    #[test]
+    fn hardware_options_are_a_whitelist() {
+        // A known switch takes a value, then unsets it again with NULL.
+        assert_eq!(
+            zk_set_hardware_option(c"gpu_shaders".as_ptr(), c"1".as_ptr()),
+            0
+        );
+        assert_eq!(std::env::var("ZAKURO_GPU_SHADERS").as_deref(), Ok("1"));
+        assert_eq!(
+            zk_set_hardware_option(c"gpu_shaders".as_ptr(), ptr::null()),
+            0
+        );
+        assert!(std::env::var_os("ZAKURO_GPU_SHADERS").is_none());
+
+        // Unknown or missing names are errors, not silent no-ops.
+        clear_last_error();
+        assert_eq!(
+            zk_set_hardware_option(c"no_such_option".as_ptr(), ptr::null()),
+            -1
+        );
+        let message = last_error_text().expect("an unknown option must set an error");
+        assert!(message.contains("unknown option"), "unexpected: {message}");
+        assert_eq!(zk_set_hardware_option(ptr::null(), ptr::null()), -1);
+    }
+
+    #[test]
+    fn vulkan_library_requires_a_path() {
+        clear_last_error();
+        assert_eq!(zk_set_vulkan_library(ptr::null()), -1);
+        let message = last_error_text().expect("a NULL path must set an error");
+        assert!(message.contains("path is NULL"), "unexpected: {message}");
     }
 
     #[test]

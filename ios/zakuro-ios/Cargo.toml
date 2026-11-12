@@ -12,17 +12,28 @@ crate-type = ["staticlib"]
 #
 # Needs `ZAKURO_LINKED_PROGRAM_ID` at build time and the generated archive at
 # the app's final link, so a `linked` library alone does not link on its own.
-# The default build is the interpreter-only shell. See RECOMP.md.
+# The default build is the interpreter-only shell. See `scripts/AOT_BUILD.md`.
 linked = []
 # Diagnostic builds only: sample guest PCs from the first frame on and put the
 # hottest ones in the periodic `zk_perf` log, so `idevicesyslog` alone can show
 # where emulated CPU time goes. Costs a little per step; leave off for release.
-# See PERF.md.
+# See `src/perf.rs`.
 profiling = []
 
 [dependencies]
 zakuro-core = { path = "../zakuro-core" }
 zakuro-common = { path = "../zakuro-common" }
+# The Vulkan device type the hardware-rendering probe makes (`SharedDevice`) and
+# the `Config.device` the loader draws on. `zakuro-core` already enables the
+# `vulkan` feature for every build (it draws the 3D on the host GPU when
+# `Config.hardware_renderer` is set), so this dependency only makes that
+# explicit: without it this crate could not name the device at all. On iOS the
+# Vulkan implementation is MoltenVK over Metal; see METAL.md.
+#
+# `default-features = false` keeps Zakuro's Cranelift shader JIT off: iOS
+# forbids executable memory for ordinary apps, and the desktop frontend is the
+# only thing that ever wanted the `jit` default feature.
+zakuro-gpu = { path = "../zakuro-gpu", default-features = false, features = ["vulkan"] }
 # Forward Zakuro's own `log` records (the loader's linked-code warnings, GPU
 # warnings, ...) to stderr, where `idevicesyslog` can see them. Nothing else in
 # an iOS app installs a logger, so without this those records are dropped.

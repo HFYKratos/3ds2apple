@@ -1,0 +1,57 @@
+diff --git a/crates/zakuro-gpu/src/instance.rs b/crates/zakuro-gpu/src/instance.rs
+index 6bacdf9..7749454 100644
+--- a/crates/zakuro-gpu/src/instance.rs
++++ b/crates/zakuro-gpu/src/instance.rs
+@@ -1,5 +1,5 @@
+-//! the system's Vulkan library and an instance of it, on any host, macOS's
+-//! included, where Vulkan is MoltenVK over Metal and only shows up to an
++//! the system's Vulkan library and an instance of it, on any host, macOS's and
++//! iOS's included, where Vulkan is MoltenVK over Metal and only shows up to an
+ //! instance that asks for portable drivers.
+ 
+ use ash::vk;
+@@ -16,6 +16,15 @@ const MACOS_LIBRARIES: [&str; 4] = [
+     "/usr/local/lib/libMoltenVK.dylib",
+ ];
+ 
++/// where an iOS app keeps MoltenVK: as a framework it embeds, whose install
++/// name is `@rpath/MoltenVK.framework/MoltenVK`, or as a dylib of its own.
++/// `ZAKURO_VULKAN_LIBRARY` names another path first.
++#[cfg(target_os = "ios")]
++const IOS_LIBRARIES: [&str; 2] = [
++    "@executable_path/Frameworks/MoltenVK.framework/MoltenVK",
++    "@rpath/libMoltenVK.dylib",
++];
++
+ /// the MoltenVK Zakuro.app comes with, in its Frameworks folder, which asks
+ /// nothing of the computer.
+ #[cfg(target_os = "macos")]
+@@ -36,6 +45,14 @@ pub(crate) fn entry() -> Result<ash::Entry, ash::LoadingError> {
+             return Ok(entry);
+         }
+     }
++    // a path the app chose wins: an iOS host points at the MoltenVK it
++    // embeds with it, and a mac at a copy the list below does not name
++    if let Some(path) = std::env::var_os("ZAKURO_VULKAN_LIBRARY") {
++        // SAFETY: a Vulkan library at a path of its own
++        if let Ok(entry) = unsafe { ash::Entry::load_from(&path) } {
++            return Ok(entry);
++        }
++    }
+     // SAFETY: loads the system's Vulkan library, which is the documented way
+     // to start
+     let error = match unsafe { ash::Entry::load() } {
+@@ -49,6 +66,13 @@ pub(crate) fn entry() -> Result<ash::Entry, ash::LoadingError> {
+             return Ok(entry);
+         }
+     }
++    #[cfg(target_os = "ios")]
++    for path in IOS_LIBRARIES {
++        // SAFETY: as above, a Vulkan library at a path of its own
++        if let Ok(entry) = unsafe { ash::Entry::load_from(path) } {
++            return Ok(entry);
++        }
++    }
+     Err(error)
+ }
+ 
