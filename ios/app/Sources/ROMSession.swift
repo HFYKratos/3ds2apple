@@ -671,6 +671,12 @@ final class ROMSession: ObservableObject {
     private static let freeRunPeriodTicks: UInt64 =
         FrameClock.ticks(seconds: 1.0 / Double(freeRunFramesPerSecond))
 
+    /// `DispatchQueue.asyncAfter` wakes about 1 ms after the requested
+    /// deadline on this device. Without the compensation the loop misses the
+    /// 60 Hz slot by ~1 ms every frame and settles at ~56–58 fps even though
+    /// the frame itself only takes ~7 ms.
+    private static let freeRunDispatchOverheadSeconds: TimeInterval = 0.001
+
     /// Starts the configured frame-loop driver after a successful load.
     /// Main queue only.
     private func startFrameLoop() {
@@ -744,7 +750,10 @@ final class ROMSession: ObservableObject {
         // removes the CADisplayLink quantization.
         let now = FrameClock.now()
         let deadline = frameStart &+ Self.freeRunPeriodTicks
-        let delay = deadline > now ? FrameClock.seconds(deadline - now) : 0
+        let rawDelay = deadline > now ? FrameClock.seconds(deadline - now) : 0
+        // Aim slightly early so asyncAfter's wake-up latency lands on the
+        // 60 Hz deadline instead of ~1 ms after it.
+        let delay = max(0, rawDelay - Self.freeRunDispatchOverheadSeconds)
         scheduleFreeRunFrame(after: delay, generation: generation)
     }
 
