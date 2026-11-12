@@ -8,6 +8,7 @@
 
 - [执行计划 v0.5（2026-11-11）](docs/plan.md)：首发 10 款、无本地 Mac、侧载、开源的落地方案；附录 B 讨论 Windows-only 出包（S2Arm 式）。
 - [可行性评估 v0.2](docs/feasibility.md)：3dsrecomp + Zakuro 的通用 AOT 路线、iOS 缺口、工作量与风险。
+- [里程碑](docs/milestones.md)：M0 iOS 构建链路已打通（macOS VM → IPA → 真机）。
 - [可行性评估 v0.1](docs/feasibility-v0.1.md)：路线 A（Azahar/Cytrus）、B（AOT）、C（反编译）的横向对比。
 
 ## 结论摘要
