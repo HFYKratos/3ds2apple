@@ -125,3 +125,37 @@
 | 日期 | 变更 | 作者 |
 |---|---|---|
 | 2026-11-12 | 建文件：解释器 26 fps / AOT 28 fps / 音频卡顿；诊断包 SHA 与本地校验；AOT 状态待回填 | qa-compat |
+
+## 10. 2026-11-12 用户实测（AOT + HUD 版，e47889aa…）
+
+- IPA：`pokemon-y-AOT.ipa`，SHA256 `e47889aa29b8e62395e04eb709bc090667baff214b54dac7036a3b6db3f5030e`，bundle `com.kratos.3ds2apple.pokemon-y`。
+- 状态行：
+
+```text
+30 fps  2,247 frames  last: completed  audio: on
+AOT: linked, active   speed: 50% of 60 Hz
+```
+
+- HUD（平均 / 最大 / 最近，ms）：
+
+| 阶段 | avg | max | last |
+|---|---:|---:|---:|
+| total | 22.9 | 72.8 | 44.4 |
+| run（zk_run_frame） | 22.6 | 72.5 | 44.0 |
+| read top | 0.18 | 1.74 | 0.19 |
+| read bottom | 0.15 | 2.02 | 0.15 |
+| CGImage | 0.00 | 0.07 | 0.00 |
+| audio | 0.00 | 0.03 | 0.00 |
+
+- 判读：
+  - **AOT 已生效**（`linked, active`），不是 loader 回退；
+  - `run` 22.6 ms ≈ `total` 22.9 ms → 瓶颈在 Zakuro 帧内部（软件 PICA200 渲染/CPU），
+    呈现（读屏/CGImage/音频）几乎不占时间；
+  - 单帧 22.6 ms 的理论上限约 44 fps（73% 速度），但状态只有 30 fps：
+    CADisplayLink 16.7 ms tick 与 22.6 ms 帧不匹配，每隔一 tick 被背压丢弃，
+    30 fps 是**显示同步量化**的结果，不是真实吞吐；
+  - 音频仍会断续：30 fps = 50% 实时，音频只生成一半样本。
+- 下一步：
+  1. I3-T9 解耦帧循环（free-run，目标先把实际吞吐从 30 提到 ~44 fps）；
+  2. 之后仍需把 `run` 从 22.6 ms 降到 <16.7 ms 才能 60 fps：
+     Pocket Native GLES 渲染器 / Metal / 软件渲染优化（I3-T4）。
