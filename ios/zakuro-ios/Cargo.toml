@@ -14,7 +14,16 @@ crate-type = ["staticlib"]
 # the app's final link, so a `linked` library alone does not link on its own.
 # The default build is the interpreter-only shell. See RECOMP.md.
 linked = []
+# Diagnostic builds only: sample guest PCs from the first frame on and put the
+# hottest ones in the periodic `zk_perf` log, so `idevicesyslog` alone can show
+# where emulated CPU time goes. Costs a little per step; leave off for release.
+# See PERF.md.
+profiling = []
 
 [dependencies]
 zakuro-core = { path = "../zakuro-core" }
 zakuro-common = { path = "../zakuro-common" }
+# Forward Zakuro's own `log` records (the loader's linked-code warnings, GPU
+# warnings, ...) to stderr, where `idevicesyslog` can see them. Nothing else in
+# an iOS app installs a logger, so without this those records are dropped.
+log = { version = "0.4", default-features = false }

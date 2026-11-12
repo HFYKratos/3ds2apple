@@ -36,6 +36,12 @@ const char *zk_last_error(void);
 int32_t     zk_linked_code(void);
 uint64_t    zk_linked_program_id(void);
 int32_t     zk_recompiled(void *system);
+const char *zk_recompiled_status(void *system);
+uint64_t    zk_last_frame_micros(void);
+uint64_t    zk_last_screen_read_micros(uint32_t which);
+uint64_t    zk_last_audio_take_micros(void);
+int32_t     zk_profiler_start(void *system);
+const char *zk_profiler_hot_spots(void *system, uint32_t count);
 ```
 
 ### 函数表
@@ -54,6 +60,17 @@ int32_t     zk_recompiled(void *system);
 | `zk_linked_code` | 无 | `int32_t`：`1` 内置了某款游戏的重编译代码，`0` 纯解释器壳 | 构建时信息，不依赖 ROM；用于 UI/日志判断当前是哪种构建 |
 | `zk_linked_program_id` | 无 | `uint64_t`：内置重编译代码的 3DS title ID；无则为 `0` | 与 ROM 的实际 title ID 不符时 loader 会回退解释器（见 RECOMP.md） |
 | `zk_recompiled` | `system` | `int32_t`：`1` = 该 `System` 正在跑 3dsrecomp 代码，`0` = 全解释器 | 诊断/性能定位：AOT 构建里返回 `0` 说明 loader 拒绝了内置代码，只是慢，不是崩 |
+| `zk_recompiled_status` | `system` | `const char *`：一行状态文本（永不 `NULL`） | 说明该 `System` 是否在跑 linked 代码；返回 `0` 时给出原因（无 linked 代码 / title ID 不符 / ABI 不符 / loader 拒绝），并报告已解释执行的指令比例。指针归本库，同一线程下一次调用前有效 |
+| `zk_last_frame_micros` | 无 | `uint64_t`：上一次 `zk_run_frame` 的微秒数；未跑帧为 `0` | 帧时间 HUD/日志用；不含 Swift 侧呈现 |
+| `zk_last_screen_read_micros` | `which`：`0` 上屏，其余下屏 | `uint64_t`：上一次 `zk_read_screen` 的微秒数 | 读屏/呈现成本（framebuffer 读出+拷贝） |
+| `zk_last_audio_take_micros` | 无 | `uint64_t`：上一次 `zk_take_audio` 的微秒数 | 音频 pump 成本 |
+| `zk_profiler_start` | `system` | `int32_t`：`0` 成功，`-1` 空句柄 | 打开 guest PC 采样（诊断用，有少量开销；默认不开） |
+| `zk_profiler_hot_spots` | `system`；`count`：条数（上限 100） | `const char *`：最热 guest PC，`thread 0xPC hits` 每行一条；未开 profiler 时为空串 | 配合 `profiler` feature 或 `zk_profiler_start` 定位热点；指针契约同 `zk_recompiled_status` |
+
+`zk_recompiled_status` / `zk_profiler_hot_spots` 的指针归本库所有：不要 `free`，
+在同一线程下一次调用前有效，Swift 侧立即复制。**新增的 6 个诊断函数需要同步到
+`ios/ZakuroBridge.h`（ios-shell 维护）**；不补头文件时日志路径仍可用
+（`zk_create` 与每 60 帧的 `zk_perf` 行走 stderr，`idevicesyslog` 能抓）。
 
 `buttons` 使用 3DS HID 位布局（`PadState`）：A=`1<<0`、B=`1<<1`、Select=`1<<2`、
 Start=`1<<3`、Right=`1<<4`、Left=`1<<5`、Up=`1<<6`、Down=`1<<7`、R=`1<<8`、
@@ -129,7 +146,8 @@ ZAKURO_LINKED_PROGRAM_ID=0004000000055E00 \
   `recomp_*` 未定义、链接失败；这是有意为之（防止把解释器壳误当 AOT 包）。
 - loader 会检查 title ID 和 `recomp.h` 接口版本（当前 ABI 5，接受 4–5）；不匹配时
   打印警告并**回退解释器**，不会崩。`zk_linked_code` / `zk_linked_program_id` /
-  `zk_recompiled` 提供诊断。
+  `zk_recompiled` 提供诊断；`zk_recompiled_status` 给出回退原因，`zk_create` 也会
+  把 linked 构建信息、ABI 检查结果和实际 `AOT active|inactive: <原因>` 打到 stderr。
 - 完整流水线（3dsrecomp `port`、iOS clang、版本匹配、update/DLC 限制、性能预期、
   build-infra 清单）：见 [`RECOMP.md`](RECOMP.md)。
 - 上游选择：目前采用 **vanilla Zakuro + upstream 3dsrecomp（方案 B）**。
@@ -138,7 +156,31 @@ ZAKURO_LINKED_PROGRAM_ID=0004000000055E00 \
   engine fork（GLES/fastmem/per-game profile）作为 I3-T4 的升级路径评估，见
   [`RECOMP.md`](RECOMP.md) §0.5 与 [`docs/pocket-native.md`](../../docs/pocket-native.md)。
 
-> 新增的 3 个函数需要同步到 Swift bridging header（`ios/ZakuroBridge.h`，ios-shell 维护）。
+> 新增的 6 个诊断函数需要同步到 Swift bridging header（`ios/ZakuroBridge.h`，
+> ios-shell 维护）；不补头文件时 `zk_create` / `zk_perf` 日志仍可用。
+
+## 性能诊断（帧时间分解，I3-T5）
+
+想知道“AOT 到底有没有在执行、一帧时间花在哪”时，用同一份库即可，不需要改 App：
+
+- `zk_create` 打印 linked 状态与回退原因（见上）；Zakuro 自己的 `log::info`/`log::warn`
+  被转发成 `zk[INFO]` / `zk[WARN]`，`idevicesyslog` 直接可见。
+- 每 60 帧打印一行 `zk_perf:`：`frame avg/max`、`read top/bottom`、`audio`、
+  `gpu`/`non-gpu`、`cpu … cyc/s (…% of real time)`、`interpreted %`、`AOT`，
+  `profiling` 构建或 `zk_profiler_start` 时再加 guest PC 热点。
+- App 可轮询 `zk_last_frame_micros` / `zk_last_screen_read_micros` /
+  `zk_last_audio_take_micros`，并用 `zk_recompiled_status` / `zk_profiler_hot_spots`
+  直接显示状态。
+
+`profiling` 是只用于诊断的 cargo feature（默认关；每 61 个 guest step 采一次 PC）：
+
+```bash
+ZAKURO_LINKED_PROGRAM_ID=0004000000055E00 \
+  cargo build -p zakuro-ios --release --features linked,profiling --target aarch64-apple-ios
+```
+
+测量方法、`zk_perf` 字段表、CPU/软件 GPU/呈现/音频的区分、以及“软件渲染器 vs
+Pocket Native GLES”的下一步建议：见 [`PERF.md`](PERF.md)。
 
 ## 验证
 
@@ -151,7 +193,7 @@ scripts/build-zakuro-ios.sh
 # 或在 Zakuro checkout 内做编译检查
 cargo check -p zakuro-ios --target aarch64-apple-ios
 
-# 单元测试（只覆盖不依赖 ROM 的错误路径；在 Zakuro checkout 内）
+# 单元测试（不依赖 ROM；在 Zakuro checkout 内）
 cargo test -p zakuro-ios --lib
 
 # linked 变体的单元测试（cfg(test) 用占位表，不需要 ROM/游戏代码）
@@ -159,6 +201,8 @@ ZAKURO_LINKED_PROGRAM_ID=0004000000055E00 cargo test -p zakuro-ios --lib --featu
 ```
 
 单元测试覆盖 `zk_last_error` 的默认值、写入/清空、文本内 NUL 转义、空 `rom`、
-非法 UTF-8 路径、错误状态的线程隔离，以及 `linked` 构建的 title ID/接口版本接线；
-不加载 ROM，也不需要 iOS 设备。真实 `libgame.a` 的链接验证见
-[`RECOMP.md`](RECOMP.md#8-测试计划)。
+非法 UTF-8 路径、错误状态的线程隔离；`linked` 构建的 title ID/接口版本接线、
+占位表 `Linked`、ABI 版本门；`zk_recompiled_status` 对“有 linked 表但未接受 / 已接受”
+与回退原因的区分；帧计时初值/清零、profiler 空句柄。不加载 ROM，也不需要 iOS
+设备。真实 `libgame.a` 的链接验证与已验证命令/结果见
+[`RECOMP.md`](RECOMP.md#8-测试计划) 与 [`PERF.md`](PERF.md) §6。

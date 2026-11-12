@@ -325,15 +325,18 @@ OTHER_LDFLAGS:
 
 ## 4. 运行期行为（QA 对照日志用）
 
-| 情况 | 结果（Zakuro loader 日志 / `zk_recompiled`） |
+| 情况 | 结果（Zakuro loader 日志 / `zk_recompiled` / `zk_create` 日志） |
 |---|---|
-| 正常 | `running the recompiled code linked in, N entry points, M modules`，`zk_recompiled()==1` |
-| title ID 不符 | `the code linked in is for title X, not Y, interpreting everything`，`zk_recompiled()==0` |
-| 接口 ABI 不符 | `could not use the code linked in, it was built for version V of the interface, this is 5, interpreting everything`，`zk_recompiled()==0` |
-| update/mod 改动函数 | `K functions changed since the game was recompiled ... they run in the interpreter`（其余 AOT） |
+| 正常 | `running the recompiled code linked in, N entry points, M modules`，`zk_recompiled()==1`；`zk_create: AOT active: …`；`zk_perf` 行 `AOT active` |
+| title ID 不符 | `the code linked in is for title X, not Y, interpreting everything`，`zk_recompiled()==0`；`zk_create: AOT inactive: interpreting everything: the code linked in is for title X, but the ROM is Y` |
+| 接口 ABI 不符 | `could not use the code linked in, it was built for version V of the interface, this is 5, interpreting everything`，`zk_recompiled()==0`；`zk_create: recomp-abi accepted` / `refused …` + `AOT inactive`（原因被记录） |
+| update/mod 改动函数 | `K functions changed since the game was recompiled ... they run in the interpreter`（其余 AOT）；`zk_perf` 的 `interpreted %` 上升 |
 
-`zk_create` 自身也会 `eprintln!` 一行 linked 结果；`zk_last_error()` 仍只表示
-**加载失败**（不是回退）。
+`zk_create` 会把 linked 构建信息、`recomp-abi` 接口版本检查结果和最终的
+`AOT active|inactive: <原因>` 打到 stderr；`zk_recompiled_status()` 把同样的信息
+合成一行返回给 App。`zk_last_error()` 仍只表示**加载失败**（不是回退）。
+帧时间分解（CPU / 软件 GPU / 读屏 / 音频、`zk_perf` 行、`profiling` 热点）见
+[`PERF.md`](PERF.md)。
 
 ## 5. 版本匹配规则
 
@@ -411,8 +414,10 @@ cargo test -p zakuro-ios --lib
 ```
 
 覆盖：`zk_linked_code()`/`zk_linked_program_id()` 与构建期 env 一致；
-`linked::code()` 用占位表构造 `Linked` 且 `recompiled::Library::linked` 接受
-（ABI 范围）；ABI 3 被拒绝（版本门）；默认构建返回 `0`；原有错误路径测试不变。
+`linked::code()`/`linked::describe_tables()` 用占位表构造 `Linked` 且
+`recompiled::Library::linked` 接受（ABI 范围）；ABI 3 被拒绝（版本门）；默认构建
+返回 `0`；`zk_recompiled_status()` 区分“有 linked 表但 loader 未接受”与“已接受”、
+回退原因可见；帧计时初值/清零、profiler 空句柄安全；原有错误路径测试不变。
 
 > 占位表验证的是**接线**（符号名/字段映射/版本门），不是生成 C 的真实布局；
 > 真实布局由上游对 `recomp.h` 的测试保证。
@@ -424,8 +429,10 @@ cd third_party/zakuro
 ZAKURO_LINKED_PROGRAM_ID=0004000000055E00 \
   cargo build -p zakuro-ios --release --features linked --target aarch64-apple-ios
 nm -u target/aarch64-apple-ios/release/libzakuro_ios.a \
-  | grep -E '_recomp_(abi|generation|entries|entry_count|modules|module_count|origins)$'
-# 期望 7 个未定义符号：App 链接时由 libgame.a 解析
+  | grep -E '_recomp_(abi|generation|entries|entry_count|modules|module_count|origins)$' \
+  | sort -u
+# 期望 7 个（去重后）未定义符号：App 链接时由 libgame.a 解析。
+# 静态归档按对象重复打印同一符号，不去重会看到多行。
 ```
 
 真实生成归档存在时（`libgame.a`）再做：
@@ -479,15 +486,18 @@ GENERATION 5）后执行：
 | `cargo check -p zakuro-ios --target aarch64-apple-ios` | ✅ 通过，本 crate 0 警告 |
 | `ZAKURO_LINKED_PROGRAM_ID=0004000000055E00 cargo check -p zakuro-ios --target aarch64-apple-ios --features linked` | ✅ 通过，本 crate 0 警告 |
 | 同上但**不给** env | ✅ 按预期在 `build.rs` 报错退出（"needs ZAKURO_LINKED_PROGRAM_ID"） |
-| `cargo test -p zakuro-ios --lib` | ✅ 8 passed |
-| `ZAKURO_LINKED_PROGRAM_ID=... cargo test -p zakuro-ios --lib --features linked` | ✅ 9 passed（含 ABI 版本门、占位表构造 `Linked`） |
+| `cargo test -p zakuro-ios --lib` | ✅ 16 passed（含计时初值/清零、profiler 空句柄、`reset`、加载失败路径） |
+| `ZAKURO_LINKED_PROGRAM_ID=... cargo test -p zakuro-ios --lib --features linked` | ✅ 19 passed（含 ABI 版本门、占位表构造 `Linked`、`zk_recompiled_status` 的 AOT/解释区分与回退原因） |
 | `cargo fmt -p zakuro-ios -- --check` | ✅ 干净 |
+| `cargo check --target aarch64-apple-ios`（默认 / `linked` / `profiling` / `linked,profiling`） | ✅ 全部通过，本 crate 0 warning |
+| `llvm-nm -g` | ✅ 新增诊断符号 `zk_last_frame_micros`、`zk_last_screen_read_micros`、`zk_last_audio_take_micros`、`zk_recompiled_status`、`zk_profiler_start`、`zk_profiler_hot_spots` 均在 linked 静态库中导出 |
 | `cargo build -p zakuro-ios --release --target aarch64-apple-ios`（默认） | ✅ 通过；`llvm-nm -u` 里 `_recomp_*` 未定义符号 **0 个**（纯解释器壳不引用游戏代码） |
 | 同命令 `--features linked` | ✅ 通过；`llvm-nm -u` 恰有 **7 个**未定义 `_recomp_*`（`_recomp_abi/_entries/_entry_count/_generation/_modules/_module_count/_origins`），将由 `libgame.a` 在 App 链接时解析——与 §8.2 预期一致 |
 
 Linux 做不到、需要 macOS VM/Lead 的部分：`clang -target arm64-apple-ios` 编译生成 C、
 App 最终链接（`-lzakuro_ios -lgame` 顺序）、`xcodebuild`、真机性能——即
-I3-T3/T4 的验证项。
+I3-T3/T4 的验证项。I3-T5 加的帧时间/回退诊断与真机判读方法见 [`PERF.md`](PERF.md)；
+真机数据回收后按 PERF.md §9 回填。
 
 ## 9. build-infra 可执行清单
 
