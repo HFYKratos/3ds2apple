@@ -6,10 +6,14 @@ Minimal SwiftUI app that links the Zakuro iOS static library
 - **I1** (merged): the shell boots without a ROM, proves the static library is
   linked via `zk_screen_width()` / `zk_screen_height()`, and explains that no
   ROM is loaded.
-- **I2-T1** (this branch): import a decrypted `.3ds` / `.cci` from Files, copy
-  it into `Documents/roms/`, and load it with `zk_create()` on a background
-  serial queue. Failures show the readable `zk_last_error()` text. The frame
-  loop (`zk_run_frame`) is still **not** wired — that is I2-T2.
+- **I2-T1** (merged): import a decrypted `.3ds` / `.cci` from Files, copy it
+  into `Documents/roms/`, and load it with `zk_create()` on a background serial
+  queue. Failures show the readable `zk_last_error()` text.
+- **I2-T2** (this branch): a `CADisplayLink`-driven frame loop runs
+  `zk_run_frame()` on the same serial queue and displays the upper 400×240 and
+  lower 320×240 screens (`zk_read_screen` RGBA8 → `CGImage`) above each other,
+  with an fps / frames / last-result status line. Audio and input are still out
+  of scope (I3).
 
 ## Layout
 
@@ -17,9 +21,10 @@ Minimal SwiftUI app that links the Zakuro iOS static library
 |---|---|
 | `project.yml` | XcodeGen spec — the source of truth, do not hand-edit `*.xcodeproj` |
 | `Sources/App.swift` | `@main` SwiftUI entry point |
-| `Sources/ContentView.swift` | UI: title, ROM import card, screen geometry from the static lib |
-| `Sources/ROMSession.swift` | ROM copy + `zk_create` / `zk_destroy` on one serial queue, `zk_last_error` text, relative-path persistence |
+| `Sources/ContentView.swift` | UI: title, ROM card, dual-screen view, fps/frames status line |
+| `Sources/ROMSession.swift` | ROM copy, `zk_create` / `zk_destroy`, `zk_last_error` text, relative-path persistence, display-link frame loop |
 | `Sources/ROMDocumentPicker.swift` | `UIDocumentPickerViewController` wrapper (`public.data`, opens files in place) |
+| `Sources/ScreenImage.swift` | `zk_read_screen` RGBA8 buffer → `CGImage` |
 | `../ZakuroBridge.h` | hand-written C ABI (`zk_*`), imported via the bridging header |
 | `../../scripts/build-zakuro-ios.sh` | builds the static lib on macOS (I0) |
 
@@ -151,7 +156,10 @@ The app ships no game data. You bring your own **decrypted** `.3ds` / `.cci`
 
 1. Make the ROM visible to the Files app (AirDrop it to the phone, put it in
    iCloud Drive, or use a Files provider / USB drive), then tap
-   **Import ROM…** in the app.
+   **Import ROM…** in the app. The app also enables Files/iTunes document
+   sharing (`UIFileSharingEnabled` + `LSSupportsOpeningDocumentsInPlace` in
+   `project.yml`), so a ROM dropped into the app's `Documents/` from Finder is
+   visible to the picker too.
 2. The picker opens with `public.data` — `.3ds` / `.cci` have no registered
    `UTType` on iOS, so the extension is validated after selection.
 3. `ROMSession` copies the picked file to `Documents/roms/<name>` on a
@@ -183,16 +191,54 @@ Only one handle exists at a time. Every `zk_*` call on it happens on the
 | nothing imported | "No ROM loaded" + Import button | `no ROM imported yet` |
 | importing | spinner + "Importing <name>…" | `imported ROM: …` or `reusing imported ROM: …` |
 | loading | spinner + "Starting Zakuro…" | `zk_create: loading …` |
-| success | green "Loaded: <name>" + Change/Unload | `zk_create OK after …` |
-| failure | red "Could not load ROM" + error text | `zk_create failed after …: <zk_last_error>` |
+| loaded, before first frame | black screens + "Waiting for first frame…" | `zk_create OK after …`, `frame loop started` |
+| running | both screens + `N fps · N frames · last: completed` | frame-loop logs (see below) |
+| exit / fault | "Runtime stopped" or red "Could not load ROM"; last frame kept | `frame loop ending: …`, `frame loop stopped` |
+| app backgrounded | "Runtime stopped … Load the ROM again" | `zk_destroy: runtime released` |
 
 Quitting or relaunching the app never crashes: the handle is released on
-Unload, on replace, and (best effort) in `ROMSession.deinit`.
+Unload, on replace, on background, and (best effort) in `ROMSession.deinit`.
 
 ### Not in this task
 
-- `zk_run_frame` / the frame loop and on-screen video are I2-T2/I2-T3.
-- Audio, input and saves UI are I3.
+- Audio (`zk_take_audio`) and input (`zk_set_input`) are I3.
+- Hardware rendering (MoltenVK) is later; I2 uses the software screens.
+
+## Frame loop (I2-T2)
+
+Once `zk_create()` succeeds the app starts a 60 Hz `CADisplayLink` on the main
+thread. Each tick enqueues at most one frame on the runtime serial queue — if
+the previous frame is still running, the tick is dropped, so the loop never
+builds up a backlog.
+
+Per frame (runtime queue, one handle only):
+
+1. `zk_run_frame(system)`:
+
+   | result | meaning | reaction |
+   |---|---|---|
+   | `0` `ZK_FRAME_COMPLETED` | frame rendered | read both screens, publish |
+   | `1` `ZK_FRAME_EXITED` | game asked to exit | stop loop, `zk_destroy`, "Runtime stopped" |
+   | `-1` `ZK_FRAME_FAULTED` | CPU fault | stop loop, `zk_destroy`, red error card |
+   | `-2` `ZK_FRAME_BAD_HANDLE` | invalid handle | same as fault |
+
+2. `zk_read_screen(system, 0, …)` → 400 × 240 × 4 = 384 000 bytes and
+   `zk_read_screen(system, 1, …)` → 320 × 240 × 4 = 307 200 bytes of RGBA8.
+   Buffers are allocated per frame and handed to `CGImage`; a short read is
+   logged once and skipped so the previous frame stays on screen.
+3. `CGImage` → `@Published` on the main queue; SwiftUI shows the upper screen
+   above the lower one with `scaledToFit`, preserving the ratio reported by
+   `zk_screen_width()` / `zk_screen_height()`.
+
+Status line: `NN fps · N frames · last: completed|exited|faulted|bad handle`.
+fps is measured over a 0.5 s window and is the *emulated* frame rate — the pure
+interpreter is usually far below 60 fps, so many display-link ticks are dropped.
+
+Lifecycle: the loop stops **and** the handle is destroyed on **Unload**, on
+**Change ROM**, when the app goes to the **background** (`scenePhase ==
+.background`), on exit/fault, and in `ROMSession.deinit`. `zk_destroy` guards a
+nil handle, so there is never a double destroy. The last frame stays visible
+after a stop until the next load or unload clears the screens.
 
 ## Package an unsigned IPA
 
@@ -242,6 +288,11 @@ If the repo is moved, nothing needs changing — all three are repo-relative.
 | Red "Could not load ROM" with `zk_create: failed to load …` | `zk_last_error()` text from the loader — encrypted/unsupported ROM or missing keys. Not a UI bug; check the ROM with qa. |
 | Picking the same filename twice | The existing `Documents/roms/<name>` is reused; delete the app (or that file) to force a fresh copy. |
 | Need to inspect imported ROMs | They live in the app container under `Documents/roms/`, data under `Documents/data/`; deleting the app removes them. |
+| Screens stay black / "Waiting for first frame…" after "Loaded" | Check `idevicesyslog` for `frame loop started` and any `zk_read_screen(which=…) returned … of … bytes` line. If the log shows `frame loop ending: …` right away, `zk_run_frame` returned 1/-1/-2 — the core faulted (stderr has details). |
+| Very low fps | Expected for the pure interpreter. Record the number for qa — the I3 performance baseline. AOT/3dsrecomp comes later. |
+| App returns from background showing "Runtime stopped" | Intentional: iOS may jettison backgrounded processes, so the runtime is released when the scene backgrounds. Tap **Load “<name>”** to restart. |
+| Red card after `frame loop ending: …` | `zk_run_frame` returned `-1`/`-2`; the last good frame stays on screen. Import or Load again to restart. |
+| Screens look stretched or letterboxed | The view keeps the aspect ratios reported by `zk_screen_width/height` (400×240, 320×240) with `scaledToFit`; bars only appear if the source frame size changes. |
 
 ## Rebuild after changes
 
