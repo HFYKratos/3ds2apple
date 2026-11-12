@@ -7,6 +7,10 @@
 //         serial queue.
 //  I3-T6: per-phase timing for the performance HUD and a reusable RGBA /
 //         CGDataProvider buffer pool instead of per-frame allocations.
+//  I3-T9: the frame loop is free-running on the runtime serial queue, capped at
+//         the 3DS 60 Hz timeline, instead of being paced by CADisplayLink. The
+//         display-link loop is kept behind the `frameLoopDriver` constant as a
+//         one-line fallback.
 //
 //  Threading contract (docs/integration.md, ios/zakuro-ios/README.md):
 //  - every zk_* call that takes a handle runs on `runtimeQueue`, a single
@@ -18,9 +22,14 @@
 //  - per-frame phase timings (mach_absolute_time deltas) are recorded on
 //    runtimeQueue only; the main queue receives one immutable
 //    `FrameTimingSnapshot` and only formats it in the HUD;
-//  - CADisplayLink fires on the main thread and enqueues at most one frame at
-//    a time: a semaphore drops ticks while the previous frame is still
-//    running;
+//  - free-run frames execute back-to-back on runtimeQueue (I3-T9): a frame
+//    schedules exactly one successor (immediately when it overran its 1/60 s
+//    slot, or with a delay up to that deadline when it finished early). The
+//    serial queue guarantees no overlap and the generation guard makes a
+//    queued frame a no-op once the loop is stopped;
+//  - the CADisplayLink fallback fires on the main thread and enqueues at most
+//    one frame at a time: a semaphore drops ticks while the previous frame is
+//    still running;
 //  - @Published state is only mutated on the main queue.
 //
 
@@ -95,6 +104,10 @@ final class ROMSession: ObservableObject {
     @Published private(set) var audioState: AudioState = .off
     /// AOT/linked-code state for the status line.
     @Published private(set) var aotStatus: AOTStatus = .unknown
+    /// Active frame-loop driver (`free-run · cap 60 fps` or
+    /// `CADisplayLink · 60 Hz`). Shown in the status line so a device
+    /// screenshot records which loop is running (I3-T9).
+    @Published private(set) var frameLoopLabel: String = "—"
 
     /// Serial queue that owns every zk_* call.
     private let runtimeQueue = DispatchQueue(
@@ -119,12 +132,19 @@ final class ROMSession: ObservableObject {
 
     // MARK: Frame-loop state
 
-    /// Lets at most one frame be in flight on `runtimeQueue`; ticks that arrive
-    /// while a frame is still running are dropped instead of queued.
+    /// Lets at most one frame be in flight on `runtimeQueue` in the
+    /// CADisplayLink fallback mode; ticks that arrive while a frame is still
+    /// running are dropped instead of queued.
     private let frameGate = DispatchSemaphore(value: 1)
-    /// Display link; created, added and invalidated on the main thread.
+    /// Display link; created, added and invalidated on the main thread. Only
+    /// used when `frameLoopDriver == .displayLink` (I3-T9 fallback).
     private var displayLink: CADisplayLink?
     private var displayLinkProxy: FrameLoopProxy?
+    /// Generation-guarded on/off state of the free-run loop (I3-T9). Written by
+    /// start/stop on the main thread, read by every queued frame on
+    /// `runtimeQueue`, so a frame that was queued before a stop/Unload can
+    /// never touch a destroyed handle.
+    private let freeRunState = FreeRunLoopState()
     /// runtimeQueue only.
     private var framesRendered: UInt64 = 0
     private var framesSinceStats = 0
@@ -146,6 +166,10 @@ final class ROMSession: ObservableObject {
     }
 
     deinit {
+        // Invalidate the free-run generation first: any frame that was already
+        // scheduled on the runtime queue becomes a no-op instead of using the
+        // handle destroyed below (I3-T9).
+        freeRunState.stop()
         controllerManager?.stop()
         audioOutput.stopEngine()
         // The display link lives on the main run loop; invalidate it there.
@@ -360,53 +384,160 @@ final class ROMSession: ObservableObject {
         return text.isEmpty ? "The Zakuro runtime could not load this ROM (empty error text)." : text
     }
 
-    // MARK: - Frame loop (main thread drives, runtimeQueue executes)
+    // MARK: - Frame loop (main thread starts/stops, runtimeQueue executes)
 
-    /// Starts CADisplayLink after a successful load. Main queue only.
+    /// How `renderFrame()` is scheduled. I3-T9 defaults to `freeRun`; see the
+    /// README ("Frame loop (I3-T9)") for why and how to revert.
+    enum FrameLoopDriver {
+        /// Frames execute back-to-back on the runtime serial queue and are
+        /// only capped at the 3DS 60 Hz timeline (I3-T9).
+        case freeRun
+        /// Pre-I3-T9 loop: a CADisplayLink on the main thread enqueues at most
+        /// one frame per refresh and drops ticks while a frame is still busy.
+        case displayLink
+    }
+
+    /// **Fallback switch**: change this to `.displayLink` to restore the
+    /// pre-I3-T9 CADisplayLink-paced loop. No other code change is needed.
+    private static let frameLoopDriver: FrameLoopDriver = .freeRun
+
+    /// Free-run cap: frames never start closer together than the 3DS 60 Hz
+    /// timeline. This is a *cap*, not a target — a frame that takes longer than
+    /// 1/60 s (e.g. the measured 22.6 ms Pokémon Y AOT frame) starts the next
+    /// frame immediately instead of waiting for a display tick, so the loop
+    /// runs at the real throughput (~44 fps) instead of a 30 fps multiple.
+    private static let freeRunFramesPerSecond = 60
+
+    /// CADisplayLink fallback rate. 60 reproduces the pre-I3-T9 behaviour; 120
+    /// is the I3-T9 experiment (`preferredFramesPerSecond = 120`). 120 only
+    /// helps once a frame is faster than 8.3 ms — at 22.6 ms a frame still
+    /// spans several ticks, so the fallback would stay at ~30 fps.
+    private static let displayLinkFramesPerSecond = 60
+
+    /// One free-run slot in mach ticks (1/60 s).
+    private static let freeRunPeriodTicks: UInt64 =
+        FrameClock.ticks(seconds: 1.0 / Double(freeRunFramesPerSecond))
+
+    /// Starts the configured frame-loop driver after a successful load.
+    /// Main queue only.
     private func startFrameLoop() {
         stopFrameLoopOnMain()
-        let proxy = FrameLoopProxy()
-        proxy.session = self
-        let link = CADisplayLink(target: proxy, selector: #selector(FrameLoopProxy.displayLinkFired(_:)))
-        link.preferredFramesPerSecond = 60
-        link.add(to: .main, forMode: .common)
-        displayLinkProxy = proxy
-        displayLink = link
         framesRendered = 0
         framesSinceStats = 0
         statsWindowStartTicks = FrameClock.now()
         lastPerfLogTicks = statsWindowStartTicks
         didLogScreenReadFailure = false
-        // Accumulators are runtimeQueue-owned, but the queue is idle here: the
-        // display link that feeds it is added below, so no frame can race this.
+        // Accumulators are runtimeQueue-owned, but the queue is idle here: no
+        // frame loop is running yet, so no frame can race this.
         timingWindow.reset()
         frameStats = FrameStats()
-        NSLog("[3ds2apple] frame loop started")
+
+        switch Self.frameLoopDriver {
+        case .freeRun:
+            let generation = freeRunState.start()
+            frameLoopLabel = "free-run · cap \(Self.freeRunFramesPerSecond) fps"
+            // First frame right away; every later frame is scheduled by the
+            // runtime queue after the previous one, so at most one frame is in
+            // flight and at most one continuation is queued.
+            scheduleFreeRunFrame(after: 0, generation: generation)
+            NSLog("[3ds2apple] frame loop started (free-run, cap %d fps)",
+                  Self.freeRunFramesPerSecond)
+        case .displayLink:
+            startDisplayLinkOnMain()
+            frameLoopLabel = "CADisplayLink · \(Self.displayLinkFramesPerSecond) Hz"
+            NSLog("[3ds2apple] frame loop started (CADisplayLink at %d fps)",
+                  Self.displayLinkFramesPerSecond)
+        }
     }
 
-    /// Invalidates the display link. Main queue only.
+    /// Schedules exactly one free-run frame on the runtime queue. `delay` is 0
+    /// when the previous frame overran its slot (continue immediately) and
+    /// positive when it finished early (wait for the 60 Hz deadline). Called
+    /// from the main queue for the first frame and from the runtime queue
+    /// afterwards; it never blocks and never queues more than one frame.
+    private func scheduleFreeRunFrame(after delay: TimeInterval, generation: UInt64) {
+        // Cheap early check; the queued block re-checks because the loop can be
+        // stopped between scheduling and execution.
+        guard freeRunState.isCurrent(generation) else { return }
+        if delay > 0 {
+            runtimeQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.runFreeRunFrame(generation: generation)
+            }
+        } else {
+            runtimeQueue.async { [weak self] in
+                self?.runFreeRunFrame(generation: generation)
+            }
+        }
+    }
+
+    /// Executes one free-run frame and schedules its successor. runtimeQueue
+    /// only. This is the I3-T9 core: the next frame starts as soon as this one
+    /// finished (or at its 60 Hz deadline when it finished early), so the loop
+    /// throughput is the real frame cost instead of a display-refresh multiple.
+    private func runFreeRunFrame(generation: UInt64) {
+        // A frame queued before a stop / Unload / destroy must do nothing.
+        guard freeRunState.isCurrent(generation), system != nil else { return }
+
+        let frameStart = FrameClock.now()
+        let shouldContinue = renderFrame()
+        // renderFrame() already stopped and destroyed the runtime on
+        // exit/fault, so there is nothing left to schedule.
+        guard shouldContinue,
+              freeRunState.isCurrent(generation),
+              system != nil else { return }
+
+        // 60 Hz cap: only the early part of the slot is waited out. A frame
+        // that overran its slot continues immediately (delay 0), which is what
+        // removes the CADisplayLink quantization.
+        let now = FrameClock.now()
+        let deadline = frameStart &+ Self.freeRunPeriodTicks
+        let delay = deadline > now ? FrameClock.seconds(deadline - now) : 0
+        scheduleFreeRunFrame(after: delay, generation: generation)
+    }
+
+    /// Creates and adds the CADisplayLink fallback driver. Main queue only.
+    private func startDisplayLinkOnMain() {
+        let proxy = FrameLoopProxy()
+        proxy.session = self
+        let link = CADisplayLink(target: proxy, selector: #selector(FrameLoopProxy.displayLinkFired(_:)))
+        link.preferredFramesPerSecond = Self.displayLinkFramesPerSecond
+        link.add(to: .main, forMode: .common)
+        displayLinkProxy = proxy
+        displayLink = link
+    }
+
+    /// Stops whichever driver is running: invalidates the free-run generation
+    /// (queued frames become no-ops) and invalidates the display link.
+    /// Main queue only.
     private func stopFrameLoopOnMain() {
-        guard displayLink != nil else { return }
-        displayLink?.invalidate()
-        displayLink = nil
-        displayLinkProxy = nil
-        NSLog("[3ds2apple] frame loop stopped")
+        let wasRunning = freeRunState.stop() || displayLink != nil
+        if let link = displayLink {
+            link.invalidate()
+            displayLink = nil
+            displayLinkProxy = nil
+        }
+        if wasRunning {
+            NSLog("[3ds2apple] frame loop stopped")
+        }
     }
 
-    /// Stops the loop from any thread; the display link lives on the main run
-    /// loop, so the invalidation is hopped there.
+    /// Stops the loop from any thread. The free-run generation is invalidated
+    /// synchronously so no new frame can start; the display link lives on the
+    /// main run loop, so its invalidation is hopped there.
     private func stopFrameLoop() {
         if Thread.isMainThread {
             stopFrameLoopOnMain()
         } else {
+            freeRunState.stop()
             DispatchQueue.main.async { [weak self] in
                 self?.stopFrameLoopOnMain()
             }
         }
     }
 
-    /// CADisplayLink callback (main thread). Schedules one frame, or drops the
-    /// tick when the runtime queue is still busy with the previous frame.
+    /// CADisplayLink fallback callback (main thread). Schedules one frame, or
+    /// drops the tick when the runtime queue is still busy with the previous
+    /// frame.
     fileprivate func displayLinkFired(_ link: CADisplayLink) {
         guard frameGate.wait(timeout: .now()) == .success else { return }
         let gate = frameGate
@@ -417,9 +548,12 @@ final class ROMSession: ObservableObject {
     }
 
     /// Executes one frame, times every phase and publishes screens + stats.
-    /// runtimeQueue only.
-    private func renderFrame() {
-        guard let system else { return }
+    /// runtimeQueue only. Returns `false` when the runtime was stopped by an
+    /// exit/fault (the caller must not schedule another frame); `true` when the
+    /// frame completed and the loop may continue.
+    @discardableResult
+    private func renderFrame() -> Bool {
+        guard let system else { return false }
         let frameStart = FrameClock.now()
 
         // The only place that pushes input: same serial queue, immediately
@@ -449,18 +583,22 @@ final class ROMSession: ObservableObject {
 
             timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
             publishFrame(top: top, bottom: bottom, result: result)
+            return true
         case 1:
             timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
             // ZK_FRAME_EXITED.
             finishRuntime(message: "The game requested exit (zk_run_frame = 1).", isError: false)
+            return false
         case -1:
             timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
             // ZK_FRAME_FAULTED.
             finishRuntime(message: "Runtime fault (zk_run_frame = -1).", isError: true)
+            return false
         default:
             timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
             // ZK_FRAME_BAD_HANDLE (-2).
             finishRuntime(message: "Invalid runtime handle (zk_run_frame = \(result)).", isError: true)
+            return false
         }
     }
 
@@ -603,6 +741,9 @@ final class ROMSession: ObservableObject {
     /// publishes a terminal state. runtimeQueue only.
     private func finishRuntime(message: String, isError: Bool) {
         NSLog("[3ds2apple] frame loop ending: %@", message)
+        // No further frame may be scheduled, whichever driver is running. This
+        // is safe to call from the runtime queue (the state is lock-guarded).
+        freeRunState.stop()
         destroySystem()
         // Show the timings accumulated up to the last frame even when the loop
         // died before the next 0.5 s boundary.
@@ -625,6 +766,7 @@ final class ROMSession: ObservableObject {
     private func clearScreens() {
         topScreenImage = nil
         bottomScreenImage = nil
+        frameLoopLabel = "—"
         frameStats = FrameStats()
     }
 
@@ -802,5 +944,51 @@ private final class FrameLoopProxy: NSObject {
 
     @objc func displayLinkFired(_ link: CADisplayLink) {
         session?.displayLinkFired(link)
+    }
+}
+
+/// Generation-guarded on/off switch for the free-run frame loop (I3-T9).
+///
+/// The main thread calls `start()` when a runtime is loaded and `stop()` on
+/// Unload / Change ROM / background / exit / fault / deinit. The runtime queue
+/// checks `isCurrent(_:)` before every frame and before scheduling the next one.
+///
+/// The generation is what makes stopping safe: a frame that was queued before
+/// a stop carries the old generation, so it does nothing instead of touching a
+/// handle that `zk_destroy()` already released. The lock covers the two
+/// threads; it is taken twice per frame (≈ tens of nanoseconds), never inside
+/// the measured `renderFrame` work.
+private final class FreeRunLoopState {
+    private let lock = NSLock()
+    private var generation: UInt64 = 0
+    private var active = false
+
+    /// Marks the loop active and returns the generation the new loop belongs
+    /// to. Main queue only (guarded anyway).
+    func start() -> UInt64 {
+        lock.lock()
+        defer { lock.unlock() }
+        generation &+= 1
+        active = true
+        return generation
+    }
+
+    /// Marks the loop stopped and invalidates every queued continuation.
+    /// Returns whether a loop was actually running. Safe from any thread.
+    @discardableResult
+    func stop() -> Bool {
+        lock.lock()
+        let wasActive = active
+        active = false
+        generation &+= 1
+        lock.unlock()
+        return wasActive
+    }
+
+    /// `true` only while `generation` is the current, active loop.
+    func isCurrent(_ generation: UInt64) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return active && generation == self.generation
     }
 }

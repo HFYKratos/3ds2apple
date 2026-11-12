@@ -45,6 +45,24 @@ enum FrameClock {
         let nanoseconds = Double(ticks) * Double(timebase.numer) / Double(timebase.denom)
         return nanoseconds / 1_000_000.0
     }
+
+    /// Converts a tick count to seconds.
+    @inline(__always)
+    static func seconds(_ ticks: UInt64) -> Double {
+        milliseconds(ticks) / 1_000.0
+    }
+
+    /// Converts a duration in seconds to a mach tick count. Used by the
+    /// free-run frame loop to turn its 1/60 s period and the remaining time
+    /// until the next deadline into ticks / a `DispatchTimeInterval`.
+    @inline(__always)
+    static func ticks(seconds: Double) -> UInt64 {
+        let nanoseconds = seconds * 1_000_000_000.0
+        guard nanoseconds > 0 else { return 0 }
+        let ticks = nanoseconds * Double(timebase.denom) / Double(timebase.numer)
+        if ticks >= Double(UInt64.max) { return UInt64.max }
+        return UInt64(ticks.rounded())
+    }
 }
 
 /// One timing field shown in the HUD: `average`/`maximum`/`last` in
@@ -143,7 +161,7 @@ struct PhaseTimingWindow {
 ///
 /// `record`/`publish` run on the runtime serial queue only. `reset()` is called
 /// from the main thread when a new frame loop starts, while that queue is idle
-/// (the display link is added afterwards), so no recorded frame can race it.
+/// (the frame loop is scheduled afterwards), so no recorded frame can race it.
 struct FrameTimingWindow {
     private var renderTotal = PhaseTimingWindow()
     private var runFrame = PhaseTimingWindow()
