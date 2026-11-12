@@ -6,6 +6,15 @@ edition = "2021"
 [lib]
 crate-type = ["staticlib"]
 
+[features]
+# Link one game's 3dsrecomp-generated tables into the app and run its code AOT
+# instead of in the interpreter (`zk_create` hands them to Zakuro).
+#
+# Needs `ZAKURO_LINKED_PROGRAM_ID` at build time and the generated archive at
+# the app's final link, so a `linked` library alone does not link on its own.
+# The default build is the interpreter-only shell. See RECOMP.md.
+linked = []
+
 [dependencies]
 zakuro-core = { path = "../zakuro-core" }
 zakuro-common = { path = "../zakuro-common" }

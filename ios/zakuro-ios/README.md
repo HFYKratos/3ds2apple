@@ -33,6 +33,9 @@ void        zk_set_input(void *system, uint32_t buttons, float circle_x, float c
                          int32_t touch, uint16_t touch_x, uint16_t touch_y);
 void        zk_destroy(void *system);
 const char *zk_last_error(void);
+int32_t     zk_linked_code(void);
+uint64_t    zk_linked_program_id(void);
+int32_t     zk_recompiled(void *system);
 ```
 
 ### 函数表
@@ -48,6 +51,9 @@ const char *zk_last_error(void);
 | `zk_take_audio` | `system`；`out`：交错立体声 `i16` 缓冲；`capacity`：`i16` 元素个数 | `size_t`：写入的**帧数**（每帧 2 个 `i16`） | 取音频；`system` / `out` 为 `NULL` 或 `capacity < 2` 时返回 `0` |
 | `zk_set_input` | `system`；`buttons`：3DS HID 位掩码；`circle_x/y`：圆盘摇杆 `-1.0..=1.0`；`touch`：`0`/`1`；`touch_x/y`：下屏像素坐标 | 无 | 更新输入状态 |
 | `zk_destroy` | `system` | 无 | 释放 `System`；每个指针只能调一次，之后不得再使用 |
+| `zk_linked_code` | 无 | `int32_t`：`1` 内置了某款游戏的重编译代码，`0` 纯解释器壳 | 构建时信息，不依赖 ROM；用于 UI/日志判断当前是哪种构建 |
+| `zk_linked_program_id` | 无 | `uint64_t`：内置重编译代码的 3DS title ID；无则为 `0` | 与 ROM 的实际 title ID 不符时 loader 会回退解释器（见 RECOMP.md） |
+| `zk_recompiled` | `system` | `int32_t`：`1` = 该 `System` 正在跑 3dsrecomp 代码，`0` = 全解释器 | 诊断/性能定位：AOT 构建里返回 `0` 说明 loader 拒绝了内置代码，只是慢，不是崩 |
 
 `buttons` 使用 3DS HID 位布局（`PadState`）：A=`1<<0`、B=`1<<1`、Select=`1<<2`、
 Start=`1<<3`、Right=`1<<4`、Left=`1<<5`、Up=`1<<6`、Down=`1<<7`、R=`1<<8`、
@@ -104,6 +110,36 @@ if system == nil {
   `System*`。销毁后不得再把该指针传给任何 `zk_*` 函数。
 - `zk_read_screen` / `zk_take_audio` 不与帧循环并发：在帧循环的同一串行队列里调用。
 
+## 链接重编译代码（`linked` build）
+
+默认构建是**纯解释器壳**（`libzakuro_ios.a` 不引用任何游戏代码，无 ROM 也能启动）。
+每款游戏的 IPA 再额外构建一个 **`linked` 变体**：把 3dsrecomp 生成的 C 编译成
+`libgame.a`，与本库一起静态链接进 App，由 `zk_create` 自动交给 Zakuro 跑 AOT 代码
+（无 `dlopen`、无 JIT、Swift 侧无需改调用）。
+
+```bash
+# 在 Zakuro checkout 内（先把本目录复制为 crates/zakuro-ios，见 scripts/build-zakuro-ios.sh）
+ZAKURO_LINKED_PROGRAM_ID=0004000000055E00 \
+  cargo build -p zakuro-ios --release --features linked --target aarch64-apple-ios
+```
+
+- `ZAKURO_LINKED_PROGRAM_ID` 是 ROM 的 16 位十六进制 title ID，由 `build.rs` 校验并在
+  编译期写进库里；`linked` 构建缺少它会在编译期报错。
+- 生成的 `libgame.a` 必须在 App 的最终链接里排在 `libzakuro_ios.a` 之后，否则
+  `recomp_*` 未定义、链接失败；这是有意为之（防止把解释器壳误当 AOT 包）。
+- loader 会检查 title ID 和 `recomp.h` 接口版本（当前 ABI 5，接受 4–5）；不匹配时
+  打印警告并**回退解释器**，不会崩。`zk_linked_code` / `zk_linked_program_id` /
+  `zk_recompiled` 提供诊断。
+- 完整流水线（3dsrecomp `port`、iOS clang、版本匹配、update/DLC 限制、性能预期、
+  build-infra 清单）：见 [`RECOMP.md`](RECOMP.md)。
+- 上游选择：目前采用 **vanilla Zakuro + upstream 3dsrecomp（方案 B）**。
+  [Pocket Native](https://github.com/whovian64/pocket-native)（MIT）的
+  `recompiler/src/port.rs` 提供了同一套静态 `Linked` 范式（我们已按其实现）；它的
+  engine fork（GLES/fastmem/per-game profile）作为 I3-T4 的升级路径评估，见
+  [`RECOMP.md`](RECOMP.md) §0.5 与 [`docs/pocket-native.md`](../../docs/pocket-native.md)。
+
+> 新增的 3 个函数需要同步到 Swift bridging header（`ios/ZakuroBridge.h`，ios-shell 维护）。
+
 ## 验证
 
 本目录不能单独构建：它依赖 Zakuro workspace 里的 `zakuro-core` / `zakuro-common`。
@@ -116,8 +152,13 @@ scripts/build-zakuro-ios.sh
 cargo check -p zakuro-ios --target aarch64-apple-ios
 
 # 单元测试（只覆盖不依赖 ROM 的错误路径；在 Zakuro checkout 内）
-cargo test -p zakuro-ios
+cargo test -p zakuro-ios --lib
+
+# linked 变体的单元测试（cfg(test) 用占位表，不需要 ROM/游戏代码）
+ZAKURO_LINKED_PROGRAM_ID=0004000000055E00 cargo test -p zakuro-ios --lib --features linked
 ```
 
 单元测试覆盖 `zk_last_error` 的默认值、写入/清空、文本内 NUL 转义、空 `rom`、
-非法 UTF-8 路径，以及错误状态的线程隔离；不加载 ROM，也不需要 iOS 设备。
+非法 UTF-8 路径、错误状态的线程隔离，以及 `linked` 构建的 title ID/接口版本接线；
+不加载 ROM，也不需要 iOS 设备。真实 `libgame.a` 的链接验证见
+[`RECOMP.md`](RECOMP.md#8-测试计划)。
