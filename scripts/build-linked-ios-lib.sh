@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-linked-ios-lib.sh — build the per-game `linked` libzakuro_ios.a.
+# build-linked-ios-lib.sh — build (or adopt) the per-game `linked` libs.
 #
 # Per-game AOT pipeline (authoritative design: ios/zakuro-ios/RECOMP.md §3.3/§9):
 #
@@ -19,12 +19,32 @@
 # Must run on macOS with Xcode + Rust (aarch64-apple-ios). Nothing is committed:
 # the libs live under build/ and are gitignored.
 #
+# Split/incremental path (2026-11-12 VM run): cargo does not have to rebuild for
+# every step. Existing artifacts can be adopted instead:
+#
+#   scripts/build-linked-ios-lib.sh pokemon-y --reuse
+#       # reuse a validated build/ios/<name>/libzakuro_ios.a and build-info.txt,
+#       # refresh the metadata (no cargo, no Zakuro checkout).
+#   scripts/build-linked-ios-lib.sh pokemon-y --libgame /path/to/librecomp.a
+#       # use an already-built arm64 archive as libgame.a (build/game/... not
+#       # required); the linked Zakuro library is still built for the title ID.
+#
+# If build/game/<name>/code/librecomp.a is missing but
+# build/ios/<name>/libgame.a already exists, the existing archive is reused with
+# a warning (the split build copied it there manually).
+#
 # Title ID: pass it explicitly or let the script read it from the output of
-# scripts/build-recomp-ios.sh (build/game/<name>/src/main.rs or recomp-info.txt).
+# scripts/build-recomp-ios.sh (recomp-info.txt or src/main.rs). It is always
+# validated as 16 hex digits; a corrupted legacy value such as "0004000000055E00n"
+# is repaired with a warning instead of being baked in.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+AOT_LOG_PREFIX="build-linked-ios-lib"
+# shellcheck source=lib/aot-common.sh
+source "${SCRIPT_DIR}/lib/aot-common.sh"
 
 ZAKURO_DIR="${ZAKURO_DIR:-${ROOT}/third_party/zakuro}"
 IOS_TARGET="aarch64-apple-ios"
@@ -32,16 +52,22 @@ IOS_TARGET="aarch64-apple-ios"
 TITLE_ARG=""
 NAME_ARG=""
 LIB_DIR_ARG=""
+LIBGAME_ARG=""
 ISOLATED_TARGET=0
+REUSE=0
 VERBOSE=0
 
-# The linked build must reference exactly these 7 tables from the generated C
-# archive (RECOMP.md §2.1/§8.2); libgame.a resolves them at the app link.
-EXPECTED_RECOMP_SYMBOLS="recomp_abi recomp_generation recomp_entry_count recomp_entries recomp_module_count recomp_modules recomp_origins"
+EXPECTED_RECOMP_SYMBOLS="$AOT_EXPECTED_RECOMP_SYMBOLS"
+
+NM_DUMP=""
+cleanup_nm_dump() {
+  [[ -z "${NM_DUMP:-}" ]] || rm -f -- "$NM_DUMP"
+}
+trap cleanup_nm_dump EXIT
 
 usage() {
   cat <<'EOF'
-Build the per-game `linked` libzakuro_ios.a and collect libgame.a.
+Build (or adopt) the per-game `linked` libzakuro_ios.a and collect libgame.a.
 
 Usage:
   scripts/build-linked-ios-lib.sh <name> [options]
@@ -51,12 +77,20 @@ Arguments:
   <name>             Short game name used by build-recomp-ios.sh
                      (open build/game/<name>/)
   <title-id>         Optional 16 hex digit ROM title ID; when omitted it is
-                     read from build/game/<name>/src/main.rs or recomp-info.txt
+                     read from build/game/<name>/recomp-info.txt or src/main.rs
                      (or pass --title-id)
 
 Options:
-  --title-id ID      16 hex digit title ID (e.g. 0004000000055E00)
+  --title-id ID      16 hex digit title ID (e.g. 0004000000055E00); validated
+                     and normalised (lower case / 0x prefix accepted)
   --name NAME        Same as the <name> argument
+  --reuse            Do not run cargo: reuse the existing, validated
+                     build/ios/<name>/libzakuro_ios.a (which must show the 7
+                     undefined _recomp_* symbols) and refresh build-info.txt.
+                     Useful for split builds and re-runs before packaging.
+  --libgame PATH     Use an already-built arm64 iOS archive as libgame.a
+                     (instead of build/game/<name>/code/librecomp.a); makes the
+                     3dsrecomp output tree optional on this machine.
   --zakuro-dir DIR   Zakuro checkout (default: third_party/zakuro;
                      env: ZAKURO_DIR)
   --lib-dir DIR      Output dir (default: build/ios/<name>)
@@ -102,37 +136,6 @@ need_tool() {
   command -v "$1" >/dev/null 2>&1 || die "'$1' not found in PATH. $2"
 }
 
-sha256_of() {
-  if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$1" | awk '{print $1}'
-  else
-    sha256sum "$1" | awk '{print $1}'
-  fi
-}
-
-info_value() {
-  # Reads `key=value` from a build info/manifest file.
-  local file="$1" key="$2"
-  [[ -f "$file" ]] || return 1
-  sed -n "s/^${key}=//p" "$file" | head -n 1
-}
-
-normalize_title_id() {
-  local value="$1"
-  value="${value#0x}"
-  value="${value#0X}"
-  printf '%s\n' "$value" | tr 'a-f' 'A-F'
-}
-
-validate_title_id() {
-  local value="$1"
-  case "$value" in
-    ''|*[!0-9A-F]*) return 1 ;;
-  esac
-  [[ "${#value}" -eq 16 ]] || return 1
-  return 0
-}
-
 POS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -144,6 +147,15 @@ while [[ $# -gt 0 ]]; do
     --name)
       [[ $# -ge 2 ]] || die "--name requires a value"
       NAME_ARG="$2"
+      shift 2
+      ;;
+    --reuse)
+      REUSE=1
+      shift
+      ;;
+    --libgame)
+      [[ $# -ge 2 ]] || die "--libgame requires a value"
+      LIBGAME_ARG="$2"
       shift 2
       ;;
     --zakuro-dir)
@@ -194,12 +206,8 @@ fi
 usage: scripts/build-linked-ios-lib.sh <name> [options]
        scripts/build-linked-ios-lib.sh <title-id> <name> [options]"
 NAME="$NAME_ARG"
-case "$NAME" in
-  .|..|*/*|.*) die "invalid game name: '$NAME' (use letters, digits, '.', '_', '-')" ;;
-esac
-if ! printf '%s\n' "$NAME" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
-  die "invalid game name: '$NAME' (use letters, digits, '.', '_', '-')"
-fi
+aot_is_valid_name "$NAME" \
+  || die "invalid game name: '$NAME' (use letters, digits, '.', '_', '-')"
 
 ZAKURO_DIR="$(resolve_path "$ZAKURO_DIR")"
 LIB_DIR="$(resolve_path "${LIB_DIR_ARG:-build/ios/${NAME}}")"
@@ -207,25 +215,80 @@ GAME_DIR="${ROOT}/build/game/${NAME}"
 GAME_ARCHIVE="${GAME_DIR}/code/librecomp.a"
 RECOMP_INFO="${GAME_DIR}/recomp-info.txt"
 BUILD_INFO="${LIB_DIR}/build-info.txt"
+LIB_ZAKURO="${LIB_DIR}/libzakuro_ios.a"
+LIB_GAME="${LIB_DIR}/libgame.a"
 
-# --- resolve the title ID (RECOMP.md §3.2) -----------------------------------
-if [[ -z "$TITLE_ARG" ]]; then
-  TITLE_ARG="$(info_value "$RECOMP_INFO" title_id || true)"
-fi
-if [[ -z "$TITLE_ARG" ]]; then
-  MAIN_RS="${GAME_DIR}/src/main.rs"
-  if [[ -f "$MAIN_RS" ]]; then
-    TITLE_ARG="$(grep -oE '0x[0-9A-Fa-f]{16}' "$MAIN_RS" | head -n 1 | sed -e 's/^0[xX]//' || true)"
+# --- resolve the title ID ----------------------------------------------------
+# Build path order: --title-id, recomp-info.txt, generated src/main.rs, then an
+# existing build-info.txt. Reuse path order: --title-id, existing build-info.txt
+# (that is the title the library was actually built for), then recomp-info.txt.
+resolve_title_id() {
+  local cand norm
+  if [[ -n "$TITLE_ARG" ]]; then
+    if norm="$(aot_normalize_title_id "$TITLE_ARG")"; then
+      TITLE_ID="$norm"
+      TITLE_ID_SOURCE="--title-id"
+      return 0
+    fi
+    aot_warn "--title-id is not a valid 16 hex digit title ID: '$TITLE_ARG'"
+    return 1
   fi
-fi
-if [[ -z "$TITLE_ARG" ]]; then
-  TITLE_ARG="$(info_value "$BUILD_INFO" title_id || true)"
-fi
+  if [[ "$REUSE" -eq 1 ]]; then
+    cand="$(aot_info_value "$BUILD_INFO" title_id || true)"
+    if [[ -n "$cand" ]]; then
+      if norm="$(aot_normalize_title_id "$cand")"; then
+        TITLE_ID="$norm"
+        TITLE_ID_SOURCE="build-info.txt"
+        return 0
+      fi
+      aot_warn "invalid title_id='$cand' in $BUILD_INFO (ignored)"
+    fi
+  fi
+  cand="$(aot_info_value "$RECOMP_INFO" title_id || true)"
+  if [[ -n "$cand" ]]; then
+    if norm="$(aot_normalize_title_id "$cand")"; then
+      TITLE_ID="$norm"
+      TITLE_ID_SOURCE="recomp-info.txt"
+      return 0
+    fi
+    aot_warn "invalid title_id='$cand' in $RECOMP_INFO (ignored)"
+  fi
+  if norm="$(aot_title_id_from_rust "${GAME_DIR}/src/main.rs" || true)"; then
+    TITLE_ID="$norm"
+    TITLE_ID_SOURCE="src/main.rs"
+    return 0
+  fi
+  if [[ "$REUSE" -ne 1 ]]; then
+    cand="$(aot_info_value "$BUILD_INFO" title_id || true)"
+    if [[ -n "$cand" ]]; then
+      if norm="$(aot_normalize_title_id "$cand")"; then
+        TITLE_ID="$norm"
+        TITLE_ID_SOURCE="build-info.txt (previous run)"
+        return 0
+      fi
+    fi
+  fi
+  return 1
+}
 
-TITLE_ID="$(normalize_title_id "$TITLE_ARG")"
-validate_title_id "$TITLE_ID" || die "could not determine a valid 16 hex digit title ID (got '$TITLE_ID').
+if ! resolve_title_id; then
+  die "could not determine a valid 16 hex digit title ID (got nothing usable).
        Run scripts/build-recomp-ios.sh first (it extracts the title ID from the
        generated src/main.rs), or pass --title-id 0004000000055E00."
+fi
+
+# Cross-check the title against the other metadata sources so a stale
+# build-info.txt or recomp-info.txt cannot silently mismatch the linked library.
+if [[ "$REUSE" -ne 1 ]]; then
+  OTHER_TITLE="$(aot_info_value "$BUILD_INFO" title_id || true)"
+  if [[ -n "$OTHER_TITLE" ]]; then
+    OTHER_TITLE="$(aot_normalize_title_id "$OTHER_TITLE" 2>/dev/null || true)"
+    if [[ -n "$OTHER_TITLE" && "$OTHER_TITLE" != "$TITLE_ID" ]]; then
+      warn "existing $BUILD_INFO is for title $OTHER_TITLE but this build resolves
+       $TITLE_ID ($TITLE_ID_SOURCE); the old library will be replaced."
+    fi
+  fi
+fi
 
 # --- host / tool checks ------------------------------------------------------
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -233,14 +296,12 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
        Detected $(uname -s); run it on the macOS VM (iOS static libs need the iOS SDK)."
 fi
 
-need_tool cargo "Install Rust (https://rustup.rs) and the aarch64-apple-ios target"
-need_tool git "Install the Xcode command line tools: xcode-select --install"
 need_tool xcrun "Install Xcode and select it: sudo xcode-select -s \"\$HOME/Applications/Xcode-16.4.0.app\""
+need_tool git "Install the Xcode command line tools: xcode-select --install"
 need_tool nm "Install the Xcode command line tools: xcode-select --install"
-
-[[ -d "$ZAKURO_DIR" || ! -e "$ZAKURO_DIR" ]] || die "Zakuro path is not a directory: $ZAKURO_DIR"
-[[ -f "$GAME_ARCHIVE" ]] || die "missing recompiled archive: $GAME_ARCHIVE
-       Run scripts/build-recomp-ios.sh <rom> $NAME first."
+if [[ "$REUSE" -ne 1 ]]; then
+  need_tool cargo "Install Rust (https://rustup.rs) and the aarch64-apple-ios target"
+fi
 
 LOG_DIR="${ROOT}/build/logs"
 mkdir -p "$LOG_DIR"
@@ -249,26 +310,135 @@ LOG_FILE="${LOG_DIR}/build-linked-ios-lib-${NAME}-$(date +%Y%m%d-%H%M%S).log"
 
 log "repo root:  $ROOT"
 log "game name:  $NAME"
-log "title id:   $TITLE_ID"
-log "zakuro:     $ZAKURO_DIR"
+log "title id:   $TITLE_ID (source: $TITLE_ID_SOURCE)"
 log "lib dir:    $LIB_DIR"
+log "mode:       $([[ "$REUSE" -eq 1 ]] && echo reuse || echo cargo-build)"
 log "build log:  $LOG_FILE"
 
-# --- zinc/prerequisites ------------------------------------------------------
-run_stage() {
-  local label="$1"
-  shift
-  if [[ "$VERBOSE" -eq 1 ]]; then
-    if ! "$@" 2>&1 | tee -a "$LOG_FILE"; then
-      die "$label failed; full log: $LOG_FILE"
-    fi
-  elif ! "$@" >>"$LOG_FILE" 2>&1; then
-    printf '\n--- %s failed: last 80 lines of %s ---\n' "$label" "$LOG_FILE" >&2
-    tail -n 80 "$LOG_FILE" >&2
-    die "$label failed; full log: $LOG_FILE"
+# --- validation (RECOMP.md §2.1/§8.2) ----------------------------------------
+validate_linked_lib() {
+  local file="$1" undefined count missing symbol lines
+  [[ -s "$file" ]] || die "linked library is missing or empty: $file"
+  aot_lipo_arch_ok "$file" \
+    || die "linked library is not arm64: $file (lipo: $AOT_LIPO_INFO)"
+
+  NM_DUMP="$(mktemp "${TMPDIR:-/tmp}/3ds2apple-nm.XXXXXX")"
+  aot_nm_dump "$file" "$NM_DUMP" -u \
+    || die "nm -u failed on $file (RECOMP.md §8.2)"
+  undefined="$(aot_nm_symbols_with_prefix "$NM_DUMP" '_recomp_')"
+  rm -f -- "$NM_DUMP"
+  NM_DUMP=""
+  if [[ -z "$undefined" ]]; then
+    die "linked library has no undefined _recomp_* symbols: $file
+       That looks like the interpreter-only shell library. Did the build use
+       --features linked and get copied from the right target dir?"
   fi
+  count="$(printf '%s\n' "$undefined" | sed '/^$/d' | wc -l | tr -d '[:space:]')"
+  lines=$'\n'"$undefined"$'\n'
+  missing=""
+  for symbol in $EXPECTED_RECOMP_SYMBOLS; do
+    case "$lines" in
+      *$'\n'"_${symbol}"$'\n'*) : ;;
+      *) missing="$missing _${symbol}" ;;
+    esac
+  done
+  [[ -z "$missing" ]] || die "linked library is missing expected undefined symbols:$missing
+       (RECOMP.md §8.2 expects exactly 7: $EXPECTED_RECOMP_SYMBOLS)"
+  [[ "$count" -eq 7 ]] || die "linked library has ${count} undefined _recomp_* symbols; expected exactly 7.
+       Found: $(printf '%s\n' "$undefined" | tr '\n' ' ')"
 }
 
+validate_game_archive() {
+  local file="$1" missing="" symbol
+  [[ -s "$file" ]] || die "libgame archive is missing or empty: $file"
+  aot_lipo_arch_ok "$file" \
+    || die "libgame archive is not arm64: $file (lipo: $AOT_LIPO_INFO)"
+  NM_DUMP="$(mktemp "${TMPDIR:-/tmp}/3ds2apple-nm.XXXXXX")"
+  aot_nm_dump "$file" "$NM_DUMP" -g \
+    || die "nm -g failed on $file"
+  for symbol in $EXPECTED_RECOMP_SYMBOLS; do
+    aot_nm_has_symbol "$NM_DUMP" "_${symbol}" || missing="$missing _${symbol}"
+  done
+  rm -f -- "$NM_DUMP"
+  NM_DUMP=""
+  [[ -z "$missing" ]] || die "libgame archive does not export generated tables:$missing
+       Check that build-recomp-ios.sh produced an iOS arm64 archive with 3dsrecomp
+       port, or pass --libgame <path/to/librecomp.a>."
+}
+
+write_build_info() {
+  aot_validate_title_id "$TITLE_ID" \
+    || die "refusing to write build-info.txt: title ID '$TITLE_ID' is not 16 hex digits."
+  {
+    printf 'name=%s\n' "$NAME"
+    printf 'title_id=%s\n' "$TITLE_ID"
+    printf 'title_id_source=%s\n' "${TITLE_ID_SOURCE:-unknown}"
+    printf 'zakuro_rev=%s\n' "$ZAKURO_REV"
+    printf 'recomp_rev=%s\n' "${RECOMP_REV:-unknown}"
+    printf 'rom_basename=%s\n' "${ROM_BASENAME:-unknown}"
+    printf 'libzakuro_ios=%s\n' "$LIB_ZAKURO"
+    printf 'libzakuro_ios_bytes=%s\n' "$(wc -c < "$LIB_ZAKURO" | tr -d '[:space:]')"
+    printf 'libzakuro_ios_sha256=%s\n' "$(aot_sha256 "$LIB_ZAKURO")"
+    printf 'libgame=%s\n' "$LIB_GAME"
+    printf 'libgame_source=%s\n' "${LIBGAME_SOURCE:-$GAME_ARCHIVE}"
+    printf 'libgame_bytes=%s\n' "$(wc -c < "$LIB_GAME" | tr -d '[:space:]')"
+    printf 'libgame_sha256=%s\n' "$(aot_sha256 "$LIB_GAME")"
+    printf 'cargo_target_dir=%s\n' "${TARGET_ROOT:-reused}"
+    printf 'isolated_target=%s\n' "$ISOLATED_TARGET"
+    printf 'reuse=%s\n' "$REUSE"
+    printf 'created_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > "$BUILD_INFO"
+}
+
+# --- choose libgame.a source ------------------------------------------------
+GAME_SRC=""
+if [[ -n "$LIBGAME_ARG" ]]; then
+  GAME_SRC="$(resolve_path "$LIBGAME_ARG")"
+  [[ -f "$GAME_SRC" ]] || die "--libgame file not found: $GAME_SRC"
+  LIBGAME_SOURCE="$GAME_SRC (--libgame)"
+elif [[ -f "$GAME_ARCHIVE" ]]; then
+  GAME_SRC="$GAME_ARCHIVE"
+  LIBGAME_SOURCE="$GAME_ARCHIVE"
+elif [[ -f "$LIB_GAME" ]]; then
+  GAME_SRC="$LIB_GAME"
+  LIBGAME_SOURCE="$LIB_GAME (existing split-build archive)"
+  warn "missing $GAME_ARCHIVE; reusing the existing $LIB_GAME
+       (split-build path: the archive was placed there manually)."
+else
+  die "missing recompiled archive: $GAME_ARCHIVE
+       Run scripts/build-recomp-ios.sh <rom> $NAME first, pass
+       --libgame <path/to/librecomp.a>, or copy the split-build libgame.a into
+       $LIB_DIR."
+fi
+
+# --- reuse path: no cargo, just validate + refresh metadata -----------------
+if [[ "$REUSE" -eq 1 ]]; then
+  [[ -f "$LIB_ZAKURO" ]] || die "--reuse needs an existing linked library: $LIB_ZAKURO
+       Run without --reuse (cargo build) first, or copy the split-build
+       libzakuro_ios.a into $LIB_DIR."
+  log "reusing linked library: $LIB_ZAKURO"
+  validate_linked_lib "$LIB_ZAKURO"
+  validate_game_archive "$GAME_SRC"
+  mkdir -p "$LIB_DIR"
+  if [[ "$(cd "$(dirname "$GAME_SRC")" && pwd)/$(basename "$GAME_SRC")" \
+        != "$(cd "$LIB_DIR" && pwd)/libgame.a" ]]; then
+    cp -f "$GAME_SRC" "$LIB_GAME"
+  fi
+  ZAKURO_REV="$(aot_info_value "$BUILD_INFO" zakuro_rev || true)"
+  [[ -n "$ZAKURO_REV" ]] || ZAKURO_REV="unknown"
+  RECOMP_REV="$(aot_info_value "$RECOMP_INFO" recomp_rev || true)"
+  ROM_BASENAME="$(aot_info_value "$RECOMP_INFO" rom_basename || true)"
+  write_build_info
+  log "per-game linked libs ready (reused, no cargo build)"
+  log "  libzakuro_ios.a: $LIB_ZAKURO"
+  log "  libgame.a:       $LIB_GAME"
+  log "  build info:      $BUILD_INFO"
+  log "next: scripts/build-game-ipa.sh ${NAME}"
+  printf '%s\n' "$LIB_DIR"
+  exit 0
+fi
+
+# --- build prerequisites (only needed for the cargo build path) -------------
 ensure_zakuro_checkout() {
   local cargo_toml="${ZAKURO_DIR}/Cargo.toml"
   if [[ ! -d "${ZAKURO_DIR}/.git" || ! -f "$cargo_toml" ]]; then
@@ -282,13 +452,26 @@ ensure_zakuro_checkout() {
   fi
 }
 
+[[ -d "$ZAKURO_DIR" || ! -e "$ZAKURO_DIR" ]] || die "Zakuro path is not a directory: $ZAKURO_DIR"
+validate_game_archive "$GAME_SRC"
+
 ensure_zakuro_checkout
 
 if ! command -v rustup >/dev/null 2>&1; then
   warn "rustup not found; assuming the aarch64-apple-ios target is installed"
-elif ! rustup target list --installed 2>/dev/null | grep -qx "$IOS_TARGET"; then
-  log "adding Rust target: $IOS_TARGET"
-  rustup target add "$IOS_TARGET"
+else
+  # Capture the list first, then match it in the shell. Piping rustup into
+  # `grep -qx` can give rustup SIGPIPE (141) under `set -o pipefail` - the same
+  # bug class as `nm | grep -q` (see scripts/lib/aot-common.sh) - which would
+  # look like "target missing" and re-run `rustup target add` every build.
+  INSTALLED_TARGETS="$(rustup target list --installed 2>/dev/null || true)"
+  case $'\n'"$INSTALLED_TARGETS"$'\n' in
+    *$'\n'"$IOS_TARGET"$'\n'*) : ;;
+    *)
+      log "adding Rust target: $IOS_TARGET"
+      rustup target add "$IOS_TARGET"
+      ;;
+  esac
 fi
 
 # Refresh the crate copy: the checkout must build the current ios/zakuro-ios
@@ -317,6 +500,20 @@ case "$TARGET_ROOT" in
 esac
 LIB_BUILT="${TARGET_ROOT}/${IOS_TARGET}/release/libzakuro_ios.a"
 
+run_stage() {
+  local label="$1"
+  shift
+  if [[ "$VERBOSE" -eq 1 ]]; then
+    if ! "$@" 2>&1 | tee -a "$LOG_FILE"; then
+      die "$label failed; full log: $LOG_FILE"
+    fi
+  elif ! "$@" >>"$LOG_FILE" 2>&1; then
+    printf '\n--- %s failed: last 80 lines of %s ---\n' "$label" "$LOG_FILE" >&2
+    tail -n 80 "$LOG_FILE" >&2
+    die "$label failed; full log: $LOG_FILE"
+  fi
+}
+
 # Force the crate (and its build.rs env check) to rebuild for this title even
 # when a previous game was built in the same target dir (RECOMP.md §3.3).
 log "cargo clean -p zakuro-ios (force per-game relink; dependency cache is kept)"
@@ -334,97 +531,24 @@ run_stage "cargo build (zakuro-ios --features linked)" do_linked_build
 
 [[ -f "$LIB_BUILT" ]] || die "linked library was not produced: $LIB_BUILT"
 
-# --- validate the linked library (RECOMP.md §2.1/§8.2) ----------------------
-lipo_arch_ok() {
-  local file="$1" lipo_info
-  lipo_info="$(xcrun lipo -info "$file" 2>&1)" || return 1
-  case "$lipo_info" in
-    *arm64*) return 0 ;;
-    *) warn "not an arm64 archive: $lipo_info"; return 1 ;;
-  esac
-}
-
-collect_recomp_symbols() {
-  # $1 = nm mode flags (e.g. "-u" or "-g"), $2 = file
-  local mode="$1" file="$2"
-  nm "$mode" "$file" 2>/dev/null | awk '{print $NF}' | grep '^_recomp_' | sort -u || true
-}
-
-validate_linked_lib() {
-  local file="$1"
-  [[ -s "$file" ]] || die "linked library is empty: $file"
-  lipo_arch_ok "$file" || die "linked library is not arm64: $file"
-
-  local undefined count missing
-  undefined="$(collect_recomp_symbols -u "$file")"
-  if [[ -z "$undefined" ]]; then
-    die "linked library has no undefined _recomp_* symbols: $file
-       That looks like the interpreter-only shell library. Did the build use
-       --features linked and got copied from the right target dir?"
-  fi
-  count="$(printf '%s\n' "$undefined" | wc -l | tr -d '[:space:]')"
-  missing=""
-  local symbol
-  for symbol in $EXPECTED_RECOMP_SYMBOLS; do
-    if ! printf '%s\n' "$undefined" | grep -qx "_${symbol}"; then
-      missing="$missing _${symbol}"
-    fi
-  done
-  [[ -z "$missing" ]] || die "linked library is missing expected undefined symbols:$missing
-       (RECOMP.md §8.2 expects exactly 7: $(printf '%s ' $EXPECTED_RECOMP_SYMBOLS))"
-  [[ "$count" -eq 7 ]] || die "linked library has ${count} undefined _recomp_* symbols; expected exactly 7.
-       See RECOMP.md §8.2: $(printf '%s\n' "$undefined" | tr '\n' ' ')"
-}
-
-validate_game_archive() {
-  local file="$1"
-  [[ -s "$file" ]] || die "libgame archive is empty: $file"
-  lipo_arch_ok "$file" || die "libgame archive is not arm64: $file"
-  local missing=""
-  local symbol
-  for symbol in $EXPECTED_RECOMP_SYMBOLS; do
-    if ! nm -g "$file" 2>/dev/null | grep -q "[[:space:]]_${symbol}\$"; then
-      missing="$missing _${symbol}"
-    fi
-  done
-  [[ -z "$missing" ]] || die "libgame archive does not export generated tables:$missing
-       Check that build-recomp-ios.sh produced $GAME_ARCHIVE with 3dsrecomp port."
-}
-
+# --- validate + collect per-game libs --------------------------------------
 validate_linked_lib "$LIB_BUILT"
-validate_game_archive "$GAME_ARCHIVE"
 
-# --- collect per-game libs ---------------------------------------------------
 mkdir -p "$LIB_DIR"
-cp -f "$LIB_BUILT" "${LIB_DIR}/libzakuro_ios.a"
-cp -f "$GAME_ARCHIVE" "${LIB_DIR}/libgame.a"
-
-LIB_ZAKURO="${LIB_DIR}/libzakuro_ios.a"
-LIB_GAME="${LIB_DIR}/libgame.a"
+cp -f "$LIB_BUILT" "$LIB_ZAKURO"
+if [[ "$(cd "$(dirname "$GAME_SRC")" && pwd)/$(basename "$GAME_SRC")" \
+      != "$(cd "$LIB_DIR" && pwd)/libgame.a" ]]; then
+  cp -f "$GAME_SRC" "$LIB_GAME"
+fi
 
 ZAKURO_REV="unknown"
 if [[ -d "${ZAKURO_DIR}/.git" ]]; then
   ZAKURO_REV="$(git -C "$ZAKURO_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 fi
-RECOMP_REV="$(info_value "$RECOMP_INFO" recomp_rev || true)"
-ROM_BASENAME="$(info_value "$RECOMP_INFO" rom_basename || true)"
+RECOMP_REV="$(aot_info_value "$RECOMP_INFO" recomp_rev || true)"
+ROM_BASENAME="$(aot_info_value "$RECOMP_INFO" rom_basename || true)"
 
-{
-  printf 'name=%s\n' "$NAME"
-  printf 'title_id=%s\n' "$TITLE_ID"
-  printf 'zakuro_rev=%s\n' "$ZAKURO_REV"
-  printf 'recomp_rev=%s\n' "${RECOMP_REV:-unknown}"
-  printf 'rom_basename=%s\n' "${ROM_BASENAME:-unknown}"
-  printf 'libzakuro_ios=%s\n' "$LIB_ZAKURO"
-  printf 'libzakuro_ios_bytes=%s\n' "$(wc -c < "$LIB_ZAKURO" | tr -d '[:space:]')"
-  printf 'libzakuro_ios_sha256=%s\n' "$(sha256_of "$LIB_ZAKURO")"
-  printf 'libgame=%s\n' "$LIB_GAME"
-  printf 'libgame_bytes=%s\n' "$(wc -c < "$LIB_GAME" | tr -d '[:space:]')"
-  printf 'libgame_sha256=%s\n' "$(sha256_of "$LIB_GAME")"
-  printf 'cargo_target_dir=%s\n' "$TARGET_ROOT"
-  printf 'isolated_target=%s\n' "$ISOLATED_TARGET"
-  printf 'created_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-} > "$BUILD_INFO"
+write_build_info
 
 log "per-game linked libs ready"
 log "  libzakuro_ios.a: $LIB_ZAKURO"
