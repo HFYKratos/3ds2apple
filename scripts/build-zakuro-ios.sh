@@ -21,6 +21,13 @@ if [[ ! -d "$ZAKURO_DIR/.git" ]]; then
   git clone --depth 1 --branch "$ZAKURO_REF" https://github.com/fearkov/zakuro "$ZAKURO_DIR"
 fi
 
+# Apply the local patches (MoltenVK lookup on iOS, pipeline-cache save
+# interval). Idempotent: an already patched checkout is left as it is, and a
+# patch that no longer applies is a warning, so upstream main can drift.
+# shellcheck source=lib/zakuro-patches.sh
+source "$ROOT/scripts/lib/zakuro-patches.sh"
+apply_zakuro_patches "$ZAKURO_DIR"
+
 python3 - "$ZAKURO_DIR" <<'PY'
 import re
 import sys
