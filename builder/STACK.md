@@ -1,10 +1,11 @@
 # Builder technology and repository layout
 
-> **Status: implemented (core, CLI, Agent).** This document records the stack,
-> the alternatives that were weighed, and the layout that now exists under
-> `builder/`: the shared library, the `zkb` CLI and the macOS Build Agent are
-> implemented in Rust and tested on Linux. The GUI frontends are still design
-> only.
+> **Status: implemented (core, CLI, Agent, Linux frontend).** This document
+> records the stack, the alternatives that were weighed, and the layout that
+> now exists under `builder/`: the shared library, the `zkb` CLI, the macOS
+> Build Agent and the Linux CLI frontend (`builder/linux`, binary
+> `3ds2apple-builder`) are implemented in Rust and tested on Linux. The
+> Windows/Linux Tauri GUIs are still design only.
 
 ## 1. Decision summary
 
@@ -13,6 +14,7 @@
 | Implementation language | **Rust 2021**, one Cargo workspace under `builder/` | One toolchain for Agent, CLI and GUI backends; single static binaries on Windows/Linux without a Python/Node runtime; the build pipeline already uses Rust (Zakuro); strong process, IO and crypto ecosystem. |
 | Shared client | `builder/core` library crate | Protocol, transports, hashing, config/secrets and log redaction are used by the CLI and both GUIs; no duplicated client logic. |
 | First client | `builder/cli` (`zkb`) | Fastest way to prove the protocol end-to-end on Linux → macOS VM; headless and scriptable; the Linux MVP. |
+| Linux frontend | `builder/linux` (`3ds2apple-builder`), a CLI shelling out to `zkb` | The remaining Linux work is VM-specific: finding a local QEMU/KVM macOS VM's forwarded SSH port, fingerprint-confirmed pairing, ROM selection and a local SHA256 re-verification plus installation guide. Reusing `zkb` keeps behaviour identical to the shared client instead of forking the protocol code. |
 | GUI | **Tauri 2** (Rust backend + TypeScript web UI) for Windows and Linux | Small installers, uses the OS web view (WebView2 / WebKitGTK), reuses the `core` crate, one UI codebase for both desktops. CLI remains available when a webview is not desired. |
 | Agent | `builder-agent` Rust binary, daemon + `ssh-dispatch` | Owns jobs, processes, cleanup and logs; runs only on macOS; no runtime dependencies beyond the OS and the existing toolchain. |
 | SSH | Shell out to the system OpenSSH client/server in v1 | Users already have `ssh` on Linux and macOS, Windows 11 ships it and Windows 10 offers it as an optional feature; it handles keys, known_hosts, agent and user config. No second crypto stack, no custom SSH server to get right. A native library can replace it later without changing the protocol. |
@@ -115,8 +117,8 @@ versioned fixtures. This keeps the "no generated code in git" rule absolute
 ## 4. Repository layout
 
 The `builder/` directory is a self-contained Cargo workspace. The `core`,
-`cli` and `agent` crates exist today; `windows/`, `linux/`, `ui/` and `cross/`
-are still design-only.
+`cli`, `agent` and `linux` crates exist today; the Windows Tauri app, the
+shared `ui/`, the Linux Tauri GUI and `cross/` are still design-only.
 
 ```text
 builder/
@@ -159,12 +161,16 @@ builder/
     src/ssh_dispatch.rs          # forced-command entry point; subcommand allowlist
     tests/                       # stage parser + cleanup tests (host-runnable, no builds)
 
-  windows/                       # Tauri app (Windows packaging, installer)
+  windows/                       # Tauri app (Windows packaging, installer); design only
     src-tauri/
     ...
-  linux/                         # Tauri packaging (AppImage/deb/rpm) for the same UI
+  linux/                         # Linux frontend: CLI implemented, Tauri GUI planned
+    Cargo.toml                   # crate builder-linux, binary 3ds2apple-builder
+    src/                         # VM discovery, host pairing, build wrapper, doctor, guide, zkb bridge
+    packaging/                   # PKGBUILD, deb/tarball script, man page, desktop entry
+    tests/                       # local integration, fake-agent E2E, shell E2E wrapper
 
-  ui/                            # shared TypeScript UI used by windows/ and linux/
+  ui/                            # shared TypeScript UI for windows/ and linux/ (design only)
     src/
       screens/  (HostSetup, Build, Progress, Result, Jobs, InstallGuide)
       components/ (StageList, LogViewer, ArtifactCard, ErrorPanel)
@@ -214,6 +220,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace            # includes protocol fixtures + fake agent
 cargo build --release -p builder-cli            # zkb
+cargo build --release -p builder-linux          # 3ds2apple-builder (Linux frontend)
 cargo build --release -p builder-agent          # builder-agent (compile on macOS for real use)
 cd ui && npm ci && npm run build
 cd ../windows && cargo tauri build             # MSI/NSIS on Windows
@@ -333,5 +340,8 @@ reviewable).
 4. Whether the Agent should manage its own source checkout (`repo.managed`) or
    require a user-managed one. The design supports both; v1 defaults to
    user-managed and documents the managed option.
-5. Packaging format for Linux (AppImage first for portability; deb/rpm as
-   follow-up) and whether the GUI or the CLI is the primary Linux deliverable.
+5. Packaging format for Linux: resolved for this release — the CLI is the
+   primary Linux deliverable, shipped as an Arch/CachyOS PKGBUILD and a
+   Debian/Ubuntu `.deb` plus a portable tarball (see
+   `linux/packaging/`). AppImage/deb packaging becomes relevant when the Tauri
+   GUI lands; the GUI still has to prove itself against the CLI.

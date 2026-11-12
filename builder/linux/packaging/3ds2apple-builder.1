@@ -1,0 +1,141 @@
+.TH 3DS2APPLE-BUILDER 1 "2026-11-12" "3ds2apple-builder 0.1.0" "User Commands"
+.SH NAME
+3ds2apple-builder \- Linux frontend for the 3ds2apple Builder
+.SH SYNOPSIS
+.B 3ds2apple-builder
+[\fIOPTIONS\fR] [\fICOMMAND\fR]
+.SH DESCRIPTION
+.B 3ds2apple-builder
+builds one legally owned, decrypted Nintendo 3DS ROM into an unsigned iOS app
+(IPA) on a macOS host that the user controls: a local macOS VM, a Mac on the
+LAN, or a cloud Mac. The heavy AOT pipeline (3dsrecomp, Apple's clang,
+xcodebuild) runs on that macOS host through the 3ds2apple Build Agent.
+.PP
+The frontend is a Linux-specific layer over the shared
+.B zkb
+client. It finds a local QEMU/KVM macOS VM's forwarded SSH port, pairs the host
+with an SSH key (never a password), streams one build, re-verifies the
+downloaded IPA against the Agent's manifest, and prints the manual
+signing/installation steps.
+.PP
+It never signs, installs or distributes anything, never asks for an Apple ID,
+UDID, certificate or provisioning profile, and never contacts a
+project-operated server. The ROM goes only to the configured macOS host and is
+deleted there when the build ends (unless the user explicitly keeps it).
+.SH OPTIONS
+.TP
+.BR \-\-zkb " " \fIPATH\fR
+Path of the shared
+.B zkb
+client. Default: \fB$ZKB_BIN\fR, a sibling of this binary, then \fB$PATH\fR.
+.TP
+.BR \-\-config " " \fIPATH\fR
+Builder configuration file. Default: the shared client's location
+(\fB$XDG_CONFIG_HOME/3ds2apple/builder/config.toml\fR or
+\fB$ZKB_CONFIG_DIR/config.toml\fR).
+.TP
+.B \-\-json
+Machine-readable output: JSON for this frontend's commands, NDJSON from the
+shared client.
+.TP
+.B \-\-no-input
+Never prompt. Choices that would need an answer become usage errors.
+.SH COMMANDS
+.TP
+.B status
+Show the shared client, configured hosts, detected macOS VM endpoints and the
+next commands. This is also what runs with no command.
+.TP
+.BIR vm " " discover
+List candidate SSH endpoints from \fB$ZKB_VM_*\fR, QEMU/KVM \fBhostfwd\fR rules
+and \fB127.0.0.1\fR ports that answer with an SSH banner.
+.TP
+.BR vm " " setup " " \-\-name \fINAME\fR [\-\-host \fIHOST\fR \-\-port \fIPORT\fR] [\-\-user \fIUSER\fR] [\-\-key \fIPATH\fR] [\-\-yes | \-\-fingerprint \fISHA256:...\fR] [\-\-test]
+Discover or accept an endpoint, show the host-key fingerprint, and pair the
+host through the shared client. Pairing uses a dedicated SSH key; the key's
+\fBauthorized_keys\fR line is printed for the user to add on the Mac.
+\fB--test\fR runs the host self-test right after pairing; it succeeds once the
+printed line has been added.
+.TP
+.BR build " " [\-\-host \fINAME\fR] [\-\-rom \fIPATH\fR] [\-\-out \fIDIR\fR] [options]
+Select a ROM (prompted for when omitted in a terminal), run the shared build
+on the macOS host, stream the log, download the IPA, re-hash it and print the
+result plus the installation guidance. Other options mirror
+.BR "\fBzkb build\fR" :
+\fB\-\-name\fR, \fB\-\-display\-name\fR, \fB\-\-bundle\-id\fR,
+\fB\-\-title\-id\fR, \fB\-\-no\-moltenvk\fR, \fB\-\-hardware\-renderer\fR,
+\fB\-\-clean\fR, \fB\-\-keep\-input\fR, \fB\-\-expected\-revision\fR,
+\fB\-\-no\-download\fR, \fB\-\-allow\-any\-file\fR, \fB\-\-rom\-dir\fR.
+.TP
+.BR doctor " " [\-\-host \fINAME\fR] [\-\-probe]
+Check the shared client, OpenSSH tools, configuration and key permissions,
+detected VM endpoints and the data directory. With \fB--host\fR it also runs
+the remote \fBzkb host test\fR. Exit status 3 when a check fails.
+.TP
+.BR install-guide " " [\-\-ipa \fIPATH\fR]
+Print the signing and installation instructions. With \fB--ipa\fR the artifact's
+size and SHA256 are filled in and hashed locally.
+.TP
+.BR zkb " " \fIARGS\fR...
+Run the shared client with the given arguments (passthrough), for example
+\fB3ds2apple-builder zkb host list\fR. The shared client's exit code is
+preserved.
+.SH ENVIRONMENT
+.TP
+.B ZKB_VM_SSH
+Endpoint override, \fB[user@]host[:port]\fR (highest priority).
+.TP
+.B ZKB_VM_HOST, ZKB_VM_PORT, ZKB_VM_USER
+Individual endpoint overrides used when \fBZKB_VM_SSH\fR is unset.
+.TP
+.B ZKB_VM_KEY
+Existing private key to use instead of a dedicated one.
+.TP
+.B ZKB_BIN
+Path of the shared \fBzkb\fR client.
+.TP
+.B ZKB_CONFIG_DIR, ZKB_DATA_DIR
+Override the shared client's configuration and data directories.
+.TP
+.B ZKB_ROM_DIR
+Extra directory searched for \fB.3ds\fR/\fB.cci\fR files.
+.SH EXIT STATUS
+0 success; 1 the build failed; 2 usage or configuration error; 3 the macOS
+host, connection or Agent failed; 4 canceled; 5 local I/O error; 64 internal
+error.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/3ds2apple/builder/config.toml
+Host profiles (SSH key paths, profile-private \fBknown_hosts\fR). No password is
+ever stored.
+.TP
+.I $XDG_DATA_HOME/3ds2apple/builder/artifacts/
+Downloaded IPAs by default.
+.SH EXAMPLE
+.nf
+# Pair the local CachyOS macOS VM (QEMU forwards host :2222 to guest :22)
+3ds2apple-builder vm setup --name cachyos-vm
+
+# Build a ROM you own and verify the download
+3ds2apple-builder build --host cachyos-vm --rom ~/ROM/"Pokemon Y.cci"
+
+# Read the signing/installation steps
+3ds2apple-builder install-guide --ipa \\
+  ~/.local/share/3ds2apple/builder/artifacts/pokemon-y/pokemon-y-AOT.ipa
+.fi
+.SH SEE ALSO
+.BR zkb (1),
+.I https://github.com/HFYKratos/3ds2apple
+.PP
+The macOS host runs
+.B builder-agent
+(builder/README.md). The per-game AOT pipeline is documented in
+.I scripts/AOT_BUILD.md
+and
+.I docs/build.md
+in the source repository.
+.SH SECURITY
+Only use decrypted ROMs you legally own. The unsigned IPA contains code derived
+from the game: sign it yourself with Sideloadly/AltStore on a Windows or macOS
+machine and do not redistribute it. The project provides no ROM, keys or
+download service.

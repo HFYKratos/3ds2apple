@@ -119,6 +119,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "builder-linux"
+version = "0.1.0"
+dependencies = [
+ "builder-core",
+ "clap",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
