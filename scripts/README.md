@@ -14,6 +14,7 @@ committed.
 | `build-recomp-ios.sh` | Run 3dsrecomp, compile generated C for `arm64-apple-ios` into `libgame.a` |
 | `build-linked-ios-lib.sh` | Build the linked `libzakuro_ios.a` for one title and collect `build/ios/<name>/` |
 | `build-game-ipa.sh` | Build the per-game app with `-lzakuro_ios -lgame`, add the one-game `GameCatalog.json`, package the AOT IPA |
+| `ios-ui-preview.sh` | Build and screenshot the shell UI in the iOS Simulator on the macOS VM (auto-generated `zk_*` stubs; no device, no static library, no ROM) |
 | `lib/game-catalog.sh` | Shared `GameCatalog.json` writer/validator/installer used by the build and package scripts |
 | `tests/game-catalog-selfcheck.sh` | Self-check for the catalog helper (runs on Linux and macOS) |
 

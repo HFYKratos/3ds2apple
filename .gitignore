@@ -86,3 +86,4 @@ AGENTS.md
 
 # --- Builder frontends ------------------------------------------------------
 node_modules/
+ios/preview/generated/
