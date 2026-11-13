@@ -354,7 +354,21 @@ do_xcodebuild() {
   # bash 3.2 (macOS default) is fine with array literals and +=.
   local actions=("build")
   if [[ "$CLEAN" -eq 1 ]]; then
-    actions=("clean" "build")
+    # `xcodebuild clean` refuses to delete an existing SYMROOT it did not create
+    # ("Could not delete ... because it was not created by the build system") and
+    # exits non-zero even though the following build succeeds. Treat the clean as
+    # best effort: stale products are rebuilt by the build action anyway, and the
+    # build action's own status is what this script reports.
+    ( cd "$APP_DIR_ABS" && xcodebuild \
+        -project "$PROJECT_FILE" \
+        -target "$TARGET_NAME" \
+        -sdk iphoneos \
+        -configuration "$CONFIGURATION" \
+        clean \
+        SYMROOT="$PWD/build" \
+        OBJROOT="$PWD/build" \
+        CODE_SIGNING_ALLOWED=NO \
+        CODE_SIGNING_REQUIRED=NO >/dev/null 2>&1 || true )
   fi
 
   # SYMROOT/OBJROOT = "$PWD/build" with cwd = app dir, so the .app ends up in
