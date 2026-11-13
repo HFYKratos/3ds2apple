@@ -1525,15 +1525,6 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         return false
     }
 
-    /// Drains the samples the runtime produced for frames that are not
-    /// presented (fast-forward), dropping them instead of queueing playback.
-    /// runtimeQueue only.
-    private func discardAudio(system: zk_system_t) {
-        _ = audioScratch.withUnsafeMutableBufferPointer { buffer -> Int in
-            guard let base = buffer.baseAddress else { return 0 }
-            return zk_take_audio(system, base, buffer.count)
-        }
-    }
 
     // MARK: - Graphics warm-up (runtimeQueue advances, main queue reveals)
 
