@@ -187,7 +187,21 @@ enum StorageInspector {
 /// Formats a byte count for the settings rows and the save manager.
 enum StorageFormat {
     static func size(_ bytes: UInt64) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+        // ByteCountFormatter renders 0 as "Zero KB", which reads like a bug in
+        // the save manager rows; show a plain 0 KB instead.
+        guard bytes > 0 else { return "0 KB" }
+        return ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+    }
+
+    /// Short relative time for library cards: "2 days ago" / "2天前" within a
+    /// week, then a short date.
+    static func relativeDate(_ date: Date) -> String {
+        if abs(Date().timeIntervalSince(date)) < 7 * 24 * 60 * 60 {
+            let formatter = RelativeDateTimeFormatter()
+            formatter.unitsStyle = .short
+            return formatter.localizedString(for: date, relativeTo: Date())
+        }
+        return Self.date(date)
     }
 
     static func date(_ date: Date?) -> String {

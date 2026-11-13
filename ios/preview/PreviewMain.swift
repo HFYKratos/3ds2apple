@@ -39,6 +39,20 @@ struct PreviewApp: App {
     @StateObject private var saveStates: SaveStateSupport
 
     init() {
+        // Headless screenshot mode: the build VM has no GUI session, so draw the
+        // real views offscreen and exit instead of waiting for a scene.
+        if let directory = ProcessInfo.processInfo.environment["ZKPREVIEW_SHOT_DIR"],
+           !directory.isEmpty {
+            // Let UIApplication finish launching first: the UIWindow variant needs
+            // a live application even though there is no signed-in GUI session.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                let written = SnapshotRenderer.renderAll(
+                    to: URL(fileURLWithPath: directory, isDirectory: true)
+                )
+                print("[ui-shot] wrote \(written.count) file(s)")
+                exit(written.isEmpty ? 1 : 0)
+            }
+        }
         // ROMSession() is inert: it restores the last-played name and builds
         // empty stats, but no console is created and zk_create() is not called.
         let session = ROMSession()

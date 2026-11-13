@@ -178,21 +178,17 @@ struct HomeView: View {
             requestStart(entry)
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                cover(for: entry)
+                cover(for: entry, linked: linked)
                 Text(entry.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
-                    .lineLimit(2)
+                    .lineLimit(2, reservesSpace: true)
                     .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .topLeading)
-                HStack(spacing: 6) {
-                    Text(lastPlayedText(for: entry))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    aotBadge(linked: linked)
-                }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                Text(lastPlayedText(for: entry))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             .padding(10)
             .background(cardBackground)
@@ -242,7 +238,7 @@ struct HomeView: View {
 
     /// Cover placeholder: deterministic gradient keyed by the title id (or the
     /// file name while the header is unknown) plus a controller glyph.
-    private func cover(for entry: GameEntry) -> some View {
+    private func cover(for entry: GameEntry, linked: Bool) -> some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(
                 LinearGradient(
@@ -251,12 +247,16 @@ struct HomeView: View {
                     endPoint: .bottomTrailing
                 )
             )
-            .aspectRatio(4.0 / 3.0, contentMode: .fit)
+            .aspectRatio(16.0 / 9.0, contentMode: .fit)
             .overlay(
                 Image(systemName: "gamecontroller.fill")
-                    .font(.system(size: 30, weight: .semibold))
+                    .font(.system(size: 28, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.9))
             )
+            .overlay(alignment: .topTrailing) {
+                aotBadge(linked: linked)
+                    .padding(6)
+            }
             .accessibilityHidden(true)
     }
 
@@ -278,7 +278,7 @@ struct HomeView: View {
         guard let lastPlayed = entry.lastPlayedAt else {
             return L10n.tr("Never played")
         }
-        return L10n.format("Last played %@", StorageFormat.date(lastPlayed))
+        return L10n.format("Last played %@", StorageFormat.relativeDate(lastPlayed))
     }
 
     private func aotBadge(linked: Bool) -> some View {

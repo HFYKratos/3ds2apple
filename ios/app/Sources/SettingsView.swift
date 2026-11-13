@@ -85,23 +85,29 @@ struct SettingsView: View {
                     Text(aspect.title).tag(aspect)
                 }
             }
-            Toggle("Integer scaling", isOn: persistedBinding(settings, \.integerScale))
-                .disabled(settings.screenAspect == .stretch)
-            Text("Whole-pixel scaling: every 3DS pixel becomes a whole block of screen pixels, so the picture stays sharp.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Picker("3D resolution", selection: persistedBinding(settings, \.renderScale)) {
-                Text("1x").tag(1)
-                Text("2x").tag(2)
-                Text("3x").tag(3)
-                Text("4x").tag(4)
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle("Integer scaling", isOn: persistedBinding(settings, \.integerScale))
+                    .disabled(settings.screenAspect == .stretch)
+                Text("Whole-pixel scaling: every 3DS pixel becomes a whole block of screen pixels, so the picture stays sharp.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .pickerStyle(.segmented)
-            Text("1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("3D resolution")
+                Picker("3D resolution", selection: persistedBinding(settings, \.renderScale)) {
+                    Text("1x").tag(1)
+                    Text("2x").tag(2)
+                    Text("3x").tag(3)
+                    Text("4x").tag(4)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                Text("1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Picker("Orientation", selection: persistedBinding(settings, \.orientation)) {
                 ForEach(OrientationLock.allCases) { lock in
                     Text(lock.title).tag(lock)
@@ -178,12 +184,16 @@ struct SettingsView: View {
 
     private var performanceSection: some View {
         Section {
-            Picker("Fast-forward", selection: persistedBinding(settings, \.playbackSpeed)) {
-                ForEach(PlaybackSpeed.allCases) { speed in
-                    Text(speed.title).tag(speed)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Fast-forward")
+                Picker("Fast-forward", selection: persistedBinding(settings, \.playbackSpeed)) {
+                    ForEach(PlaybackSpeed.allCases) { speed in
+                        Text(speed.title).tag(speed)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
             }
-            .pickerStyle(.segmented)
             if model.playbackSpeedAutoReduced {
                 Text(autoReducedText)
                     .font(.caption)
@@ -359,29 +369,35 @@ struct QuickDisplaySettingsView: View {
                             Text(aspect.title).tag(aspect)
                         }
                     }
-                    Toggle(
-                        "Integer scaling",
-                        isOn: persistedBinding(settings, \.integerScale)
-                    )
-                    .disabled(settings.screenAspect == .stretch)
-                    Text("Whole-pixel scaling: every 3DS pixel becomes a whole block of screen pixels, so the picture stays sharp.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Picker(
-                        "3D resolution",
-                        selection: persistedBinding(settings, \.renderScale)
-                    ) {
-                        Text("1x").tag(1)
-                        Text("2x").tag(2)
-                        Text("3x").tag(3)
-                        Text("4x").tag(4)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle(
+                            "Integer scaling",
+                            isOn: persistedBinding(settings, \.integerScale)
+                        )
+                        .disabled(settings.screenAspect == .stretch)
+                        Text("Whole-pixel scaling: every 3DS pixel becomes a whole block of screen pixels, so the picture stays sharp.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .pickerStyle(.segmented)
-                    Text("1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("3D resolution")
+                        Picker(
+                            "3D resolution",
+                            selection: persistedBinding(settings, \.renderScale)
+                        ) {
+                            Text("1x").tag(1)
+                            Text("2x").tag(2)
+                            Text("3x").tag(3)
+                            Text("4x").tag(4)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        Text("1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Picker(
                         "Orientation",
                         selection: persistedBinding(settings, \.orientation)
