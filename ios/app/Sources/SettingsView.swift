@@ -87,13 +87,21 @@ struct SettingsView: View {
             }
             Toggle("Integer scaling", isOn: persistedBinding(settings, \.integerScale))
                 .disabled(settings.screenAspect == .stretch)
-            Picker("Render resolution", selection: persistedBinding(settings, \.renderScale)) {
+            Text("Whole-pixel scaling: every 3DS pixel becomes a whole block of screen pixels, so the picture stays sharp.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Picker("3D resolution", selection: persistedBinding(settings, \.renderScale)) {
                 Text("1x").tag(1)
                 Text("2x").tag(2)
                 Text("3x").tag(3)
                 Text("4x").tag(4)
             }
             .pickerStyle(.segmented)
+            Text("1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Picker("Orientation", selection: persistedBinding(settings, \.orientation)) {
                 ForEach(OrientationLock.allCases) { lock in
                     Text(lock.title).tag(lock)
@@ -170,26 +178,12 @@ struct SettingsView: View {
 
     private var performanceSection: some View {
         Section {
-            Picker("Frame cap", selection: persistedBinding(settings, \.frameCap)) {
-                ForEach(FrameRateCap.allCases) { cap in
-                    Text(cap.title).tag(cap)
-                }
-            }
-            .pickerStyle(.segmented)
             Picker("Fast-forward", selection: persistedBinding(settings, \.playbackSpeed)) {
                 ForEach(PlaybackSpeed.allCases) { speed in
                     Text(speed.title).tag(speed)
                 }
             }
             .pickerStyle(.segmented)
-            HStack {
-                Text("Running at")
-                Spacer()
-                Text(L10n.speedLabel(model.effectivePlaybackSpeed))
-                    .foregroundColor(.secondary)
-                    .monospacedDigit()
-                    .accessibilityIdentifier("effective-playback-speed")
-            }
             if model.playbackSpeedAutoReduced {
                 Text(autoReducedText)
                     .font(.caption)
@@ -198,8 +192,8 @@ struct SettingsView: View {
             }
             Toggle("System Metal HUD", isOn: persistedBinding(settings, \.systemMetalHUD))
                 .accessibilityIdentifier("settings-system-metal-hud")
-            if let note = systemHUDNote {
-                Text(note)
+            if settings.systemMetalHUD {
+                Text("Restart the app to apply. If it still does not appear, check System Settings.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -212,7 +206,7 @@ struct SettingsView: View {
         } header: {
             Text("Performance")
         } footer: {
-            Text("Fast-forward runs extra console frames per presented frame and mutes audio while it is active.")
+            Text("Fast-forward runs extra console frames per presented frame.")
         }
     }
 
@@ -277,17 +271,6 @@ struct SettingsView: View {
         )
     }
 
-    /// What the System Metal HUD switch does right now. The HUD is read by the
-    /// Metal device at launch, so the switch needs an app restart; the build also
-    /// has to enable it in Info.plist, which is only mentioned when it is missing.
-    private var systemHUDNote: String? {
-        if !buildEnablesMetalHUD {
-            return L10n.tr("This build does not enable the Metal HUD (MetalHudEnabled in Info.plist).")
-        }
-        guard settings.systemMetalHUD else { return nil }
-        return L10n.tr("Restart the app to apply: Metal devices read MTL_HUD_ENABLED at launch. If it still does not appear, turn on Graphics HUD in Settings → Developer on the device.")
-    }
-
     /// What the optional first-load graphics warm-up does.
     private var warmUpStatusText: String {
         if settings.graphicsWarmUpEnabled {
@@ -306,19 +289,6 @@ struct SettingsView: View {
     private var deviceText: String {
         let device = UIDevice.current
         return "\(device.model) · \(device.systemName) \(device.systemVersion)"
-    }
-
-    /// Whether the build's Info.plist enables the system Metal HUD.
-    private var buildEnablesMetalHUD: Bool {
-        guard let raw = Bundle.main.object(forInfoDictionaryKey: "MetalHudEnabled") else {
-            return false
-        }
-        if let value = raw as? Bool { return value }
-        if let value = raw as? NSNumber { return value.boolValue }
-        if let value = raw as? String {
-            return value == "YES" || value == "true" || value == "1"
-        }
-        return false
     }
 
     private func infoRow(_ title: LocalizedStringKey, _ value: String) -> some View {
@@ -394,8 +364,12 @@ struct QuickDisplaySettingsView: View {
                         isOn: persistedBinding(settings, \.integerScale)
                     )
                     .disabled(settings.screenAspect == .stretch)
+                    Text("Whole-pixel scaling: every 3DS pixel becomes a whole block of screen pixels, so the picture stays sharp.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     Picker(
-                        "Render resolution",
+                        "3D resolution",
                         selection: persistedBinding(settings, \.renderScale)
                     ) {
                         Text("1x").tag(1)
@@ -404,6 +378,10 @@ struct QuickDisplaySettingsView: View {
                         Text("4x").tag(4)
                     }
                     .pickerStyle(.segmented)
+                    Text("1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     Picker(
                         "Orientation",
                         selection: persistedBinding(settings, \.orientation)

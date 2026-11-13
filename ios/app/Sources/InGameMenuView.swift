@@ -204,7 +204,7 @@ struct InGameMenuView: View {
                 }
                 .pickerStyle(.segmented)
             }
-            Text("Fast-forward applies when the game resumes and mutes its audio while it is active.")
+            Text("Fast-forward applies when the game resumes.")
                 .font(.caption2)
                 .foregroundColor(.white.opacity(0.55))
                 .fixedSize(horizontal: false, vertical: true)

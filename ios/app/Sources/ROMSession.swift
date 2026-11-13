@@ -1397,10 +1397,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     ///
     /// Fast-forward: at 2×/4× the runtime advances `speed` console frames per
     /// presented frame. The extra frames call `zk_run_frame` without presenting
-    /// or reading the screens, and their audio is drained and discarded: sound
-    /// is muted while fast-forwarding. The final frame is presented and
-    /// published as usual, so input, pause, save states and unload keep working
-    /// at the same serial-queue frame boundaries.
+    /// or reading the screens, but their audio is queued too, so the sound
+    /// speeds up with the game instead of being muted. The final frame is
+    /// presented and published as usual, so input, pause, save states and unload
+    /// keep working at the same serial-queue frame boundaries.
     ///
     /// Returns `false` when the runtime was stopped by an exit/fault (the caller
     /// must not schedule another frame); `true` when the frame completed and the
@@ -1446,14 +1446,11 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
 
         // ZK_FRAME_COMPLETED. Audio first: it does not depend on the display,
         // and in Metal mode a present can wait for a drawable, which must not
-        // delay draining the ring buffer. Fast-forward is silent: the samples
-        // are drained and dropped so they cannot pile up and play later.
+        // delay draining the ring buffer. Fast-forward keeps its audio: every
+        // console frame (including the extra ones) feeds the same ring buffer,
+        // so the sound speeds up with the game instead of being muted.
         let audioStart = FrameClock.now()
-        if speed > 1 {
-            discardAudio(system: system)
-        } else {
-            pumpAudio(system: system)
-        }
+        pumpAudio(system: system)
         timingWindow.record(.audioPump, ticks: FrameClock.now() - audioStart)
 
         var top: CGImage?
@@ -1484,7 +1481,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     }
 
     /// One extra console frame while fast-forwarding: advances the game without
-    /// presenting or reading the screens, and drops the audio it produced.
+    /// presenting or reading the screens; its audio is queued like a normal frame.
     /// runtimeQueue only. Returns false when the runtime stopped.
     private func runFastForwardFrame(system: zk_system_t,
                                      input: InputSnapshot,
@@ -1495,9 +1492,8 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         let result = zk_run_frame(system)
         timingWindow.record(.runFrame, ticks: FrameClock.now() - runStart)
         framesRendered += 1
-        // Drain the samples this frame produced; nothing is enqueued for
-        // playback while fast-forwarding.
-        discardAudio(system: system)
+        // Queue this extra frame's samples as well: fast-forward is audible.
+        pumpAudio(system: system)
         guard result == 0 else {
             timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
             return finishForRunFrameResult(result)

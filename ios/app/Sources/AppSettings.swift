@@ -40,7 +40,7 @@ enum ScreenLayout: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .stacked: return L10n.tr("Stacked (console)")
+        case .stacked: return L10n.tr("Stacked")
         case .sideBySide: return L10n.tr("Side by side")
         case .upperOnly: return L10n.tr("Upper screen only")
         case .lowerOnly: return L10n.tr("Lower screen only")
@@ -84,7 +84,7 @@ enum ScreenAspect: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .fit: return L10n.tr("Fit (native)")
+        case .fit: return L10n.tr("Fit")
         case .fourThree: return L10n.tr("4:3")
         case .stretch: return L10n.tr("Stretch")
         }
@@ -380,9 +380,10 @@ final class AppSettings: ObservableObject {
         }
         haptics = Self.bool(defaults, Keys.haptics, fallback: false)
 
-        frameCap = FrameRateCap(
-            rawValue: defaults.integer(forKey: Keys.frameCap)
-        ) ?? .sixty
+        // The performance page no longer offers a frame cap: the console
+        // timeline runs at its native 60 Hz and Fast-forward is the only
+        // speed control, so an old stored 30 fps value is ignored on purpose.
+        frameCap = .sixty
 
         systemMetalHUD = Self.bool(defaults, Keys.systemMetalHUD, fallback: false)
         graphicsWarmUpEnabled = Self.bool(defaults, Keys.graphicsWarmUpEnabled, fallback: false)
