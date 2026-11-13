@@ -6,7 +6,7 @@
 #   scripts/build-zakuro-ios.sh              # once per Zakuro checkout
 #   scripts/build-recomp-ios.sh <rom> <name> # 3dsrecomp -> librecomp.a
 #   scripts/build-linked-ios-lib.sh <name>   # linked libs in build/ios/<name>/
-#   scripts/build-game-ipa.sh <name>         # this script -> IPA/<name>-AOT.ipa
+#   scripts/build-game-ipa.sh <name>         # this script -> IPA/3ds2apple-<name>-<ver>.ipa
 #
 # The XcodeGen project in ios/app is generated as usual (no ios/app changes are
 # needed); the two static archives are linked by overriding OTHER_LDFLAGS on the
@@ -27,6 +27,13 @@
 # "0004000000055E00n" (over-escaped printf in the first run) is repaired with a
 # warning instead of being written to manifest.txt.
 #
+# The built app also carries GameCatalog.json (the build-time AOT manifest read
+# by ios/app/Sources/GameCatalog.swift): exactly one game entry for the linked
+# title, so the phone only selects and launches code that is already compiled
+# into the app - it never recompiles a ROM on device. The catalog is installed
+# into ios/app/Resources/ before xcodegen, verified inside the built .app, and
+# removed again on exit (also on failure), so the working tree stays clean.
+#
 # The app remains unsigned (CODE_SIGNING_ALLOWED=NO); signing/installing is the
 # user's job on Windows with Sideloadly/AltStore. Nothing is committed: libs,
 # build logs, the IPA and its manifest all live in gitignored directories.
@@ -38,6 +45,8 @@ ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 AOT_LOG_PREFIX="build-game-ipa"
 # shellcheck source=lib/aot-common.sh
 source "${SCRIPT_DIR}/lib/aot-common.sh"
+# shellcheck source=lib/game-catalog.sh
+source "${SCRIPT_DIR}/lib/game-catalog.sh"
 
 CONFIGURATION="Release"
 APP_DIR_ARG="${ROOT}/ios/app"
@@ -48,8 +57,23 @@ BUNDLE_ID_ARG=""
 DISPLAY_NAME_ARG=""
 NAME_ARG=""
 TITLE_ARG=""
+PRODUCT_CODE_ARG=""
+AOT_VERSION_ARG=""
+IPA_VERSION_ARG=""
 CLEAN_PROJECT=0
 VERBOSE=0
+
+# Last-resort version for the IPA file name when neither the built app nor
+# ios/app/project.yml exposes one (simulated/partial environment only; keep in
+# sync with MARKETING_VERSION). A real build derives it from the app.
+DEFAULT_IPA_VERSION="0.1.2"
+PRODUCT_CODE=""
+AOT_VERSION=1
+IPA_VERSION=""
+IPA_NAME=""
+CATALOG_TMP=""
+CATALOG_SUMMARY=""
+CATALOG_IN_APP=""
 
 EXPECTED_RECOMP_SYMBOLS="$AOT_EXPECTED_RECOMP_SYMBOLS"
 
@@ -86,9 +110,18 @@ Options:
   --bundle-id ID     Per-game bundle identifier (default:
                      com.kratos.3ds2apple.<name>); lets the AOT app be
                      installed side by side with the interpreter shell
-  --display-name T   Home-screen name (default: <name>)
+  --display-name T   Home-screen name (default: <name>); also the GameCatalog
+                     displayName entry
+  --product-code C   Product code recorded in GameCatalog.json (e.g.
+                     CTR-P-EKJA). Default: empty (optional metadata).
+  --aot-version N    AOT asset version recorded in GameCatalog.json
+                     (default: 1)
   --out-dir DIR      IPA output dir (default: IPA/, gitignored)
-  --ipa-name NAME    IPA base name without .ipa (default: <name>-AOT)
+  --ipa-name NAME    Explicit IPA base name without .ipa (default:
+                     3ds2apple-<name>-<version>)
+  --ipa-version V    Version used in the default IPA name; defaults to the
+                     app CFBundleShortVersionString (project.yml
+                     MARKETING_VERSION), e.g. 0.1.2
   --clean-project    Delete the generated 3ds2apple.xcodeproj afterwards
                      (default: keep; ios/app/3ds2apple.xcodeproj/ is gitignored)
   --verbose          Stream xcodebuild output to the terminal as well
@@ -101,9 +134,16 @@ Split/incremental builds:
   them and produces the manifest-correct IPA. Only Xcode is needed; cargo and
   the ROM are not (the ROM is still required on the device at runtime).
 
+GameCatalog.json (AOT manifest read by ios/app/Sources/GameCatalog.swift):
+  The build installs ios/app/Resources/GameCatalog.json for the duration of the
+  build: exactly one game entry for the linked title (titleID, displayName,
+  productCode, aot=true, aotVersion). It is bundled into the .app, verified
+  after the build and removed again (also on failure), so the working tree
+  stays clean (.gitignore covers it as a safeguard).
+
 Outputs (all gitignored):
-  IPA/<name>-AOT.ipa                     unsigned AOT IPA
-  build/ios/<name>/manifest.txt          title ID, source, revs, SHA256 manifest
+  IPA/3ds2apple-<name>-<version>.ipa     unsigned AOT IPA
+  build/ios/<name>/manifest.txt          title ID, source, revs, catalog, SHA256
   build/logs/build-game-ipa-<name>-*.log
 
 Exit status: 0 on success, non-zero on failure (the log tail is printed).
@@ -141,7 +181,17 @@ sanitize_bundle_component() {
     | sed -e 's/--*/-/g' -e 's/^-*//' -e 's/-*$//'
 }
 
-trap cleanup_nm_dumps EXIT
+# Build-time GameCatalog.json and temp files are always removed (also on
+# failure), so the working tree stays clean; the catalog is restored if a file
+# existed before the build.
+cleanup_all() {
+  cleanup_nm_dumps
+  if [[ -n "${CATALOG_TMP:-}" && -f "$CATALOG_TMP" ]]; then
+    rm -f -- "$CATALOG_TMP"
+  fi
+  game_catalog_cleanup
+}
+trap cleanup_all EXIT
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -178,6 +228,21 @@ while [[ $# -gt 0 ]]; do
     --display-name)
       [[ $# -ge 2 ]] || die "--display-name requires a value"
       DISPLAY_NAME_ARG="$2"
+      shift 2
+      ;;
+    --product-code)
+      [[ $# -ge 2 ]] || die "--product-code requires a value"
+      PRODUCT_CODE_ARG="$2"
+      shift 2
+      ;;
+    --aot-version)
+      [[ $# -ge 2 ]] || die "--aot-version requires a value"
+      AOT_VERSION_ARG="$2"
+      shift 2
+      ;;
+    --ipa-version)
+      [[ $# -ge 2 ]] || die "--ipa-version requires a value"
+      IPA_VERSION_ARG="$2"
       shift 2
       ;;
     --out-dir)
@@ -260,12 +325,23 @@ DISPLAY_NAME="${DISPLAY_NAME_ARG:-$NAME}"
 case "$DISPLAY_NAME" in
   *$'\n'*|*$'\r'*) die "--display-name must be a single line (no newlines)" ;;
 esac
-IPA_NAME="${IPA_NAME_ARG:-${NAME}-AOT}"
-IPA_NAME="${IPA_NAME%.ipa}"
-[[ -n "$IPA_NAME" ]] || die "--ipa-name must not be empty"
-case "$IPA_NAME" in
-  */*) die "--ipa-name must be a file name, not a path: $IPA_NAME" ;;
+# --- catalog metadata (written to GameCatalog.json) -------------------------
+PRODUCT_CODE="${PRODUCT_CODE_ARG:-}"
+AOT_VERSION="${AOT_VERSION_ARG:-1}"
+case "$AOT_VERSION" in
+  ''|*[!0-9]*) die "--aot-version must be a positive integer (got '$AOT_VERSION')" ;;
 esac
+[[ "$AOT_VERSION" -ge 1 ]] || die "--aot-version must be >= 1 (got $AOT_VERSION)"
+
+# An explicit --ipa-name still wins; otherwise the default is derived after the
+# app is built: 3ds2apple-<name>-<version> (version from the app, see below).
+if [[ -n "$IPA_NAME_ARG" ]]; then
+  IPA_NAME="${IPA_NAME_ARG%.ipa}"
+  [[ -n "$IPA_NAME" ]] || die "--ipa-name must not be empty"
+  case "$IPA_NAME" in
+    */*) die "--ipa-name must be a file name, not a path: $IPA_NAME" ;;
+  esac
+fi
 
 # --- title ID (validated, never "unknown") -----------------------------------
 # The AOT linked library is compiled for one title ID; the manifest must record
@@ -368,6 +444,28 @@ check_game_archive() {
 check_linked_lib "$LIB_ZAKURO"
 check_game_archive "$LIB_GAME"
 
+# --- GameCatalog.json for this title (build artifact, removed afterwards) ---
+# Exactly one game: the title the linked library was built for. The app reads
+# this to know that the bundled AOT code matches the selected ROM. Generated in
+# a temp file first, validated, then installed where XcodeGen bundles it.
+[ -n "$TITLE_ID" ] || die "internal: no title ID resolved before the catalog step"
+CATALOG_TMP="$(mktemp "${TMPDIR:-/tmp}/3ds2apple-catalog.XXXXXX")" \
+  || die "mktemp failed; cannot create the build-time GameCatalog.json"
+if ! game_catalog_write_game "$CATALOG_TMP" "$TITLE_ID" "$DISPLAY_NAME" "$PRODUCT_CODE" "$AOT_VERSION"; then
+  die "could not generate GameCatalog.json: ${GAME_CATALOG_ERROR:-unknown error}"
+fi
+if ! game_catalog_validate "$CATALOG_TMP"; then
+  die "the generated GameCatalog.json failed validation: ${GAME_CATALOG_ERROR:-unknown error}"
+fi
+CATALOG_SUMMARY="$(game_catalog_summary_text)"
+CATALOG_DEST="${APP_DIR}/${GAME_CATALOG_RELATIVE_PATH}"
+if ! game_catalog_install "$CATALOG_TMP" "$CATALOG_DEST"; then
+  die "could not install GameCatalog.json into $CATALOG_DEST: ${GAME_CATALOG_ERROR:-unknown error}"
+fi
+[[ -z "$CATALOG_TMP" ]] || rm -f -- "$CATALOG_TMP"
+log "game catalog: $CATALOG_SUMMARY"
+log "  installed for this build: $CATALOG_DEST (removed afterwards)"
+
 LOG_DIR="${ROOT}/build/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/build-game-ipa-${NAME}-$(date +%Y%m%d-%H%M%S).log"
@@ -383,6 +481,7 @@ log "title id:      $TITLE_ID (source: $TITLE_ID_SOURCE)"
 log "lib dir:       $LIB_DIR"
 log "bundle id:     $BUNDLE_ID"
 log "display name:  $DISPLAY_NAME"
+log "product code:  ${PRODUCT_CODE:-(empty)}"
 log "configuration: $CONFIGURATION"
 log "build log:     $LOG_FILE"
 
@@ -495,6 +594,49 @@ NM_DUMP_UNDEF=""
 $(printf '%s\n' "$UNDEFINED_RECOMP")
        The link must have failed instead; inspect $LOG_FILE"
 
+# --- GameCatalog.json inside the app (S2ARM split) --------------------------
+# The catalog must ship in the bundle; the .app is what the phone installs, so a
+# missing/invalid catalog is fatal here (unlike the shell build, which only warns).
+CATALOG_IN_APP="$(game_catalog_find_in_app "$APP_PATH" || true)"
+[[ -n "$CATALOG_IN_APP" ]] || die "the built app contains no GameCatalog.json.
+       Make sure ios/app/project.yml bundles Resources/ and that xcodegen ran
+       after the catalog was installed (see scripts/AOT_BUILD.md)."
+if ! game_catalog_validate "$CATALOG_IN_APP"; then
+  die "the GameCatalog.json bundled in the app is invalid: $GAME_CATALOG_ERROR"
+fi
+[[ "$GAME_CATALOG_COUNT" -eq 1 ]] \
+  || die "the bundled GameCatalog.json has $GAME_CATALOG_COUNT games; a per-game AOT IPA must contain exactly 1"
+case "$GAME_CATALOG_AOT_LINES" in
+  *"$TITLE_ID"*) ;;
+  *) die "the bundled GameCatalog.json does not list the linked title ID $TITLE_ID:
+       $GAME_CATALOG_AOT_LINES" ;;
+esac
+
+# --- IPA name: 3ds2apple-<game>-<version> -----------------------------------
+# The version is taken from the built app (CFBundleShortVersionString) so it
+# matches SideStore's source.json requirement (version == CFBundleShortVersionString);
+# --ipa-version overrides it, project.yml MARKETING_VERSION is the fallback.
+APP_VERSION=""
+if [[ -x /usr/libexec/PlistBuddy && -f "$APP_PATH/Info.plist" ]]; then
+  APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist" 2>/dev/null || true)"
+fi
+if [[ -z "$APP_VERSION" ]]; then
+  APP_VERSION="$(sed -n 's/^[[:space:]]*MARKETING_VERSION:[[:space:]]*//p' "${APP_DIR}/project.yml" 2>/dev/null | tr -d '"[:space:]' | sed -n '1p')"
+fi
+[[ -n "$APP_VERSION" ]] || APP_VERSION="$DEFAULT_IPA_VERSION"
+IPA_VERSION="${IPA_VERSION_ARG:-$APP_VERSION}"
+case "$IPA_VERSION" in
+  ''|*[!A-Za-z0-9._-]*) die "invalid --ipa-version: '$IPA_VERSION' (letters, digits, '.', '_', '-')" ;;
+esac
+if [[ -n "$APP_VERSION" && "$IPA_VERSION" != "$APP_VERSION" ]]; then
+  warn "--ipa-version $IPA_VERSION differs from the app CFBundleShortVersionString $APP_VERSION (SideStore source.json expects the app version)"
+fi
+if [[ -z "$IPA_NAME" ]]; then
+  IPA_NAME="3ds2apple-${NAME}-${IPA_VERSION}"
+fi
+log "game catalog in app: $(basename "$CATALOG_IN_APP") ($GAME_CATALOG_AOT_LINES)"
+log "IPA name:      ${IPA_NAME}.ipa (version $IPA_VERSION)"
+
 # --- package IPA (delegates to scripts/package-ipa.sh) ----------------------
 [[ -x "${ROOT}/scripts/package-ipa.sh" ]] || die "missing executable: ${ROOT}/scripts/package-ipa.sh"
 mkdir -p "$OUT_DIR"
@@ -518,6 +660,13 @@ MANIFEST="${LIB_DIR}/manifest.txt"
   printf 'title_id_source=%s\n' "$TITLE_ID_SOURCE"
   printf 'bundle_id=%s\n' "$BUNDLE_ID"
   printf 'display_name=%s\n' "$DISPLAY_NAME"
+  printf 'product_code=%s\n' "$PRODUCT_CODE"
+  printf 'aot_version=%s\n' "$AOT_VERSION"
+  printf 'ipa_version=%s\n' "$IPA_VERSION"
+  printf 'game_catalog=%s\n' "$GAME_CATALOG_BUNDLE_NAME"
+  printf 'game_catalog_sha256=%s\n' "$(aot_sha256 "$CATALOG_IN_APP")"
+  printf 'game_catalog_games=%s\n' "$GAME_CATALOG_COUNT"
+  printf 'game_catalog_title_id=%s\n' "$TITLE_ID"
   printf 'configuration=%s\n' "$CONFIGURATION"
   printf 'recomp_rev=%s\n' "${RECOMP_REV:-unknown}"
   printf 'zakuro_rev=%s\n' "${ZAKURO_REV:-unknown}"
@@ -555,7 +704,8 @@ log "  IPA:      $IPA_PATH ($IPA_SIZE, ${IPA_BYTES} bytes)"
 log "  SHA256:   $IPA_SHA"
 log "  manifest: $MANIFEST"
 log "  title:    $TITLE_ID (source: $TITLE_ID_SOURCE)"
-log "  bundle:   $BUNDLE_ID (display name: $DISPLAY_NAME)"
+log "  catalog:  $GAME_CATALOG_BUNDLE_NAME: $GAME_CATALOG_AOT_LINES"
+log "  bundle:   $BUNDLE_ID (display name: $DISPLAY_NAME, product code: ${PRODUCT_CODE:-(empty)})"
 log "install: sideload the unsigned IPA with Sideloadly/AltStore (user's Apple ID)."
 log "on-device checks (idevicesyslog): expect zk_linked_code()==1,"
 log "  zk_linked_program_id()==0x${TITLE_ID}, zk_recompiled()==1 after load;"

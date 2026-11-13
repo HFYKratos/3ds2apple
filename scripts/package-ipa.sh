@@ -5,6 +5,11 @@
 #   Payload/<App>.app
 #   <name>.ipa  (zip archive, no signature)
 #
+# When the app carries GameCatalog.json (the build-time AOT manifest installed by
+# scripts/build-ios-app.sh / scripts/build-game-ipa.sh), it is validated before
+# zipping and the report prints how many games are listed and which have AOT
+# code linked in. A shell build has an empty catalog (0 games).
+#
 # Signing/installing happens later on Windows with Sideloadly / AltStore; this
 # script never touches Apple IDs, certificates or device UDIDs, and it never
 # runs `git add`. Output defaults to IPA/, which is gitignored.
@@ -20,6 +25,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# shellcheck source=lib/game-catalog.sh
+source "${SCRIPT_DIR}/lib/game-catalog.sh"
 
 APP_ARG=""
 NAME_ARG=""
@@ -44,6 +52,10 @@ Options:
 
 Output:
   <out-dir>/<name>.ipa   unsigned IPA; absolute path, SHA256 and size are printed
+
+GameCatalog.json:
+  When the bundle contains GameCatalog.json (AOT manifest), it is validated
+  and the report prints the number of games and the AOT title(s).
 
 The script refuses to write onto a path tracked by git and never commits
 anything. Sign the IPA on Windows with Sideloadly/AltStore.
@@ -116,6 +128,23 @@ case "$APP_PATH" in
 esac
 [[ -f "$APP_PATH/Info.plist" ]] \
   || die "missing Info.plist in $APP_PATH (not a valid .app bundle)"
+
+# --- GameCatalog.json (AOT games shipped in this app) -----------------------
+# Shell builds ship an empty catalog (0 games); per-game AOT builds ship one
+# entry. A malformed catalog would make the app fall back to interpreter mode
+# for every game, so refuse to package it instead of shipping a broken bundle.
+CATALOG_FILE="$(game_catalog_find_in_app "$APP_PATH" || true)"
+CATALOG_REPORT="none (no GameCatalog.json: legacy/interpreter-only build)"
+if [[ -n "$CATALOG_FILE" ]]; then
+  if ! game_catalog_validate "$CATALOG_FILE"; then
+    die "invalid GameCatalog.json in $APP_PATH:
+     $GAME_CATALOG_ERROR"
+  fi
+  CATALOG_REPORT="$(game_catalog_summary_text)"
+  log "GameCatalog: $(basename "$CATALOG_FILE") ($CATALOG_REPORT)"
+else
+  log "GameCatalog: not found (legacy/interpreter-only build)"
+fi
 
 if [[ -z "$NAME_ARG" ]]; then
   NAME_ARG="$(basename "$APP_PATH" .app)"
@@ -267,6 +296,7 @@ fi
 
 printf '\n'
 log "IPA:    $OUT_IPA"
+printf 'CATALOG: %s\n' "$CATALOG_REPORT"
 printf 'SHA256: %s\n' "$SHA256"
 printf 'SIZE:   %s\n' "$SIZE"
 printf 'NOTE:   unsigned IPA — sign with Sideloadly/AltStore on Windows using your own Apple ID.\n'

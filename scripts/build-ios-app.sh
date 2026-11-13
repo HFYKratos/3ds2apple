@@ -15,6 +15,15 @@
 #   scripts/build-ios-app.sh --configuration Debug
 #   scripts/build-ios-app.sh --app-dir ios/app --staticlib build/ios/libzakuro_ios.a
 #   scripts/build-ios-app.sh --clean --verbose --keep-project
+#   scripts/build-ios-app.sh --game-catalog build/catalog/pokemon-y.json
+#
+# GameCatalog.json (the build-time AOT manifest): a plain shell build writes an
+# EMPTY catalog ({"schemaVersion":1,"games":[]}) so every ROM runs in interpreter
+# mode. scripts/build-game-ipa.sh installs its one-game catalog itself; here the
+# optional --game-catalog PATH lets an advanced shell build ship a pre-generated
+# multi-game catalog. The catalog is copied into <app-dir>/Resources/ for the
+# build only and removed (or restored) afterwards, so `git status` stays clean
+# (.gitignore covers it as a safeguard).
 #
 # Relative paths are resolved from the repository root, so the script can be
 # started from any working directory. It is safe to re-run.
@@ -22,6 +31,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# shellcheck source=lib/game-catalog.sh
+source "${SCRIPT_DIR}/lib/game-catalog.sh"
 
 APP_DIR="ios/app"
 STATICLIB="build/ios/libzakuro_ios.a"
@@ -32,6 +44,10 @@ CLEAN=0
 VERBOSE=0
 KEEP_PROJECT=0
 PROJECT_GENERATED=0
+GAME_CATALOG_ARG="${GAME_CATALOG:-}"
+CATALOG_SRC=""
+CATALOG_TMP=""
+CATALOG_SUMMARY=""
 
 usage() {
   cat <<'EOF'
@@ -44,6 +60,10 @@ Options:
   --app-dir DIR        XcodeGen project directory (default: ios/app)
   --staticlib PATH     Zakuro iOS static library, relative to repo root
                        (default: build/ios/libzakuro_ios.a)
+  --game-catalog PATH  GameCatalog.json to bundle for this build (validated
+                       first). Default: write an EMPTY catalog, i.e. no AOT
+                       games / interpreter-only shell. Environment equivalent:
+                       GAME_CATALOG=PATH
   --configuration CFG  xcodebuild configuration (default: Release)
   --project NAME       Generated Xcode project (default: 3ds2apple.xcodeproj)
   --target NAME        Xcode target to build (default: 3ds2apple)
@@ -80,7 +100,12 @@ resolve_path() {
 # Keep the tracked tree clean: the .xcodeproj is an XcodeGen artifact and is not
 # committed. If the repo already gitignores it, leave it in place for debugging;
 # otherwise remove it unless --keep-project was requested.
+GENERATED_PROJECT_CLEANED=0
 cleanup_generated_project() {
+  if [[ "$GENERATED_PROJECT_CLEANED" -eq 1 ]]; then
+    return 0
+  fi
+  GENERATED_PROJECT_CLEANED=1
   if [[ "$PROJECT_GENERATED" -ne 1 ]]; then
     return 0
   fi
@@ -109,9 +134,30 @@ cleanup_generated_project() {
   return 0
 }
 
+# The build-time GameCatalog.json is generated, never committed: a pre-existing
+# file is restored, otherwise ours is removed - also when the build fails.
+BUILD_CATALOG_CLEANED=0
+cleanup_build_catalog() {
+  if [[ "$BUILD_CATALOG_CLEANED" -eq 1 ]]; then
+    return 0
+  fi
+  BUILD_CATALOG_CLEANED=1
+  if [[ -n "${CATALOG_TMP:-}" && -f "$CATALOG_TMP" ]]; then
+    rm -f -- "$CATALOG_TMP"
+  fi
+  game_catalog_cleanup
+}
+
+cleanup_all() {
+  local status=$?
+  cleanup_build_catalog || true
+  cleanup_generated_project || true
+  exit "$status"
+}
+trap cleanup_all EXIT
+
 die() {
   printf 'error: %s\n' "$*" >&2
-  cleanup_generated_project
   exit 1
 }
 
@@ -125,6 +171,11 @@ while [[ $# -gt 0 ]]; do
     --staticlib)
       [[ $# -ge 2 ]] || die "--staticlib requires a value"
       STATICLIB="$2"
+      shift 2
+      ;;
+    --game-catalog)
+      [[ $# -ge 2 ]] || die "--game-catalog requires a value"
+      GAME_CATALOG_ARG="$2"
       shift 2
       ;;
     --configuration)
@@ -202,6 +253,42 @@ APP_DIR_ABS="$(cd "$APP_DIR_ABS" && pwd)"
   || die "static library not found: $STATICLIB_ABS
        Build it first with scripts/build-zakuro-ios.sh, or pass --staticlib <path>."
 [[ -s "$STATICLIB_ABS" ]] || die "static library is empty: $STATICLIB_ABS"
+
+# --- build-time GameCatalog.json --------------------------------------------
+# The app reads GameCatalog.json from its bundle to learn which title IDs have
+# AOT code linked in. A plain shell build ships an EMPTY catalog (everything is
+# interpreter-only); --game-catalog PATH bundles a pre-generated one. The file is
+# installed before xcodegen so it is copied into the .app, then removed (or a
+# pre-existing file restored) when the script exits - including failures.
+CATALOG_DEST="$APP_DIR_ABS/${GAME_CATALOG_RELATIVE_PATH}"
+if [[ -n "$GAME_CATALOG_ARG" ]]; then
+  CATALOG_SRC="$(resolve_path "$GAME_CATALOG_ARG")"
+  [[ -f "$CATALOG_SRC" ]] \
+    || die "game catalog not found: $CATALOG_SRC (pass --game-catalog <GameCatalog.json>)"
+  if ! game_catalog_validate "$CATALOG_SRC"; then
+    die "invalid game catalog: $CATALOG_SRC
+     ${GAME_CATALOG_ERROR}"
+  fi
+  CATALOG_SUMMARY="$(game_catalog_summary_text)"
+  log "game catalog: $CATALOG_SRC ($CATALOG_SUMMARY)"
+else
+  CATALOG_TMP="$(mktemp "${TMPDIR:-/tmp}/3ds2apple-catalog.XXXXXX")" \
+    || die "mktemp failed; cannot create the build-time game catalog"
+  if ! game_catalog_write_empty "$CATALOG_TMP"; then
+    die "could not write the empty game catalog: ${GAME_CATALOG_ERROR:-unknown error}"
+  fi
+  if ! game_catalog_validate "$CATALOG_TMP"; then
+    die "the generated empty catalog failed validation: ${GAME_CATALOG_ERROR:-unknown error}"
+  fi
+  CATALOG_SRC="$CATALOG_TMP"
+  CATALOG_SUMMARY="$(game_catalog_summary_text)"
+  log "game catalog: empty (no --game-catalog; interpreter-only shell)"
+fi
+if ! game_catalog_install "$CATALOG_SRC" "$CATALOG_DEST"; then
+  die "could not install the game catalog: ${GAME_CATALOG_ERROR:-unknown error}"
+fi
+[[ -z "$CATALOG_TMP" ]] || rm -f -- "$CATALOG_TMP"
+log "game catalog installed: $CATALOG_DEST (removed after the build)"
 
 # The project path is relative to the app dir unless it is already absolute.
 case "$PROJECT_FILE" in
@@ -315,6 +402,30 @@ fi
   || die "xcodebuild reported success but no .app was found under $BUILD_ROOT
        (expected $EXPECTED_APP; inspect the log: $LOG_FILE)"
 
+# --- GameCatalog.json bundle check ------------------------------------------
+# The catalog must ship inside the .app. The Swift side falls back to "no AOT
+# games" when it is missing, so this is a warning here; the per-game build
+# (scripts/build-game-ipa.sh) treats a missing catalog as fatal for its title.
+CATALOG_IN_APP="$(game_catalog_find_in_app "$APP_PATH" || true)"
+if [[ -n "$CATALOG_IN_APP" ]]; then
+  if game_catalog_validate "$CATALOG_IN_APP"; then
+    log "game catalog in app: $(basename "$CATALOG_IN_APP") ($(game_catalog_summary_text))"
+  else
+    printf 'warning: bundled GameCatalog.json is invalid: %s\n' "$GAME_CATALOG_ERROR" >&2
+  fi
+else
+  printf 'warning: GameCatalog.json was not copied into %s\n' "$APP_PATH" >&2
+  printf 'warning: the app will mark every game interpreter-only; check that ios/app/project.yml bundles Resources/.\n' >&2
+fi
+
+# --- Metal Performance HUD build gate ---------------------------------------
+# Xcode's generated Info.plist only maps known INFOPLIST_KEY_* build settings,
+# so the documented Metal HUD key is injected after the build.
+if [[ -f "$APP_PATH/Info.plist" ]]; then
+  /usr/libexec/PlistBuddy -c 'Add :MetalHudEnabled bool true' "$APP_PATH/Info.plist" 2>/dev/null \
+    || /usr/libexec/PlistBuddy -c 'Set :MetalHudEnabled true' "$APP_PATH/Info.plist" 2>/dev/null || true
+fi
+
 # --- link sanity check (non-fatal) -------------------------------------------
 # A static library only links the objects the app references: I1 calls
 # zk_screen_width(), so that symbol is the reliable probe for "libzakuro_ios.a
@@ -344,5 +455,6 @@ log "built app: $APP_PATH ($APP_SIZE)"
 log "unsigned (CODE_SIGNING_ALLOWED=NO); sign with Sideloadly/AltStore on Windows."
 log "next: scripts/package-ipa.sh \"$APP_PATH\" <name>"
 
+cleanup_build_catalog
 cleanup_generated_project
 printf '%s\n' "$APP_PATH"

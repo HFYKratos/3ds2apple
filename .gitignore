@@ -78,6 +78,7 @@ ROM/
 # --- Generated Xcode project / build products -------------------------------
 ios/app/3ds2apple.xcodeproj/
 ios/app/build/
+/ios/app/Resources/GameCatalog.json
 
 # --- Local-only internal notes (never publish) ------------------------------
 .internal/

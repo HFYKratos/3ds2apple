@@ -281,6 +281,12 @@ mkdir -p "$app"
   printf '!T _zk_linked_code\n'
 } > "$app/3ds2apple"
 chmod +x "$app/3ds2apple"
+# The real build installs ios/app/Resources/GameCatalog.json before xcodegen and
+# verifies it inside the .app; mimic the Copy Bundle Resources phase so the real
+# build-game-ipa.sh catalog check stays enabled in this simulated run.
+if [[ -f "$PWD/Resources/GameCatalog.json" ]]; then
+  cp "$PWD/Resources/GameCatalog.json" "$app/GameCatalog.json"
+fi
 SH
 
 write_fake fake-3dsrecomp <<'SH'
@@ -410,7 +416,19 @@ run_ok "build-game-ipa.sh (corrupted build-info)" \
   bash "$IPA_SH" pokemon-y --display-name "Pokemon Y"
 MANIFEST="${LIB_DIR}/manifest.txt"
 expect_eq "manifest title_id is clean" '0004000000055E00' "$(info_value "$MANIFEST" title_id)"
-expect_file "IPA packaged" "${REPO}/IPA/pokemon-y-AOT.ipa"
+expect_file "IPA packaged as 3ds2apple-<game>-<version>.ipa" \
+  "${REPO}/IPA/3ds2apple-pokemon-y-0.1.2.ipa"
+expect_file "GameCatalog.json bundled in the app" \
+  "${REPO}/ios/app/build/Release-iphoneos/3ds2apple.app/GameCatalog.json"
+if [[ -e "${REPO}/ios/app/Resources/GameCatalog.json" ]]; then
+  fail "build-time GameCatalog.json removed from the source tree"
+else
+  pass "build-time GameCatalog.json removed from the source tree"
+fi
+expect_contains "catalog summary logged" \
+  'games=1; AOT: Pokemon Y (0004000000055E00)' "$LAST_OUTPUT"
+expect_eq "manifest records the catalog title ID" '0004000000055E00' \
+  "$(info_value "$MANIFEST" game_catalog_title_id)"
 expect_contains "repair warning printed" 'repaired corrupted title ID' "$LAST_OUTPUT"
 expect_eq "manifest bundle_id" 'com.kratos.3ds2apple.pokemon-y' \
   "$(info_value "$MANIFEST" bundle_id)"
@@ -503,7 +521,7 @@ expect_eq "split build-info title_id" '0004000000055E00' \
 run_ok "build-game-ipa.sh from the split libs" bash "$IPA_SH" split-game
 expect_eq "split manifest title_id" '0004000000055E00' \
   "$(info_value "${REPO}/build/ios/split-game/manifest.txt" title_id)"
-expect_file "split IPA packaged" "${REPO}/IPA/split-game-AOT.ipa"
+expect_file "split IPA packaged" "${REPO}/IPA/3ds2apple-split-game-0.1.2.ipa"
 
 # ---------------------------------------------------------------------------
 # 8. fresh port path (prebuilt CLI, derived name, title from src/main.rs)

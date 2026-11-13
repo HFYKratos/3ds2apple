@@ -13,7 +13,9 @@ committed.
 | `package-ipa.sh` | Wrap an unsigned `.app` into `IPA/<name>.ipa` and print its SHA256 |
 | `build-recomp-ios.sh` | Run 3dsrecomp, compile generated C for `arm64-apple-ios` into `libgame.a` |
 | `build-linked-ios-lib.sh` | Build the linked `libzakuro_ios.a` for one title and collect `build/ios/<name>/` |
-| `build-game-ipa.sh` | Build the per-game app with `-lzakuro_ios -lgame` and package the AOT IPA |
+| `build-game-ipa.sh` | Build the per-game app with `-lzakuro_ios -lgame`, add the one-game `GameCatalog.json`, package the AOT IPA |
+| `lib/game-catalog.sh` | Shared `GameCatalog.json` writer/validator/installer used by the build and package scripts |
+| `tests/game-catalog-selfcheck.sh` | Self-check for the catalog helper (runs on Linux and macOS) |
 
 ## Quick start
 
@@ -28,7 +30,25 @@ For a game:
 ```bash
 scripts/build-recomp-ios.sh "path/to/game.cci" <name> --auto-serial
 scripts/build-linked-ios-lib.sh <name>
-scripts/build-game-ipa.sh <name> --display-name "Game name"
+scripts/build-game-ipa.sh <name> \
+  --title-id 0004000000055E00 \
+  --display-name "Game name" \
+  --product-code CTR-P-EKJA
+```
+
+Every AOT IPA carries a build-time `GameCatalog.json` in the app bundle: it
+lists the title IDs whose AOT code is linked in, so the phone only selects and
+launches a game and never recompiles a ROM. The plain shell build
+(`build-ios-app.sh`) ships an empty catalog (interpreter-only) and removes the
+file afterwards, so `git status` stays clean. See
+[../docs/build.md](../docs/build.md#3-two-ipa-tracks-shell-ipa-vs-game-ipa).
+
+Run the script self-checks (no Xcode needed):
+
+```bash
+bash scripts/tests/game-catalog-selfcheck.sh
+bash scripts/tests/aot-selfcheck.sh
+bash scripts/tests/aot-sim-harness.sh
 ```
 
 See [AOT_BUILD.md](AOT_BUILD.md) for options, incremental builds and failure
