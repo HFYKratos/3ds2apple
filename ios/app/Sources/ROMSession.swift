@@ -5,7 +5,7 @@
 //  I2-T1: ROM import + zk_create() wiring.
 //  I2-T2: frame loop (zk_run_frame → zk_read_screen → CGImage) on the same
 //         serial queue.
-//  I3-T6: per-phase timing for the performance HUD and a reusable RGBA /
+//  I3-T6: per-phase timing for diagnostics and a reusable RGBA /
 //         CGDataProvider buffer pool instead of per-frame allocations.
 //  I3-T9: the frame loop is free-running on the runtime serial queue, capped at
 //         the 3DS 60 Hz timeline, instead of being paced by CADisplayLink. The
@@ -27,7 +27,7 @@
 //    copied to a Swift String inside the same queue block;
 //  - per-frame phase timings (mach_absolute_time deltas) are recorded on
 //    runtimeQueue only; the main queue receives one immutable
-//    `FrameTimingSnapshot` and only formats it in the HUD;
+//    `FrameTimingSnapshot` for the diagnostics report;
 //  - free-run frames execute back-to-back on runtimeQueue (I3-T9): a frame
 //    schedules exactly one successor (immediately when it overran its 1/60 s
 //    slot, or with a delay up to that deadline when it finished early). The
@@ -55,7 +55,7 @@ struct ImportedROM {
     let relativePath: String
 }
 
-/// Rolling status of the frame loop, shown in the UI status line + perf HUD.
+/// Rolling status of the frame loop, shown in the UI status line and diagnostics.
 struct FrameStats {
     /// Frames per second over the last sampling window (0 when stopped).
     var fps: Double = 0
@@ -64,7 +64,7 @@ struct FrameStats {
     /// Last `zk_run_frame` result: 0 completed, 1 exited, -1 faulted,
     /// -2 bad handle (see ZK_FRAME_* in ios/ZakuroBridge.h).
     var lastResult: Int32 = 0
-    /// Per-phase durations in milliseconds (I3-T6 performance HUD).
+    /// Per-phase durations in milliseconds (I3-T6; recorded for diagnostics).
     var timing = FrameTimingSnapshot()
 }
 
@@ -195,9 +195,11 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Turn of the screens inside their area (Settings → Display). Applied the
     /// same way as the layout.
     private(set) var screenRotation: ScreenRotation = .upright
-    /// Drawable resolution factor (1 = the arrangement's own pixels, 2 = twice
-    /// them) requested for the presented screens. Applied to the Metal view (and
-    /// its presenter) as soon as it exists, and remembered for the first load.
+    /// Drawable resolution factor (1 = the arrangement's own pixels ... 4 =
+    /// four times them) requested for the presented screens. Applied to the Metal
+    /// view (and its presenter) as soon as it exists, and remembered for the
+    /// first load. The runtime's internal 3D renderer reads the same factor when
+    /// a system loads (see `applyRenderScale`).
     private var requestedRenderScale: CGFloat = 1
     /// Integer scaling for the layer's magnification (nearest-pixel filtering).
     /// The layout box itself is computed by the game view from the setting.
@@ -229,6 +231,13 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         label: "com.kratos.3ds2apple.zakuro-runtime",
         qos: .userInitiated
     )
+    /// Serial queue for library imports: copying a multi-GB ROM must not block
+    /// the main thread, and one import at a time keeps the progress status
+    /// honest.
+    private let importQueue = DispatchQueue(
+        label: "com.kratos.3ds2apple.rom-import",
+        qos: .userInitiated
+    )
     /// Runtime handle; only read/written on `runtimeQueue` (except deinit).
     private var system: zk_system_t?
     private let fileManager = FileManager.default
@@ -242,8 +251,6 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private let audioOutput = AudioOutput()
     /// Scratch buffer for zk_take_audio; runtimeQueue only. 16384 stereo frames.
     private var audioScratch = [Int16](repeating: 0, count: 16384 * 2)
-
-    private static let lastROMPathKey = "I2.lastROMRelativePath"
 
     // MARK: Frame-loop state
 
@@ -288,9 +295,11 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private var warmUpRun: GraphicsWarmUpRun?
 
     init() {
-        if let relativePath = UserDefaults.standard.string(forKey: Self.lastROMPathKey) {
-            let name = URL(fileURLWithPath: relativePath).lastPathComponent
-            lastROM = ImportedROM(name: name, relativePath: relativePath)
+        // The library is the source of truth for "last game": restore its most
+        // recent entry so the diagnostics line and loadLastROM have context
+        // before the user taps a card.
+        if let entry = GameLibrary.shared.entries.first {
+            lastROM = ImportedROM(name: entry.fileName, relativePath: entry.relativePath)
         }
     }
 
@@ -327,54 +336,95 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
 
     // MARK: - Commands (main queue)
 
-    /// Copies `url` picked in Files into `Documents/roms/` (reusing an existing
-    /// import of the same name) and starts `zk_create`.
+    /// Copies the picked file into Documents/roms and adds it to the game
+    /// library. Nothing is loaded: tapping the card starts it later.
     func importROM(from url: URL) {
-        let name = url.lastPathComponent
-        guard Self.isSupportedROM(name) else {
-            setPhase(.failed(message: L10n.format("Unsupported file “%@”. Choose a decrypted .3ds or .cci ROM.", name)))
+        importROMs(from: [url])
+    }
+
+    /// Imports picked ROM files into the library, one at a time on a private
+    /// queue so several multi-GB copies never run at once and the main thread
+    /// stays responsive. `phase` reports the file being copied; failures are
+    /// collected into one readable message.
+    func importROMs(from urls: [URL]) {
+        guard !urls.isEmpty, !isImporting else { return }
+        let names = urls.map { $0.lastPathComponent }
+        if let unsupported = names.first(where: { !GameLibrary.isSupportedROM($0) }) {
+            setPhase(.failed(message: L10n.format(
+                "Unsupported file “%@”. Choose a decrypted .3ds, .cci or .cia ROM.",
+                unsupported
+            )))
             return
         }
-        // Stop ticking/audio before the current runtime is replaced.
-        stopFrameLoop()
-        stopAudio()
-        inputState.clearAll()
-        isPaused = false
-        warmUp = GraphicsWarmUpStatus()
-        setPhase(.importing(name: name))
-        runtimeQueue.async { [weak self] in
-            guard let self else { return }
-            switch self.prepareROM(from: url) {
-            case .success(let rom):
-                self.beginLoad(rom)
-            case .failure(let failure):
-                self.publishFailure(L10n.format("Could not import “%@”: %@", name, failure.message))
+        setPhase(.importing(name: names[0]))
+        importQueue.async { [weak self] in
+            var failures: [String] = []
+            for (index, url) in urls.enumerated() {
+                let name = names[index]
+                DispatchQueue.main.async { [weak self] in
+                    self?.setPhase(.importing(name: name))
+                }
+                do {
+                    let entry = try GameLibrary.makeEntry(importing: url)
+                    DispatchQueue.main.async {
+                        GameLibrary.shared.add(entry)
+                    }
+                } catch {
+                    let reason = error.localizedDescription
+                    failures.append(L10n.format("“%@”: %@", name, reason))
+                    AppLog.log("[3ds2apple] ROM import failed for %@: %@", name, reason)
+                }
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if failures.isEmpty {
+                    self.setPhase(.idle)
+                } else {
+                    self.setPhase(.failed(message: failures.joined(separator: "\n")))
+                }
             }
         }
     }
 
-    /// Loads the last successfully imported ROM from Documents again.
-    func loadLastROM() {
-        guard let rom = lastROM else {
-            setPhase(.failed(message: L10n.tr("No ROM has been imported yet. Tap “Import ROM…” first.")))
-            return
-        }
-        let url = documentsDirectory.appendingPathComponent(rom.relativePath)
+    /// Whether an import is running (the home page disables import and play).
+    var isImporting: Bool {
+        if case .importing = phase { return true }
+        return false
+    }
+
+    /// Starts a game from the library: marks it played and loads its ROM. The
+    /// runtime path (beginLoad then startRuntime) is unchanged.
+    func start(_ entry: GameEntry) {
+        let url = GameLibrary.fileURL(for: entry)
         guard fileManager.fileExists(atPath: url.path) else {
-            clearLastROM()
-            setPhase(.failed(message: L10n.format("“%@” is no longer in this app's Documents folder. Import it again.", rom.name)))
+            setPhase(.failed(message: L10n.format(
+                "“%@” is no longer in this app's Documents folder. Import it again.",
+                entry.title
+            )))
             return
         }
+        GameLibrary.shared.markPlayed(id: entry.id)
+        lastROM = ImportedROM(name: entry.fileName, relativePath: entry.relativePath)
         stopFrameLoop()
         stopAudio()
         inputState.clearAll()
         isPaused = false
         warmUp = GraphicsWarmUpStatus()
-        setPhase(.starting(name: rom.name))
+        setPhase(.starting(name: entry.fileName))
         runtimeQueue.async { [weak self] in
             guard let self else { return }
-            self.beginLoad(rom)
+            self.beginLoad(ImportedROM(name: entry.fileName, relativePath: entry.relativePath))
         }
+    }
+
+    /// Loads the most recently played game in the library.
+    func loadLastROM() {
+        guard let entry = GameLibrary.shared.mostRecentlyPlayed
+            ?? GameLibrary.shared.entries.first else {
+            setPhase(.failed(message: L10n.tr("No games in your library yet. Import a ROM first.")))
+            return
+        }
+        start(entry)
     }
 
     /// Releases the runtime handle and returns to the "no ROM loaded" state.
@@ -578,7 +628,15 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// dictionary can only show/hide a HUD the build (or the device's Developer
     /// settings) enables.
     var buildEnablesSystemMetalHUD: Bool {
-        Bundle.main.object(forInfoDictionaryKey: "MetalHudEnabled") as? Bool ?? false
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: "MetalHudEnabled") else {
+            return false
+        }
+        if let value = raw as? Bool { return value }
+        if let value = raw as? NSNumber { return value.boolValue }
+        if let value = raw as? String {
+            return value == "YES" || value == "true" || value == "1"
+        }
+        return false
     }
 
     // MARK: - Graphics warm-up (main queue sets, runtimeQueue reads)
@@ -594,14 +652,28 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Whether the optional graphics warm-up is on, for diagnostics.
     var graphicsWarmUpEnabled: Bool { graphicsWarmUpSetting.current == 1 }
 
-    /// Drawable resolution factor for the presented screens (1 or 2). The
-    /// swapchain is resized on the runtime queue by the Metal view's size
-    /// callback.
+    /// Render resolution factor (1...4). The Metal drawable and the presenter
+    /// geometry use the new factor at once; the runtime's internal 3D render
+    /// scale is process-wide and only read when a system loads, so a game that is
+    /// already loaded keeps its internal resolution until it is reloaded or
+    /// restarted (see zk_set_render_scale in ios/ZakuroBridge.h).
     func applyRenderScale(_ scale: CGFloat) {
-        let factor: CGFloat = scale >= 2 ? 2 : 1
-        requestedRenderScale = factor
+        let factor = min(max(Int(scale.rounded()), 1), 4)
+        requestedRenderScale = CGFloat(factor)
+        // The value is read while a system loads, and loads run on the runtime
+        // queue: queue the write there so it can never race a load.
+        runtimeQueue.async {
+            let result = zk_set_render_scale(UInt32(factor))
+            if result != 0 {
+                AppLog.log("[3ds2apple] zk_set_render_scale(%d) failed: %@",
+                      factor, Self.currentRuntimeError())
+            }
+        }
         applyPresentedGeometry()
-        AppLog.log("[3ds2apple] render scale: %.0fx", factor)
+        AppLog.log(
+            "[3ds2apple] render scale: %dx · drawable resized now · internal 3D renderer applies on the next load",
+            factor
+        )
     }
 
     /// Pushes the layout, rotation, render scale and integer-scaling choice into
@@ -1068,7 +1140,6 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.lastROM = rom
-            UserDefaults.standard.set(rom.relativePath, forKey: Self.lastROMPathKey)
             self.inputState.clearAll()
             self.clearScreens()
             self.aotStatus = aot
@@ -1641,8 +1712,8 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             snapshot.timing = timingWindow.publish()
             stats = snapshot
 
-            // One `perf:` line every ~2 s for idevicesyslog (the HUD itself
-            // refreshes every 0.5 s).
+            // One `perf:` line every ~2 s for idevicesyslog; the diagnostics
+            // report carries the same numbers.
             if FrameClock.milliseconds(now - lastPerfLogTicks) >= 2000 {
                 lastPerfLogTicks = now
                 logPerfLine(snapshot)
@@ -1818,85 +1889,13 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         }
     }
 
-    // MARK: - ROM storage (runtimeQueue only)
+    // MARK: - ROM storage
 
-    private struct ROMImportFailure: Error {
-        let message: String
-    }
-
-    /// Copies the picked file into `Documents/roms/` and returns its relative
-    /// path. An existing file with the same name is reused.
-    private func prepareROM(from url: URL) -> Result<ImportedROM, ROMImportFailure> {
-        let romsDirectory = documentsDirectory.appendingPathComponent("roms", isDirectory: true)
-        do {
-            try fileManager.createDirectory(at: romsDirectory, withIntermediateDirectories: true)
-        } catch {
-            return .failure(ROMImportFailure(
-                message: L10n.format("Could not create Documents/roms: %@", error.localizedDescription)
-            ))
-        }
-
-        let name = url.lastPathComponent
-        let destination = romsDirectory.appendingPathComponent(name)
-        if fileManager.fileExists(atPath: destination.path) {
-            AppLog.log("[3ds2apple] reusing imported ROM: %@", destination.path)
-            return .success(ImportedROM(name: name, relativePath: relativePath(of: destination)))
-        }
-
-        // Files picked in Files/iCloud Drive are security-scoped.
-        let scopedAccess = url.startAccessingSecurityScopedResource()
-        defer {
-            if scopedAccess { url.stopAccessingSecurityScopedResource() }
-        }
-
-        // Copy through a temporary file so an interrupted import cannot leave a
-        // truncated ROM behind under the final name.
-        let temporary = romsDirectory.appendingPathComponent(".incoming-\(UUID().uuidString).tmp")
-        do {
-            try fileManager.copyItem(at: url, to: temporary)
-        } catch {
-            try? fileManager.removeItem(at: temporary)
-            return .failure(ROMImportFailure(
-                message: L10n.format("Could not read the selected file: %@", error.localizedDescription)
-            ))
-        }
-        do {
-            try fileManager.moveItem(at: temporary, to: destination)
-        } catch {
-            try? fileManager.removeItem(at: temporary)
-            // A concurrent import of the same file may have won the race.
-            if fileManager.fileExists(atPath: destination.path) {
-                return .success(ImportedROM(name: name, relativePath: relativePath(of: destination)))
-            }
-            return .failure(ROMImportFailure(
-                message: L10n.format("Could not store the ROM in Documents: %@", error.localizedDescription)
-            ))
-        }
-
-        AppLog.log("[3ds2apple] imported ROM: %@", destination.path)
-        return .success(ImportedROM(name: name, relativePath: relativePath(of: destination)))
-    }
-
-    /// Path relative to the app's Documents directory (persisted across
-    /// launches; absolute container paths are not stable).
-    private func relativePath(of url: URL) -> String {
-        let documentsPath = documentsDirectory.standardizedFileURL.path
-        let path = url.standardizedFileURL.path
-        if path.hasPrefix(documentsPath + "/") {
-            return String(path.dropFirst(documentsPath.count + 1))
-        }
-        return url.lastPathComponent
-    }
-
+    /// The app's Documents folder: the library keeps ROMs under roms/, the
+    /// runtime writes its battery save data under data/.
     private var documentsDirectory: URL {
         fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-    }
-
-    /// .3ds / .cci have no registered UTTypes on iOS, so the picker offers
-    /// public.data and we validate the extension ourselves.
-    private static func isSupportedROM(_ fileName: String) -> Bool {
-        ["3ds", "cci"].contains((fileName as NSString).pathExtension.lowercased())
     }
 
     // MARK: - State (main queue)
@@ -1914,11 +1913,6 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private func publishFailure(_ message: String) {
         AppLog.log("[3ds2apple] ROM load failed: %@", message)
         setPhase(.failed(message: message))
-    }
-
-    private func clearLastROM() {
-        UserDefaults.standard.removeObject(forKey: Self.lastROMPathKey)
-        lastROM = nil
     }
 }
 

@@ -67,6 +67,7 @@ struct SaveManagerView: View {
             saveStateSection
             archiveMessagesSection
         }
+        .listStyle(.insetGrouped)
         .navigationTitle("Save Manager")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -140,7 +141,7 @@ struct SaveManagerView: View {
         } header: {
             Text("Summary")
         } footer: {
-            Text("Battery saves are written by the game runtime into Documents/data/<game>. Instant save slots are stored in Documents/states/<game>. Both stay on this device.")
+            Text("Battery saves are written by the game; instant slots are snapshots of the whole console. Everything stays on this device.")
         }
     }
 
@@ -160,13 +161,9 @@ struct SaveManagerView: View {
     private var batterySaveSection: some View {
         Section {
             if gameName == nil {
-                Text("Import a game first: battery saves are listed per game.")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
+                emptyHint("Import a game first: battery saves are listed per game.")
             } else if files.isEmpty {
-                Text("No battery save data yet. Save from the game's own menu and the files appear here.")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
+                emptyHint("No battery save data yet. Save from the game's own menu and the files appear here.")
             } else {
                 ForEach(files) { file in
                     batterySaveRow(file)
@@ -176,12 +173,20 @@ struct SaveManagerView: View {
         } header: {
             Text("Battery saves")
         } footer: {
-            Text("A backup is a ZIP archive of the files above. Importing one merges its files back into this game's save-data folder.")
+            Text("A backup is a ZIP archive of the files above; importing one merges its files back.")
         }
     }
 
+    private func emptyHint(_ text: LocalizedStringKey) -> some View {
+        Text(text)
+            .font(.footnote)
+            .foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.vertical, 2)
+    }
+
     private func batterySaveRow(_ file: BatterySaveFile) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(file.name)
                 .font(.subheadline)
                 .lineLimit(1)
@@ -239,6 +244,7 @@ struct SaveManagerView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .padding(.vertical, 4)
     }
 
     // MARK: - Save states
@@ -258,7 +264,7 @@ struct SaveManagerView: View {
                     .foregroundColor(.secondary)
             }
         } footer: {
-            Text("A save state is a snapshot of the whole console, taken between frames. Loading one restores that point, drops the audio buffered before it and continues the same game session.")
+            Text("Loading a state restores that point and continues the same game session.")
         }
     }
 

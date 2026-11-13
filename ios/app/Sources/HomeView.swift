@@ -2,8 +2,16 @@
 //  HomeView.swift
 //  3ds2apple
 //
-//  Landing page: the current game card with Play / Import actions, and the
-//  entry points to Settings, the Save Manager, diagnostics export and About.
+//  Landing page: the game library, one import action and a small toolbar for
+//  settings/tools. The library is a grid of cards, one per imported ROM: a
+//  cover placeholder tinted from the title id, the title, when it was last
+//  played and whether this build links AOT code for it.
+//
+//  Importing only copies a ROM into the app and adds it to the library; tapping
+//  a card starts that game. A game without linked AOT code is started after one
+//  confirmation, because it runs in the interpreter.
+//
+//  No developer telemetry on this screen.
 //
 
 import Foundation
@@ -20,11 +28,14 @@ private enum HomeRoute: Hashable {
 struct HomeView: View {
     @ObservedObject var model: ROMSession
     @ObservedObject var settings: AppSettings
+    @ObservedObject var library: GameLibrary
+
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @State private var sheet: HomeSheet?
+    @State private var alert: HomeAlert?
 
-    /// One sheet slot for the two sheets the home page can present (the system
-    /// Files picker and the diagnostics share sheet).
+    /// One sheet slot for the pages the home page can present.
     private enum HomeSheet: Identifiable {
         case filesPicker
         case diagnostics(URL)
@@ -37,27 +48,36 @@ struct HomeView: View {
         }
     }
 
-    private var versionLabel: String {
-        let info = Bundle.main.infoDictionary ?? [:]
-        let version = info["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info["CFBundleVersion"] as? String ?? "?"
-        return "v\(version) (\(build))"
+    /// One confirmation/error alert; a single alert slot keeps the destructive
+    /// delete and the interpreter warning from overwriting each other.
+    private enum HomeAlert: Identifiable {
+        case interpreter(GameEntry)
+        case delete(GameEntry)
+        case error(String)
+
+        var id: String {
+            switch self {
+            case .interpreter(let entry): return "interpreter-\(entry.id.uuidString)"
+            case .delete(let entry): return "delete-\(entry.id.uuidString)"
+            case .error(let message): return "error-\(message.hashValue)"
+            }
+        }
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 24) {
                     header
-                    gameCard
-                    quickActions
+                    librarySection
+                    tools
                     footer
                 }
                 .padding(20)
                 .frame(maxWidth: 760)
                 .frame(maxWidth: .infinity)
             }
-            .background(Color(uiColor: .systemGroupedBackground))
+            .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: HomeRoute.self) { route in
                 switch route {
@@ -73,302 +93,377 @@ struct HomeView: View {
         .sheet(item: $sheet) { sheet in
             switch sheet {
             case .filesPicker:
-                ROMDocumentPicker { url in
+                ROMDocumentPicker { urls in
                     self.sheet = nil
-                    if let url {
-                        model.importROM(from: url)
-                    }
+                    model.importROMs(from: urls)
                 }
             case .diagnostics(let url):
                 ShareSheet(items: [url])
             }
+        }
+        .alert(item: $alert) { alert in
+            alertView(for: alert)
         }
     }
 
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text("3ds2apple")
-                    .font(.system(size: 38, weight: .bold, design: .rounded))
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
                     .accessibilityIdentifier("app-title")
-                Spacer(minLength: 8)
-                Text(versionLabel)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .monospacedDigit()
+                Text("Nintendo 3DS, natively.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
-            Text("Nintendo 3DS, natively on iPhone and iPad")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+            Spacer(minLength: 8)
+            NavigationLink(value: HomeRoute.settings) {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 42, height: 42)
+                    .background(.background, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Settings")
+            .accessibilityIdentifier("settings-link")
         }
     }
 
-    // MARK: - Current game
+    // MARK: - Library
 
-    private var gameCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 14) {
-                coverPlaceholder
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(gameTitle)
-                        .font(.title3.weight(.semibold))
-                        .lineLimit(2)
-                        .accessibilityIdentifier("game-title")
-                    Text(gameSubtitle)
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                        .lineLimit(3)
+    private var librarySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Library")
+                    .font(.title3.weight(.semibold))
+                Spacer()
+                Button {
+                    sheet = .filesPicker
+                } label: {
+                    Label("Import", systemImage: "plus")
+                        .font(.subheadline.weight(.medium))
                 }
-                Spacer(minLength: 0)
+                .buttonStyle(.plain)
+                .disabled(isBusy)
+                .accessibilityIdentifier("import-rom")
             }
-            phaseDetail
-            gameActions
+
+            if library.entries.isEmpty {
+                emptyLibrary
+            } else {
+                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 14) {
+                    ForEach(library.entries) { entry in
+                        gameCard(entry)
+                    }
+                }
+            }
+
+            phaseStatus
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Two columns on an iPhone, three on an iPad: every card keeps a readable
+    /// width without the grid turning into a wall of tiny covers.
+    private var gridColumns: [GridItem] {
+        let count = horizontalSizeClass == .regular ? 3 : 2
+        return Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: count)
+    }
+
+    private func gameCard(_ entry: GameEntry) -> some View {
+        let linked = GameCatalog.bundled.isAOTPlayable(titleID: entry.titleID)
+        return Button {
+            requestStart(entry)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                cover(for: entry)
+                Text(entry.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .topLeading)
+                HStack(spacing: 6) {
+                    Text(lastPlayedText(for: entry))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    aotBadge(linked: linked)
+                }
+            }
+            .padding(10)
+            .background(cardBackground)
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+        .accessibilityIdentifier("game-card")
+        .contextMenu {
+            Button(role: .destructive) {
+                alert = .delete(entry)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+
+    private var emptyLibrary: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "square.grid.2x2.fill")
+                .font(.system(size: 38, weight: .regular))
+                .foregroundStyle(.secondary)
+            Text("No games yet")
+                .font(.headline)
+            Text("Import one or more decrypted ROMs (.3ds, .cci or .cia) from the Files app. They are copied into this app and stay on the device.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                sheet = .filesPicker
+            } label: {
+                Label("Import game", systemImage: "square.and.arrow.down")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(isBusy)
+            .accessibilityIdentifier("import-rom")
+        }
+        .padding(26)
+        .frame(maxWidth: .infinity)
         .background(cardBackground)
-        .accessibilityIdentifier("rom-card")
     }
 
-    private var gameTitle: String {
-        model.lastROM?.name ?? L10n.tr("No game imported")
-    }
+    // MARK: - Card contents
 
-    private var gameSubtitle: String {
-        if let rom = model.lastROM {
-            return L10n.format("Imported game · %@", rom.relativePath)
-        }
-        return L10n.tr("Import a decrypted .3ds or .cci from the Files app. The file is copied into this app's Documents folder and stays on the device.")
-    }
-
-    private var coverPlaceholder: some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
+    /// Cover placeholder: deterministic gradient keyed by the title id (or the
+    /// file name while the header is unknown) plus a controller glyph.
+    private func cover(for entry: GameEntry) -> some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(
                 LinearGradient(
-                    colors: [Color.accentColor.opacity(0.9), Color(uiColor: .systemIndigo)],
+                    colors: coverColors(for: entry),
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
             )
-            .frame(width: 64, height: 78)
+            .aspectRatio(4.0 / 3.0, contentMode: .fit)
             .overlay(
                 Image(systemName: "gamecontroller.fill")
-                    .font(.system(size: 26, weight: .semibold))
-                    .foregroundColor(.white)
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
             )
             .accessibilityHidden(true)
     }
 
+    private func coverColors(for entry: GameEntry) -> [Color] {
+        let seed = entry.titleID ?? entry.fileName
+        var hash: UInt64 = 14695981039346656037
+        for byte in seed.utf8 {
+            hash = (hash ^ UInt64(byte)) &* 1099511628211
+        }
+        let hue = Double(hash % 360) / 360.0
+        let secondHue = (hue + 0.12).truncatingRemainder(dividingBy: 1)
+        return [
+            Color(hue: hue, saturation: 0.55, brightness: 0.85),
+            Color(hue: secondHue, saturation: 0.75, brightness: 0.45),
+        ]
+    }
+
+    private func lastPlayedText(for entry: GameEntry) -> String {
+        guard let lastPlayed = entry.lastPlayedAt else {
+            return L10n.tr("Never played")
+        }
+        return L10n.format("Last played %@", StorageFormat.date(lastPlayed))
+    }
+
+    private func aotBadge(linked: Bool) -> some View {
+        Text(L10n.tr(linked ? "AOT" : "Interpreter"))
+            .font(.system(size: 9, weight: .semibold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .foregroundStyle(linked ? Color.green : Color.secondary)
+            .background(
+                Capsule().fill(linked ? Color.green.opacity(0.15) : Color.secondary.opacity(0.12))
+            )
+            .accessibilityLabel(L10n.tr(linked ? "AOT code linked" : "Interpreter only"))
+    }
+
+    // MARK: - Status
+
     @ViewBuilder
-    private var phaseDetail: some View {
+    private var phaseStatus: some View {
         switch model.phase {
-        case .idle:
-            Text(model.lastROM == nil
-                 ? L10n.tr("No game imported yet.")
-                 : L10n.tr("Ready to load the imported game."))
-                .font(.footnote)
-                .foregroundColor(.secondary)
         case .importing(let name):
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 ProgressView()
                 Text(L10n.format("Importing %@…", name))
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
-        case .starting(let name):
-            HStack(spacing: 8) {
-                ProgressView()
-                Text(L10n.format("Starting %@…", name))
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-            }
-        case .preparing(let name):
-            Text(L10n.format("Preparing graphics for %@…", name))
-                .font(.footnote)
-                .foregroundColor(.secondary)
-        case .loaded(let name):
-            Label(L10n.format("Loaded: %@", name), systemImage: "checkmark.circle.fill")
-                .font(.footnote)
-                .foregroundColor(.green)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(cardBackground)
+            .accessibilityIdentifier("import-status")
         case .failed(let message):
-            VStack(alignment: .leading, spacing: 4) {
-                Label("Could not load the game", systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundColor(.red)
-                    .accessibilityIdentifier("rom-error")
-                Text(message)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .textSelection(.enabled)
-            }
+            notice(
+                icon: "exclamationmark.triangle.fill",
+                tint: .red,
+                title: "Something went wrong",
+                message: message
+            )
+            .accessibilityIdentifier("rom-error")
         case .finished(let message):
-            VStack(alignment: .leading, spacing: 4) {
-                Label("Runtime stopped", systemImage: "stop.circle")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundColor(.secondary)
-                    .accessibilityIdentifier("runtime-finished")
-                Text(message)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+            notice(
+                icon: "stop.circle",
+                tint: .secondary,
+                title: "Runtime stopped",
+                message: message
+            )
+            .accessibilityIdentifier("runtime-finished")
+        case .idle, .starting, .preparing, .loaded:
+            EmptyView()
         }
     }
 
-    @ViewBuilder
-    private var gameActions: some View {
-        if model.lastROM != nil {
-            Button {
-                model.loadLastROM()
-            } label: {
-                Label("Play", systemImage: "play.fill")
-                    .frame(maxWidth: .infinity)
+    private func notice(
+        icon: String,
+        tint: Color,
+        title: LocalizedStringKey,
+        message: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                Text(title)
+                    .font(.caption.weight(.semibold))
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(isBusy)
-            .accessibilityIdentifier("load-last-rom")
-
-            Button {
-                sheet = .filesPicker
-            } label: {
-                Label("Import / Change ROM…", systemImage: "square.and.arrow.down")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(isBusy)
-            .accessibilityIdentifier("import-rom")
-        } else {
-            Button {
-                sheet = .filesPicker
-            } label: {
-                Label("Import ROM…", systemImage: "square.and.arrow.down")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(isBusy)
-            .accessibilityIdentifier("import-rom")
-        }
-
-        if isShowingNotice {
+            .foregroundStyle(tint)
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
             Button("Dismiss") {
                 model.dismissNotice()
             }
-            .buttonStyle(.borderless)
-            .font(.footnote)
+            .font(.caption.weight(.medium))
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+    }
+
+    // MARK: - Actions
+
+    private func requestStart(_ entry: GameEntry) {
+        if GameCatalog.bundled.isAOTPlayable(titleID: entry.titleID) {
+            model.start(entry)
+        } else {
+            alert = .interpreter(entry)
         }
     }
 
-    private var isBusy: Bool {
-        if case .importing = model.phase { return true }
-        return false
+    private func delete(_ entry: GameEntry) {
+        do {
+            try library.remove(id: entry.id)
+        } catch {
+            alert = .error(error.localizedDescription)
+        }
     }
 
-    private var isShowingNotice: Bool {
-        if case .failed = model.phase { return true }
-        if case .finished = model.phase { return true }
-        return false
+    private func alertView(for alert: HomeAlert) -> Alert {
+        switch alert {
+        case .interpreter(let entry):
+            return Alert(
+                title: Text("Run without AOT code?"),
+                message: Text("This game has no linked AOT code in this build. It will run in the interpreter and may be slow."),
+                primaryButton: .default(Text("Start Anyway"), action: {
+                    model.start(entry)
+                }),
+                secondaryButton: .cancel()
+            )
+        case .delete(let entry):
+            return Alert(
+                title: Text(L10n.format("Delete “%@”?", entry.title)),
+                message: Text("The imported ROM is removed from this app. Save data and save states stay on the device."),
+                primaryButton: .destructive(Text("Delete"), action: {
+                    delete(entry)
+                }),
+                secondaryButton: .cancel()
+            )
+        case .error(let message):
+            return Alert(
+                title: Text("Could not delete the game"),
+                message: Text(message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+    }
+
+    private func exportDiagnostics() {
+        if let url = DiagnosticsExporter.write(model: model, settings: settings) {
+            sheet = .diagnostics(url)
+        }
     }
 
     // MARK: - Tools
 
-    private var quickActions: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Tools")
-                .font(.headline)
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 12),
-                    GridItem(.flexible(), spacing: 12)
-                ],
-                spacing: 12
-            ) {
-                NavigationLink(value: HomeRoute.settings) {
-                    actionTile(
-                        title: "Settings",
-                        systemImage: "gearshape.fill",
-                        detail: "Display, audio, controls, performance, storage",
-                        tint: .blue
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("settings-link")
-
-                NavigationLink(value: HomeRoute.saveManager) {
-                    actionTile(
-                        title: "Save Manager",
-                        systemImage: "externaldrive.fill",
-                        detail: "Battery saves and instant save slots",
-                        tint: .green
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("save-manager-link")
-
-                Button {
-                    exportDiagnostics()
-                } label: {
-                    actionTile(
-                        title: "Diagnostics",
-                        systemImage: "square.and.arrow.up",
-                        detail: "Export a report and the session log",
-                        tint: .orange
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("export-diagnostics")
-
-                NavigationLink(value: HomeRoute.about) {
-                    actionTile(
-                        title: "About",
-                        systemImage: "info.circle.fill",
-                        detail: "Version, runtime and acknowledgements",
-                        tint: .purple
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("about-link")
+    private var tools: some View {
+        HStack(spacing: 10) {
+            NavigationLink(value: HomeRoute.saveManager) {
+                toolButton(title: "Saves", systemImage: "externaldrive.fill")
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("save-manager-link")
+
+            Button {
+                exportDiagnostics()
+            } label: {
+                toolButton(title: "Diagnostics", systemImage: "square.and.arrow.up")
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("export-diagnostics")
+
+            NavigationLink(value: HomeRoute.about) {
+                toolButton(title: "About", systemImage: "info.circle.fill")
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("about-link")
         }
     }
 
-    private func actionTile(
-        title: LocalizedStringKey,
-        systemImage: String,
-        detail: LocalizedStringKey,
-        tint: Color
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func toolButton(title: LocalizedStringKey, systemImage: String) -> some View {
+        VStack(spacing: 7) {
             Image(systemName: systemImage)
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundColor(tint)
+                .font(.system(size: 18, weight: .semibold))
             Text(title)
-                .font(.headline)
-                .foregroundColor(.primary)
-            Text(detail)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+                .font(.caption2)
+                .lineLimit(1)
         }
-        .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
-        .padding(14)
+        .foregroundStyle(.primary)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
         .background(cardBackground)
     }
 
     // MARK: - Footer
 
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Games run as native ARM64 code (AOT) — no CPU JIT. Your ROM and save data stay on this device.")
-            Text("3ds2apple is not affiliated with Nintendo. Use only game dumps you made from your own console.")
+        VStack(alignment: .leading, spacing: 3) {
+            Text("AOT native · no CPU JIT · your ROMs stay on this device.")
+            Text("Not affiliated with Nintendo. Use only your own game dumps.")
         }
         .font(.caption2)
-        .foregroundColor(.secondary)
-        .padding(.top, 4)
+        .foregroundStyle(Color.secondary.opacity(0.7))
+        .padding(.top, 2)
     }
 
     // MARK: - Helpers
@@ -378,9 +473,7 @@ struct HomeView: View {
             .fill(Color(uiColor: .secondarySystemGroupedBackground))
     }
 
-    private func exportDiagnostics() {
-        if let url = DiagnosticsExporter.write(model: model, settings: settings) {
-            sheet = .diagnostics(url)
-        }
+    private var isBusy: Bool {
+        model.isImporting
     }
 }

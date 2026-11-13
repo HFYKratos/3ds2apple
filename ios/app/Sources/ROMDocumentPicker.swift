@@ -2,23 +2,24 @@
 //  ROMDocumentPicker.swift
 //  3ds2apple
 //
-//  I2-T1: thin SwiftUI wrapper around UIDocumentPickerViewController.
+//  Thin SwiftUI wrapper around UIDocumentPickerViewController.
 //
-//  Files are opened in place (`asCopy: false`) and copied by ROMSession, so a
-//  multi-GB ROM is not duplicated by the system before we copy it into the app
-//  container.
+//  Files are opened in place (asCopy: false) and copied into the app container
+//  by GameLibrary, so a multi-GB ROM is not duplicated by the system before the
+//  import. Several files can be picked at once; the home page imports them one
+//  after another.
 //
 
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Presents the system document picker. `onPick` receives the selected URL, or
-/// `nil` when the user cancels.
+/// Presents the system document picker. "onPick" receives the selected URLs
+/// (empty when the user cancels).
 struct ROMDocumentPicker: UIViewControllerRepresentable {
-    private let onPick: (URL?) -> Void
+    private let onPick: ([URL]) -> Void
 
-    init(onPick: @escaping (URL?) -> Void) {
+    init(onPick: @escaping ([URL]) -> Void) {
         self.onPick = onPick
     }
 
@@ -27,28 +28,28 @@ struct ROMDocumentPicker: UIViewControllerRepresentable {
     }
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        // .3ds / .cci have no registered UTTypes; public.data covers them.
+        // .3ds / .cci / .cia have no registered UTTypes; public.data covers them.
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data], asCopy: false)
         picker.delegate = context.coordinator
-        picker.allowsMultipleSelection = false
+        picker.allowsMultipleSelection = true
         return picker
     }
 
     func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
 
     final class Coordinator: NSObject, UIDocumentPickerDelegate {
-        private let onPick: (URL?) -> Void
+        private let onPick: ([URL]) -> Void
 
-        init(onPick: @escaping (URL?) -> Void) {
+        init(onPick: @escaping ([URL]) -> Void) {
             self.onPick = onPick
         }
 
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            onPick(urls.first)
+            onPick(urls)
         }
 
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-            onPick(nil)
+            onPick([])
         }
     }
 }

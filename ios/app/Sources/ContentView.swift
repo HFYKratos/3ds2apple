@@ -20,6 +20,8 @@ import SwiftUI
 import UIKit
 
 struct ContentView: View {
+    /// The persisted multi-game library, shared by the whole app.
+    @StateObject private var library = GameLibrary.shared
     @StateObject private var model = ROMSession()
     @StateObject private var settings = AppSettings.shared
     /// Rebuilds the view tree when iOS reports a locale change, so the
@@ -36,7 +38,7 @@ struct ContentView: View {
             if showsGame {
                 GameView(model: model, settings: settings)
             } else {
-                HomeView(model: model, settings: settings)
+                HomeView(model: model, settings: settings, library: library)
             }
         }
         // A locale change while the app runs re-reads the localized texts.
@@ -132,6 +134,7 @@ struct ContentView: View {
             bottom.height
         )
         AppLog.log("[3ds2apple] language: %@", L10n.diagnosticsLine)
+        AppLog.log("[3ds2apple] library: %ld game(s)", library.entries.count)
         if let last = model.lastROM {
             AppLog.log("[3ds2apple] last imported ROM: %@", last.relativePath)
         } else {

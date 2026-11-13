@@ -3,8 +3,7 @@
 //  3ds2apple
 //
 //  The running game: the two 3DS screens on the CAMetalLayer (or the CGImage
-//  readback fallback), the performance HUD, the on-screen controls and the
-//  in-game overlay menu.
+//  readback fallback), the on-screen controls and the in-game overlay menu.
 //
 //  The view is responsive:
 //
@@ -133,10 +132,6 @@ struct GameView: View {
         ScrollView {
             VStack(spacing: 10) {
                 screenCard
-                frameStatusLine
-                if settings.showCustomHUD {
-                    performanceHUD
-                }
             }
             .padding(12)
             .frame(maxWidth: 900)
@@ -151,8 +146,6 @@ struct GameView: View {
                 portraitScreenArea
                     .overlay { graphicsWarmUpOverlay }
 
-                audioFailureLine
-
                 if showsTouchControls {
                     TouchControlsView(
                         backgroundOpacity: settings.controlsBackgroundOpacity,
@@ -162,7 +155,6 @@ struct GameView: View {
                     }
                 }
 
-                inputStatusLine
             }
             .accessibilityIdentifier("screens")
         }
@@ -233,23 +225,10 @@ struct GameView: View {
                 }
             }
             .frame(maxHeight: .infinity)
-
-            landscapeStatus
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .accessibilityIdentifier("screens")
-    }
-
-    /// The compact status line in landscape: the same frame line plus a
-    /// single-row performance HUD, so the screens keep the height.
-    private var landscapeStatus: some View {
-        VStack(spacing: 1) {
-            frameStatusLine
-            if settings.showCustomHUD {
-                compactPerformanceHUD
-            }
-        }
     }
 
     // MARK: - Menu
@@ -659,194 +638,6 @@ struct GameView: View {
             UInt16(clamping: Int(pixelsX.rounded())),
             UInt16(clamping: Int(pixelsY.rounded()))
         )
-    }
-
-    // MARK: - Status / HUD
-
-    private var frameStatusLine: some View {
-        VStack(spacing: 2) {
-            HStack(spacing: 10) {
-                Text(L10n.format("%.0f fps", model.frameStats.fps))
-                Text(L10n.frameCount(model.frameStats.frames))
-                Text(L10n.format("last: %@", DiagnosticsExporter.frameResultLabel(model.frameStats.lastResult)))
-                Text(L10n.format("audio: %@", model.audioState.title))
-                    .accessibilityIdentifier("audio-status")
-                if model.isPaused {
-                    Text("paused")
-                        .foregroundColor(.yellow)
-                        .accessibilityIdentifier("paused-status")
-                }
-            }
-            HStack(spacing: 10) {
-                Text(L10n.format("AOT: %@", model.aotStatus.title))
-                    .accessibilityIdentifier("aot-status")
-                Text(L10n.format("speed: %.0f%% of 60 Hz", speedPercent))
-                    .accessibilityIdentifier("speed-status")
-                if model.effectivePlaybackSpeed > 1 {
-                    Text(fastForwardStatus)
-                        .foregroundColor(.yellow)
-                        .accessibilityIdentifier("playback-speed-status")
-                }
-            }
-            HStack(spacing: 10) {
-                Text(L10n.format("loop: %@", model.frameLoopDisplayLabel))
-                    .accessibilityIdentifier("loop-status")
-                Text(L10n.format("display: %@", model.displayPath.title))
-                    .accessibilityIdentifier("display-path")
-            }
-            // First-run graphics warm-up result (why the loading screen was
-            // there, how long, and whether frames were still spiking). Exported
-            // in diagnostics so a device run proves the hitch moved off-screen.
-            if let warmUpSummary = model.warmUp.summary {
-                Text(warmUpSummary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .accessibilityIdentifier("warmup-summary")
-            }
-        }
-        .font(.caption2)
-        .foregroundColor(.secondary)
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
-        .frame(maxWidth: .infinity, alignment: .center)
-        .accessibilityIdentifier("frame-status")
-    }
-
-    /// Emulation speed as a percentage of the 3DS 60 Hz timeline, including
-    /// the fast-forward multiplier (presented frames × frames per presented
-    /// frame).
-    private var speedPercent: Double {
-        model.frameStats.fps * Double(model.effectivePlaybackSpeed) / 60.0 * 100
-    }
-
-    /// "fast-forward: 2×" (with "(auto)" when the automatic fallback lowered
-    /// the speed).
-    private var fastForwardStatus: String {
-        let label = L10n.speedLabel(model.effectivePlaybackSpeed)
-        if model.playbackSpeedAutoReduced {
-            return L10n.format("fast-forward: %@ (auto)", label)
-        }
-        return L10n.format("fast-forward: %@", label)
-    }
-
-    /// Per-phase frame timing: average / max (since the loop started) / last
-    /// frame, in milliseconds. Toggled by the custom HUD setting.
-    private var performanceHUD: some View {
-        let timing = model.frameStats.timing
-        return VStack(spacing: 2) {
-            HStack(spacing: 8) {
-                Text("ms")
-                    .frame(width: 60, alignment: .leading)
-                Text("avg")
-                    .frame(width: 46, alignment: .trailing)
-                Text("max")
-                    .frame(width: 46, alignment: .trailing)
-                Text("last")
-                    .frame(width: 46, alignment: .trailing)
-            }
-            .foregroundColor(.secondary.opacity(0.75))
-
-            hudRow("total", timing.renderTotal, decimals: 1, identifier: "perf-total")
-            hudRow("run", timing.runFrame, decimals: 1, identifier: "perf-run")
-            if model.displayPath.usesMetalLayer {
-                hudRow("present", timing.present, decimals: 2, identifier: "perf-present")
-            } else {
-                hudRow("read top", timing.topScreenRead, decimals: 2, identifier: "perf-read-top")
-                hudRow("read bottom", timing.bottomScreenRead, decimals: 2, identifier: "perf-read-bottom")
-                hudRow("CGImage", timing.cgImage, decimals: 2, identifier: "perf-cgimage")
-            }
-            hudRow("audio", timing.audioPump, decimals: 2, identifier: "perf-audio")
-        }
-        .font(.caption2)
-        .monospacedDigit()
-        .foregroundColor(.secondary)
-        .frame(maxWidth: .infinity, alignment: .center)
-        .accessibilityIdentifier("perf-hud")
-    }
-
-    /// Single-row HUD for landscape, where three columns of rows would take the
-    /// screens' height. Same phases and averages as the portrait HUD.
-    private var compactPerformanceHUD: some View {
-        let timing = model.frameStats.timing
-        return HStack(spacing: 10) {
-            compactHudItem("total", timing.renderTotal, decimals: 1)
-            compactHudItem("run", timing.runFrame, decimals: 1)
-            if model.displayPath.usesMetalLayer {
-                compactHudItem("present", timing.present, decimals: 2)
-            } else {
-                compactHudItem("read top", timing.topScreenRead, decimals: 2)
-                compactHudItem("read bottom", timing.bottomScreenRead, decimals: 2)
-                compactHudItem("CGImage", timing.cgImage, decimals: 2)
-            }
-            compactHudItem("audio", timing.audioPump, decimals: 2)
-        }
-        .font(.caption2)
-        .monospacedDigit()
-        .foregroundColor(.secondary)
-        .lineLimit(1)
-        .minimumScaleFactor(0.6)
-        .frame(maxWidth: .infinity, alignment: .center)
-        .accessibilityIdentifier("perf-hud")
-    }
-
-    private func compactHudItem(
-        _ label: LocalizedStringKey,
-        _ stats: FramePhaseStats,
-        decimals: Int
-    ) -> some View {
-        HStack(spacing: 3) {
-            Text(label)
-            Text(stats.isAvailable ? String(format: "%.\(decimals)f", stats.average) : "—")
-        }
-    }
-
-    private func hudRow(
-        _ label: LocalizedStringKey,
-        _ stats: FramePhaseStats,
-        decimals: Int,
-        identifier: String
-    ) -> some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .frame(width: 60, alignment: .leading)
-            hudValue(stats.average, decimals: decimals, available: stats.isAvailable)
-            hudValue(stats.maximum, decimals: decimals, available: stats.isAvailable)
-            hudValue(stats.last, decimals: decimals, available: stats.isAvailable)
-        }
-        .accessibilityIdentifier(identifier)
-    }
-
-    private func hudValue(_ milliseconds: Double, decimals: Int, available: Bool) -> some View {
-        Text(available ? String(format: "%.\(decimals)f", milliseconds) : "—")
-            .frame(width: 46, alignment: .trailing)
-    }
-
-    @ViewBuilder
-    private var audioFailureLine: some View {
-        if let failure = model.audioState.failureMessage {
-            Text(L10n.format("Audio: %@", failure))
-                .font(.caption2)
-                .foregroundColor(.red)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .accessibilityIdentifier("audio-error")
-        }
-    }
-
-    @ViewBuilder
-    private var inputStatusLine: some View {
-        if let controllerName = model.controllerName {
-            Text(L10n.format("Controller: %@", controllerName))
-                .font(.caption2)
-                .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .accessibilityIdentifier("controller-status")
-        } else {
-            Text("No controller connected — use the on-screen controls")
-                .font(.caption2)
-                .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-        }
     }
 
     // MARK: - Derived state

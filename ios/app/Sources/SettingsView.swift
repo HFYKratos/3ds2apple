@@ -7,8 +7,7 @@
 //
 //  The settings live in AppSettings; every control writes through a binding that
 //  also stores the new value in UserDefaults. Rows are written directly in the
-//  Form sections (rather than grouped in helper view types) so a Form renders
-//  each control as its own row.
+//  Form sections so a Form renders each control as its own row.
 //
 //  User-facing text: static SwiftUI literals localize through
 //  Localizable.strings; strings built at run time go through L10n.
@@ -45,268 +44,12 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section {
-                Picker("Screen layout", selection: persistedBinding(settings, \.screenLayout)) {
-                    ForEach(ScreenLayout.allCases) { layout in
-                        Text(layout.title).tag(layout)
-                    }
-                }
-                Text(settings.screenLayout.detail)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Picker("Screen rotation", selection: persistedBinding(settings, \.screenRotation)) {
-                    ForEach(ScreenRotation.allCases) { rotation in
-                        Text(rotation.title).tag(rotation)
-                    }
-                }
-                Picker("Aspect ratio", selection: persistedBinding(settings, \.screenAspect)) {
-                    ForEach(ScreenAspect.allCases) { aspect in
-                        Text(aspect.title).tag(aspect)
-                    }
-                }
-                Text(settings.screenAspect.detail)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Toggle("Integer scaling", isOn: persistedBinding(settings, \.integerScale))
-                    .disabled(settings.screenAspect == .stretch)
-                Picker("Render resolution", selection: persistedBinding(settings, \.renderScale)) {
-                    Text("1x").tag(1)
-                    Text("2x").tag(2)
-                }
-                .pickerStyle(.segmented)
-                Picker("Orientation", selection: persistedBinding(settings, \.orientation)) {
-                    ForEach(OrientationLock.allCases) { lock in
-                        Text(lock.title).tag(lock)
-                    }
-                }
-                Text(settings.orientation.detail)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            } header: {
-                Text("Display")
-            } footer: {
-                Text("Display changes apply immediately, also while a game is running: the layer is resized to the new layout and the next frame uses it. Integer scaling needs Fit or 4:3 and snaps each 3DS pixel to a whole number of screen pixels; Stretch ignores it. Render resolution changes the presenter's internal drawable, not the screen space the picture takes.")
-            }
-
-            Section {
-                HStack {
-                    Text("Volume")
-                    Spacer()
-                    Text(L10n.format("%ld%%", Int((settings.audioVolume * 100).rounded())))
-                        .foregroundColor(.secondary)
-                        .monospacedDigit()
-                }
-                Slider(
-                    value: persistedBinding(settings, \.audioVolume),
-                    in: 0...1,
-                    step: 0.05
-                )
-                Toggle("Mute", isOn: persistedBinding(settings, \.audioMuted))
-                Picker("Buffer size", selection: persistedBinding(settings, \.audioBuffer)) {
-                    ForEach(AudioBufferSize.allCases) { size in
-                        Text(size.title).tag(size)
-                    }
-                }
-                Text(settings.audioBuffer.detail)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            } header: {
-                Text("Audio")
-            } footer: {
-                Text("Changes apply immediately. A different buffer size restarts the audio engine once while a game is running.")
-            }
-
-            Section {
-                Toggle(
-                    "Show on-screen controls",
-                    isOn: persistedBinding(settings, \.showTouchControls)
-                )
-                HStack {
-                    Text("Overlay opacity")
-                    Spacer()
-                    Text(L10n.format("%ld%%", Int((settings.controlsOpacity * 100).rounded())))
-                        .foregroundColor(.secondary)
-                        .monospacedDigit()
-                }
-                Slider(
-                    value: persistedBinding(settings, \.controlsOpacity),
-                    in: 0.15...1.0,
-                    step: 0.05
-                )
-                Toggle(
-                    "Haptic feedback on button press",
-                    isOn: persistedBinding(settings, \.haptics)
-                )
-                HStack {
-                    Text("Controller")
-                    Spacer()
-                    Text(model.controllerName ?? L10n.tr("Not connected"))
-                        .foregroundColor(.secondary)
-                }
-                HStack {
-                    Text("Button remapping")
-                    Spacer()
-                    Text("Not available in this build")
-                        .foregroundColor(.secondary)
-                }
-            } header: {
-                Text("Controls")
-            } footer: {
-                Text("The on-screen pad and a connected controller are merged. Dragging on the lower screen is the 3DS touchscreen.")
-            }
-
-            Section {
-                Toggle(
-                    "Custom frame-time HUD",
-                    isOn: persistedBinding(settings, \.showCustomHUD)
-                )
-                Picker("Frame cap", selection: persistedBinding(settings, \.frameCap)) {
-                    ForEach(FrameRateCap.allCases) { cap in
-                        Text(cap.title).tag(cap)
-                    }
-                }
-                .pickerStyle(.segmented)
-                HStack {
-                    Text("Frame loop")
-                    Spacer()
-                    Text(model.frameLoopDisplayLabel)
-                        .foregroundColor(.secondary)
-                }
-                Picker(
-                    "Fast-forward",
-                    selection: persistedBinding(settings, \.playbackSpeed)
-                ) {
-                    ForEach(PlaybackSpeed.allCases) { speed in
-                        Text(speed.title).tag(speed)
-                    }
-                }
-                .pickerStyle(.segmented)
-                HStack {
-                    Text("Running at")
-                    Spacer()
-                    Text(L10n.speedLabel(model.effectivePlaybackSpeed))
-                        .foregroundColor(.secondary)
-                        .monospacedDigit()
-                        .accessibilityIdentifier("effective-playback-speed")
-                }
-                Text(fastForwardStatusText)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Toggle(
-                    "System Metal HUD",
-                    isOn: persistedBinding(settings, \.systemMetalHUD)
-                )
-                Text(systemHUDStatusText)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Toggle(
-                    "First-load graphics warm-up (optional)",
-                    isOn: persistedBinding(settings, \.graphicsWarmUpEnabled)
-                )
-                Text(warmUpStatusText)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } header: {
-                Text("Performance")
-            } footer: {
-                Text("The custom HUD shows the per-phase frame times. Fast-forward runs extra console frames per displayed frame and mutes audio while it is active; if presented frames stay below 20 fps the app lowers the speed automatically. The graphics warm-up is optional and off by default: the pipeline cache is still written while you play either way.")
-            }
-
-            Section {
-                HStack {
-                    Text("Save data")
-                    Spacer()
-                    Text(StorageFormat.size(storage.saveDataBytes))
-                        .foregroundColor(.secondary)
-                }
-                HStack {
-                    Text("Imported ROMs")
-                    Spacer()
-                    Text(StorageFormat.size(storage.romBytes))
-                        .foregroundColor(.secondary)
-                }
-                HStack {
-                    Text("App logs")
-                    Spacer()
-                    Text(StorageFormat.size(storage.logBytes))
-                        .foregroundColor(.secondary)
-                }
-                HStack {
-                    Text("Graphics pipeline cache")
-                    Spacer()
-                    Text(StorageFormat.size(storage.cacheBytes))
-                        .foregroundColor(.secondary)
-                }
-                Button("Clear graphics pipeline cache") {
-                    isClearCacheConfirmationPresented = true
-                }
-                .disabled(model.isRuntimeActive)
-                if model.isRuntimeActive {
-                    Text("Available when no game is running.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Folder")
-                    Text(storage.documentsPath)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                        .truncationMode(.middle)
-                }
-            } header: {
-                Text("Storage")
-            } footer: {
-                Text("Everything stays in the app's Documents and Caches folders on this device. The pipeline cache only holds compiled shader pipelines and is rebuilt automatically.")
-            }
-
-            Section {
-                HStack {
-                    Text("Version")
-                    Spacer()
-                    Text(versionText)
-                        .foregroundColor(.secondary)
-                        .monospacedDigit()
-                }
-                HStack {
-                    Text("Device")
-                    Spacer()
-                    Text(deviceText)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.trailing)
-                }
-                HStack {
-                    Text("AOT code")
-                    Spacer()
-                    Text(model.aotStatus.title)
-                        .foregroundColor(.secondary)
-                }
-                HStack {
-                    Text("Language")
-                    Spacer()
-                    Text(L10n.languageSummary)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.trailing)
-                }
-                if let url = URL(string: "https://github.com/HFYKratos/3ds2apple") {
-                    Link(destination: url) {
-                        HStack {
-                            Text("Project page")
-                            Spacer()
-                            Image(systemName: "arrow.up.right")
-                                .font(.footnote)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-            } header: {
-                Text("About")
-            } footer: {
-                Text("Apache-2.0. 3ds2apple ships without game data; use only your own decrypted dumps. The app follows the system language: Simplified Chinese and English are included, and every other language uses English.")
-            }
+            displaySection
+            audioSection
+            controlsSection
+            performanceSection
+            storageSection
+            aboutSection
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
@@ -323,7 +66,235 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Display
+
+    private var displaySection: some View {
+        Section {
+            Picker("Screen layout", selection: persistedBinding(settings, \.screenLayout)) {
+                ForEach(ScreenLayout.allCases) { layout in
+                    Text(layout.title).tag(layout)
+                }
+            }
+            Picker("Screen rotation", selection: persistedBinding(settings, \.screenRotation)) {
+                ForEach(ScreenRotation.allCases) { rotation in
+                    Text(rotation.title).tag(rotation)
+                }
+            }
+            Picker("Aspect ratio", selection: persistedBinding(settings, \.screenAspect)) {
+                ForEach(ScreenAspect.allCases) { aspect in
+                    Text(aspect.title).tag(aspect)
+                }
+            }
+            Toggle("Integer scaling", isOn: persistedBinding(settings, \.integerScale))
+                .disabled(settings.screenAspect == .stretch)
+            Picker("Render resolution", selection: persistedBinding(settings, \.renderScale)) {
+                Text("1x").tag(1)
+                Text("2x").tag(2)
+                Text("3x").tag(3)
+                Text("4x").tag(4)
+            }
+            .pickerStyle(.segmented)
+            Picker("Orientation", selection: persistedBinding(settings, \.orientation)) {
+                ForEach(OrientationLock.allCases) { lock in
+                    Text(lock.title).tag(lock)
+                }
+            }
+        } header: {
+            Text("Display")
+        } footer: {
+            Text("Changes apply immediately while a game is running; a new render resolution is used after the game reloads.")
+        }
+    }
+
+    // MARK: - Audio
+
+    private var audioSection: some View {
+        Section {
+            HStack {
+                Text("Volume")
+                Spacer()
+                Text(L10n.format("%ld%%", Int((settings.audioVolume * 100).rounded())))
+                    .foregroundColor(.secondary)
+                    .monospacedDigit()
+            }
+            Slider(
+                value: persistedBinding(settings, \.audioVolume),
+                in: 0...1,
+                step: 0.05
+            )
+            Toggle("Mute", isOn: persistedBinding(settings, \.audioMuted))
+            Picker("Buffer size", selection: persistedBinding(settings, \.audioBuffer)) {
+                ForEach(AudioBufferSize.allCases) { size in
+                    Text(size.title).tag(size)
+                }
+            }
+        } header: {
+            Text("Audio")
+        } footer: {
+            Text("A different buffer size restarts audio once while a game is running.")
+        }
+    }
+
+    // MARK: - Controls
+
+    private var controlsSection: some View {
+        Section {
+            Toggle("Show on-screen controls", isOn: persistedBinding(settings, \.showTouchControls))
+            HStack {
+                Text("Overlay opacity")
+                Spacer()
+                Text(L10n.format("%ld%%", Int((settings.controlsOpacity * 100).rounded())))
+                    .foregroundColor(.secondary)
+                    .monospacedDigit()
+            }
+            Slider(
+                value: persistedBinding(settings, \.controlsOpacity),
+                in: 0.15...1.0,
+                step: 0.05
+            )
+            Toggle("Haptic feedback on button press", isOn: persistedBinding(settings, \.haptics))
+            HStack {
+                Text("Controller")
+                Spacer()
+                Text(model.controllerName ?? L10n.tr("Not connected"))
+                    .foregroundColor(.secondary)
+            }
+        } header: {
+            Text("Controls")
+        } footer: {
+            Text("The on-screen pad and a connected controller are merged.")
+        }
+    }
+
+    // MARK: - Performance
+
+    private var performanceSection: some View {
+        Section {
+            Picker("Frame cap", selection: persistedBinding(settings, \.frameCap)) {
+                ForEach(FrameRateCap.allCases) { cap in
+                    Text(cap.title).tag(cap)
+                }
+            }
+            .pickerStyle(.segmented)
+            Picker("Fast-forward", selection: persistedBinding(settings, \.playbackSpeed)) {
+                ForEach(PlaybackSpeed.allCases) { speed in
+                    Text(speed.title).tag(speed)
+                }
+            }
+            .pickerStyle(.segmented)
+            HStack {
+                Text("Running at")
+                Spacer()
+                Text(L10n.speedLabel(model.effectivePlaybackSpeed))
+                    .foregroundColor(.secondary)
+                    .monospacedDigit()
+                    .accessibilityIdentifier("effective-playback-speed")
+            }
+            if model.playbackSpeedAutoReduced {
+                Text(autoReducedText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Toggle("System Metal HUD", isOn: persistedBinding(settings, \.systemMetalHUD))
+                .accessibilityIdentifier("settings-system-metal-hud")
+            if let note = systemHUDNote {
+                Text(note)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Toggle("First-load graphics warm-up (optional)", isOn: persistedBinding(settings, \.graphicsWarmUpEnabled))
+            Text(warmUpStatusText)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        } header: {
+            Text("Performance")
+        } footer: {
+            Text("Fast-forward runs extra console frames per presented frame and mutes audio while it is active.")
+        }
+    }
+
+    // MARK: - Storage
+
+    private var storageSection: some View {
+        Section {
+            infoRow("Save data", StorageFormat.size(storage.saveDataBytes))
+            infoRow("Imported ROMs", StorageFormat.size(storage.romBytes))
+            infoRow("App logs", StorageFormat.size(storage.logBytes))
+            infoRow("Graphics pipeline cache", StorageFormat.size(storage.cacheBytes))
+            Button("Clear graphics pipeline cache") {
+                isClearCacheConfirmationPresented = true
+            }
+            .disabled(model.isRuntimeActive)
+            .accessibilityIdentifier("settings-clear-cache")
+            if model.isRuntimeActive {
+                Text("Available when no game is running.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        } header: {
+            Text("Storage")
+        } footer: {
+            Text("Save data, ROMs, logs and the shader cache live in the app's Documents folder.")
+        }
+    }
+
+    // MARK: - About
+
+    private var aboutSection: some View {
+        Section {
+            infoRow("Version", versionText)
+            infoRow("Device", deviceText)
+            infoRow("AOT code", model.aotStatus.title)
+            infoRow("Language", L10n.languageSummary)
+            if let url = URL(string: "https://github.com/HFYKratos/3ds2apple") {
+                Link(destination: url) {
+                    HStack {
+                        Text("Project page")
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        } header: {
+            Text("About")
+        } footer: {
+            Text("Apache-2.0; the app ships without game data, so use only your own game dumps.")
+        }
+    }
+
     // MARK: - Text
+
+    /// Fast-forward state when the automatic fallback lowered the speed.
+    private var autoReducedText: String {
+        L10n.format(
+            "Lowered automatically from %@ because frames stayed below 20 fps.",
+            L10n.speedLabel(settings.playbackSpeed.rawValue)
+        )
+    }
+
+    /// What the System Metal HUD switch does right now. The HUD is read by the
+    /// Metal device at launch, so the switch needs an app restart; the build also
+    /// has to enable it in Info.plist, which is only mentioned when it is missing.
+    private var systemHUDNote: String? {
+        if !buildEnablesMetalHUD {
+            return L10n.tr("This build does not enable the Metal HUD (MetalHudEnabled in Info.plist).")
+        }
+        guard settings.systemMetalHUD else { return nil }
+        return L10n.tr("Restart the app to apply: Metal devices read MTL_HUD_ENABLED at launch. If it still does not appear, turn on Graphics HUD in Settings → Developer on the device.")
+    }
+
+    /// What the optional first-load graphics warm-up does.
+    private var warmUpStatusText: String {
+        if settings.graphicsWarmUpEnabled {
+            return L10n.tr("Shows a “Preparing graphics” screen while the first frames of each load compile their pipelines (at most 5 s).")
+        }
+        return L10n.tr("Off by default: the game appears as soon as it loads, and the pipeline cache is still written while you play.")
+    }
 
     private var versionText: String {
         let info = Bundle.main.infoDictionary ?? [:]
@@ -337,41 +308,28 @@ struct SettingsView: View {
         return "\(device.model) · \(device.systemName) \(device.systemVersion)"
     }
 
-    /// Fast-forward state, including the automatic fallback when it happened.
-    private var fastForwardStatusText: String {
-        let effective = L10n.speedLabel(model.effectivePlaybackSpeed)
-        if model.playbackSpeedAutoReduced {
-            return L10n.format(
-                "Running at %@: lowered automatically from %@ because presented frames stayed below 20 fps.",
-                effective,
-                L10n.speedLabel(settings.playbackSpeed.rawValue)
-            )
+    /// Whether the build's Info.plist enables the system Metal HUD.
+    private var buildEnablesMetalHUD: Bool {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: "MetalHudEnabled") else {
+            return false
         }
-        return L10n.format("Running at %@.", effective)
+        if let value = raw as? Bool { return value }
+        if let value = raw as? NSNumber { return value.boolValue }
+        if let value = raw as? String {
+            return value == "YES" || value == "true" || value == "1"
+        }
+        return false
     }
 
-    /// What the system Metal HUD switch does right now, including the note when
-    /// the build does not enable the HUD the runtime tries to show.
-    private var systemHUDStatusText: String {
-        let buildEnablesHUD = Bundle.main.object(forInfoDictionaryKey: "MetalHudEnabled") as? Bool ?? false
-        if settings.systemMetalHUD {
-            if buildEnablesHUD {
-                return L10n.tr("On: the HUD is shown over the presented Metal layer.")
-            }
-            return L10n.tr("The switch is on, but this build must also enable the HUD (MetalHudEnabled in Info.plist), or turn on Developer → Graphics HUD on the device, then relaunch.")
+    private func infoRow(_ title: LocalizedStringKey, _ value: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer(minLength: 12)
+            Text(value)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
-        if buildEnablesHUD {
-            return L10n.tr("Off: the HUD is hidden for this app even though the build enables it.")
-        }
-        return L10n.tr("Off: the build does not enable the system HUD.")
-    }
-
-    /// What the optional first-load graphics warm-up does.
-    private var warmUpStatusText: String {
-        if settings.graphicsWarmUpEnabled {
-            return L10n.tr("On: the first frames of each load run behind a “Preparing graphics” screen until they stop spiking (at most 5 s). Later pipelines can still compile on first use.")
-        }
-        return L10n.tr("Off by default: the game appears as soon as the ROM loads. The runtime still writes its pipeline cache while you play, so later loads start warm.")
     }
 
     // MARK: - Actions
@@ -431,9 +389,6 @@ struct QuickDisplaySettingsView: View {
                             Text(aspect.title).tag(aspect)
                         }
                     }
-                    Text(settings.screenAspect.detail)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                     Toggle(
                         "Integer scaling",
                         isOn: persistedBinding(settings, \.integerScale)
@@ -445,6 +400,8 @@ struct QuickDisplaySettingsView: View {
                     ) {
                         Text("1x").tag(1)
                         Text("2x").tag(2)
+                        Text("3x").tag(3)
+                        Text("4x").tag(4)
                     }
                     .pickerStyle(.segmented)
                     Picker(
@@ -458,7 +415,7 @@ struct QuickDisplaySettingsView: View {
                 } header: {
                     Text("Display")
                 } footer: {
-                    Text("Display changes apply immediately, also while a game is running. The in-game layout moves the on-screen controls out of the screens' way in landscape.")
+                    Text("Changes apply immediately while a game is running.")
                 }
             }
             .navigationTitle("Display settings")

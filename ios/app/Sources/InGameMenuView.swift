@@ -2,8 +2,8 @@
 //  InGameMenuView.swift
 //  3ds2apple
 //
-//  The in-game overlay menu: it dims the (paused) game and offers resume, save
-//  states, quick toggles (on-screen controls, mute, fast-forward), reset,
+//  The in-game overlay menu: it dims the (paused) game and offers resume, the
+//  quick save state, fast toggles (on-screen controls, mute, fast-forward),
 //  display settings, the save manager, diagnostics and exit.
 //
 //  Opening the menu pauses the frame loop and the audio engine in ROMSession,
@@ -36,59 +36,10 @@ struct InGameMenuView: View {
             ScrollView {
                 VStack(spacing: 12) {
                     header
-                    actionButton(
-                        "Resume game",
-                        systemImage: "play.fill",
-                        prominent: true,
-                        enabled: !saveStates.busy,
-                        action: onResume
-                    )
-                    .accessibilityIdentifier("menu-resume")
-
-                    quickToggles
-
-                    saveStateControls
-
-                    actionButton(
-                        "Reset game",
-                        systemImage: "arrow.counterclockwise",
-                        enabled: !saveStates.busy,
-                        action: onReset
-                    )
-                    .accessibilityIdentifier("menu-reset")
-
-                    actionButton(
-                        "Display settings",
-                        systemImage: "display",
-                        enabled: !saveStates.busy,
-                        action: onDisplaySettings
-                    )
-                    .accessibilityIdentifier("menu-display-settings")
-
-                    actionButton(
-                        "Save Manager",
-                        systemImage: "externaldrive.fill",
-                        enabled: !saveStates.busy,
-                        action: onSaveManager
-                    )
-                    .accessibilityIdentifier("menu-save-manager")
-
-                    actionButton(
-                        "Export diagnostics",
-                        systemImage: "square.and.arrow.up",
-                        enabled: !saveStates.busy,
-                        action: onDiagnostics
-                    )
-                    .accessibilityIdentifier("menu-diagnostics")
-
-                    actionButton(
-                        "Exit to home",
-                        systemImage: "xmark.circle",
-                        destructive: true,
-                        enabled: !saveStates.busy,
-                        action: onExit
-                    )
-                    .accessibilityIdentifier("menu-exit")
+                    resumeButton
+                    saveStateCard
+                    quickSettingsCard
+                    gameActionsCard
                 }
                 .padding(20)
                 .frame(maxWidth: 420)
@@ -102,6 +53,8 @@ struct InGameMenuView: View {
         .accessibilityIdentifier("in-game-menu-overlay")
     }
 
+    // MARK: - Header
+
     private var header: some View {
         VStack(spacing: 4) {
             Text("Paused")
@@ -113,52 +66,40 @@ struct InGameMenuView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, 2)
     }
 
-    /// Behaviours that are useful to change without leaving the game.
-    private var quickToggles: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Toggle(
-                "On-screen controls",
-                isOn: persistedBinding(settings, \.showTouchControls)
-            )
-            .tint(.accentColor)
-            Toggle(
-                "Mute audio",
-                isOn: persistedBinding(settings, \.audioMuted)
-            )
-            .tint(.accentColor)
-            Text("Fast-forward")
-                .padding(.top, 2)
-            Picker(
-                "Fast-forward",
-                selection: persistedBinding(settings, \.playbackSpeed)
-            ) {
-                ForEach(PlaybackSpeed.allCases) { speed in
-                    Text(speed.title).tag(speed)
-                }
+    // MARK: - Resume
+
+    private var resumeButton: some View {
+        Button(action: onResume) {
+            HStack(spacing: 10) {
+                Image(systemName: "play.fill")
+                Text("Resume game")
+                Spacer(minLength: 0)
             }
-            .pickerStyle(.segmented)
-            Text("Fast-forward applies when the game resumes and mutes its audio while it is active.")
-                .font(.caption2)
-                .foregroundColor(.white.opacity(0.6))
-                .fixedSize(horizontal: false, vertical: true)
+            .font(.body.weight(.semibold))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 15)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.accentColor)
+            )
+            .foregroundColor(.white)
         }
-        .font(.subheadline)
-        .foregroundColor(.white)
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.08))
-        )
+        .buttonStyle(.plain)
+        .disabled(saveStates.busy)
+        .accessibilityIdentifier("menu-resume")
     }
 
-    /// Instant save states: the quick buttons act on slot 1; the Save Manager
-    /// page lists and manages all slots.
-    private var saveStateControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    // MARK: - Quick save state
+
+    private var saveStateCard: some View {
+        card {
+            Text("Save state")
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.white.opacity(0.55))
             HStack(spacing: 10) {
                 stateButton(
                     "Save state",
@@ -193,29 +134,25 @@ struct InGameMenuView: View {
                     .tint(.white)
                     .controlSize(.small)
                 Text(saveStates.statusText)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundColor(.white.opacity(0.75))
                     .lineLimit(2)
             }
-            .padding(.horizontal, 4)
             .accessibilityIdentifier("menu-save-state-progress")
         } else if let error = saveStates.errorMessage {
             Label(error, systemImage: "exclamationmark.triangle.fill")
-                .font(.caption2)
+                .font(.caption)
                 .foregroundColor(.orange)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 4)
                 .accessibilityIdentifier("menu-save-state-error")
         } else if !saveStates.isRuntimeLoaded {
             Text("Save states are available while a game is running.")
-                .font(.caption2)
-                .foregroundColor(.white.opacity(0.6))
-                .padding(.horizontal, 4)
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.55))
         } else {
             Text(L10n.format("Slot %ld · %@", SaveStateSupport.quickSlot, saveStates.quickSlotInfo.detail))
-                .font(.caption2)
-                .foregroundColor(.white.opacity(0.6))
-                .padding(.horizontal, 4)
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.55))
                 .accessibilityIdentifier("menu-save-state-detail")
         }
     }
@@ -237,10 +174,10 @@ struct InGameMenuView: View {
             .font(.footnote.weight(.medium))
             .foregroundColor(.white.opacity(enabled ? 0.95 : 0.45))
             .padding(.horizontal, 12)
-            .padding(.vertical, 12)
+            .padding(.vertical, 11)
             .frame(maxWidth: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(Color.white.opacity(enabled ? 0.14 : 0.06))
             )
         }
@@ -249,33 +186,117 @@ struct InGameMenuView: View {
         .accessibilityIdentifier(identifier)
     }
 
-    private func actionButton(
+    // MARK: - Quick settings
+
+    private var quickSettingsCard: some View {
+        card {
+            Toggle("On-screen controls", isOn: persistedBinding(settings, \.showTouchControls))
+                .tint(.accentColor)
+            Toggle("Mute audio", isOn: persistedBinding(settings, \.audioMuted))
+                .tint(.accentColor)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Fast-forward")
+                    .font(.subheadline)
+                Picker("Fast-forward", selection: persistedBinding(settings, \.playbackSpeed)) {
+                    ForEach(PlaybackSpeed.allCases) { speed in
+                        Text(speed.title).tag(speed)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            Text("Fast-forward applies when the game resumes and mutes its audio while it is active.")
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.55))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.subheadline)
+        .foregroundColor(.white)
+    }
+
+    // MARK: - Game actions
+
+    private var gameActionsCard: some View {
+        card {
+            actionRow(
+                "Display settings",
+                systemImage: "display",
+                identifier: "menu-display-settings",
+                action: onDisplaySettings
+            )
+            rowDivider
+            actionRow(
+                "Save Manager",
+                systemImage: "externaldrive.fill",
+                identifier: "menu-save-manager",
+                action: onSaveManager
+            )
+            rowDivider
+            actionRow(
+                "Export diagnostics",
+                systemImage: "square.and.arrow.up",
+                identifier: "menu-diagnostics",
+                action: onDiagnostics
+            )
+            rowDivider
+            actionRow(
+                "Reset game",
+                systemImage: "arrow.counterclockwise",
+                identifier: "menu-reset",
+                action: onReset
+            )
+            rowDivider
+            actionRow(
+                "Exit to home",
+                systemImage: "rectangle.portrait.and.arrow.right",
+                destructive: true,
+                identifier: "menu-exit",
+                action: onExit
+            )
+        }
+    }
+
+    private var rowDivider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.1))
+            .frame(height: 0.5)
+    }
+
+    private func actionRow(
         _ title: LocalizedStringKey,
         systemImage: String,
-        prominent: Bool = false,
         destructive: Bool = false,
-        enabled: Bool = true,
+        identifier: String,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Image(systemName: systemImage)
-                    .frame(width: 24)
+                    .frame(width: 24, alignment: .center)
                 Text(title)
                 Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.white.opacity(0.35))
             }
-            .font(.body.weight(.medium))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(prominent ? Color.accentColor.opacity(0.9) : Color.white.opacity(0.12))
-            )
-            .foregroundColor(destructive ? Color.red : Color.white)
+            .font(.body)
+            .foregroundColor(destructive ? .red : .white)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.45)
+        .disabled(saveStates.busy)
+        .accessibilityIdentifier(identifier)
+    }
+
+    // MARK: - Card
+
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12, content: content)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+            )
     }
 }
