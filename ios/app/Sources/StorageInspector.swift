@@ -199,13 +199,21 @@ enum StorageFormat {
         if abs(Date().timeIntervalSince(date)) < 7 * 24 * 60 * 60 {
             let formatter = RelativeDateTimeFormatter()
             formatter.unitsStyle = .short
+            formatter.locale = displayLocale
             return formatter.localizedString(for: date, relativeTo: Date())
         }
         return Self.date(date)
     }
 
+    /// The app language, not the device locale: the UI follows the bundle
+    /// language pick, so dates must not fall back to the system locale.
+    private static var displayLocale: Locale {
+        Locale(identifier: L10n.currentLanguage == .simplifiedChinese ? "zh_Hans" : "en_US")
+    }
+
     static func date(_ date: Date?) -> String {
         guard let date else { return "—" }
+        formatter.locale = displayLocale
         return formatter.string(from: date)
     }
 

@@ -116,7 +116,7 @@ struct SettingsView: View {
         } header: {
             Text("Display")
         } footer: {
-            Text("Changes apply immediately while a game is running; a new render resolution is used after the game reloads.")
+            Text("Changes apply immediately while a game is running.")
         }
     }
 

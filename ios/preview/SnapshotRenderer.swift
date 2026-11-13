@@ -36,7 +36,13 @@ enum SnapshotRenderer {
         let saveStates = SaveStateSupport(runtime: model)
         let library = GameLibrary.shared
 
+        // Optional subset for quick, low-risk single-screen renders:
+        // ZKPREVIEW_SHOT_ONLY=home,settings
+        let only = ProcessInfo.processInfo.environment["ZKPREVIEW_SHOT_ONLY"]
+            .map { Set($0.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }) }
+
         func shot(_ name: String, _ view: AnyView) {
+            if let only, !only.contains(name) { return }
             if let url = render(name, view, to: directory) {
                 written.append(url)
             }

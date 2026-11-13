@@ -30,7 +30,9 @@
 "A backup is a ZIP archive of the files above. Importing one merges its files back into this game's save-data folder." = "备份是上述文件的 ZIP 压缩包。导入会把这些文件合并回本游戏的存档数据文件夹。";
 "A different buffer size restarts audio once while a game is running." = "游戏运行时更改缓冲区大小会重启一次音频。";
 "A save state is a snapshot of the whole console, taken between frames. Loading one restores that point, drops the audio buffered before it and continues the same game session." = "即时存档是整个主机状态的快照，在两个帧之间生成。载入会回到该时间点，丢弃载入前缓冲的音频，并继续同一个游戏会话。";
+"AOT" = "AOT";
 "AOT code" = "AOT 代码";
+"AOT code linked" = "已链接 AOT 代码";
 "AOT native · no CPU JIT · your ROMs stay on this device." = "AOT 原生 · 不使用 CPU JIT · ROM 只留在本设备。";
 "AOT: %@" = "AOT：%@";
 "About" = "关于";
@@ -155,6 +157,8 @@
 "Importing %@…" = "正在导入 %@…";
 "Importing battery saves…" = "正在导入电池存档…";
 "Integer scaling" = "整数缩放";
+"Interpreter" = "解释器";
+"Interpreter only" = "仅解释器";
 "Invalid runtime handle (zk_run_frame = %d)." = "运行时句柄无效（zk_run_frame = %d）。";
 "Keeps the 3DS picture's own shape. Black bars fill the rest of the screen." = "保持 3DS 画面原本的比例，剩余区域留黑边。";
 "Landscape" = "横屏";
@@ -235,6 +239,7 @@
 "Save states are available while a game is running." = "游戏运行期间可使用即时存档。";
 "Save states are not available in this build." = "此版本不提供即时存档。";
 "Saved %@ · %@" = "已保存 %@ · %@";
+"Saves" = "存档";
 "Saving to slot %ld…" = "正在保存到存档位 %ld…";
 "Screen layout" = "屏幕布局";
 "Screen rotation" = "屏幕旋转";

@@ -2,7 +2,7 @@
    Keys are the English UI text; keeping the table explicit documents every key
    for translators and keeps the English and Chinese tables in step. */
 
-"“%@” is empty." = "“%@”是空的。";
+"“%@” is empty." = "“%@” is empty.";
 "“%@”: %@" = "“%@”：%@";
 "%@ is empty." = "%@ is empty.";
 "%@ · %@" = "%@ · %@";
@@ -31,7 +31,7 @@
 "A different buffer size restarts audio once while a game is running." = "A different buffer size restarts audio once while a game is running.";
 "A save state is a snapshot of the whole console, taken between frames. Loading one restores that point, drops the audio buffered before it and continues the same game session." = "A save state is a snapshot of the whole console, taken between frames. Loading one restores that point, drops the audio buffered before it and continues the same game session.";
 "AOT code" = "AOT code";
-"AOT native · no CPU JIT · your ROMs stay on this device." = "AOT 原生 · 不使用 CPU JIT · ROM 只留在本设备。";
+"AOT native · no CPU JIT · your ROMs stay on this device." = "AOT native · no CPU JIT · your ROMs stay on this device.";
 "AOT: %@" = "AOT: %@";
 "About" = "About";
 "Acknowledgements" = "Acknowledgements";
@@ -75,7 +75,7 @@
 "Could not create the save-data directory: %@" = "Could not create the save-data directory: %@";
 "Could not delete %@: %@" = "Could not delete %@: %@";
 "Could not delete “%@”: %@" = "Could not delete “%@”: %@";
-"Could not delete the game" = "无法删除游戏";
+"Could not delete the game" = "Could not delete the game";
 "Could not export the battery save data: %@" = "Could not export the battery save data: %@";
 "Could not finish the ZIP archive: %@" = "Could not finish the ZIP archive: %@";
 "Could not import the archive: %@" = "Could not import the archive: %@";
@@ -98,7 +98,7 @@
 "Could not write the ZIP archive: %@" = "Could not write the ZIP archive: %@";
 "Could not write “%@”: %@" = "Could not write “%@”: %@";
 "Delete" = "Delete";
-"Delete “%@”?" = "删除“%@”？";
+"Delete “%@”?" = "Delete “%@”?";
 "Delete Slot %ld?" = "Delete Slot %ld?";
 "Delete this save file?" = "Delete this save file?";
 "Delete?" = "Delete?";
@@ -141,10 +141,10 @@
 "Graphics" = "Graphics";
 "Graphics pipeline cache" = "Graphics pipeline cache";
 "Haptic feedback on button press" = "Haptic feedback on button press";
-"Import" = "导入";
+"Import" = "Import";
 "Import / Change ROM…" = "Import / Change ROM…";
-"Import game" = "导入游戏";
-"Import one or more decrypted ROMs (.3ds, .cci or .cia) from the Files app. They are copied into this app and stay on the device." = "从“文件”App 导入一个或多个已解密的 ROM（.3ds、.cci 或 .cia）。它们会被复制到本 App 内，并留在设备上。";
+"Import game" = "Import game";
+"Import one or more decrypted ROMs (.3ds, .cci or .cia) from the Files app. They are copied into this app and stay on the device." = "Import one or more decrypted ROMs (.3ds, .cci or .cia) from the Files app. They are copied into this app and stay on the device.";
 "Import ROM…" = "Import ROM…";
 "Import a decrypted .3ds or .cci from the Files app. The file is copied into this app's Documents folder and stays on the device." = "Import a decrypted .3ds or .cci from the Files app. The file is copied into this app's Documents folder and stays on the device.";
 "Import a game first: battery saves are listed per game." = "Import a game first: battery saves are listed per game.";
@@ -159,8 +159,8 @@
 "Keeps the 3DS picture's own shape. Black bars fill the rest of the screen." = "Keeps the 3DS picture's own shape. Black bars fill the rest of the screen.";
 "Landscape" = "Landscape";
 "Language" = "Language";
-"Last played %@" = "上次游玩：%@";
-"Library" = "游戏库";
+"Last played %@" = "Last played %@";
+"Library" = "Library";
 "Licence" = "Licence";
 "Load" = "Load";
 "Load a game to save or restore a state. Slots already on disk can be deleted here." = "Load a game to save or restore a state. Slots already on disk can be deleted here.";
@@ -176,27 +176,27 @@
 "Multi-disk ZIP archives are not supported." = "Multi-disk ZIP archives are not supported.";
 "Mute" = "Mute";
 "Mute audio" = "Mute audio";
-"Never played" = "未游玩";
+"Never played" = "Never played";
 "Nintendo 3DS games as native ARM64 apps on iPhone and iPad." = "Nintendo 3DS games as native ARM64 apps on iPhone and iPad.";
 "Nintendo 3DS is a trademark of Nintendo Co., Ltd. This app is not affiliated with or endorsed by Nintendo." = "Nintendo 3DS is a trademark of Nintendo Co., Ltd. This app is not affiliated with or endorsed by Nintendo.";
 "Nintendo 3DS, natively on iPhone and iPad" = "Nintendo 3DS, natively on iPhone and iPad";
-"Nintendo 3DS, natively." = "原生的 Nintendo 3DS。";
-"No games in your library yet. Import a ROM first." = "游戏库还是空的，请先导入 ROM。";
-"No games yet" = "还没有游戏";
+"Nintendo 3DS, natively." = "Nintendo 3DS, natively.";
+"No games in your library yet. Import a ROM first." = "No games in your library yet. Import a ROM first.";
+"No games yet" = "No games yet";
 "No ROM has been imported yet. Tap “Import ROM…” first." = "No ROM has been imported yet. Tap “Import ROM…” first.";
 "No battery save data yet. Save from the game's own menu and the files appear here." = "No battery save data yet. Save from the game's own menu and the files appear here.";
 "No controller connected — use the on-screen controls" = "No controller connected — use the on-screen controls";
 "No game imported" = "No game imported";
 "No game imported yet." = "No game imported yet.";
 "No game is selected." = "No game is selected.";
-"Not affiliated with Nintendo. Use only your own game dumps." = "与任天堂无关。请仅使用你自有的游戏转储。";
+"Not affiliated with Nintendo. Use only your own game dumps." = "Not affiliated with Nintendo. Use only your own game dumps.";
 "Not available in this build" = "Not available in this build";
 "Not connected" = "Not connected";
 "Off by default: the game appears as soon as it loads, and the pipeline cache is still written while you play." = "Off by default: the game appears as soon as it loads, and the pipeline cache is still written while you play.";
 "Off by default: the game appears as soon as the ROM loads. The runtime still writes its pipeline cache while you play, so later loads start warm." = "Off by default: the game appears as soon as the ROM loads. The runtime still writes its pipeline cache while you play, so later loads start warm.";
 "Off: the HUD is hidden for this app even though the build enables it." = "Off: the HUD is hidden for this app even though the build enables it.";
 "Off: the build does not enable the system HUD." = "Off: the build does not enable the system HUD.";
-"OK" = "好";
+"OK" = "OK";
 "On-screen controls" = "On-screen controls";
 "On: the HUD is shown over the presented Metal layer." = "On: the HUD is shown over the presented Metal layer.";
 "On: the first frames of each load run behind a “Preparing graphics” screen until they stop spiking (at most 5 s). Later pipelines can still compile on first use." = "On: the first frames of each load run behind a “Preparing graphics” screen until they stop spiking (at most 5 s). Later pipelines can still compile on first use.";
@@ -222,7 +222,7 @@
 "Restart the app to apply. If it still does not appear, check System Settings." = "Restart the app to apply. If it still does not appear, check System Settings.";
 "Restoring the console…" = "Restoring the console…";
 "Resume game" = "Resume game";
-"Run without AOT code?" = "不使用 AOT 代码运行？";
+"Run without AOT code?" = "Run without AOT code?";
 "Runtime" = "Runtime";
 "Runtime fault (zk_run_frame = -1)." = "Runtime fault (zk_run_frame = -1).";
 "Runtime stopped" = "Runtime stopped";
@@ -257,7 +257,7 @@
 "Start a game before loading a state." = "Start a game before loading a state.";
 "Start a game before saving a state." = "Start a game before saving a state.";
 "Start a game before using save states." = "Start a game before using save states.";
-"Start Anyway" = "仍要启动";
+"Start Anyway" = "Start Anyway";
 "Starting %@…" = "Starting %@…";
 "Starting Zakuro…" = "Starting Zakuro…";
 "Storage" = "Storage";
@@ -265,7 +265,7 @@
 "Summary" = "Summary";
 "System Metal HUD" = "System Metal HUD";
 "That file is not inside the game's save-data folder." = "That file is not inside the game's save-data folder.";
-"The imported ROM is removed from this app. Save data and save states stay on the device." = "导入的 ROM 会从本 App 中删除；存档与即时存档仍保留在设备上。";
+"The imported ROM is removed from this app. Save data and save states stay on the device." = "The imported ROM is removed from this app. Save data and save states stay on the device.";
 "The on-screen pad and a connected controller are merged." = "The on-screen pad and a connected controller are merged.";
 "The ZIP archive contains a file this device could not decompress." = "The ZIP archive contains a file this device could not decompress.";
 "The ZIP archive is damaged (bad central directory)." = "The ZIP archive is damaged (bad central directory).";
@@ -306,7 +306,7 @@
 "There is no battery save data to export yet. Save in the game's own menu first." = "There is no battery save data to export yet. Save in the game's own menu first.";
 "There is no save-state slot %ld." = "There is no save-state slot %ld.";
 "This app ships without any game data. It has no ROMs, decryption keys, system files or game assets. Import only dumps that you made from a console you own." = "This app ships without any game data. It has no ROMs, decryption keys, system files or game assets. Import only dumps that you made from a console you own.";
-"This game has no linked AOT code in this build. It will run in the interpreter and may be slow." = "此构建没有为该游戏链接 AOT 代码，将以解释器运行，速度可能较慢。";
+"This game has no linked AOT code in this build. It will run in the interpreter and may be slow." = "This game has no linked AOT code in this build. It will run in the interpreter and may be slow.";
 "Tools" = "Tools";
 "Unsupported file “%@”. Choose a decrypted .3ds or .cci ROM." = "Unsupported file “%@”. Choose a decrypted .3ds or .cci ROM.";
 "Upper screen above the lower one, as on the console. Fits a portrait screen; with 90° rotation it becomes two columns." = "Upper screen above the lower one, as on the console. Fits a portrait screen; with 90° rotation it becomes two columns.";
