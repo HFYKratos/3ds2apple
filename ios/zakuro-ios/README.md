@@ -161,6 +161,7 @@ The app-side thresholds, log lines and diagnostics fields are documented in
 | `zk_set_hardware_renderer(enabled)` | Draw the 3D on the host GPU for the next `zk_create` (`0` = software). Process-wide; systems already loaded keep their renderer. Returns `0` |
 | `zk_set_vulkan_library(path)` | Name the MoltenVK framework/dylib to load (`@executable_path/…`, `@rpath/…` or absolute); `0`, or `-1` for NULL/non-UTF-8. Call before `zk_create` |
 | `zk_set_hardware_option(name, value)` | Renderer switches (`gpu_shaders`, `cpu_shaders`, `static_blend`, `float_depth`, …); NULL/empty unsets. `0`, or `-1` for an unknown name/NULL/non-UTF-8. Call before `zk_create` |
+| `zk_set_render_scale(scale)` | Internal 3D render scale of the host-GPU renderer: `1`–`4` (`1` = 400×240, `4` = 1600×960) for the next `zk_create`/`zk_create_presented`; a loaded system keeps its scale (no run-time renderer rebuild), and the software renderer always draws at `1`×. `0`, or `-1` when the scale is outside `1..4` (setting unchanged, reason in `zk_last_error`). Call before the load |
 | `zk_hardware_status(system)` | One-line renderer + present status: host GPU with scale and whether the screens go straight to the Metal layer or are read back; requested-but-fell-back, or software. A NULL handle reports the last probe. Pointer is library-owned like `zk_recompiled_status` |
 
 Additional diagnostics used by the app's HUD/logs include
@@ -173,11 +174,12 @@ The hardware functions keep the same error contract as `zk_create`:
 `zk_set_hardware_option` (invalid arguments), and the presenter calls
 (`zk_presenter_create` on a bad view/size, `zk_create_presented` on a load or
 device failure, `zk_present` on a presentation failure) write `zk_last_error` on
-the calling thread; `zk_set_hardware_renderer` cannot fail. `zk_hardware_status`
-and the presentation functions are declared in `ios/ZakuroBridge.h` (the Swift
-bridging header); the probe/setter switches are declared in `src/lib.rs` only
-and are documented here, so the app does not call them today. The build-time
-`ZAKURO_IOS_HARDWARE` switch needs no header change.
+the calling thread; `zk_set_hardware_renderer` cannot fail. `zk_hardware_status`,
+`zk_set_render_scale` and the presentation functions are declared in
+`ios/ZakuroBridge.h` (the Swift bridging header); the probe and renderer-option
+switches are declared in `src/lib.rs` only and are documented here, so the app
+does not call them today. The build-time `ZAKURO_IOS_HARDWARE` switch needs no
+header change.
 
 ## Saved states
 

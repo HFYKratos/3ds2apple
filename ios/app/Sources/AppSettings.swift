@@ -8,10 +8,13 @@
 //  bindings in SettingsView.swift, which also store them in UserDefaults.
 //
 //  The audio/controls/performance values apply immediately. Display values are
-//  applied by the game screen when a game is loaded: the screen arrangement and
-//  rotation resize the presented layer and tell the presenter (the next frame
-//  uses them), while aspect, integer scaling and render scale are applied by the
-//  game screen itself. Every display change is safe while a game runs.
+//  applied by the game screen when a game is loaded: the screen arrangement,
+//  rotation and render resolution resize the presented layer and tell the
+//  presenter (the next frame uses them), while aspect and integer scaling are
+//  applied by the game screen itself. The internal 3D render scale behind the
+//  render resolution is read by the runtime when a system loads, so a running
+//  game keeps it until the next load. Every display change is safe while a game
+//  runs.
 //
 //  Titles and details are localized with L10n.tr() at the point they are read,
 //  so they show English or Simplified Chinese with the rest of the UI.
@@ -228,6 +231,68 @@ enum PlaybackSpeed: Int, CaseIterable, Identifiable {
     var isFastForward: Bool { rawValue > 1 }
 }
 
+/// The system Metal Performance HUD (FPS / GPU time / frame interval overlay).
+///
+/// Apple documents three programmatic ways to enable it, all handled here:
+///
+/// 1. `MetalHudEnabled` in Info.plist, injected by `scripts/build-ios-app.sh`.
+///    The build gate; without it the other switches do nothing.
+/// 2. `MetalHUDForceEnabled` in `NSUserDefaults` (value 1), the documented
+///    runtime switch that needs no environment and no scheme option. The
+///    Settings toggle writes it while it is on, so it is present from the next
+///    launch on.
+/// 3. `MTL_HUD_ENABLED=1` in the environment. Metal reads it when the process
+///    creates its first device (MoltenVK creates that device when the first
+///    game loads), so `App.init` sets it from the persisted setting; a device
+///    that already exists keeps the state it was created with.
+///
+/// On top of that, `CAMetalLayer.developerHUDProperties` (see
+/// `MetalScreenView`) shows or hides the HUD on the live layer without a
+/// relaunch. The per-layer key is "mode": "default" / "main" / "disabled";
+/// every `MTL_HUD_*` environment key may also be put in that dictionary.
+enum MetalHUD {
+    static let environmentKey = "MTL_HUD_ENABLED"
+    static let defaultsKey = "MetalHUDForceEnabled"
+
+    /// Whether the process environment currently asks Metal for the HUD.
+    static var isEnvironmentEnabled: Bool {
+        guard let raw = getenv(environmentKey) else { return false }
+        return String(cString: raw) != "0"
+    }
+
+    /// Whether the documented NSUserDefaults switch is on. The HUD reads it at
+    /// launch, so it has to be on disk before the next launch to take effect.
+    static var isDefaultsEnabled: Bool {
+        UserDefaults.standard.integer(forKey: defaultsKey) != 0
+    }
+
+    /// Writes all programmatic switches for the next launch. Main queue only.
+    static func apply(enabled: Bool) {
+        let defaults = UserDefaults.standard
+        if enabled {
+            setenv(environmentKey, "1", 1)
+            defaults.set(1, forKey: defaultsKey)
+        } else {
+            unsetenv(environmentKey)
+            defaults.removeObject(forKey: defaultsKey)
+        }
+    }
+
+    /// The Info.plist build gate injected by scripts/build-ios-app.sh.
+    static var buildGateEnabled: Bool {
+        Bundle.main.object(forInfoDictionaryKey: "MetalHudEnabled") as? Bool ?? false
+    }
+
+    /// One line for the device log and the diagnostics report. Reading
+    /// `AppSettings.shared` here is safe: the settings object is created before
+    /// any of this is asked for.
+    static var diagnosticsLine: String {
+        "setting=\(AppSettings.shared.systemMetalHUD ? 1 : 0)"
+            + " env=\(isEnvironmentEnabled ? 1 : 0)"
+            + " defaults=\(isDefaultsEnabled ? 1 : 0)"
+            + " plist=\(buildGateEnabled ? 1 : 0)"
+    }
+}
 /// Persisted shell settings. One shared instance is injected through the view
 /// tree; `SettingsView` and its reusable sections are the only writers.
 final class AppSettings: ObservableObject {
@@ -238,8 +303,10 @@ final class AppSettings: ObservableObject {
     /// Turn the screens inside their area (see `ScreenRotation`).
     @Published var screenRotation: ScreenRotation
     @Published var integerScale: Bool
-    /// 1 = the layout's own drawable (400x480 for the stacked console),
-    /// 2 = twice that (800x960).
+    /// 1 = the layout's own drawable (400x480 for the stacked console) through
+    /// 4 = four times that (1600x1920). The presenter's drawable is resized at
+    /// once; the runtime's internal 3D renderer reads the factor when a system
+    /// loads, so an already loaded game keeps its internal scale.
     @Published var renderScale: Int
     @Published var orientation: OrientationLock
 
@@ -251,7 +318,6 @@ final class AppSettings: ObservableObject {
     @Published var controlsOpacity: Double
     @Published var haptics: Bool
 
-    @Published var showCustomHUD: Bool
     @Published var frameCap: FrameRateCap
 
     /// Show the system Metal Performance HUD (FPS / GPU time / memory) over the
@@ -282,7 +348,16 @@ final class AppSettings: ObservableObject {
             rawValue: defaults.string(forKey: Keys.screenRotation) ?? ""
         ) ?? .upright
         integerScale = Self.bool(defaults, Keys.integerScale, fallback: false)
-        renderScale = Self.bool(defaults, Keys.renderScaleDoubleX, fallback: false) ? 2 : 1
+        // Render resolution is 1...4 (UI.renderScale). Earlier builds stored
+        // only a "double resolution" switch (UI.renderScaleDoubleX): migrate it
+        // to 2x, or 1x when it was off or absent.
+        if defaults.object(forKey: Keys.renderScale) != nil {
+            renderScale = Self.clampRenderScale(defaults.integer(forKey: Keys.renderScale))
+        } else if defaults.object(forKey: Keys.legacyRenderScaleDoubleX) != nil {
+            renderScale = defaults.bool(forKey: Keys.legacyRenderScaleDoubleX) ? 2 : 1
+        } else {
+            renderScale = 1
+        }
         orientation = OrientationLock(
             rawValue: defaults.string(forKey: Keys.orientation) ?? ""
         ) ?? .automatic
@@ -305,7 +380,6 @@ final class AppSettings: ObservableObject {
         }
         haptics = Self.bool(defaults, Keys.haptics, fallback: false)
 
-        showCustomHUD = Self.bool(defaults, Keys.showCustomHUD, fallback: true)
         frameCap = FrameRateCap(
             rawValue: defaults.integer(forKey: Keys.frameCap)
         ) ?? .sixty
@@ -323,7 +397,7 @@ final class AppSettings: ObservableObject {
         defaults.set(screenAspect.rawValue, forKey: Keys.screenAspect)
         defaults.set(screenRotation.rawValue, forKey: Keys.screenRotation)
         defaults.set(integerScale, forKey: Keys.integerScale)
-        defaults.set(renderScale >= 2, forKey: Keys.renderScaleDoubleX)
+        defaults.set(renderScale, forKey: Keys.renderScale)
         defaults.set(orientation.rawValue, forKey: Keys.orientation)
         defaults.set(audioVolume, forKey: Keys.audioVolume)
         defaults.set(audioMuted, forKey: Keys.audioMuted)
@@ -331,17 +405,23 @@ final class AppSettings: ObservableObject {
         defaults.set(showTouchControls, forKey: Keys.showTouchControls)
         defaults.set(controlsOpacity, forKey: Keys.controlsOpacity)
         defaults.set(haptics, forKey: Keys.haptics)
-        defaults.set(showCustomHUD, forKey: Keys.showCustomHUD)
         defaults.set(frameCap.rawValue, forKey: Keys.frameCap)
         defaults.set(systemMetalHUD, forKey: Keys.systemMetalHUD)
+        // Keep MTL_HUD_ENABLED in step with the switch: it is read when a
+        // Metal device is created, so a change without a relaunch still applies
+        // to the next device (the layer property switches the live layer).
+        MetalHUD.apply(enabled: systemMetalHUD)
         defaults.set(graphicsWarmUpEnabled, forKey: Keys.graphicsWarmUpEnabled)
         defaults.set(playbackSpeed.rawValue, forKey: Keys.playbackSpeed)
     }
 
     // MARK: - Derived values
 
+    /// Render scale clamped to the 1...4 the Metal view and the runtime accept.
+    var clampedRenderScale: Int { Self.clampRenderScale(renderScale) }
+
     /// Render scale as a factor the Metal view can use.
-    var renderScaleFactor: Double { renderScale >= 2 ? 2 : 1 }
+    var renderScaleFactor: Double { Double(clampedRenderScale) }
 
     var audioVolumeFloat: Float { Float(audioVolume) }
 
@@ -357,11 +437,13 @@ final class AppSettings: ObservableObject {
         static let screenAspect = "UI.screenAspect"
         static let screenRotation = "UI.screenRotation"
         static let integerScale = "UI.integerScale"
-        static let renderScaleDoubleX = "UI.renderScaleDoubleX"
+        static let renderScale = "UI.renderScale"
+        // Earlier builds stored only this "double resolution" switch; read it
+        // once to migrate it to renderScale.
+        static let legacyRenderScaleDoubleX = "UI.renderScaleDoubleX"
         static let orientation = "UI.orientation"
         static let audioVolume = "UI.audioVolume"
         static let audioBuffer = "UI.audioBuffer"
-        static let showCustomHUD = "UI.showCustomHUD"
         static let controlsOpacity = "UI.controlsOpacity"
         static let haptics = "UI.haptics"
         static let frameCap = "UI.frameCap"
@@ -379,6 +461,12 @@ final class AppSettings: ObservableObject {
     private static func bool(_ defaults: UserDefaults, _ key: String, fallback: Bool) -> Bool {
         guard defaults.object(forKey: key) != nil else { return fallback }
         return defaults.bool(forKey: key)
+    }
+
+    /// Clamps a render scale to the 1...4 both the drawable and the runtime's
+    /// internal 3D renderer accept.
+    static func clampRenderScale(_ value: Int) -> Int {
+        min(max(value, 1), 4)
     }
 
     private static func clampVolume(_ value: Double) -> Double {

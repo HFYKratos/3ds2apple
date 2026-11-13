@@ -52,6 +52,11 @@
 //! renderer's tuning switches (GPU versus CPU vertex shading) before a load.
 //! `METAL.md` has the architecture, the MoltenVK findings and the spike plan.
 //!
+//! The internal resolution the host-GPU renderer draws the 3D at is a separate,
+//! process-wide switch: [`zk_set_render_scale`] picks 1x (the console's own
+//! 400×240, the default) to 4x, and the value is read when a system loads, like
+//! the renderer switch. The software PICA200 always draws at 1x.
+//!
 //! ## Presentation on a CAMetalLayer
 //!
 //! The A0 path above still copies every screen out of the GPU memory and shows
@@ -84,7 +89,7 @@ use std::cell::RefCell;
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::path::PathBuf;
 use std::ptr;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -357,6 +362,39 @@ fn hardware_requested() -> bool {
             Some("1" | "on" | "true" | "yes")
         ),
     }
+}
+
+/// Internal render resolution: the scale [`zk_create`] and
+/// [`presenter::zk_create_presented`] hand the loader as `Config.resolution`,
+/// where `1` is the 3DS's own 400×240 and `4` is 1600×960.
+///
+/// The loader builds the renderer once, while it loads a system, so a new scale
+/// applies to the next load and never rebuilds a loaded system's renderer.
+const DEFAULT_RENDER_SCALE: u32 = 1;
+/// Smallest accepted internal scale: the console's own pixels.
+const MIN_RENDER_SCALE: u32 = 1;
+/// Largest accepted internal scale: 4x (1600×960), 16 times the pixels of 1x.
+const MAX_RENDER_SCALE: u32 = 4;
+
+/// The process-wide internal render scale; see [`zk_set_render_scale`].
+static RENDER_SCALE: AtomicU32 = AtomicU32::new(DEFAULT_RENDER_SCALE);
+
+/// The render scale a load should use, clamped into the accepted range in case
+/// the atomic ever holds anything else.
+fn render_scale() -> u32 {
+    RENDER_SCALE
+        .load(Ordering::Relaxed)
+        .clamp(MIN_RENDER_SCALE, MAX_RENDER_SCALE)
+}
+
+/// Stores a new render scale, or leaves the old one and returns `false` for a
+/// value outside `1..=4`.
+fn store_render_scale(scale: u32) -> bool {
+    if !(MIN_RENDER_SCALE..=MAX_RENDER_SCALE).contains(&scale) {
+        return false;
+    }
+    RENDER_SCALE.store(scale, Ordering::Relaxed);
+    true
 }
 
 /// Stores `text` as the last [`zk_hardware_probe`] result.
@@ -710,6 +748,11 @@ pub(crate) fn create_system(
     config.texture_packs = false;
     // iOS forbids executable memory: no JIT, no recompiled-code discovery here.
     config.find_recompiled = false;
+    // The internal render resolution of the host-GPU renderer (1x = the
+    // console's own 400×240). The loader builds the renderer while it loads, so
+    // this is where a new scale takes effect: there is no run-time rebuild of a
+    // loaded system's renderer, and the software renderer stays at 1x.
+    config.resolution = render_scale();
 
     // One game's AOT code can be linked into the app instead (`scripts/AOT_BUILD.md`). The
     // loader checks its title ID and interface version, and interprets instead
@@ -942,6 +985,40 @@ pub extern "C" fn zk_set_hardware_renderer(enabled: i32) -> i32 {
     eprintln!(
         "zk_set_hardware_renderer: hardware rendering {} for the next zk_create",
         if enabled != 0 { "on" } else { "off" }
+    );
+    0
+}
+
+/// Sets the internal resolution the 3D renderer draws at for the systems
+/// [`zk_create`] and [`presenter::zk_create_presented`] load from now on: `1`
+/// (the default) is the 3DS's own 400×240, `4` is 1600×960.
+///
+/// The value goes into `Config.resolution` on the next load. Zakuro builds the
+/// renderer while it loads a system, so a change never rebuilds the renderer of
+/// a system already loaded (there is no run-time renderer rebuild): destroy the
+/// system and call `zk_create`/`zk_create_presented` again for the new scale to
+/// take effect. The setting is process-wide and independent of the
+/// hardware/software renderer switch, but only the host-GPU renderer uses it:
+/// the software PICA200 always draws at 1x. A higher scale costs GPU time and
+/// memory, and the presenter scales the larger screens down to its layer.
+///
+/// Returns 0, or -1 when `scale` is outside 1..=4; the setting is then
+/// unchanged and the reason goes to [`zk_last_error`] on the calling thread.
+#[no_mangle]
+pub extern "C" fn zk_set_render_scale(scale: u32) -> i32 {
+    if !store_render_scale(scale) {
+        let message = format!(
+            "zk_set_render_scale: scale {scale} is outside {MIN_RENDER_SCALE}..={MAX_RENDER_SCALE}"
+        );
+        eprintln!("{message}");
+        set_last_error(message);
+        return -1;
+    }
+    eprintln!(
+        "zk_set_render_scale: the next load draws the 3D at {scale}x ({}x{} internally); a \
+         loaded system keeps its scale",
+        400 * scale,
+        240 * scale
     );
     0
 }
@@ -1184,16 +1261,19 @@ pub extern "C" fn zk_destroy(system: *mut c_void) {
 mod tests {
     use std::ffi::{c_char, c_void, CStr};
     use std::ptr;
+    use std::sync::atomic::Ordering;
+    use std::sync::{Mutex, MutexGuard};
 
     #[cfg(feature = "linked")]
     use zakuro_core::{Config, System};
 
     use super::{
-        clear_last_error, set_last_error, zk_create, zk_hardware_status, zk_last_audio_take_micros,
-        zk_last_error, zk_last_frame_micros, zk_last_screen_read_micros, zk_linked_code,
-        zk_linked_program_id, zk_profiler_hot_spots, zk_profiler_start, zk_recompiled,
-        zk_recompiled_status, zk_set_hardware_option, zk_set_hardware_renderer,
-        zk_set_vulkan_library,
+        clear_last_error, render_scale, set_last_error, store_render_scale, zk_create,
+        zk_hardware_status, zk_last_audio_take_micros, zk_last_error, zk_last_frame_micros,
+        zk_last_screen_read_micros, zk_linked_code, zk_linked_program_id, zk_profiler_hot_spots,
+        zk_profiler_start, zk_recompiled, zk_recompiled_status, zk_set_hardware_option,
+        zk_set_hardware_renderer, zk_set_render_scale, zk_set_vulkan_library, DEFAULT_RENDER_SCALE,
+        MAX_RENDER_SCALE, MIN_RENDER_SCALE, RENDER_SCALE,
     };
     #[cfg(feature = "linked")]
     use super::{clear_linked_refusal, set_linked_refusal};
@@ -1513,5 +1593,80 @@ mod tests {
         let text = status_text(handle);
         clear_linked_refusal();
         assert!(text.contains("version 3"), "unexpected: {text}");
+    }
+
+    /// Serializes the tests that change the process-wide render scale: the test
+    /// harness runs them in parallel, and the scale is one atomic for the whole
+    /// process.
+    static RENDER_SCALE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Puts the render scale back to its default when a test ends, including
+    /// while a failing test unwinds, so every section starts from 1x.
+    struct RenderScaleReset;
+
+    impl Drop for RenderScaleReset {
+        fn drop(&mut self) {
+            RENDER_SCALE.store(DEFAULT_RENDER_SCALE, Ordering::Relaxed);
+        }
+    }
+
+    /// The render-scale tests' serial section, with the default restored on exit.
+    fn render_scale_test_section() -> (MutexGuard<'static, ()>, RenderScaleReset) {
+        let guard = RENDER_SCALE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        (guard, RenderScaleReset)
+    }
+
+    #[test]
+    fn render_scale_defaults_to_one() {
+        let (_section, _reset) = render_scale_test_section();
+        assert_eq!(DEFAULT_RENDER_SCALE, 1);
+        assert_eq!(RENDER_SCALE.load(Ordering::Relaxed), 1);
+        assert_eq!(render_scale(), 1);
+    }
+
+    #[test]
+    fn render_scale_accepts_one_to_four() {
+        let (_section, _reset) = render_scale_test_section();
+        for scale in MIN_RENDER_SCALE..=MAX_RENDER_SCALE {
+            assert_eq!(
+                zk_set_render_scale(scale),
+                0,
+                "scale {scale} must be accepted"
+            );
+            assert_eq!(render_scale(), scale);
+            assert!(store_render_scale(scale));
+        }
+    }
+
+    #[test]
+    fn render_scale_rejects_values_outside_one_to_four() {
+        let (_section, _reset) = render_scale_test_section();
+        assert_eq!(zk_set_render_scale(2), 0);
+        for scale in [0u32, MAX_RENDER_SCALE + 1, 5, 100, u32::MAX] {
+            clear_last_error();
+            assert_eq!(
+                zk_set_render_scale(scale),
+                -1,
+                "scale {scale} must be refused"
+            );
+            let message = last_error_text().expect("a refused scale must set an error");
+            assert!(message.contains("outside 1..=4"), "unexpected: {message}");
+            assert_eq!(
+                render_scale(),
+                2,
+                "a refused scale must not replace the stored one"
+            );
+        }
+    }
+
+    #[test]
+    fn render_scale_reading_clamps_a_corrupt_setting() {
+        let (_section, _reset) = render_scale_test_section();
+        RENDER_SCALE.store(0, Ordering::Relaxed);
+        assert_eq!(render_scale(), MIN_RENDER_SCALE);
+        RENDER_SCALE.store(MAX_RENDER_SCALE + 1, Ordering::Relaxed);
+        assert_eq!(render_scale(), MAX_RENDER_SCALE);
     }
 }

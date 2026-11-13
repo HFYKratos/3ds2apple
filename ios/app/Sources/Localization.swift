@@ -105,11 +105,6 @@ enum L10n {
         format("%ld of %ld slots", used, total)
     }
 
-    /// "2 frames", localized.
-    static func frameCount(_ count: UInt64) -> String {
-        count == 1 ? tr("1 frame") : format("%llu frames", count)
-    }
-
     /// Speed label used by the fast-forward controls: "1×", "2×", "4×".
     static func speedLabel(_ speed: Int) -> String {
         "\(max(1, speed))×"

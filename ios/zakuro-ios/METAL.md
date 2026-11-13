@@ -122,7 +122,7 @@ So linking `zakuro-core` already links the Vulkan backend;
 |---|---|---|
 | `hardware_renderer: bool` | `false` | when `true`, the loader tries the Vulkan renderer; on failure it falls back to software and logs a warning |
 | `device: Option<Arc<SharedDevice>>` | `None` | Vulkan device shared with a presenter; `None` lets the renderer make its own, so no presenter is needed |
-| `resolution: u32` | `1` | internal render scale (`1` = 400×240) |
+| `resolution: u32` | `1` | internal render scale of the host-GPU renderer (`1` = 400×240; software always 1x); `zk_set_render_scale` sets it to 1–4 for the next load |
 | `interpolate: bool` | `false` | frame interpolation; needs a presenter with a shared device (not used in v1) |
 | `texture_packs: bool` | `true` | texture packs; need the hardware renderer (the iOS FFI keeps this off) |
 
@@ -595,7 +595,9 @@ build; fps not lower than A0; soak passes.
 ### 5.3 A2: renderer tuning (after A1)
 
 - `Config.resolution = 2` (800×480 internally): sharper picture, more GPU load;
-  decide from the HUD.
+  decide from the HUD. The app sets it with `zk_set_render_scale` (1–4); the
+  loader reads it when it builds the renderer, so a change applies to the next
+  load (no run-time renderer rebuild).
 - GPU vertex shading (`zk_set_hardware_option("gpu_shaders", "1")`) versus CPU.
 - Pipeline cache warm-up/sizing (`MOST_PIPELINE_BYTES = 64 MiB`).
 - Texture packs / 3D stereo / interpolation (presenter features behind app UI).
@@ -642,9 +644,10 @@ useful as a Plan B reference.
 
 ## 7. C ABI added by these changes
 
-The hardware-rendering FFI (A0) and the presentation FFI (A1) are new; **no
-existing `zk_*` signature changed**. `zk_create` is now a thin wrapper over the
-body `zk_create_presented` also uses: the presented variant sets
+The hardware-rendering FFI (A0), the presentation FFI (A1) and the internal
+render-scale setter (A2) are new; **no existing `zk_*` signature changed**.
+`zk_create` is now a thin wrapper over the body `zk_create_presented` also
+uses: the presented variant sets
 `Config.device` to the presenter's Vulkan device and forces the GPU renderer on
 (the screens it draws must be the ones presented). The full table is in
 [README.md](README.md#c-abi); prototypes are in `ios/ZakuroBridge.h`:
@@ -656,6 +659,9 @@ int32_t     zk_set_hardware_renderer(int32_t enabled);
 int32_t     zk_set_vulkan_library(const char *path);
 int32_t     zk_set_hardware_option(const char *name, const char *value);
 const char *zk_hardware_status(zk_system_t system);
+
+/* internal render resolution (A2) */
+int32_t     zk_set_render_scale(uint32_t scale);
 
 /* presentation on the app's CAMetalLayer (A1) */
 zk_presenter_t zk_presenter_create(void *ui_view, uint32_t width, uint32_t height);
@@ -678,8 +684,8 @@ Do not set it for release builds; the app can call `zk_set_hardware_renderer`
 from a setting instead.
 
 The app only sees these functions once they are declared in
-`ios/ZakuroBridge.h` (the Swift bridging header); the A1 functions and
-`zk_hardware_status` are declared there.
+`ios/ZakuroBridge.h` (the Swift bridging header); the A1 functions,
+`zk_hardware_status` and `zk_set_render_scale` are declared there.
 
 ## 8. Building a hardware-rendering test build (A0/A1)
 

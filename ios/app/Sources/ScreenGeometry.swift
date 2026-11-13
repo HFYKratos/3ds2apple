@@ -39,14 +39,14 @@ enum ScreenGeometry {
     }
 
     /// Drawable size in pixels for the presenter: the arrangement's own pixels
-    /// times the render scale (1x or 2x).
+    /// times the render scale (1x through 4x).
     static func drawablePixelSize(
         layout: ScreenLayout,
         rotation: ScreenRotation,
         renderScale: CGFloat
     ) -> CGSize {
         let native = nativePixelSize(layout: layout, rotation: rotation)
-        let factor: CGFloat = renderScale >= 2 ? 2 : 1
+        let factor = min(max(renderScale.rounded(), 1), 4)
         return CGSize(width: native.width * factor, height: native.height * factor)
     }
 

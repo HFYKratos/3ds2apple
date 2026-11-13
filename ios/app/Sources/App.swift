@@ -19,6 +19,15 @@ struct ThreeDS2AppleApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
+        // Metal Performance HUD: the Metal device reads MTL_HUD_ENABLED once,
+        // when it is created. The device here is MoltenVK's, created by the
+        // first zk_create()/load, so the persisted Settings switch has to
+        // become an environment variable before that. The layer-level
+        // developerHUDProperties switch in MetalScreenView then shows/hides the
+        // HUD on the live layer; flipping it while a game runs does not need a
+        // relaunch, but a build whose Metal device was created before the
+        // variable was set does (see SettingsView and MetalScreenView).
+        MetalHUD.apply(enabled: AppSettings.shared.systemMetalHUD)
         // Zakuro stores its Vulkan pipeline cache under XDG_CACHE_HOME (or
         // ~/.cache). On iOS the sandbox home's .cache is not writable, which
         // made every launch recompile pipelines and stutter on first use.
@@ -29,6 +38,9 @@ struct ThreeDS2AppleApp: App {
         }
         // Redirect stderr and start the in-app log before the runtime loads.
         AppLog.shared.start()
+        // One line that answers "why is the HUD not showing?" on device:
+        // setting, environment variable and the Info.plist build gate.
+        AppLog.log("[3ds2apple] metal hud: %@", MetalHUD.diagnosticsLine)
         if let directory = PipelineCacheStats.directoryURL {
             AppLog.log("pipeline cache dir: %@", directory.path)
         }

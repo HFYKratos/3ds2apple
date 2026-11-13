@@ -433,6 +433,29 @@ int32_t zk_present_touch_map(uint32_t width, uint32_t height,
 /* --------------------------------------------------- hardware diagnostics -- */
 
 /**
+ * Sets the internal resolution the 3D renderer draws at: 1 is the 3DS's own
+ * 400x240 (the default) and 4 is 1600x960. Values in between are the same
+ * multiple of both screens.
+ *
+ * The loader builds the renderer while it loads a system, so a new scale takes
+ * effect on the next zk_create()/zk_create_presented() call. A system that is
+ * already loaded keeps the scale it was created with; there is no run-time
+ * renderer rebuild, so destroy it and load again to change the scale. The
+ * setting is process-wide and independent of zk_set_hardware_renderer(), but
+ * only the host-GPU renderer uses it: the software PICA200 always draws at 1x.
+ * The presenter scales the larger screens down to its layer.
+ *
+ * Call it on the runtime serial queue before a load, or from the main queue
+ * while no load is running.
+ *
+ * @param scale Internal render scale, 1 through 4.
+ * @return 0 on success; -1 when scale is outside 1..4 (the setting is left
+ *         unchanged and the reason is in zk_last_error() on the calling
+ *         thread).
+ */
+int32_t zk_set_render_scale(uint32_t scale);
+
+/**
  * What a loaded system ended up drawing the 3D on: the host GPU through Vulkan
  * (MoltenVK over Metal on iOS) with the resolution scale, whether the screens
  * go straight to the CAMetalLayer or are read back, a request that fell back to

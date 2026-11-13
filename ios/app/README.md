@@ -1,8 +1,8 @@
 # iOS app
 
 The SwiftUI shell for 3ds2apple. It imports the user's own ROM, displays the two
-3DS screens, drives the Zakuro runtime and exposes input, audio, frame timing,
-fast-forward, save data and settings. The app is organised as a home page, the
+3DS screens, drives the Zakuro runtime and exposes input, audio, fast-forward,
+save data, diagnostics and settings. The app is organised as a home page, the
 running game, a settings page and a few supporting pages.
 
 The UI follows the system language: Simplified Chinese gets Chinese, every other
@@ -15,7 +15,7 @@ views do not carry duplicated strings.
 | Page | Contents |
 |---|---|
 | **Home** | Current game card (ROM name), Play / Load, Import / Change ROM, and tools: Settings, Save Manager, Diagnostics export, About. |
-| **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), performance HUD, on-screen controls, the optional "Preparing graphics" warm-up overlay and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. |
+| **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), on-screen controls, the optional "Preparing graphics" warm-up overlay and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. |
 | **Settings** | Display, Audio, Controls, Performance (frame cap, fast-forward, system Metal HUD, optional graphics warm-up), Storage and About sections. |
 | **Save Manager** | The battery save files of the current game (size, date, export as ZIP, import, delete), the three instant save-state slots (save, load, delete) and the container usage. |
 | **About** | Version, runtime state, acknowledgements and licence. |
@@ -59,10 +59,11 @@ on-screen controls, so no input or audio advances behind it.
   (`CAMetalLayer.developerHUDProperties`, iOS 16), off by default. See "System
   Metal HUD" below.
 - Display settings: screen layout, screen rotation, aspect (fit / 4:3 / stretch),
-  integer scaling, render resolution (1×/2×) and interface orientation. All of
-  them apply immediately, also while a game runs. See "Display settings" below.
-- Performance HUD: `zk_run_frame`, presentation (`present`), the fallback
-  screen reads/CGImages, and audio pump, in milliseconds; it can be hidden.
+  integer scaling, render resolution (1×–4×) and interface orientation. Layout,
+  rotation, aspect and integer scaling apply immediately, also while a game
+  runs; the render resolution resizes the presented drawable at once, while the
+  internal 3D render scale is applied when a game loads. See "Display settings"
+  below.
 - AOT status (`linked, active` / `linked, interpreting` / `interpreter shell`)
   and emulation speed relative to the 3DS 60 Hz timeline.
 - Storage page: save-data / ROM / log / pipeline-cache usage and a "clear
@@ -90,7 +91,7 @@ on-screen controls, so no input or audio advances behind it.
 | Screen rotation | Upright, 90° clockwise, upside down, 90° counter-clockwise | Immediately. Turns the screens inside their area, e.g. the stacked console becomes two columns (480×400) a quarter turn clockwise. The touchscreen is mapped back into the screen's own pixels. |
 | Aspect ratio | Fit (native), 4:3, Stretch | Immediately. Fit keeps the arrangement's shape; 4:3 fits the picture inside a 4:3 area with black bars; Stretch fills the game view's space and deliberately distorts the picture. |
 | Integer scaling | On / off | Immediately, with Fit and 4:3 (Stretch ignores it): each 3DS pixel maps to a whole number of screen pixels and the layer magnifies with nearest-pixel filtering. |
-| Render resolution | 1× / 2× | Immediately. The presenter renders the arrangement at its own pixels (×2 for a sharper picture) and CoreAnimation scales the result to the screen; the swapchain is resized through `zk_presenter_resize` and the following frame presents at the new size. |
+| Render resolution | 1× / 2× / 3× / 4× | The presenter's drawable is the arrangement's own pixels times the factor and CoreAnimation scales it to the screen; the swapchain is resized through `zk_presenter_resize` and the following frame presents at the new size. The internal resolution the host-GPU 3D renderer draws at is set with `zk_set_render_scale` and read when a system loads, so a running game keeps its old internal scale until it is reloaded or restarted. The software renderer always draws at 1×; higher factors cost GPU time and memory. |
 | Orientation | Automatic / portrait / landscape | Immediately: the app restricts the supported orientations and asks the window scene to rotate. The in-game layout reflows for portrait/landscape. iOS still decides in some situations (for example during a phone call). |
 
 The 3DS screens stay upright in the app's interface, which iOS rotates with the
@@ -117,7 +118,6 @@ mapping is documented in the input section below.
 
 | Setting | Values | Behaviour |
 |---|---|---|
-| Custom frame-time HUD | On / off | Immediately; shows the per-phase milliseconds under the screens. |
 | Frame cap | 60 / 30 fps | Immediately; the free-run loop never starts presented frames closer than 1/60 s (or 1/30 s). It is a cap, not a target. |
 | Fast-forward | 1× / 2× / 4× | Immediately (also from the in-game menu); the next presented frame uses the new value. |
 | System Metal HUD | On / off | Immediately on the presented `CAMetalLayer`; remembered for later loads. |
@@ -143,9 +143,8 @@ frames with `zk_run_frame` before the frame that is presented:
   menu or input unresponsive. The Settings page and the status line show the
   effective speed (`fast-forward: 2× (auto)`), and choosing a speed again
   clears the fallback.
-- The status line shows the effective speed and a game-time percentage
-  (`speed: 190% of 60 Hz`, `fast-forward: 2×`), and the exported diagnostics
-  record both the requested and the effective speed.
+- The status line shows the effective speed (`fast-forward: 2×`), and the
+  exported diagnostics records both the requested and the effective speed.
 - Pause, Save State / Load State, Reset, Unload and moving to the background all
   stop the frame loop before touching the runtime, so a fast-forward group can
   never straddle a state change.
@@ -171,8 +170,8 @@ The system Metal Performance HUD (FPS, GPU time, memory) attaches to the
 Metal HUD sets `CAMetalLayer.developerHUDProperties["mode"]` to `"default"` or
 `"disabled"` at run time (iOS 16 API), and the preference is persisted and
 re-applied whenever the layer is reused, so it survives page navigation and ROM
-reloads. The app also keeps HUD logging off, because it has its own frame-time
-HUD.
+reloads. The app keeps the system HUD's device logging off; the app log and the
+diagnostics report carry the frame timings instead.
 
 The HUD can only appear when something enables it for the build: the packaged
 test IPA sets `MetalHudEnabled` in `Info.plist` (`scripts/package-ipa.sh`), or the
@@ -276,7 +275,7 @@ Without it the app still builds and runs, on the readback path.
 | `ApplicationDelegate.swift` | UIKit delegate used for the orientation preference. |
 | `ContentView.swift` | Root router: home page or game for the current session phase; applies settings to the session. |
 | `HomeView.swift` | Home page: current game card, Play/Import, tools. |
-| `GameView.swift` | Running game: responsive portrait/landscape layout, screens, status line, performance HUD, on-screen controls, warm-up overlay, in-game menu. |
+| `GameView.swift` | Running game: responsive portrait/landscape layout, screens, status line, on-screen controls, warm-up overlay, in-game menu. |
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, reset, display settings, save manager, diagnostics, exit) and quick toggles. |
 | `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. |
 | `SaveManagerView.swift` | Battery save list (export as ZIP, import, delete) and the instant save-state slots (save, load, delete), with progress and errors. |
@@ -289,7 +288,7 @@ Without it the app still builds and runs, on the readback path.
 | `ZipArchive.swift` | Small ZIP writer (stored entries) and reader (stored and deflated entries) used for save-data backups. |
 | `SaveArchivePicker.swift` | Files picker for importing a save-data ZIP or individual save files. |
 | `ROMSession.swift` | Runtime handle, ROM import, frame loop, presenter lifecycle, input/audio plumbing, pause/resume/reset and the settings that change runtime behaviour. |
-| `MetalScreenView.swift` | `UIView` with a `CAMetalLayer` the presenter draws into (A1); drawable size for the chosen layout/rotation and the render scale, plus the integer-scaling magnification filter. |
+| `MetalScreenView.swift` | `UIView` with a `CAMetalLayer` the presenter draws into (A1); drawable size for the chosen layout/rotation and the render scale (1×–4×), plus the integer-scaling magnification filter. |
 | `ScreenGeometry.swift` | The drawable size of each layout/rotation and the box the screens occupy for the aspect/integer-scale settings. |
 | `ROMDocumentPicker.swift` | Files document picker wrapper. |
 | `ScreenImage.swift` | Reusable RGBA buffers and `CGImage` conversion. |
@@ -297,7 +296,7 @@ Without it the app still builds and runs, on the readback path.
 | `TouchControlsView.swift` | On-screen button controls: the portrait pad and the landscape top bar / side rails (opacity and haptics options). |
 | `GameControllerInput.swift` | GameController-to-3DS button mapping. |
 | `AudioOutput.swift` | Ring buffer and AVAudioEngine output (volume, mute, buffer duration). |
-| `FrameTiming.swift` | Per-phase frame timing for the HUD. |
+| `FrameTiming.swift` | Per-phase frame timing for the diagnostics report and the fast-forward auto-fallback. |
 | `GraphicsWarmUp.swift` | Optional first-load graphics warm-up state/plan (off by default), its persisted "warmed" marker and pipeline-cache filesystem stats. |
 | `Localization.swift` | `L10n` lookup/format helpers, the resolved display language, and the locale-change observer that rebuilds the UI. |
 | `AppLog.swift` | In-app log capture and the diagnostics report assembly. |
@@ -312,10 +311,10 @@ run on the single serial queue owned by `ROMSession`.
 
 The app has one presentation path and one fallback:
 
-| Path | What happens | HUD |
+| Path | What happens | Frame timing |
 |---|---|---|
-| **CAMetalLayer (A1)** | The app owns a `MetalScreenView` (`UIView` + `CAMetalLayer`), makes a Zakuro Vulkan presenter for it (`zk_presenter_create`) and loads the ROM with `zk_create_presented`. The presenter lays out the chosen screen arrangement in the layer's drawable (`zk_presenter_set_layout` / `zk_presenter_set_orientation`); after every `zk_run_frame` the app calls `zk_present` and the screens go straight from the renderer's GPU images to the swapchain. | `present` row; no screen reads, no `CGImage` |
-| **CGImage readback (fallback)** | `zk_create` + `zk_read_screen` for each screen, converted to `CGImage` and shown by SwiftUI in the same layout/rotation. Only when no presenter can be made. | `read top` / `read bottom` / `CGImage` rows |
+| **CAMetalLayer (A1)** | The app owns a `MetalScreenView` (`UIView` + `CAMetalLayer`), makes a Zakuro Vulkan presenter for it (`zk_presenter_create`) and loads the ROM with `zk_create_presented`. The presenter lays out the chosen screen arrangement in the layer's drawable (`zk_presenter_set_layout` / `zk_presenter_set_orientation`); after every `zk_run_frame` the app calls `zk_present` and the screens go straight from the renderer's GPU images to the swapchain. | `present` phase; no screen reads, no `CGImage` |
+| **CGImage readback (fallback)** | `zk_create` + `zk_read_screen` for each screen, converted to `CGImage` and shown by SwiftUI in the same layout/rotation. Only when no presenter can be made. | `read top` / `read bottom` / `CGImage` phases |
 
 - Both screens are in the one layer: Zakuro's presenter arranges them itself, so
   no 2D composition in Swift is needed. The on-screen touch surface maps a
@@ -334,7 +333,10 @@ The app has one presentation path and one fallback:
   exit/fault); the presenter is released with the app. A display change (layout,
   rotation, render scale) resizes the layer's drawable and the presenter's
   swapchain on the runtime queue, so the next frame uses it; that costs one
-  out-of-date present.
+  out-of-date present. For the render scale that only resizes the drawable: the
+  internal 3D render scale itself is set with `zk_set_render_scale` and read when
+  a system loads, so an already loaded game keeps its internal scale until it is
+  reloaded or restarted.
 - Because there is a real Metal layer, the system Metal Performance HUD can
   attach to it: Settings → Performance → System Metal HUD sets
   `developerHUDProperties` on the layer (`mode: "default"` / `"disabled"`) at run
@@ -456,32 +458,30 @@ Instant save states:
 The status line in the game view includes:
 
 ```text
-57 fps  4,494 frames  last: completed  audio: on
-AOT: linked, active   speed: 190% of 60 Hz   fast-forward: 2×
+audio: on
+AOT: linked, active   fast-forward: 2×
 loop: free-run · cap 60 fps   display: CAMetalLayer · GPU direct
 warm-up ready in 2.40 s · 146 frames · max 586 ms · 3 spiky (>50 ms)
 ```
 
-and, when the custom HUD is enabled, a millisecond HUD for
-`total / run / present / audio` (presented) or
-`total / run / read top / read bottom / CGImage / audio` (fallback). The
-`fast-forward: 2×` and `(auto)` markers appear only above 1×. The `warm-up …`
+The `fast-forward: 2×` and `(auto)` markers appear only above 1×. The `warm-up …`
 line appears once an enabled warm-up finished (it replaces the "Preparing
 graphics…" overlay), or says it was not needed for a software renderer; it is
 absent by default because the optional warm-up setting is off. The device log
 carries one line per load
 (`zk_presenter_create`, `display:`, `hardware:`), the pipeline-cache state at
 launch/load/after `zk_destroy`, one `graphics warm-up:` line with the same
-timing, a `frame cap:` / `render scale:` line when those settings change, one
-line per pause/resume/reset, one `save state:` line per save/load/delete, one
-`save data:` line per export/import/delete, and a `perf:` line every ~2 s with
-the HUD phases.
+timing, a `frame cap:` / `render scale:` line when those settings change (the
+render-scale line notes that the internal 3D scale applies on the next load),
+one line per pause/resume/reset, one `save state:` line per save/load/delete,
+one `save data:` line per export/import/delete, and a `perf:` line every ~2 s
+with the per-phase timings.
 
 The exported diagnostics header adds the build, device, session phase
 (`paused=`), the runtime state, the active settings (`frame_cap=`,
 `screen_layout=`, `screen_aspect=`, `integer_scale=`, `render_scale=`,
-`orientation=`, `audio_volume=`, `audio_muted=`, `audio_buffer_ms=`,
-`touch_controls=`, `controls_opacity=`, `haptics=`, `custom_hud=`,
+`render_scale_applies=`, `orientation=`, `audio_volume=`, `audio_muted=`,
+`audio_buffer_ms=`, `touch_controls=`, `controls_opacity=`, `haptics=`,
 `playback_speed=`, `playback_speed_effective=`,
 `playback_speed_auto_reduced=`, `warmup_enabled=`, `system_metal_hud=`,
 `screen_rotation=`, `presented_native_pixels=`, `presented_drawable_pixels=`,

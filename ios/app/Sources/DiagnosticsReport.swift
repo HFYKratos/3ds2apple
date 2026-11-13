@@ -69,7 +69,7 @@ enum DiagnosticsExporter {
         let size = ScreenGeometry.drawablePixelSize(
             layout: model.screenLayout,
             rotation: model.screenRotation,
-            renderScale: CGFloat(settings.renderScale)
+            renderScale: CGFloat(settings.clampedRenderScale)
         )
         return "\(Int(size.width))x\(Int(size.height))"
     }
@@ -102,7 +102,8 @@ enum DiagnosticsExporter {
         screen_rotation=\(model.screenRotation.rawValue)
         screen_aspect=\(settings.screenAspect.rawValue)
         integer_scale=\(settings.integerScale ? 1 : 0)
-        render_scale=\(settings.renderScale)x
+        render_scale=\(settings.clampedRenderScale)x
+        render_scale_applies=next_load
         presented_native_pixels=\(nativePixelSizeDescription(settings: settings))
         presented_drawable_pixels=\(drawablePixelSizeDescription(model: model, settings: settings))
         orientation=\(settings.orientation.rawValue)
@@ -117,13 +118,14 @@ enum DiagnosticsExporter {
         touch_controls=\(settings.showTouchControls ? 1 : 0)
         controls_opacity=\(String(format: "%.2f", settings.controlsOpacity))
         haptics=\(settings.haptics ? 1 : 0)
-        custom_hud=\(settings.showCustomHUD ? 1 : 0)
         playback_speed=\(settings.playbackSpeed.rawValue)
         playback_speed_effective=\(model.effectivePlaybackSpeed)
         playback_speed_auto_reduced=\(model.playbackSpeedAutoReduced ? 1 : 0)
         warmup_enabled=\(model.graphicsWarmUpEnabled ? 1 : 0)
         system_metal_hud=\(settings.systemMetalHUD ? 1 : 0)
         system_metal_hud_build_enabled=\(model.buildEnablesSystemMetalHUD ? 1 : 0)
+        system_metal_hud_env=\(MetalHUD.isEnvironmentEnabled ? 1 : 0)
+        system_metal_hud_plist=\(MetalHUD.buildGateEnabled ? 1 : 0)
         \(L10n.diagnosticsLine)
         controller=\(model.controllerName ?? "none")
         warmup_outcome=\(warmUp.diagnosticsOutcome)
@@ -161,18 +163,6 @@ enum DiagnosticsExporter {
         case .loaded(let name): return "loaded \(name)"
         case .failed(let message): return "failed: \(message)"
         case .finished(let message): return "finished: \(message)"
-        }
-    }
-
-    /// zk_run_frame result codes — see ZK_FRAME_* in ios/ZakuroBridge.h.
-    /// Shown in the status line, so the label is localized.
-    static func frameResultLabel(_ result: Int32) -> String {
-        switch result {
-        case 0: return L10n.tr("completed")
-        case 1: return L10n.tr("exited")
-        case -1: return L10n.tr("faulted")
-        case -2: return L10n.tr("bad handle")
-        default: return "\(result)"
         }
     }
 }

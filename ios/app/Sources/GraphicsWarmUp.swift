@@ -205,7 +205,7 @@ struct GraphicsWarmUpStatus: Equatable {
         )
     }
 
-    /// One line for the HUD / diagnostics once the run is over. Nil while a run
+    /// One line for the status line / diagnostics once the run is over. Nil while a run
     /// is in progress and when the optional warm-up is off (the default), so a
     /// normal load adds no extra status line.
     var summary: String? {

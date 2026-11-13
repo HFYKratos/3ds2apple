@@ -20,8 +20,8 @@
 //  renders at 400x480 for the stacked console, 720x240 side by side, or the
 //  whole arrangement turned a quarter turn, and CoreAnimation scales that image
 //  to the view's box. Rendering at the device resolution would make the GPU do
-//  20x the work for no visible benefit; the Settings render scale can raise the
-//  drawable to twice the arrangement's pixels on fast devices.
+//  20x the work for no visible benefit; the Settings render resolution can raise
+//  the drawable to one to four times the arrangement's pixels.
 //
 //  Threading: `UIView` objects are main-thread only, so the view, and the
 //  presenter created from it, are created/resized on the main queue. The
@@ -41,7 +41,8 @@ final class MetalScreenView: UIView {
     /// queue only; changed through `setPresentedGeometry`.
     private var nativePixelSize = CGSize(width: 400, height: 480)
 
-    /// 1 = the arrangement's own pixels, 2 = twice them. Main queue only.
+    /// 1 = the arrangement's own pixels ... 4 = four times them. Main queue
+    /// only.
     private var renderScale: CGFloat = 1
 
     /// Whole-console-pixel scaling: the layer is magnified with nearest-pixel
@@ -114,7 +115,7 @@ final class MetalScreenView: UIView {
     }
 
     /// Sets the arrangement the presenter draws and the layer holds: the native
-    /// pixel size comes from `ScreenGeometry`, `renderScale` is 1 or 2 and
+    /// pixel size comes from `ScreenGeometry`, `renderScale` is 1 through 4 and
     /// `integerScaling` selects nearest-pixel magnification. The drawable size
     /// change reaches the runtime through `onDrawableSizeChanged`, which resizes
     /// the swapchain to match. Main queue only.
@@ -123,7 +124,7 @@ final class MetalScreenView: UIView {
         renderScale: CGFloat,
         integerScaling: Bool
     ) {
-        let factor: CGFloat = renderScale >= 2 ? 2 : 1
+        let factor = min(max(renderScale.rounded(), 1), 4)
         let size = CGSize(
             width: max(nativePixelSize.width, 1),
             height: max(nativePixelSize.height, 1)
@@ -157,12 +158,16 @@ final class MetalScreenView: UIView {
     /// nothing to show. Main queue only. `developerHUDProperties` is an iOS 16
     /// API, exactly the deployment target, so no availability check is needed.
     func applySystemMetalHUD(enabled: Bool) {
+        // The variable has to be in the environment before Metal creates the
+        // device (App.init does that); the layer property below is the part
+        // that can be flipped without a relaunch. Documented keys for iOS 16+:
+        // "mode" is "default" / "main" to show the HUD, "disabled" to hide it.
+        MetalHUD.apply(enabled: enabled)
         var properties = metalLayer.developerHUDProperties ?? [AnyHashable: Any]()
         properties[AnyHashable("mode")] = enabled ? "default" : "disabled"
-        // The app has its own frame-time HUD; keep the system one from also
-        // spamming the device log.
-        properties[AnyHashable("logging")] = "disabled"
         metalLayer.developerHUDProperties = properties
+        AppLog.log("[3ds2apple] metal hud layer: %@ (%@)",
+                   enabled ? "on" : "off", MetalHUD.diagnosticsLine)
     }
 
     override func layoutSubviews() {

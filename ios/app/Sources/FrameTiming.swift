@@ -2,13 +2,14 @@
 //  FrameTiming.swift
 //  3ds2apple
 //
-//  I3-T6: per-phase frame timing for the performance HUD.
+//  I3-T6: per-phase frame timing for the diagnostics report and the
+//  fast-forward automatic fallback.
 //
 //  Threading: every `record` happens on the runtime serial queue, right around
 //  the call it measures (zk_run_frame, zk_present or zk_read_screen, CGImage
 //  creation, the audio pump). Only an immutable FrameTimingSnapshot is hopped
-//  to the main queue for display, so the HUD never touches the runtime handle
-//  or the timing accumulators.
+//  to the main queue with the frame stats, so the UI never touches the runtime
+//  handle or the timing accumulators.
 //
 //  Clock: mach_absolute_time() — monotonic, never affected by wall-clock
 //  changes, and cheaper than Date()/CACurrentMediaTime() in a per-frame path.
@@ -19,7 +20,7 @@
 import Darwin
 import Foundation
 
-/// Monotonic clock used by the frame timing HUD (`mach_absolute_time`).
+/// Monotonic clock used by the frame timing and pacing code (`mach_absolute_time`).
 enum FrameClock {
     /// mach timebase (constant for the lifetime of the process).
     private static let timebase: mach_timebase_info_data_t = {
@@ -65,7 +66,7 @@ enum FrameClock {
     }
 }
 
-/// One timing field shown in the HUD: `average`/`maximum`/`last` in
+/// One timing field in a frame-timing snapshot: `average`/`maximum`/`last` in
 /// milliseconds. `samples == 0` means the phase has not been measured yet.
 struct FramePhaseStats: Equatable {
     /// Most recent single-frame duration.
@@ -99,7 +100,7 @@ struct FrameTimingSnapshot: Equatable {
     var audioPump = FramePhaseStats()
 }
 
-/// The phases the HUD reports. Recorded once per executed frame on the
+/// The phases recorded per frame. Recorded once per executed frame on the
 /// runtime serial queue.
 enum FramePhase {
     case renderTotal
@@ -130,7 +131,7 @@ struct PhaseTimingWindow {
         }
     }
 
-    /// Builds the HUD values and clears the window:
+    /// Builds the published values and clears the window:
     /// - `average` = mean of the window that just ended,
     /// - `maximum` = worst frame since the last `reset()` (session max),
     /// - `last` = most recent frame, kept across empty windows (e.g. a
@@ -160,7 +161,7 @@ struct PhaseTimingWindow {
 }
 
 /// Collects the per-frame phase timings and turns them into one
-/// `FrameTimingSnapshot` at the 0.5 s HUD refresh boundary.
+/// `FrameTimingSnapshot` at the 0.5 s stats refresh boundary.
 ///
 /// `record`/`publish` run on the runtime serial queue only. `reset()` is called
 /// from the main thread when a new frame loop starts, while that queue is idle
@@ -186,7 +187,7 @@ struct FrameTimingWindow {
         }
     }
 
-    /// Snapshot for the HUD and start a new averaging window.
+    /// Snapshot for the frame stats and start a new averaging window.
     mutating func publish() -> FrameTimingSnapshot {
         FrameTimingSnapshot(
             renderTotal: renderTotal.publish(),
