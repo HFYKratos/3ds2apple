@@ -20,6 +20,26 @@ calls `zk_create`.
 | `../scripts/gen-zakuro-stub.py` | generate the stubs from `ios/ZakuroBridge.h` and the Swift sources |
 | `../scripts/ios-ui-preview.sh` | build, boot a simulator, seed a fake library, screenshot every screen |
 
+## Screenshots without the iOS Simulator (Mac Catalyst)
+
+The iOS Simulator is unusable on the Intel build VM: booting it builds the iOS
+runtime dyld cache at load 180+, which starves the host and takes the host SSH
+away. The same preview app therefore also builds for **Mac Catalyst** and runs
+as a normal macOS window; the screenshot is taken from QEMU's monitor
+(`screendump`), so no simulator is involved:
+
+```bash
+PATH=/usr/local/bin:$PATH xcodegen generate --spec ios/preview/project.yml \
+  --project ios/preview/build --project-root .
+PATH=/usr/local/bin:$PATH xcodebuild -project ios/preview/build/3ds2apple-preview.xcodeproj \
+  -scheme 3ds2apple-preview -destination 'platform=macOS,variant=Mac Catalyst' \
+  -configuration Debug -derivedDataPath ios/preview/build/DerivedData build
+```
+
+Launch it with `ZKPREVIEW_SCREEN` in the environment on the VM GUI session, and
+capture the VM display with `screendump` on the host. The preview content is
+pinned to a 402x780 pt iPhone-sized frame.
+
 ## Requirements
 
 Run on the macOS VM (macOS 26.7, Xcode 26.6 with an iOS Simulator runtime

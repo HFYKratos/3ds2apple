@@ -82,8 +82,17 @@ private struct PreviewRoot: View {
     @ObservedObject var saveStates: SaveStateSupport
 
     var body: some View {
-        content
-            .preferredColorScheme(forceDark ? .dark : nil)
+        Group {
+            #if targetEnvironment(macCatalyst)
+            // Catalyst runs in a resizable macOS window; pin the content to an
+            // iPhone-sized frame so the screenshot shows the real iPhone layout.
+            content
+                .frame(width: 402, height: 780)
+            #else
+            content
+            #endif
+        }
+        .preferredColorScheme(forceDark ? .dark : nil)
     }
 
     /// The in-game overlay is always dark; ZKPREVIEW_DARK forces dark elsewhere.

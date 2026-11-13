@@ -57,6 +57,15 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: "3ds2apple preview"
         INFOPLIST_KEY_MetalHudEnabled: "NO"
         GENERATE_INFOPLIST_FILE: "YES"
+
+        # --- Mac Catalyst: run the same preview app natively on the build VM ---
+        # The iOS Simulator cannot be used on this VM (booting it builds the
+        # iOS runtime dyld cache at load 180+ and starves the host). With
+        # Catalyst the preview app runs as a normal macOS window instead, so a
+        # screenshot needs only QEMU's screendump - no simulator, no dyld cache.
+        SUPPORTS_MACCATALYST: "YES"
+        DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER: "NO"
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: "NO"
         INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: "YES"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
