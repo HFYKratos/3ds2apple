@@ -401,3 +401,74 @@
 "%@ — %@" = "%@ — %@";
 "The Zakuro runtime could not load this game (empty error text)." = "The Zakuro runtime could not load this game (empty error text).";
 "The Zakuro runtime could not load this game (no error text was reported)." = "The Zakuro runtime could not load this game (no error text was reported).";
+
+/* --- Launcher-first Documents library: games pushed into Documents/Games/ --- */
+"AOT · package" = "AOT · package";
+"Checking" = "Checking";
+"Checking game files" = "Checking game files";
+"Error" = "Error";
+"From the previous build" = "From the previous build";
+"Installed games" = "Installed games";
+"Legacy game files" = "Legacy game files";
+"No games on this iPhone yet" = "No games on this iPhone yet";
+"Refresh library" = "Refresh library";
+"This game cannot be started" = "This game cannot be started";
+"This game's files are still being checked. Try again when the check finishes." = "This game's files are still being checked. Try again when the check finishes.";
+"%ld games" = "%ld games";
+"1 game" = "1 game";
+"Games are stored in this app's Documents/Games folder. The desktop launcher fills it over USB or Wi-Fi." = "Games are stored in this app's Documents/Games folder. The desktop launcher fills it over USB or Wi-Fi.";
+"Games are added from your computer. Open the 3ds2apple desktop launcher, import a game you own and let it build the AOT pack; the launcher installs this app once and then copies each game into it. Imported games appear here." = "Games are added from your computer. Open the 3ds2apple desktop launcher, import a game you own and let it build the AOT pack; the launcher installs this app once and then copies each game into it. Imported games appear here.";
+"The launcher writes each game to Documents/Games/<TITLEID>/. The same folder is visible in the Files app under On My iPhone → 3ds2apple." = "The launcher writes each game to Documents/Games/<TITLEID>/. The same folder is visible in the Files app under On My iPhone → 3ds2apple.";
+"Installed games live in this app's Documents/Games folder; the desktop launcher fills it over USB or Wi-Fi. The Files app shows the same folder under On My iPhone → 3ds2apple." = "Installed games live in this app's Documents/Games folder; the desktop launcher fills it over USB or Wi-Fi. The Files app shows the same folder under On My iPhone → 3ds2apple.";
+"This library was installed by the previous build. Re-push these games with the desktop launcher so they are managed in Documents/Games." = "This library was installed by the previous build. Re-push these games with the desktop launcher so they are managed in Documents/Games.";
+"Could not read the Documents/Games folder: %@" = "Could not read the Documents/Games folder: %@";
+"the game info says the pack uses ABI version %ld, this app speaks %ld" = "the game info says the pack uses ABI version %ld, this app speaks %ld";
+"The game data of “%@” is missing from Documents/Games/%@. Re-push the game with the desktop launcher." = "The game data of “%@” is missing from Documents/Games/%@. Re-push the game with the desktop launcher.";
+"the manifest is %ld bytes (limit %ld)" = "the manifest is %ld bytes (limit %ld)";
+"“%@” is not a folder." = "“%@” is not a folder.";
+
+/* --- Per-game validation errors (missing files, size/hash mismatch) --- */
+"“%@” is not named after a 16-digit title ID. The launcher must create one folder per game named <TITLEID>." = "“%@” is not named after a 16-digit title ID. The launcher must create one folder per game named <TITLEID>.";
+"“%@” is missing from this game's folder. Re-push the game with the desktop launcher." = "“%@” is missing from this game's folder. Re-push the game with the desktop launcher.";
+"GameInfo.json could not be read: %@" = "GameInfo.json could not be read: %@";
+"GameInfo.json uses schema version %ld, but this app understands version %ld. Update the app." = "GameInfo.json uses schema version %ld, but this app understands version %ld. Update the app.";
+"GameInfo.json says this game is %@, but its folder is named %@. Re-push the game with the launcher." = "GameInfo.json says this game is %@, but its folder is named %@. Re-push the game with the launcher.";
+"GameInfo.json says this game has no AOT code. Re-push it with the desktop launcher." = "GameInfo.json says this game has no AOT code. Re-push it with the desktop launcher.";
+"The path “%@” in GameInfo.json points outside the game's folder. Re-push the game with the launcher." = "The path “%@” in GameInfo.json points outside the game's folder. Re-push the game with the launcher.";
+"GameInfo.json records an invalid SHA-256 for “%@”. Re-push the game with the launcher." = "GameInfo.json records an invalid SHA-256 for “%@”. Re-push the game with the launcher.";
+"The AOT pack “%@” is missing from this game's folder. Re-push the game with the desktop launcher." = "The AOT pack “%@” is missing from this game's folder. Re-push the game with the desktop launcher.";
+"The AOT pack “%@” is empty. Re-push the game with the desktop launcher." = "The AOT pack “%@” is empty. Re-push the game with the desktop launcher.";
+"“%@” is not a file, so the AOT pack cannot be loaded." = "“%@” is not a file, so the AOT pack cannot be loaded.";
+"The AOT pack is %ld bytes but GameInfo.json records %ld. Re-push the game with the launcher." = "The AOT pack is %ld bytes but GameInfo.json records %ld. Re-push the game with the launcher.";
+"The AOT pack's SHA-256 does not match the manifest (expected %@, got %@). Re-push the game with the launcher." = "The AOT pack's SHA-256 does not match the manifest (expected %@, got %@). Re-push the game with the launcher.";
+"The game data “%@” is missing from this game's folder. Re-push the game with the desktop launcher." = "The game data “%@” is missing from this game's folder. Re-push the game with the desktop launcher.";
+"The game data “%@” is empty. Re-push the game with the desktop launcher." = "The game data “%@” is empty. Re-push the game with the desktop launcher.";
+"“%@” is not a file, so the game cannot be loaded." = "“%@” is not a file, so the game cannot be loaded.";
+"The game data is %ld bytes but GameInfo.json records %ld. Re-push the game with the launcher." = "The game data is %ld bytes but GameInfo.json records %ld. Re-push the game with the launcher.";
+"The game data's SHA-256 does not match the manifest (expected %@, got %@). Re-push the game with the launcher." = "The game data's SHA-256 does not match the manifest (expected %@, got %@). Re-push the game with the launcher.";
+"Could not read “%@” to check it: %@" = "Could not read “%@” to check it: %@";
+"The game folder “%@” is no longer in Documents/Games. Refresh the library." = "The game folder “%@” is no longer in Documents/Games. Refresh the library.";
+
+/* --- About: games come from the desktop launcher --- */
+"Games come from the 3ds2apple desktop launcher: it imports a game you own, builds its AOT pack on the computer and copies the game into this app. The app only runs AOT code and never enables a CPU JIT." = "Games come from the 3ds2apple desktop launcher: it imports a game you own, builds its AOT pack on the computer and copies the game into this app. The app only runs AOT code and never enables a CPU JIT.";
+"This app ships without any game data. Use the 3ds2apple desktop launcher to import a game you own; it installs this app and copies the game into Documents/Games, where the library finds it. The app has no ROMs, decryption keys, system files or game assets." = "This app ships without any game data. Use the 3ds2apple desktop launcher to import a game you own; it installs this app and copies the game into Documents/Games, where the library finds it. The app has no ROMs, decryption keys, system files or game assets.";
+
+/* --- Catalog + pushed game data: AOT packs inside the IPA, ROM in Documents/Games --- */
+"Data missing" = "Data missing";
+"No games in this build yet" = "No games in this build yet";
+"Games are added with the 3ds2apple desktop launcher: it builds a version of this app that contains the game's AOT pack and installs it, then pushes the game's data into this app. Games appear here once the data push completes." = "Games are added with the 3ds2apple desktop launcher: it builds a version of this app that contains the game's AOT pack and installs it, then pushes the game's data into this app. Games appear here once the data push completes.";
+"Pushed game data lives in Documents/Games/<TITLEID>/ and stays across app updates. The same folder is visible in the Files app under On My iPhone → 3ds2apple." = "Pushed game data lives in Documents/Games/<TITLEID>/ and stays across app updates. The same folder is visible in the Files app under On My iPhone → 3ds2apple.";
+"Each game's AOT code is part of this app; its game data is pushed into this app's Documents/Games folder by the desktop launcher." = "Each game's AOT code is part of this app; its game data is pushed into this app's Documents/Games folder by the desktop launcher.";
+"Each game's AOT code is part of this app; the desktop launcher pushes the game data into this app's Documents/Games folder over USB or Wi-Fi. The Files app shows the same folder under On My iPhone → 3ds2apple." = "Each game's AOT code is part of this app; the desktop launcher pushes the game data into this app's Documents/Games folder over USB or Wi-Fi. The Files app shows the same folder under On My iPhone → 3ds2apple.";
+"The pushed game data of “%@” cannot be read any more. Push it again with the desktop launcher." = "The pushed game data of “%@” cannot be read any more. Push it again with the desktop launcher.";
+"The launcher has not pushed the game data of “%@” yet. Install the build from the desktop launcher, then let it push the game's data into Documents/Games/%@." = "The launcher has not pushed the game data of “%@” yet. Install the build from the desktop launcher, then let it push the game's data into Documents/Games/%@.";
+"“%@” is missing from this game's data folder. Push the game data with the desktop launcher." = "“%@” is missing from this game's data folder. Push the game data with the desktop launcher.";
+"GameInfo.json says this game is %@, but its folder is named %@. Push the game data again with the launcher." = "GameInfo.json says this game is %@, but its folder is named %@. Push the game data again with the launcher.";
+"The path “%@” in GameInfo.json points outside the game's data folder. Push the game data again with the launcher." = "The path “%@” in GameInfo.json points outside the game's data folder. Push the game data again with the launcher.";
+"GameInfo.json records an invalid SHA-256 for “%@”. Push the game data again with the launcher." = "GameInfo.json records an invalid SHA-256 for “%@”. Push the game data again with the launcher.";
+"The game data “%@” has not been pushed into this app yet. Push the game data with the desktop launcher." = "The game data “%@” has not been pushed into this app yet. Push the game data with the desktop launcher.";
+"The game data “%@” is empty. Push the game data again with the desktop launcher." = "The game data “%@” is empty. Push the game data again with the desktop launcher.";
+"The game data is %ld bytes but GameInfo.json records %ld. Push the game data again with the launcher." = "The game data is %ld bytes but GameInfo.json records %ld. Push the game data again with the launcher.";
+"The game data's SHA-256 does not match the manifest (expected %@, got %@). Push the game data again with the launcher." = "The game data's SHA-256 does not match the manifest (expected %@, got %@). Push the game data again with the launcher.";
+"The game data of %@ has not been pushed yet. Install the build from the desktop launcher, then let it push the game's data." = "The game data of %@ has not been pushed yet. Install the build from the desktop launcher, then let it push the game's data.";
+"The game data folder “%@” is no longer in Documents/Games. Refresh the library." = "The game data folder “%@” is no longer in Documents/Games. Refresh the library.";

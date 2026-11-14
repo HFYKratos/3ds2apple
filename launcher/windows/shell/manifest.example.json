@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "fileName": "3ds2apple-shell.ipa",
+  "version": "0.0.0-example",
+  "bundleId": "com.kratos.3ds2apple",
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "bytes": 0,
+  "build": 9,
+  "minIosVersion": "16.0"
+}

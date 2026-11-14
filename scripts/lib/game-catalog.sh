@@ -69,7 +69,9 @@ game_catalog_write_empty() {
   fi
   dir="$(dirname "$dest")"
   mkdir -p -- "$dir" || { GAME_CATALOG_ERROR="cannot create $dir"; return 1; }
-  printf '{"schemaVersion":%s,"games":[]}\n' "$GAME_CATALOG_SCHEMA_VERSION" > "$dest" \
+  # The AOT shell (build-ios-app.sh) always ships schema 2; the legacy
+  # single-game writer below keeps GAME_CATALOG_SCHEMA_VERSION=1.
+  printf '{"schemaVersion":2,"games":[]}\n' > "$dest" \
     || { GAME_CATALOG_ERROR="cannot write $dest"; return 1; }
   return 0
 }

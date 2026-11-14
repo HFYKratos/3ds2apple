@@ -1,0 +1,40 @@
+# devpush — 3ds2apple device bridge (Rust).
+# Talks to Apple's usbmuxd over USB or Wi-Fi, uses house_arrest (VendContainer) + AFC
+# to read/write an installed app's container, and installation_proxy to install,
+# uninstall and query app attributes. Modelled on S2Arm's s2a-devpush (Apache-2.0);
+# the idevice dependency is pinned to the same upstream commit that official
+# Impactor v2.7.2 uses. See docs/device-bridge.md and THIRD_PARTY.md.
+[package]
+name = "devpush"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "3ds2apple device bridge: devices, install/uninstall, app-attr, put/get/ls/put-tar over usbmuxd"
+rust-version = "1.85"
+
+[[bin]]
+name = "devpush"
+path = "src/main.rs"
+
+[dependencies]
+# MIT, https://github.com/jkcoxson/idevice — pinned to the commit used by official Impactor v2.7.2.
+# "ring" keeps TLS pure-Rust (no OpenSSL) so the same crate builds on Windows/macOS/Linux.
+idevice = { git = "https://github.com/jkcoxson/idevice", rev = "5171e34e3a236842af1160a84d955d037ddca3af", default-features = false, features = ["house_arrest", "installation_proxy", "usbmuxd", "ring"] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "fs", "io-util", "time"] }
+plist = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4.5", features = ["derive", "env"] }
+thiserror = "2"
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+strip = true
+
+# proc-macro dylibs used at build time are not stripped (macOS system loader rejects
+# stripped proc-macro dylibs). Only affects build scripts; the final binary is stripped.
+[profile.release.build-override]
+strip = false

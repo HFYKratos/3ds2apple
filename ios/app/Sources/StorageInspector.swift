@@ -18,6 +18,11 @@ import Foundation
 /// One snapshot of the app container usage. Built off the main queue.
 struct StorageSnapshot {
     var documentsPath = ""
+    /// Documents/Games: the game data the desktop launcher pushed (the AOT
+    /// packs themselves are inside the app bundle).
+    var gamesBytes: UInt64 = 0
+    var gamesFileCount = 0
+    /// Documents/roms: cartridges of the 0.1.x shell (legacy only).
     var romBytes: UInt64 = 0
     var romFileCount = 0
     var saveDataBytes: UInt64 = 0
@@ -29,7 +34,7 @@ struct StorageSnapshot {
 
     static let empty = StorageSnapshot()
 
-    var totalBytes: UInt64 { romBytes + saveDataBytes + logBytes + cacheBytes }
+    var totalBytes: UInt64 { gamesBytes + romBytes + saveDataBytes + logBytes + cacheBytes }
 
     static func sizeText(_ bytes: UInt64) -> String {
         // ByteCountFormatter renders 0 as "Zero KB", which reads like a bug.
@@ -61,6 +66,13 @@ enum StorageInspector {
         documentsURL.appendingPathComponent("data", isDirectory: true)
     }
 
+    /// Documents/Games: one folder per launcher-pushed game's data (ROM and
+    /// GameInfo.json; the AOT pack is inside the app bundle).
+    static var gamesURL: URL {
+        documentsURL.appendingPathComponent(DocumentsGames.folderName, isDirectory: true)
+    }
+
+    /// Documents/roms: the 0.1.x shell's cartridges (legacy builds only).
     static var romsURL: URL {
         documentsURL.appendingPathComponent("roms", isDirectory: true)
     }
@@ -74,6 +86,10 @@ enum StorageInspector {
     static func snapshot() -> StorageSnapshot {
         var snapshot = StorageSnapshot.empty
         snapshot.documentsPath = documentsURL.path
+
+        let games = directorySize(gamesURL)
+        snapshot.gamesBytes = games.bytes
+        snapshot.gamesFileCount = games.files
 
         let roms = directorySize(romsURL)
         snapshot.romBytes = roms.bytes

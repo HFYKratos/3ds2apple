@@ -1,0 +1,19 @@
+<Project>
+  <!-- Shared settings for every launcher/windows project (3ds2apple Windows launcher MVP).
+       Keep this file small: per-project settings belong in the .csproj. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <Version>0.1.0</Version>
+    <Company>3ds2apple</Company>
+    <Product>3ds2apple launcher (Windows)</Product>
+    <RepositoryUrl>https://github.com/kratos/3ds2apple</RepositoryUrl>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+</Project>

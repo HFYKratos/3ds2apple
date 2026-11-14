@@ -2,10 +2,17 @@
 //  GameCatalog.swift
 //  3ds2apple
 //
-//  The games this build can run as AOT code. The desktop build writes
-//  Resources/GameCatalog.json into the app bundle; the shell only reads it.
-//  The catalog is the ONLY source of the home-page library: the app never
-//  scans for ROMs and never imports game data on the device.
+//  The games this build carries AOT code for. The desktop launcher writes
+//  Resources/GameCatalog.json into the signed app bundle together with one
+//  Frameworks/GamePack-<TITLEID>.dylib per game; the shell reads the catalog as
+//  the game list. A base shell may ship an empty (or no) catalog and then shows
+//  its launcher empty state.
+//
+//  The game DATA is not in the bundle: the launcher pushes it into
+//  Documents/Games/<TITLEID>/ after installing the build (InstalledGame.swift).
+//  The catalog's "romFile" is only used by an app updated from the previous
+//  self-contained build, whose ROM still sits inside the bundle; it is the
+//  legacy fallback, not the launcher-first path.
 //
 //  Schema version 2 (this file). Version 1 catalogs still decode unchanged:
 //
@@ -38,9 +45,9 @@
 //  - "schemaVersion": 1 catalogs have no packFile, so every AOT entry is treated
 //    as statically linked; that keeps every 0.1.x build working.
 //
-//  A missing or unreadable GameCatalog.json is not an error: a shell build with
-//  no games simply has an empty library, and the home page says games are added
-//  from the computer.
+//  A missing or unreadable GameCatalog.json is not an error: a base shell with
+//  no games has an empty library, and the home page explains that games are
+//  added from the desktop launcher.
 //
 
 import Foundation
@@ -245,7 +252,7 @@ struct GameCatalog: Codable {
 
             var packFile = game.packFile?.trimmingCharacters(in: .whitespacesAndNewlines)
             if let rawPackFile = packFile, !rawPackFile.isEmpty {
-                if AOTPackageLoader.isValidBundleRelativePath(rawPackFile) {
+                if AOTPackageLoader.isValidRelativePath(rawPackFile) {
                     packFile = rawPackFile
                 } else {
                     AppLog.log(
@@ -263,7 +270,7 @@ struct GameCatalog: Codable {
             // bundle is dropped, never opened.
             var romFile = game.romFile?.trimmingCharacters(in: .whitespacesAndNewlines)
             if let rawROMFile = romFile, !rawROMFile.isEmpty {
-                if AOTPackageLoader.isValidBundleRelativePath(rawROMFile) {
+                if AOTPackageLoader.isValidRelativePath(rawROMFile) {
                     romFile = rawROMFile
                 } else {
                     AppLog.log(
@@ -278,7 +285,7 @@ struct GameCatalog: Codable {
             }
 
             var coverFile = game.coverFile?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let rawCover = coverFile, rawCover.isEmpty || !AOTPackageLoader.isValidBundleRelativePath(rawCover) {
+            if let rawCover = coverFile, rawCover.isEmpty || !AOTPackageLoader.isValidRelativePath(rawCover) {
                 coverFile = nil
             }
 
@@ -308,7 +315,7 @@ struct GameCatalog: Codable {
             ?? bundle.url(forResource: "GameCatalog", withExtension: "json", subdirectory: "Resources")
         else {
             AppLog.log(
-                "[3ds2apple] game catalog: GameCatalog.json is not in the app bundle; the library is empty (build games on the computer and reinstall)"
+                "[3ds2apple] game catalog: no GameCatalog.json in the app bundle (base shell with no AOT games)"
             )
             return .empty
         }

@@ -1,0 +1,9 @@
+# Build outputs of the launcher projects (never committed).
+bin/
+obj/
+dist/
+artifacts/
+publish/
+*.user
+*.suo
+.vs/

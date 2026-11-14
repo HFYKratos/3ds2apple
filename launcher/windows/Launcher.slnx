@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ThreeDsTwoApple.Launcher.Core/ThreeDsTwoApple.Launcher.Core.csproj" />
+  </Folder>
+  <Folder Name="/src/Launcher.Desktop/">
+    <Project Path="src/Launcher.Desktop/ThreeDsTwoApple.Launcher.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ThreeDsTwoApple.Launcher.Core.Tests/ThreeDsTwoApple.Launcher.Core.Tests.csproj" />
+  </Folder>
+</Solution>

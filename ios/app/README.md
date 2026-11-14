@@ -1,11 +1,17 @@
 # iOS app
 
-The SwiftUI shell for 3ds2apple. It is an AOT-only app: the games come from the
-build-time `GameCatalog.json` that the desktop build writes into the app bundle,
-and the shell never imports, copies or scans game data. It displays the two 3DS
-screens, drives the Zakuro runtime and exposes input, audio, fast-forward, save
-data, diagnostics and settings. The app is organised as a home page, the running
-game, a settings page and a few supporting pages.
+The SwiftUI shell for 3ds2apple. It is an AOT-only app and ships **no game
+data**. A game reaches the phone in two steps, both driven by the 3ds2apple
+desktop launcher: (1) the launcher builds a version of this app that contains
+the game's AOT pack (`Frameworks/GamePack-<TITLEID>.dylib` + a
+`GameCatalog.json` entry) and installs it — executable code has to be signed as
+part of the IPA; (2) it pushes the user's own game data (the decrypted ROM +
+`GameInfo.json`) into this app's `Documents/Games/<TITLEID>/`, where it stays
+across app updates. The shell reads the catalog as its game list, validates and
+launches the pushed data, and never downloads or imports anything itself. It
+displays the two 3DS screens, drives the Zakuro runtime and exposes input,
+audio, fast-forward, save data, diagnostics and settings. The app is organised
+as a home page, the running game, a settings page and a few supporting pages.
 
 The UI follows the system language: Simplified Chinese gets Chinese, every other
 language gets English. Static text lives in `Resources/<lang>.lproj/
@@ -16,7 +22,7 @@ views do not carry duplicated strings.
 
 | Page | Contents |
 |---|---|
-| **Home** | Read-only game library (the build's AOT catalog), last-played state and AOT availability per card; tapping a game starts it, a game without AOT in this build shows "No AOT build for this game". Settings entry. No import action. |
+| **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`; last-played state and a per-card state badge (**AOT** / **Checking** / **Data missing** / **Error**). Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Refresh button and pull-to-refresh rescan Documents. The empty state explains the desktop launcher. No on-phone import. Settings entry. |
 | **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), on-screen controls, the optional "Preparing graphics" warm-up overlay and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. |
 | **Settings** | Display, Audio, Controls, Performance (frame cap, fast-forward, system Metal HUD, optional graphics warm-up), Storage and About sections. |
 | **Save Manager** | The battery save files of the current game (size, date, export as ZIP, import, delete), the three instant save-state slots (save, load, delete) and the container usage. |
@@ -30,10 +36,16 @@ on-screen controls, so no input or audio advances behind it.
 
 ## Features
 
-- Games come from the build-time catalog only: the desktop build compiles each
-  game ahead of time and writes `GameCatalog.json` (+ optional per-game
-  `Frameworks/GamePack-<titleID>.dylib`) into the app. The phone never imports a
-  ROM and never copies game data; an empty build says so on the home page.
+- Games are installed by the 3ds2apple desktop launcher in two steps: the AOT
+  pack (`Frameworks/GamePack-<TITLEID>.dylib`) and its `GameCatalog.json` entry
+  are part of the signed app build (adding a game = rebuild + reinstall), while
+  the user's game data is pushed separately into `Documents/Games/<TITLEID>/`
+  and persists across app updates. The shell never imports game data itself and
+  ships none; a base shell with an empty catalog shows the launcher empty state.
+  See "Game library: AOT packs in the app, game data in Documents" below.
+- iOS file sharing is enabled (`UIFileSharingEnabled`,
+  `LSSupportsOpeningDocumentsInPlace`), so the same `Documents` folder is
+  visible in the Files app and through Finder/iTunes file sharing.
 - Upper screen 400×240 and lower screen 320×240, arranged stacked, side by side
   or one at a time, optionally turned a quarter turn; the lower screen also acts
   as the 3DS touchscreen.
@@ -87,6 +99,114 @@ on-screen controls, so no input or audio advances behind it.
   and re-renders if iOS reports a locale change while it runs. See
   "Localization" below.
 - Diagnostics export from the home page and the in-game menu.
+
+## Game library: AOT packs in the app, game data in Documents
+
+A game on the phone has two halves:
+
+| Half | Lives in | How it gets there |
+|---|---|---|
+| AOT pack + catalog entry (`GamePack-<TITLEID>.dylib`, `GameCatalog.json`) | the signed app bundle (`Frameworks/`, `Resources/`) | the desktop launcher builds the app with the pack and installs it — adding a game rebuilds/reinstalls the shell |
+| Game data (the user's decrypted ROM + `GameInfo.json`) | `Documents/Games/<TITLEID>/` in the app container | the launcher pushes it through the device bridge over USB/Wi-Fi; it survives app reinstalls and updates |
+
+The split is deliberate: iOS refuses to `dlopen` unsigned code copied into
+Documents, so the AOT pack must be part of the signed IPA, while the large
+per-user game data stays in Documents and can be pushed or replaced without
+rebuilding the app.
+
+```text
+App bundle (signed)
+  Frameworks/GamePack-<TITLEID>.dylib   per-game AOT code
+  GameCatalog.json                      the game list + packFile/ABI per game
+
+Documents/
+  Games/<TITLEID>/            16 upper-case hex digits, e.g. 0004000000055E00
+    GameInfo.json             launcher manifest (written last)
+    GameRom.cci               user's decrypted game data
+    cover.png                 optional
+  Library/playHistory.json    last-played times (written by the shell)
+  data/<save namespace>/      battery saves (written by the runtime)
+  states/<save namespace>/    instant save-state slots
+```
+
+`GameInfo.json` is schemaVersion 1 and is authoritative for the pushed game
+data: `titleID`, `displayName`, optional `productCode`/`saveNamespace` (defaults
+to the title ID), a `rom` object with `file` + optional `size`/`sha256`, plus
+optional `cover`, `launcherVersion`, `pushedAt` and `notes`. The `pack` object is
+informational metadata about the pack the launcher embedded in the IPA (the shell
+never loads a pack from Documents). Unknown fields are ignored; the game data
+defaults to `GameRom.cci` / `GameRom.3ds`.
+
+The shell validates the pushed game data in two passes:
+
+1. **Scan** (fast; at launch, on returning to the foreground and on refresh): the
+   folder name is a title ID, `GameInfo.json` parses and matches the folder, and
+   the game data exists as a non-empty regular file inside the folder with the
+   recorded size.
+2. **Hash check** (background): the recorded SHA-256 of the ROM is streamed and
+   verified; the card shows **Checking** until it finishes.
+
+Home-page states: **AOT** (pack installed + data verified → playable),
+**Data missing** (the catalog lists the game but the launcher has not pushed its
+data yet; the tap explains the next step), **Checking**, and **Error** (a broken
+push: missing file, unsafe path, size/hash mismatch — the tap lists exactly what
+is wrong and how to fix it). The shell never launches a game with missing or
+unverified game data, and there is no interpreter fallback. An unknown or
+partial push (a folder without a usable `GameInfo.json`) is an error card, never
+a game.
+
+The launcher writes `GameInfo.json` **last**, so a directory only becomes usable
+after all of its files are in place. The shell's scanner also rejects paths that
+escape the game folder.
+
+The app enables iOS file sharing (`UIFileSharingEnabled` and
+`LSSupportsOpeningDocumentsInPlace`), so the same folder is visible in the Files
+app under **On My iPhone → 3ds2apple** and through Finder/iTunes file sharing.
+There is no on-phone import UI.
+
+An app updated from the previous self-contained build (games + ROM inside the
+bundle) keeps those bundle games playable from the bundled ROM until the
+launcher reinstalls with the pack and pushes the data; that path is the legacy
+fallback, not the launcher-first flow.
+
+### Simulator fixture and debug launch arguments
+
+The shell can be driven headlessly without tapping:
+
+- `-gamesRoot <path>` scans a different folder instead of `Documents/Games`
+  (a relative path resolves against Documents, a `Documents/` prefix is
+  accepted; an absolute path must stay inside the app container).
+- `-openAOTTitleID <TITLEID>` starts that library game 0.5 s after the home
+  page appears, through the same path a card tap uses.
+
+A Simulator fixture never has to touch the real library. Build a Simulator shell
+that already contains the game's pack + catalog entry, then push only game data:
+
+```bash
+UDID=3CBF5A62-AE12-47E8-803D-1D77BED85A66
+scripts/build-ios-app-sim.sh --app shell \
+    --game-pack build/sim/game/packages/0004000000055E00 \
+    --game-title-id 0004000000055E00 --game-display-name "Pokemon Y"
+APP=build/sim/shell/out/Release-iphonesimulator/3ds2apple.app
+xcrun simctl install "$UDID" "$APP"
+CONTAINER=$(xcrun simctl get_app_container "$UDID" com.kratos.3ds2apple data)
+GAME="$CONTAINER/Documents/GamesFixtures/0004000000055E00"
+mkdir -p "$GAME"
+cp "/path/to/your/game.cci" "$GAME/GameRom.cci"
+cat > "$GAME/GameInfo.json" <<'JSON'
+{"schemaVersion":1,"titleID":"0004000000055E00","displayName":"Pokemon Y",
+ "rom":{"file":"GameRom.cci"}}
+JSON
+xcrun simctl launch "$UDID" com.kratos.3ds2apple \
+    -gamesRoot Documents/GamesFixtures -openAOTTitleID 0004000000055E00
+```
+
+Omit the game-data fixture (or use an empty `-gamesRoot` folder) to see the
+**Data missing** state of a catalog game; record a wrong `rom.size`/`sha256` to
+exercise the per-game error state. The fixture files are user-owned local test
+data: never commit them, and remove the fixture from the container when done.
+[docs/build-simulator.md](../../docs/build-simulator.md) covers building the
+x86_64 Simulator shell and its runtime.
 
 ## Display settings
 
@@ -245,6 +365,24 @@ The project is generated by XcodeGen; new source files and the `Resources`
 folder are picked up when `xcodegen generate` runs. Do not edit the generated
 `.xcodeproj`: it is ignored by git.
 
+The shell this builds contains **no games**: it is the base app the desktop
+launcher installs, and it shows the launcher empty state until games are pushed
+into its Documents folder. `Info.plist` is generated by XcodeGen from the
+target's `info:` block in `project.yml` into the gitignored
+`ios/app/build/Info.plist`; iOS file sharing needs both
+`UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace` there (the
+`INFOPLIST_KEY_*` synthesis silently dropped `UIFileSharingEnabled`). Verify
+after a build:
+
+```bash
+plutil -p ios/app/build/Release-iphoneos/3ds2apple.app/Info.plist \
+  | grep -E "UIFileSharing|LSSupportsOpening"
+```
+
+The `GameCatalog.json` handling further down is legacy: it only matters for the
+previous self-contained per-game IPA path and for adopting the games of an app
+updated from it.
+
 Localization resources: `Resources/en.lproj/Localizable.strings` and
 `Resources/zh-Hans.lproj/Localizable.strings` are listed in `project.yml`
 (`developmentLanguage: en`). XcodeGen turns the two `.lproj` folders into one
@@ -279,7 +417,7 @@ Without it the app still builds and runs, on the readback path.
 | `App.swift` | SwiftUI entry point; cache directory, logging and the app delegate. |
 | `ApplicationDelegate.swift` | UIKit delegate used for the orientation preference. |
 | `ContentView.swift` | Root router: home page or game for the current session phase; applies settings to the session. |
-| `HomeView.swift` | Home page: catalog library grid, last-played dates, AOT badges, "No AOT build for this game" notice, settings entry. |
+| `HomeView.swift` | Home page: the Documents/Games library grid, last-played dates, per-card state badge (AOT / Checking / Error), the exact per-game validation error on tap, the launcher empty state, refresh control, settings entry. |
 | `GameView.swift` | Running game: responsive portrait/landscape layout, screens, status line, on-screen controls, warm-up overlay, in-game menu. |
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, reset, display settings, save manager, diagnostics, exit) and quick toggles. |
 | `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. |
@@ -295,9 +433,12 @@ Without it the app still builds and runs, on the readback path.
 | `ROMSession.swift` | Runtime handle, AOT-only game launch gate, frame loop, presenter lifecycle, input/audio plumbing, pause/resume/reset and the settings that change runtime behaviour. |
 | `MetalScreenView.swift` | `UIView` with a `CAMetalLayer` the presenter draws into (A1); drawable size for the chosen layout/rotation and the render scale (1×–4×), plus the integer-scaling magnification filter. |
 | `ScreenGeometry.swift` | The drawable size of each layout/rotation and the box the screens occupy for the aspect/integer-scale settings. |
-| `GameCatalog.swift` | The build-time `GameCatalog.json` schema (v2, v1 compatible): per-game title ID, display name, AOT flags, `packFile`, cover. |
-| `GameLibrary.swift` | Read-only library: catalog entries + `Documents/Library/playHistory.json`; no ROM scanning or importing. |
-| `AOTPackageLoader.swift` | Resolves/loads per-game `GamePack-<titleID>.dylib` (`dlopen`, optional title/ABI/registration symbols), documents the C ABI, and falls back to the statically linked single-game build. |
+| `GameInfo.swift` | The launcher's `Documents/Games/<TITLEID>/GameInfo.json` manifest (schema 1): authoritative display title, save namespace and pushed game-data size/SHA-256; the pack fields are informational metadata about the pack embedded in the IPA. |
+| `InstalledGame.swift` | Scans `Documents/Games` for pushed game data, validates it (folder/title ID, manifest, ROM presence/size/path containment) and verifies the recorded SHA-256 in the background. |
+| `GameCatalog.swift` | The bundle `GameCatalog.json` schema (v2, v1 compatible): the build's game list plus per-game `packFile`/ABI/`registrationSymbol`. A base shell may ship an empty catalog. |
+| `GameLibrary.swift` | The library: bundle catalog joined with the pushed `Documents/Games` data, per-card states (AOT / Checking / Data missing / Error), background SHA-256 checks and `Documents/Library/playHistory.json`. No ROM importing. |
+| `AOTPackageLoader.swift` | Resolves/loads the per-game `GamePack.dylib` from the signed app bundle, validates title/ABI/registration symbols before use, hands the launch the pushed (or legacy bundled) ROM, documents the C ABI, and falls back to the statically linked single-game build. |
+| `DebugLaunch.swift` | Headless launch hooks: `-openAOTTitleID` (start a library game) and `-gamesRoot` (scan a Simulator fixture folder instead of Documents/Games). |
 | `LegacyGameData.swift` | One-time migration for apps updated from 0.1.x: cartridge lookup for the statically linked title, play times, and renaming ROM-named save folders to the title-id namespace. |
 | `ScreenImage.swift` | Reusable RGBA buffers and `CGImage` conversion. |
 | `InputState.swift` | Thread-safe merge of touch, overlay and controller input. |
@@ -371,11 +512,18 @@ The app has one presentation path and one fallback:
 
 ## ROM handling
 
-- The ROM is copied into `Documents/roms/`; saves and runtime data go under
-  `Documents/data/<game>/`.
-- The repository ships no ROMs, keys or game data.
-- The app works only with decrypted dumps the user obtained from their own
-  console.
+- Game data is the user's decrypted ROM. The desktop launcher pushes it into
+  `Documents/Games/<TITLEID>/GameRom.cci` (or the file name declared in
+  `GameInfo.json`); the shell reads it in place and never copies or imports it.
+- The AOT code for each game is part of the signed app (`Frameworks/`), never in
+  Documents: iOS will not `dlopen` an unsigned dylib copied there.
+- An app updated from the previous self-contained build may still have its ROM
+  inside the app bundle and keeps launching that way until the launcher
+  reinstalls and pushes the data; an app updated from the 0.1.x shell may still
+  have its old cartridge under `Documents/roms/`, read only by the legacy
+  statically linked single-game build.
+- The repository ships no ROMs, keys or game data. The app works only with
+  decrypted dumps the user obtained from their own console.
 
 ## Save data
 
@@ -383,8 +531,13 @@ Two kinds of data stay on the device:
 
 | Data | Where | Managed by |
 |---|---|---|
-| Battery saves | `Documents/data/<game>/` | The game's own save menu writes them; the Save Manager lists, exports, imports and deletes them. |
-| Instant save states | `Documents/states/<game>/slot1.bin` … `slot3.bin` | Save State / Load State in the in-game menu (slot 1) and the Save Manager (all three slots). |
+| Battery saves | `Documents/data/<save namespace>/` | The game's own save menu writes them; the Save Manager lists, exports, imports and deletes them. |
+| Instant save states | `Documents/states/<save namespace>/slot1.bin` … `slot3.bin` | Save State / Load State in the in-game menu (slot 1) and the Save Manager (all three slots). |
+
+The save namespace is the title ID by default; a launcher may set `saveNamespace`
+in `GameInfo.json` (for example to share saves between two regional builds). The
+folder is sanitized, so two games can never share a save-data directory unless
+the launcher deliberately gives them the same namespace.
 
 Battery saves:
 
@@ -437,11 +590,22 @@ Instant save states:
   layout and rotation, but it copies both screens to the CPU each frame and is
   slower than the presented path; its stretch mode divides the space between the
   two screens rather than reproducing the presenter's exact sub-screen split.
-- A game runs only when this build contains its AOT code: either the statically
-  linked single-game `libgame.a` (0.1.x shape, cartridge required in
-  Documents/roms) or a desktop-built `Frameworks/GamePack-<titleID>.dylib`. There
-  is no interpreter fallback; starting a package game needs the runtime hand-off
-  that is still being added in `ios/zakuro-ios`.
+- A game runs only when this build has its AOT code — normally
+  `Frameworks/GamePack-<TITLEID>.dylib` listed in the bundle `GameCatalog.json`
+  — and its pushed game data has passed validation. An app updated from an older
+  build may still use a bundled ROM or a statically linked 0.1.x `libgame.a`.
+  There is no interpreter fallback.
+- Adding a game rebuilds and reinstalls the shell: the AOT pack must be signed
+  inside the IPA. Only the (large) game data is pushed afterwards and is kept
+  across later updates, so adding a second game does not need the first game's
+  data re-pushed.
+- A catalog game shows **Data missing** until the launcher's data push finishes.
+  The push writes `GameInfo.json` last, so a half-finished push is never treated
+  as a game.
+- The first scan after a large push reads the game data once to verify the
+  SHA-256 the launcher recorded. That check runs in the background and the card
+  shows **Checking** until it finishes; a push without recorded hashes skips the
+  check. A size or hash mismatch blocks launch with an error card.
 - The first release does not include camera, microphone, online play or a full
   game library UI.
 - Button remapping is not available in this build. Save states are not
@@ -485,6 +649,9 @@ launch/load/after `zk_destroy`, one `graphics warm-up:` line with the same
 timing, a `frame cap:` / `render scale:` line when those settings change (the
 render-scale line notes that the internal 3D scale applies on the next load),
 one line per pause/resume/reset, one `save state:` line per save/load/delete,
+one `library:` line per scan (entry counts per source) with a `library entry:`
+line and the per-game validation messages for every game, the
+`-gamesRoot`/`-openAOTTitleID` arguments when the debug hooks are used,
 one `save data:` line per export/import/delete, and a `perf:` line every ~2 s
 with the per-phase timings.
 

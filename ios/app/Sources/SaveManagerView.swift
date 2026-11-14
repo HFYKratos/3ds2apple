@@ -328,8 +328,9 @@ struct SaveManagerView: View {
     /// Display name of the game whose saves are shown.
     private var gameTitle: String? { model.currentGame?.title }
 
-    /// Title-id namespace of that game's save-data / save-state folders.
-    private var namespace: String? { model.currentGame?.titleID }
+    /// Save namespace (the title ID by default) of that game's save-data /
+    /// save-state folders.
+    private var namespace: String? { model.currentGame?.saveNamespace }
 
     private var isBusy: Bool { busyMessage != nil }
 

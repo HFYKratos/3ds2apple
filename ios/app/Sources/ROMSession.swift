@@ -49,11 +49,13 @@ import UIKit
 struct GameLaunch {
     /// The catalog entry being started.
     let entry: GameEntry
-    /// The cartridge image the runtime reads at load time. For a statically
-    /// linked single-game build this is the legacy Documents/roms file; for a
-    /// self-contained AOT package it is the ROM the package bundles in the app.
+    /// The game data the runtime reads at load time: the ROM in
+    /// Documents/Games/<TITLEID>/ for a launcher install, the bundled ROM for an
+    /// app updated from the previous build, or the legacy Documents/roms file
+    /// for a statically linked 0.1.x build.
     let cartridgeURL: URL
-    /// Documents/data/<title ID>: the runtime's battery-save directory.
+    /// Documents/data/<save namespace> (the title ID by default): the
+    /// runtime's battery-save directory.
     let dataDirectory: URL
     /// Where the AOT code came from (diagnostics + status label). Both sources
     /// still end in zk_create() and the AOT-only post-create check.
@@ -340,23 +342,58 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
 
     // MARK: - Commands (main queue)
 
-    /// Starts a catalog game. The shell only runs AOT code: a game without AOT
-    /// in this build (or whose package is missing) is refused with a clear
-    /// notice instead of falling back to the interpreter.
+    /// Starts a game from the library. The shell only runs AOT code and only
+    /// starts a game whose pushed game data validated: a game without AOT code,
+    /// game data that is missing or still being pushed (size/SHA-256 mismatch)
+    /// or a broken pack is refused with a clear per-game notice instead of
+    /// falling back to the interpreter.
     func start(_ entry: GameEntry) {
         guard !isRuntimeActive else { return }
+        let latest = GameLibrary.shared.entry(titleID: entry.titleID) ?? entry
+        switch latest.validation {
+        case .invalid(let issues):
+            presentInstallationProblem(for: latest, issues: issues)
+        case .checking:
+            // The launcher recorded SHA-256 hashes and the check is still
+            // running: wait for it, then start (or explain), so a tap right
+            // after launch does not silently do nothing.
+            GameLibrary.shared.ensureVerified(titleID: latest.titleID) { [weak self] state in
+                guard let self else { return }
+                let current = GameLibrary.shared.entry(titleID: latest.titleID) ?? latest
+                switch state {
+                case .valid:
+                    self.startValidated(current)
+                case .invalid(let issues):
+                    self.presentInstallationProblem(for: current, issues: issues)
+                case .checking:
+                    self.presentNotice(
+                        title: L10n.tr("Checking game files"),
+                        message: L10n.tr("This game's files are still being checked. Try again when the check finishes.")
+                    )
+                }
+            }
+        case .valid:
+            startValidated(latest)
+        }
+    }
 
+    /// The AOT gate for a game whose pushed game data passed its checks. A game
+    /// is only started from its bundle pack (the catalog lists it) or from
+    /// statically linked AOT code; the GamePack registration path is the same in
+    /// both cases.
+    private func startValidated(_ entry: GameEntry) {
         switch AOTPackageLoader.shared.availability(for: entry) {
         case .unavailable(let reason):
             presentNoAOTNotice(for: entry, reason: reason)
-        case .available(.bundlePackage):
+        case .available(.bundlePackage(_)):
             switch AOTPackageLoader.shared.resolve(for: entry) {
             case .package(let package):
                 // The pack is dlopen()ed and its AOT tables are registered with
-                // the runtime; the game data is the ROM the package bundles.
+                // the runtime; the game data comes from the same install (see
+                // startPackaged).
                 AppLog.log(
                     "[3ds2apple] game package ready: %@ (title %@, registered: %@)",
-                    package.bundleRelativePath,
+                    package.path,
                     package.titleID,
                     package.registrationSymbol ?? "no"
                 )
@@ -393,38 +430,46 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         startLaunch(entry: entry, cartridgeURL: cartridgeURL, aotStatus: .staticLinked)
     }
 
-    /// Loads a catalog game from its self-contained package: the AOT code comes
-    /// from the GamePack dylib (already loaded and registered by
-    /// AOTPackageLoader) and the game data is the ROM the package bundles under
-    /// its catalog "romFile". Nothing is imported or copied on the device.
+    /// Loads a game from its pack: the AOT code comes from the signed bundle
+    /// GamePack dylib (already loaded and registered by AOTPackageLoader) and
+    /// the game data is the ROM pushed into Documents/Games/<TITLEID>/ (or the
+    /// bundled ROM of an app updated from the previous self-contained build).
+    /// Nothing is imported or copied on the device.
     private func startPackaged(_ entry: GameEntry) {
-        guard let cartridgeURL = AOTPackageLoader.bundleROMURL(for: entry) else {
-            presentNotice(
-                title: L10n.tr("Game data missing"),
-                message: L10n.format(
-                    "This build contains the AOT code for “%@”, but its game data (ROM) is not in the app bundle. Rebuild the game on your computer with the ROM included in the package, then install that build.",
-                    entry.title
+        guard let cartridgeURL = AOTPackageLoader.launchROMURL(for: entry) else {
+            if entry.hasPushedData {
+                presentNotice(
+                    title: L10n.tr("Game data missing"),
+                    message: L10n.format(
+                        "The pushed game data of “%@” cannot be read any more. Push it again with the desktop launcher.",
+                        entry.title
+                    )
                 )
-            )
+            } else {
+                presentNotice(
+                    title: L10n.tr("Game data missing"),
+                    message: L10n.format(
+                        "The launcher has not pushed the game data of “%@” yet. Install the build from the desktop launcher, then let it push the game's data into Documents/Games/%@.",
+                        entry.title,
+                        entry.titleID
+                    )
+                )
+            }
             return
         }
-        AppLog.log(
-            "[3ds2apple] starting %@ from the package ROM %@ (%@)",
-            entry.title,
-            entry.romFile ?? "?",
-            cartridgeURL.lastPathComponent
-        )
+        AppLog.log("[3ds2apple] starting %@ from %@", entry.title, cartridgeURL.path)
         startLaunch(entry: entry, cartridgeURL: cartridgeURL, aotStatus: .package)
     }
 
-    /// Shared launch path for both AOT code sources: publish the game, reset the
+    /// Shared launch path for every AOT code source: publish the game, reset the
     /// runtime state, then load on the runtime queue. Save data is namespaced by
-    /// title ID whichever way the game data arrived.
+    /// the launcher's save namespace (the title ID by default) whichever way the
+    /// game data arrived.
     private func startLaunch(entry: GameEntry, cartridgeURL: URL, aotStatus: AOTStatus) {
         let dataDirectory = documentsDirectory
             .appendingPathComponent("data", isDirectory: true)
             .appendingPathComponent(
-                SaveDataStore.directoryName(forNamespace: entry.titleID),
+                SaveDataStore.directoryName(forNamespace: entry.saveNamespace),
                 isDirectory: true
             )
 
@@ -448,6 +493,34 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             guard let self else { return }
             self.beginLoad(launch)
         }
+    }
+
+    /// Shows the per-game state of a pushed game's data: not pushed yet, which
+    /// file is missing, or the size/SHA-256 mismatch, and what to do about it.
+    func presentInstallationProblem(for entry: GameEntry, issues: [GameValidationIssue]) {
+        guard !issues.isEmpty else { return }
+        let hasMissingData = issues.contains { issue in
+            if case .gameDataMissing = issue { return true }
+            return false
+        }
+        if hasMissingData && issues.count == 1 {
+            // The normal pre-push state: the AOT pack is installed but the
+            // launcher has not pushed the game data yet. This is not an error.
+            presentNotice(
+                title: L10n.tr("Game data missing"),
+                message: L10n.format(
+                    "The launcher has not pushed the game data of “%@” yet. Install the build from the desktop launcher, then let it push the game's data into Documents/Games/%@.",
+                    entry.title,
+                    entry.titleID
+                )
+            )
+            return
+        }
+        let detail = issues.map { "• " + $0.localizedMessage }.joined(separator: "\n")
+        presentNotice(
+            title: L10n.tr("This game cannot be started"),
+            message: "\(entry.title)\n\n\(detail)"
+        )
     }
 
     /// Shows the "No AOT build for this game" state on the home page.
@@ -829,7 +902,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     }
 
     /// Title-id namespace used for the save-state folder of the loaded game.
-    var saveStateNamespace: String? { currentGame?.titleID }
+    var saveStateNamespace: String? { currentGame?.saveNamespace }
 
     /// Stops the frame loop and the audio engine before the console is
     /// serialized or restored, so a state is always taken between frames.

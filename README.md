@@ -15,7 +15,7 @@ Platform: iPhone / iPad (iOS 16+) · Build: macOS Tahoe 26.2+ with Xcode 26.6 (i
 
 **Status: early development.** The shell imports your own ROMs, keeps a multi-game library and runs them through the interpreter; a per-game AOT build (compiled locally from your own ROM) is what reaches near-60 fps. Compatibility, stability and the number of supported games are still being verified.
 
-> **Development on `main`:** the AOT-only 0.2.0-beta1 generation (desktop-built self-contained game packages, no on-device import) is implemented and under device validation. The public shell release below remains v0.1.5-beta3 until that validation finishes. See [docs/aot-first.md](docs/aot-first.md).
+> **Development on `main`:** the launcher-first 0.2.0-beta1 generation is implemented and under device validation — Windows/macOS launchers import a user ROM, build AOT GamePacks, install a ROM-free shell through the built-in signing flow, and push only game data into Documents. The public shell release below remains v0.1.5-beta3 until that validation finishes. See [docs/launcher-architecture.md](docs/launcher-architecture.md).
 
 ## Try the shell build
 

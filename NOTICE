@@ -9,5 +9,35 @@ included in this repository. Users must supply their own legally obtained,
 decrypted game dumps.
 
 The project contains original source code, build scripts and documentation.
-It depends on third-party software, including Zakuro and 3dsrecomp (MIT); see
-THIRD_PARTY.md for the list and licenses.
+It depends on third-party software, including Zakuro and 3dsrecomp (MIT), the
+idevice crate used by tools/devpush (MIT, https://github.com/jkcoxson/idevice,
+pinned commit 5171e34e3a236842af1160a84d955d037ddca3af), and S2Arm
+(Apache-2.0) as the API-usage reference for the device bridge. See
+THIRD_PARTY.md for the full list and licenses.
+
+The launchers bundle the official Impactor v2.7.2 and plumesign release files
+(unmodified) so the user can sign the base shell IPA with their own Apple ID.
+Impactor is MIT (Copyright 2025 Samara M) and embeds apple-codesign 0.29.0 under
+MPL-2.0. The binaries are downloaded from the official GitHub release
+(https://github.com/claration/impactor/releases/tag/v2.7.2) at launcher packaging
+time, verified against pinned SHA-256 values, and are not committed to this
+repository; the MIT and MPL-2.0 license texts and source links are kept in
+scripts/impactor/licenses/. 3ds2apple does not implement Apple ID authentication
+and never receives or logs the user's password or session tokens.
+
+The device bridge does not contain or distribute game data. Game files are
+pushed by the user from their own machine to their own device; ROMs, IPAs and
+generated C code stay out of git.
+The optional Windows/Linux local-build path (tools/winbuild, launcher feature flag)
+uses the official open-source LLVM/Clang/LLD 21.1.8 release, licensed under the
+Apache License v2.0 WITH LLVM-exception (https://llvm.org/LICENSE.txt). No Apple
+SDK, iPhoneOS stub library or Xcode component is used, copied or redistributed by
+that path; it links the GamePack with -undefined dynamic_lookup so libSystem and
+the app's runtime resolve host symbols at dlopen() time. The LLVM release files are
+not committed to this repository: when the launcher bundles an official LLVM
+build, the binaries stay unmodified, are verified against the SHA-256 values pinned
+in tools/winbuild/llvm-manifest.json, and the LLVM licence text plus copyright
+notices are shipped alongside them (source: https://github.com/llvm/llvm-project).
+3dsrecomp declares MIT in its Cargo.toml but ships no LICENSE file upstream; it is
+only run as a build tool (cloned at a pinned revision at build time) and is never
+vendored or redistributed by this project.

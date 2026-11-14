@@ -204,10 +204,18 @@ struct SettingsView: View {
 
     private var storageSection: some View {
         Section {
+            infoRow("Installed games", StorageFormat.size(storage.gamesBytes))
             infoRow("Save data", StorageFormat.size(storage.saveDataBytes))
-            infoRow("Game files", StorageFormat.size(storage.romBytes))
+            if storage.romBytes > 0 {
+                // 0.1.x shell cartridges: only present on an updated install.
+                infoRow("Legacy game files", StorageFormat.size(storage.romBytes))
+            }
             infoRow("App logs", StorageFormat.size(storage.logBytes))
             infoRow("Graphics pipeline cache", StorageFormat.size(storage.cacheBytes))
+            Text("Each game's AOT code is part of this app; the desktop launcher pushes the game data into this app's Documents/Games folder over USB or Wi-Fi. The Files app shows the same folder under On My iPhone → 3ds2apple.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Button("Clear graphics pipeline cache") {
                 isClearCacheConfirmationPresented = true
             }

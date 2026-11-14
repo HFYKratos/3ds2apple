@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>ThreeDsTwoApple.Launcher.App</RootNamespace>
+    <AssemblyName>3ds2apple-launcher</AssemblyName>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Description>3ds2apple launcher for Windows: import decrypted ROMs, build GamePacks, install the base shell with the official Impactor, push games to the phone.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ThreeDsTwoApple.Launcher.Core\ThreeDsTwoApple.Launcher.Core.csproj" />
+  </ItemGroup>
+</Project>

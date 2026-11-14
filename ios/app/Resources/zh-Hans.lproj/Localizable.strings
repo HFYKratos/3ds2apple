@@ -405,3 +405,74 @@
 "%@ — %@" = "%@ — %@";
 "The Zakuro runtime could not load this game (empty error text)." = "Zakuro 运行时无法载入此游戏（错误信息为空）。";
 "The Zakuro runtime could not load this game (no error text was reported)." = "Zakuro 运行时无法载入此游戏（运行时未提供错误信息）。";
+
+/* --- 启动器优先：游戏由桌面启动器写入 Documents/Games/ --- */
+"AOT · package" = "AOT · 游戏包";
+"Checking" = "校验中";
+"Checking game files" = "正在校验游戏文件";
+"Error" = "错误";
+"From the previous build" = "来自上一个构建";
+"Installed games" = "已安装游戏";
+"Legacy game files" = "旧版游戏文件";
+"No games on this iPhone yet" = "这台 iPhone 上还没有游戏";
+"Refresh library" = "刷新游戏库";
+"This game cannot be started" = "此游戏无法启动";
+"This game's files are still being checked. Try again when the check finishes." = "此游戏的文件仍在校验中。请在校验结束后重试。";
+"%ld games" = "%ld 个游戏";
+"1 game" = "1 个游戏";
+"Games are stored in this app's Documents/Games folder. The desktop launcher fills it over USB or Wi-Fi." = "游戏保存在本应用的 Documents/Games 文件夹中，由桌面启动器通过 USB 或 Wi-Fi 写入。";
+"Games are added from your computer. Open the 3ds2apple desktop launcher, import a game you own and let it build the AOT pack; the launcher installs this app once and then copies each game into it. Imported games appear here." = "游戏需要在电脑上添加：打开 3ds2apple 桌面启动器，导入你拥有的游戏并让它构建 AOT 包；启动器会安装一次本应用，然后把每个游戏复制进来。导入的游戏会显示在这里。";
+"The launcher writes each game to Documents/Games/<TITLEID>/. The same folder is visible in the Files app under On My iPhone → 3ds2apple." = "启动器会把每个游戏写入 Documents/Games/<TITLEID>/。同一文件夹可在“文件”App 的“我的 iPhone → 3ds2apple”中查看。";
+"Installed games live in this app's Documents/Games folder; the desktop launcher fills it over USB or Wi-Fi. The Files app shows the same folder under On My iPhone → 3ds2apple." = "已安装游戏位于本应用的 Documents/Games 文件夹中，由桌面启动器通过 USB 或 Wi-Fi 写入。“文件”App 的“我的 iPhone → 3ds2apple”中可以看到同一文件夹。";
+"This library was installed by the previous build. Re-push these games with the desktop launcher so they are managed in Documents/Games." = "此游戏库来自上一个构建版本。请用桌面启动器重新推送这些游戏，以便在 Documents/Games 中管理。";
+"Could not read the Documents/Games folder: %@" = "无法读取 Documents/Games 文件夹：%@";
+"the game info says the pack uses ABI version %ld, this app speaks %ld" = "游戏信息显示游戏包使用 ABI 版本 %ld，本应用支持 %ld";
+"The game data of “%@” is missing from Documents/Games/%@. Re-push the game with the desktop launcher." = "Documents/Games/%@ 中缺少“%@”的游戏数据。请用桌面启动器重新推送该游戏。";
+"the manifest is %ld bytes (limit %ld)" = "清单为 %ld 字节（上限 %ld）";
+"“%@” is not a folder." = "“%@”不是文件夹。";
+
+/* --- 每个游戏的校验错误（文件缺失、大小/SHA-256 不匹配） --- */
+"“%@” is not named after a 16-digit title ID. The launcher must create one folder per game named <TITLEID>." = "“%@”不是以 16 位标题 ID 命名的。启动器必须为每个游戏创建一个名为 <TITLEID> 的文件夹。";
+"“%@” is missing from this game's folder. Re-push the game with the desktop launcher." = "此游戏的文件夹中缺少“%@”。请用桌面启动器重新推送该游戏。";
+"GameInfo.json could not be read: %@" = "无法读取 GameInfo.json：%@";
+"GameInfo.json uses schema version %ld, but this app understands version %ld. Update the app." = "GameInfo.json 使用架构版本 %ld，但本应用只支持版本 %ld。请更新应用。";
+"GameInfo.json says this game is %@, but its folder is named %@. Re-push the game with the launcher." = "GameInfo.json 说此游戏是 %@，但文件夹名为 %@。请用启动器重新推送该游戏。";
+"GameInfo.json says this game has no AOT code. Re-push it with the desktop launcher." = "GameInfo.json 表示此游戏没有 AOT 代码。请用桌面启动器重新推送。";
+"The path “%@” in GameInfo.json points outside the game's folder. Re-push the game with the launcher." = "GameInfo.json 中的路径“%@”指向游戏文件夹之外。请用启动器重新推送该游戏。";
+"GameInfo.json records an invalid SHA-256 for “%@”. Re-push the game with the launcher." = "GameInfo.json 为“%@”记录了无效的 SHA-256。请用启动器重新推送该游戏。";
+"The AOT pack “%@” is missing from this game's folder. Re-push the game with the desktop launcher." = "此游戏的文件夹中缺少 AOT 包“%@”。请用桌面启动器重新推送该游戏。";
+"The AOT pack “%@” is empty. Re-push the game with the desktop launcher." = "AOT 包“%@”是空的。请用桌面启动器重新推送该游戏。";
+"“%@” is not a file, so the AOT pack cannot be loaded." = "“%@”不是文件，无法加载 AOT 包。";
+"The AOT pack is %ld bytes but GameInfo.json records %ld. Re-push the game with the launcher." = "AOT 包为 %ld 字节，但 GameInfo.json 记录为 %ld 字节。请用启动器重新推送该游戏。";
+"The AOT pack's SHA-256 does not match the manifest (expected %@, got %@). Re-push the game with the launcher." = "AOT 包的 SHA-256 与清单不符（应为 %@，实际为 %@）。请用启动器重新推送该游戏。";
+"The game data “%@” is missing from this game's folder. Re-push the game with the desktop launcher." = "此游戏的文件夹中缺少游戏数据“%@”。请用桌面启动器重新推送该游戏。";
+"The game data “%@” is empty. Re-push the game with the desktop launcher." = "游戏数据“%@”是空的。请用桌面启动器重新推送该游戏。";
+"“%@” is not a file, so the game cannot be loaded." = "“%@”不是文件，无法加载游戏。";
+"The game data is %ld bytes but GameInfo.json records %ld. Re-push the game with the launcher." = "游戏数据为 %ld 字节，但 GameInfo.json 记录为 %ld 字节。请用启动器重新推送该游戏。";
+"The game data's SHA-256 does not match the manifest (expected %@, got %@). Re-push the game with the launcher." = "游戏数据的 SHA-256 与清单不符（应为 %@，实际为 %@）。请用启动器重新推送该游戏。";
+"Could not read “%@” to check it: %@" = "无法读取“%@”进行校验：%@";
+"The game folder “%@” is no longer in Documents/Games. Refresh the library." = "游戏文件夹“%@”已不在 Documents/Games 中。请刷新游戏库。";
+
+/* --- 关于页：游戏来自桌面启动器 --- */
+"Games come from the 3ds2apple desktop launcher: it imports a game you own, builds its AOT pack on the computer and copies the game into this app. The app only runs AOT code and never enables a CPU JIT." = "游戏来自 3ds2apple 桌面启动器：它在电脑上导入你拥有的游戏、构建 AOT 包并复制进本应用。应用只运行 AOT 代码，绝不启用 CPU JIT。";
+"This app ships without any game data. Use the 3ds2apple desktop launcher to import a game you own; it installs this app and copies the game into Documents/Games, where the library finds it. The app has no ROMs, decryption keys, system files or game assets." = "本应用不附带任何游戏数据。请用 3ds2apple 桌面启动器导入你拥有的游戏；它会安装本应用并把游戏复制到 Documents/Games，游戏库会从那里找到游戏。应用不含 ROM、解密密钥、系统文件或游戏资源。";
+
+/* --- 目录 + 推送的游戏数据：AOT 包在 IPA 内，ROM 在 Documents/Games --- */
+"Data missing" = "缺少游戏数据";
+"No games in this build yet" = "此构建中还没有游戏";
+"Games are added with the 3ds2apple desktop launcher: it builds a version of this app that contains the game's AOT pack and installs it, then pushes the game's data into this app. Games appear here once the data push completes." = "游戏需要通过 3ds2apple 桌面启动器添加：启动器会构建包含该游戏 AOT 包的本应用版本并安装，然后把游戏数据推送进本应用。数据推送完成后，游戏会显示在这里。";
+"Pushed game data lives in Documents/Games/<TITLEID>/ and stays across app updates. The same folder is visible in the Files app under On My iPhone → 3ds2apple." = "推送的游戏数据保存在 Documents/Games/<TITLEID>/，应用更新后仍然保留。“文件”App 的“我的 iPhone → 3ds2apple”中可以看到同一文件夹。";
+"Each game's AOT code is part of this app; its game data is pushed into this app's Documents/Games folder by the desktop launcher." = "每个游戏的 AOT 代码都是本应用的一部分；游戏数据由桌面启动器推送到本应用的 Documents/Games 文件夹。";
+"Each game's AOT code is part of this app; the desktop launcher pushes the game data into this app's Documents/Games folder over USB or Wi-Fi. The Files app shows the same folder under On My iPhone → 3ds2apple." = "每个游戏的 AOT 代码都是本应用的一部分；桌面启动器通过 USB 或 Wi-Fi 把游戏数据推送到本应用的 Documents/Games 文件夹。“文件”App 的“我的 iPhone → 3ds2apple”中可以看到同一文件夹。";
+"The pushed game data of “%@” cannot be read any more. Push it again with the desktop launcher." = "“%@”的已推送游戏数据已无法读取。请用桌面启动器重新推送。";
+"The launcher has not pushed the game data of “%@” yet. Install the build from the desktop launcher, then let it push the game's data into Documents/Games/%@." = "启动器尚未推送“%@”的游戏数据。请先安装桌面启动器生成的构建，再让它把游戏数据推送到 Documents/Games/%@。";
+"“%@” is missing from this game's data folder. Push the game data with the desktop launcher." = "此游戏的数据文件夹中缺少“%@”。请用桌面启动器推送游戏数据。";
+"GameInfo.json says this game is %@, but its folder is named %@. Push the game data again with the launcher." = "GameInfo.json 说此游戏是 %@，但文件夹名为 %@。请用启动器重新推送游戏数据。";
+"The path “%@” in GameInfo.json points outside the game's data folder. Push the game data again with the launcher." = "GameInfo.json 中的路径“%@”指向游戏数据文件夹之外。请用启动器重新推送游戏数据。";
+"GameInfo.json records an invalid SHA-256 for “%@”. Push the game data again with the launcher." = "GameInfo.json 为“%@”记录了无效的 SHA-256。请用启动器重新推送游戏数据。";
+"The game data “%@” has not been pushed into this app yet. Push the game data with the desktop launcher." = "游戏数据“%@”尚未推送进本应用。请用桌面启动器推送游戏数据。";
+"The game data “%@” is empty. Push the game data again with the desktop launcher." = "游戏数据“%@”是空的。请用桌面启动器重新推送游戏数据。";
+"The game data is %ld bytes but GameInfo.json records %ld. Push the game data again with the launcher." = "游戏数据为 %ld 字节，但 GameInfo.json 记录为 %ld 字节。请用启动器重新推送游戏数据。";
+"The game data's SHA-256 does not match the manifest (expected %@, got %@). Push the game data again with the launcher." = "游戏数据的 SHA-256 与清单不符（应为 %@，实际为 %@）。请用启动器重新推送游戏数据。";
+"The game data of %@ has not been pushed yet. Install the build from the desktop launcher, then let it push the game's data." = "%@ 的游戏数据尚未推送。请先安装桌面启动器生成的构建，再让它推送游戏数据。";
+"The game data folder “%@” is no longer in Documents/Games. Refresh the library." = "游戏数据文件夹“%@”已不在 Documents/Games 中。请刷新游戏库。";

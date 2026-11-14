@@ -176,6 +176,7 @@ final class HarnessModel: ObservableObject {
 
         var frames = 0
         var savedFrames = 0
+        var statusLogged = false
         var windowStart = Date()
         var windowMinMs = Double.greatestFiniteMagnitude
         var windowMaxMs = 0.0
@@ -195,6 +196,16 @@ final class HarnessModel: ObservableObject {
             }
             frames += 1
             windowFrames += 1
+            // AOT coverage evidence: after 60 frames ask the runtime how much
+            // of the executed instruction stream came from the recompiled code.
+            if frames == 60 && !statusLogged {
+                statusLogged = true
+                if let status = zk_recompiled_status(system) {
+                    log("zk_recompiled_status: \(String(cString: status))")
+                } else {
+                    log("zk_recompiled_status: no text returned")
+                }
+            }
             windowMinMs = min(windowMinMs, frameMs)
             windowMaxMs = max(windowMaxMs, frameMs)
 
@@ -303,6 +314,13 @@ final class HarnessModel: ObservableObject {
     }
 
     // MARK: helpers
+
+    // Test-only harness hook: the runtime exposes a human-readable AOT status that
+    // includes the interpreted-instruction percentage (zk_recompiled_status). The
+    // shipping bridge header does not declare it because the app never shows raw
+    // runtime counters; the harness logs it to prove AOT coverage after frames ran.
+    @_silgen_name("zk_recompiled_status")
+    private func zk_recompiled_status(_ system: zk_system_t?) -> UnsafePointer<CChar>?
 
     private func probeMetal() {
         let device = MTLCreateSystemDefaultDevice()

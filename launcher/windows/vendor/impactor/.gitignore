@@ -1,0 +1,7 @@
+# Official Impactor/plumesign release binaries are downloaded by
+# tools/fetch-impactor.ps1 (Windows) / fetch-impactor.sh (dev) and verified against
+# PINS.json. They are third-party release artifacts (~29 MB) and must not be committed.
+*.exe
+*.dll
+*.pdb
+.downloaded/

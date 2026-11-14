@@ -17,10 +17,10 @@ exefs/
 *.sav
 *.dsv
 
-# --- Build outputs ----------------------------------------------------------
-build/
-out/
-dist/
+# --- Build outputs (root only; do not hide source dirs like launcher/**/Build/) --
+/build/
+/out/
+/dist/
 DerivedData/
 Payload/
 *.ipa
@@ -66,8 +66,8 @@ tmp/
 # --- Local test IPAs (never commit) ----------------------------------------
 IPA/
 
-# --- Vendored checkouts -----------------------------------------------------
-third_party/
+# --- Vendored checkouts (root only) -----------------------------------------
+/third_party/
 
 # --- Local ROMs (never commit) ---------------------------------------------
 ROM/

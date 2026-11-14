@@ -1,0 +1,131 @@
+{
+  "schema": "winbuild-llvm-manifest/1",
+  "purpose": "Official open-source LLVM/Clang + LLD toolchain for locally cross-building 3ds2apple GamePack arm64/x86_64 Mach-O dylibs on Windows/Linux without Apple SDK files.",
+  "documented": "2026-11-14",
+  "pinned_llvm_release": {
+    "version": "21.1.8",
+    "tag": "llvmorg-21.1.8",
+    "published_at": "2025-12-16T10:23:31Z",
+    "release_page": "https://github.com/llvm/llvm-project/releases/tag/llvmorg-21.1.8",
+    "license": {
+      "spdx": "Apache-2.0 WITH LLVM-exception",
+      "license_url": "https://llvm.org/LICENSE.txt",
+      "notes": "LLVM release binaries, clang, ld64.lld, llvm-ar, llvm-nm and llvm-objdump are redistributable under the LLVM licence with the licence text and copyright notices; keep the official files unmodified and pin SHA-256 (same policy as third_party/impactor)."
+    },
+    "assets": [
+      {
+        "platform": "windows-x86_64",
+        "file": "LLVM-21.1.8-win64.exe",
+        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/LLVM-21.1.8-win64.exe",
+        "bytes": 374129373,
+        "sha256": "7a5386c26497db1691f320121e5b113364dd0274b98e55f15f4dbc00c0450113",
+        "signature": "https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/LLVM-21.1.8-win64.exe.sig",
+        "installer": "NSIS; default install C:\\Program Files\\LLVM; winget id LLVM.LLVM",
+        "extracted_bin_dir": "C:\\Program Files\\LLVM\\bin"
+      },
+      {
+        "platform": "windows-i686",
+        "file": "LLVM-21.1.8-win32.exe",
+        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/LLVM-21.1.8-win32.exe",
+        "bytes": 349589289,
+        "sha256": "0492c5c292e515ebbbc2533671e54c5895fe209e534812313f64257407233181",
+        "note": "32-bit x86 Windows only; not needed for a 64-bit launcher"
+      },
+      {
+        "platform": "linux-x86_64",
+        "file": "LLVM-21.1.8-Linux-X64.tar.xz",
+        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/LLVM-21.1.8-Linux-X64.tar.xz",
+        "bytes": 2019005384,
+        "sha256": "b3b7f2801d15d50736acea3c73982994d025b01c2f035b91ae3b49d1b575732b",
+        "install": "tar -xf ... -C /opt/llvm-21.1.8; export WINBUILD_LLVM_DIR=/opt/llvm-21.1.8/bin",
+        "note": "Checked 2026-11-14 against the GitHub release API digest field (not downloaded in full on the prototype host)."
+      }
+    ],
+    "required_tools": [
+      "clang",
+      "ld64.lld",
+      "llvm-ar",
+      "llvm-nm",
+      "llvm-objdump",
+      "llvm-readobj"
+    ],
+    "ubuntu_packages_prototype": {
+      "distro": "Ubuntu 26.04 (resolute), llvm-toolchain-21 21.1.8-6ubuntu1",
+      "install": "tools/winbuild/fetch-llvm-ubuntu.sh (apt-get download + dpkg-deb -x, no root; every .deb verified against apt's published SHA512)",
+      "verified_on": "2026-11-14, x86_64 WSL2, used for the prototype builds in docs/windows-build.md",
+      "packages": [
+        {
+          "package": "clang-21",
+          "version": "1:21.1.8-6ubuntu1",
+          "bytes": 127928,
+          "sha512": "464dcf96c2532fe7e8520f5518a2b34cd9caf40865fb426d33663308e8b5d2e2fbdfc5d1f16fee1ec3d4bbfd06f7a2cd67068640b5abece6c1e6acab563db915",
+          "file": "clang-21_1%3a21.1.8-6ubuntu1_amd64.deb"
+        },
+        {
+          "package": "libclang-common-21-dev",
+          "version": "1:21.1.8-6ubuntu1",
+          "bytes": 769884,
+          "sha512": "4e0ce4865a4ee3f8d8a762fe276e797a11bafa46bb67a735a30da0af0ef9d3090a11266f6aaec4529219dfd91b48be25ec34acfb6a9b2ab711316afd98aa73db",
+          "file": "libclang-common-21-dev_1%3a21.1.8-6ubuntu1_amd64.deb"
+        },
+        {
+          "package": "libclang-cpp21",
+          "version": "1:21.1.8-6ubuntu1",
+          "bytes": 13724698,
+          "sha512": "c94c3cab82c4ad4114e26b58f85a4d6d4f183041eb36cbebf7225a5cdc8adf5779b925462b343886e23821db5a2bc2c9d2c0df70fb2885acf6f6f3cf71bb2b30",
+          "file": "libclang-cpp21_1%3a21.1.8-6ubuntu1_amd64.deb"
+        },
+        {
+          "package": "libllvm21",
+          "version": "1:21.1.8-6ubuntu1",
+          "bytes": 30710558,
+          "sha512": "40586a16a0e965fb4d7533caaf384b06fa2dcb8b9c0f7092fe6f3809c9c70a33d1ceb9dbeb2c569be824f89032d6c7f787d43add23b94e9185e74e5861cfb916",
+          "file": "libllvm21_1%3a21.1.8-6ubuntu1_amd64.deb"
+        },
+        {
+          "package": "lld-21",
+          "version": "1:21.1.8-6ubuntu1",
+          "bytes": 1518618,
+          "sha512": "61042c1fa7099ad142974e6cd098b0a2dcc000423e45ad9821a7a604f6ebb2a8a8fcff79cda6d6b075174bbe38f8f7884ff6f4b89628cb4a33d568c4a4f7f481",
+          "file": "lld-21_1%3a21.1.8-6ubuntu1_amd64.deb"
+        },
+        {
+          "package": "llvm-21-linker-tools",
+          "version": "1:21.1.8-6ubuntu1",
+          "bytes": 1324772,
+          "sha512": "1a312f2ec1194e1f520a5439122da399af6d15e725046ef4e1b6b0e69dd9dc82cae98f8422b8c89d4110167524dcc1fe940fb9dfb9055654c2cf69dd87f1b535",
+          "file": "llvm-21-linker-tools_1%3a21.1.8-6ubuntu1_amd64.deb"
+        },
+        {
+          "package": "llvm-21-runtime",
+          "version": "1:21.1.8-6ubuntu1",
+          "bytes": 564298,
+          "sha512": "16f59df8da971bd50bb63f0c011c75998759166c548371d9b9fe16f2300cbc8cde1643a5d1c9fce06ab0c79cc1a55d4deffc5899c508001ccc7a79c7bc3a9151",
+          "file": "llvm-21-runtime_1%3a21.1.8-6ubuntu1_amd64.deb"
+        },
+        {
+          "package": "llvm-21",
+          "version": "1:21.1.8-6ubuntu1",
+          "bytes": 20012922,
+          "sha512": "08669700cac31769475d1f66987b6398bbe67e72ff34d80102cebefa2fa824b3f7228db027bef5e7f9db060d8cee3cecd3c08e7b3829f24b7f7b773ea0eb9b97",
+          "file": "llvm-21_1%3a21.1.8-6ubuntu1_amd64.deb"
+        }
+      ]
+    }
+  },
+  "host_tool_requirements": {
+    "windows": "Windows 10/11 x64; no Visual Studio, no Windows SDK, no Xcode, no Apple files",
+    "linux": "Ubuntu 22.04+/WSL2 or any glibc distro that runs the official LLVM tarball",
+    "windows_posix_shell": "Git for Windows (bundled MinGit is enough) for tools/winbuild/build-gamepack.sh; the build also works with a native C#/PowerShell invocation using the exact clang.exe/ld64.lld.exe command lines documented in tools/winbuild/README.md",
+    "python": "Python 3.8+ for tools/winbuild/check-gamepack.py (the Windows launcher already bundles a Python runtime for its build pipeline; without Python the script falls back to llvm-nm/llvm-objdump checks)"
+  },
+  "apple_sdk": {
+    "required": false,
+    "reason": "The generated C is compiled -nostdinc against tools/winbuild/darwin-stubs/include (hand-written ISO C declarations); libSystem/host symbols stay undefined via -undefined dynamic_lookup and resolve from the signed app + libSystem when the shell dlopen()s the pack. No Apple SDK header, stub library, tbd or binary is copied or redistributed."
+  },
+  "validation": {
+    "script": "tools/winbuild/check-gamepack.py",
+    "checks": "thin 64-bit Mach-O dylib; arch matches target; LC_BUILD_VERSION platform ios/iossimulator minos >= 16.0; install name @rpath/GamePack-<TITLE>.dylib; exports zk_gamepack_title_id/abi_version/register + the seven recomp tables; keeps zk_register_gamepack undefined; defines no Zakuro runtime symbol; reports unexpected undefined imports",
+    "evidence": "see docs/windows-build.md section 'Phase-2 prototype (task-22)'"
+  }
+}

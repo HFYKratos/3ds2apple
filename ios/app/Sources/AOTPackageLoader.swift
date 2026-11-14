@@ -7,18 +7,21 @@
 //
 //  Two ways a build can contain AOT code for a game:
 //
-//  1. STATIC LINK (today's single-game IPA). The game's recompiled code is
+//  1. APP-BUNDLE GAME PACKAGE (the launcher-first product). The desktop launcher
+//     rebuilds the app with Frameworks/GamePack-<TITLEID>.dylib and lists it as
+//     "packFile" in GameCatalog.json, so the AOT code is signed as part of the
+//     IPA. The user's game data (the decrypted ROM) is pushed separately into
+//     Documents/Games/<TITLEID>/ and resolved at launch (InstalledGame.swift).
+//     iOS refuses to dlopen unsigned code, which is exactly why the pack cannot
+//     be pushed into Documents as well.
+//
+//  2. STATIC LINK (the 0.1.x single-game IPA). The game's recompiled code is
 //     linked into the main binary; zk_linked_code() is 1 and
-//     zk_linked_program_id() names the title. The shell loads nothing here: this
-//     is the compatibility fallback for every 0.1.x build.
+//     zk_linked_program_id() names the title.
 //
-//  2. GAME PACKAGE (the AOT-first build). The desktop build writes one dylib per
-//     game into the app bundle and lists it as "packFile" in GameCatalog.json.
-//     The shell resolves that path inside the bundle, dlopen()s it and, when the
-//     pack exports the registration symbol, lets it register with the runtime.
-//
-//  The shell never launches a game without AOT code. Every failure returns an
-//  AOTUnavailableReason the UI shows as "No AOT build for this game".
+//  The shell never launches a game without AOT code. The pushed game data is
+//  validated by GameLibrary/InstalledGame before launch; every AOT failure
+//  returns an AOTUnavailableReason the UI shows on the card or in a notice.
 //
 //  GamePack C ABI v1 (the pack's side; built by the desktop AOT pipeline):
 //
@@ -46,18 +49,21 @@
 //  The registration hook is where a pack hands its AOT code image to the runtime
 //  (ios/zakuro-ios/src/gamepack.rs). This loader dlopen()s the pack, validates
 //  its title/ABI, registers the tables, and then ROMSession.start() calls
-//  zk_create() with the ROM the package bundles. See docs/desktop-aot.md §6 and
-//  docs/build-simulator.md §9 for the verified contract.
+//  zk_create() with the game data resolved from Documents/Games (or from the
+//  bundle for an app updated from the previous self-contained build). See
+//  docs/desktop-aot.md §6 and docs/build-simulator.md §9 for the verified
+//  contract.
 //
 
 import Darwin
 import Foundation
 
-/// Where the AOT code of a catalog game comes from.
+/// Where the AOT code of a library game comes from.
 enum AOTCodeSource: Equatable {
-    /// Compiled into the app binary (today's single-game linked build).
+    /// Compiled into the app binary (the 0.1.x single-game linked build).
     case staticLinked
-    /// A per-game dylib at this bundle-relative path, not loaded yet.
+    /// A per-game dylib at this bundle-relative path, built into the signed
+    /// IPA and listed in GameCatalog.json.
     case bundlePackage(String)
 }
 
@@ -114,8 +120,8 @@ enum AOTResolution {
 /// it is cached (see `loadPackage`).
 struct AOTPackage {
     let titleID: String
-    /// Catalog "packFile": path relative to the app bundle.
-    let bundleRelativePath: String
+    /// The catalog's "packFile": path relative to the signed app bundle.
+    let path: String
     /// Absolute on-disk location of the loaded dylib.
     let url: URL
     /// dlopen() handle; never closed for a pack that registered successfully.
@@ -180,15 +186,17 @@ final class AOTPackageLoader {
                     )
                 ))
             }
-            // AOT-first packages are self-contained: the catalogue must name the
-            // bundled ROM and the file must be there, or zk_create cannot run.
-            guard let romFile = game.romFile?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !romFile.isEmpty else {
-                return .unavailable(.noBundledGameData)
-            }
-            guard let romURL = Self.bundleURL(forBundleRelativePath: romFile),
-                  FileManager.default.fileExists(atPath: romURL.path) else {
-                return .unavailable(.packageGameDataMissing(romFile))
+            // The pack itself is enough for availability: the game data lives
+            // in Documents/Games and its validation is a separate, per-game
+            // state (missing data shows "Data missing", not a broken pack).
+            // Only an app updated from the previous self-contained build has a
+            // bundled ROM, and then that file must still be there.
+            if let romFile = game.romFile?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !romFile.isEmpty {
+                guard let romURL = Self.bundleURL(forBundleRelativePath: romFile),
+                      FileManager.default.fileExists(atPath: romURL.path) else {
+                    return .unavailable(.packageGameDataMissing(romFile))
+                }
             }
             return .available(.bundlePackage(packFile))
         }
@@ -220,7 +228,7 @@ final class AOTPackageLoader {
             guard let url = Self.bundleURL(forBundleRelativePath: packFile) else {
                 return .unavailable(.packageMissing(packFile))
             }
-            return loadPackage(for: game, relativePath: packFile, url: url)
+            return loadPackage(for: game, path: packFile, url: url)
         }
     }
 
@@ -232,9 +240,10 @@ final class AOTPackageLoader {
     }
 
     // MARK: - Paths
-    /// Whether a catalog "packFile" is a safe bundle-relative path: not
-    /// absolute, no "..", no empty components.
-    static func isValidBundleRelativePath(_ path: String) -> Bool {
+    /// Whether a manifest/catalog path is a safe relative path inside its
+    /// root: not absolute, no "..", no empty components. Used for both the
+    /// app bundle (previous build) and Documents/Games (launcher installs).
+    static func isValidRelativePath(_ path: String) -> Bool {
         guard !path.isEmpty, !path.hasPrefix("/"), !path.hasPrefix("\\") else { return false }
         let components = path.split(separator: "/", omittingEmptySubsequences: false)
         guard !components.isEmpty else { return false }
@@ -251,7 +260,7 @@ final class AOTPackageLoader {
     /// the bundle cannot make the loader read a file outside it.
     static func bundleURL(forBundleRelativePath path: String,
                           bundle: Bundle = .main) -> URL? {
-        guard isValidBundleRelativePath(path) else { return nil }
+        guard isValidRelativePath(path) else { return nil }
         let base = bundle.bundleURL.resolvingSymlinksInPath().standardizedFileURL
         let candidate = base.appendingPathComponent(path, isDirectory: false)
         let url = candidate.resolvingSymlinksInPath()
@@ -275,6 +284,16 @@ final class AOTPackageLoader {
         return url
     }
 
+    /// The game data a launch hands to the runtime: the ROM pushed into
+    /// Documents/Games for a launcher install, the bundled ROM for an app
+    /// updated from the previous self-contained build.
+    static func launchROMURL(for game: GameEntry) -> URL? {
+        if let pushed = game.pushedData {
+            return pushed.romURL
+        }
+        return bundleROMURL(for: game)
+    }
+
     // MARK: - Static link
 
     /// Title IDs whose AOT code is statically linked into this binary.
@@ -289,7 +308,7 @@ final class AOTPackageLoader {
     // MARK: - Game package loading
 
     private func loadPackage(for game: GameEntry,
-                             relativePath: String,
+                             path: String,
                              url: URL) -> AOTResolution {
         if let loaded = cachedPackage(for: game.titleID) {
             switch register(package: loaded) {
@@ -311,7 +330,7 @@ final class AOTPackageLoader {
         _ = dlerror()
         guard let handle = dlopen(url.path, RTLD_NOW | RTLD_LOCAL) else {
             let detail = dlerror().map { String(cString: $0) } ?? L10n.tr("dlopen failed")
-            AppLog.log("[3ds2apple] game package %@: dlopen failed: %@", relativePath, detail)
+            AppLog.log("[3ds2apple] game package %@: dlopen failed: %@", path, detail)
             return .unavailable(.packageInvalid(detail))
         }
 
@@ -325,7 +344,7 @@ final class AOTPackageLoader {
                 dlclose(handle)
                 AppLog.log(
                     "[3ds2apple] game package %@: pack is for %@, catalog says %@",
-                    relativePath,
+                    path,
                     packedTitleID,
                     game.titleID
                 )
@@ -342,7 +361,7 @@ final class AOTPackageLoader {
                     packABI,
                     Self.hostABIVersion
                 )
-                AppLog.log("[3ds2apple] game package %@: %@", relativePath, detail)
+                AppLog.log("[3ds2apple] game package %@: %@", path, detail)
                 return .unavailable(.packageInvalid(detail))
             }
         }
@@ -353,15 +372,15 @@ final class AOTPackageLoader {
             dlclose(handle)
             let detail = L10n.format(
                 "the game package “%@” does not export the required registration hook “%@”, so it cannot hand its AOT code to the runtime",
-                relativePath,
+                path,
                 registrationName
             )
-            AppLog.log("[3ds2apple] game package %@: %@", relativePath, detail)
+            AppLog.log("[3ds2apple] game package %@: %@", path, detail)
             return .unavailable(.packageInvalid(detail))
         }
         let package = AOTPackage(
             titleID: game.titleID,
-            bundleRelativePath: relativePath,
+            path: path,
             url: url,
             handle: handle,
             registrationSymbol: registrationName
@@ -406,7 +425,7 @@ final class AOTPackageLoader {
               let symbol = dlsym(package.handle, registrationName) else {
             return .failed(L10n.format(
                 "the game package “%@” does not export its registration hook any more",
-                package.bundleRelativePath
+                package.path
             ))
         }
         typealias RegisterFunction = @convention(c) (UInt32) -> Int32
@@ -419,7 +438,7 @@ final class AOTPackageLoader {
                 registrationName,
                 result
             )
-            AppLog.log("[3ds2apple] game package %@: %@", package.bundleRelativePath, detail)
+            AppLog.log("[3ds2apple] game package %@: %@", package.path, detail)
             return .failed(detail)
         }
         let registeredTitle = zk_registered_gamepack_title_id()
@@ -431,12 +450,12 @@ final class AOTPackageLoader {
                 registeredTitle,
                 package.titleID
             )
-            AppLog.log("[3ds2apple] game package %@: %@", package.bundleRelativePath, detail)
+            AppLog.log("[3ds2apple] game package %@: %@", package.path, detail)
             return .failed(detail)
         }
         AppLog.log(
             "[3ds2apple] game package %@: registered for %@ (abi %ld)",
-            package.bundleRelativePath,
+            package.path,
             package.titleID,
             Self.hostABIVersion
         )

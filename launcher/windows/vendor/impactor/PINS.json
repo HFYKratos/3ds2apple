@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "component": "Impactor (official, unmodified) + plumesign CLI",
+  "testedVersion": "2.7.2",
+  "releasePage": "https://github.com/claration/impactor/releases/tag/v2.7.2",
+  "downloadBase": "https://github.com/claration/impactor/releases/download/v2.7.2/",
+  "verifiedAgainst": "GitHub REST API release asset digests (GET /repos/claration/impactor/releases/tags/v2.7.2), checked 2026-11-14",
+  "verificationMethod": "SHA-256 of each downloaded asset must equal the digest published for the official v2.7.2 release; tools/fetch-impactor.ps1 and the launcher refuse any other file.",
+  "binaries": [
+    {
+      "fileName": "Impactor-windows-x86_64-portable.exe",
+      "sha256": "f493cd99081370dca7c677676e119d8808418ebccab49e1f219744b3b71e88ef",
+      "bytes": 18213888,
+      "upstreamDigest": "sha256:f493cd99081370dca7c677676e119d8808418ebccab49e1f219744b3b71e88ef"
+    },
+    {
+      "fileName": "plumesign-windows-x86_64.exe",
+      "sha256": "b965e51a613341cb8c7e0f3594b24c09243a235b4187f669ea958a548e6a2fe0",
+      "bytes": 10718720,
+      "upstreamDigest": "sha256:b965e51a613341cb8c7e0f3594b24c09243a235b4187f669ea958a548e6a2fe0"
+    }
+  ],
+  "licenses": [
+    {
+      "file": "LICENSE-Impactor-MIT.txt",
+      "component": "Impactor v2.7.2",
+      "license": "MIT",
+      "copyright": "Copyright 2025 Samara M",
+      "source": "https://github.com/claration/impactor/blob/v2.7.2/LICENSE"
+    },
+    {
+      "file": "LICENSE-apple-codesign-MPL-2.0.txt",
+      "component": "apple-codesign 0.29.0 library embedded in the Impactor binary",
+      "license": "MPL-2.0",
+      "source": "https://github.com/claration/impactor/tree/v2.7.2/3rdparty/apple-codesign-0.29.0"
+    }
+  ],
+  "sourceLinks": [
+    "https://github.com/claration/impactor/tree/v2.7.2",
+    "https://github.com/claration/impactor/tree/v2.7.2/3rdparty/apple-codesign-0.29.0"
+  ],
+  "bundledBy": "launcher/windows/tools/fetch-impactor.ps1 (Windows) / fetch-impactor.sh (WSL/dev) into ThirdParty/Impactor; the launcher verifies SHA-256 before every use and never rebuilds, patches or re-signs these files."
+}

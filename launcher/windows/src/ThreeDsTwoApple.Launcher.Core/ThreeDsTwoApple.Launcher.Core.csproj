@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>ThreeDsTwoApple.Launcher.Core</RootNamespace>
+    <AssemblyName>ThreeDsTwoApple.Launcher.Core</AssemblyName>
+    <Description>Non-UI engine of the 3ds2apple Windows launcher: tool CLIs, build-agent flow, Impactor/plumesign signing, device bridge pushes.</Description>
+  </PropertyGroup>
+</Project>

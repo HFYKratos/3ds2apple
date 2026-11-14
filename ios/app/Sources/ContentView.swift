@@ -46,6 +46,10 @@ struct ContentView: View {
         .onAppear {
             model.startControllerSupport()
             applySettings()
+            // Rescan Documents/Games before the home page is measured: the
+            // desktop launcher can add or replace games while the app is not
+            // running.
+            library.refresh()
             logRuntimeProbe()
             // Automated launch for the Simulator / diagnostics
             // (`-openAOTTitleID <TITLEID>`); inert in normal use.
@@ -55,6 +59,11 @@ struct ContentView: View {
             // iOS may jettison a backgrounded process; release the runtime.
             if newPhase == .background {
                 model.stopForBackground()
+            }
+            // The launcher (or the Files app) can add or replace games while
+            // the app is not in front: rescan Documents/Games on return.
+            if newPhase == .active {
+                library.refresh()
             }
         }
         .onChange(of: settings.audioMuted) { muted in
@@ -137,7 +146,18 @@ struct ContentView: View {
             bottom.height
         )
         AppLog.log("[3ds2apple] language: %@", L10n.diagnosticsLine)
-        AppLog.log("[3ds2apple] library: %ld game(s)", library.entries.count)
+        AppLog.log("[3ds2apple] documents: %@", StorageInspector.documentsURL.path)
+        AppLog.log("[3ds2apple] library: %ld catalog game(s) (%ld with pushed game data, %ld from the previous build, %ld checking)",
+                   library.entries.count,
+                   library.entries.filter { $0.hasPushedData }.count,
+                   library.entries.filter { $0.isLegacyBundled }.count,
+                   library.entries.filter { $0.validation == .checking }.count)
+        for entry in library.entries {
+            AppLog.log("[3ds2apple] library entry: %@ (%@) from %@", entry.title, entry.titleID, entry.sourceDescription)
+            for issue in entry.validation.issues {
+                AppLog.log("[3ds2apple] library entry %@: %@", entry.titleID, issue.localizedMessage)
+            }
+        }
         if let game = model.currentGame {
             AppLog.log("[3ds2apple] current game: %@ (%@)", game.title, game.titleID)
         } else {

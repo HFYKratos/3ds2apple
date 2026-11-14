@@ -1,0 +1,58 @@
+# XcodeGen spec for the 3ds2apple macOS launcher (MVP).
+#
+# Generate/build on macOS (Xcode 26.6 on the build VM):
+#   cd launcher/macos && PATH=/usr/local/bin:$PATH xcodegen generate
+#   xcodebuild -project 3ds2apple-launcher.xcodeproj -scheme 3ds2apple-launcher \
+#     -configuration Debug -destination 'platform=macOS' -derivedDataPath build build
+#
+# The generated .xcodeproj and build/ are gitignored build artifacts.
+name: 3ds2apple-launcher
+
+options:
+  bundleIdPrefix: com.kratos
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    # Development build: unsigned by default, runs locally on the user's Mac.
+    # The launcher never signs this app; signing happens at install time in Xcode.
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGN_IDENTITY: ""
+    ENABLE_HARDENED_RUNTIME: "NO"
+    ENABLE_APP_SANDBOX: "NO"
+
+targets:
+  "3ds2apple-launcher":
+    type: application
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: Sources
+    settings:
+      base:
+        PRODUCT_NAME: "3ds2apple-launcher"
+        PRODUCT_BUNDLE_IDENTIFIER: "com.kratos.3ds2apple.launcher"
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_KEY_CFBundleDisplayName: "3ds2apple Launcher"
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
+        INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright 2026 3ds2apple contributors. Apache-2.0."
+        INFOPLIST_KEY_LSMinimumSystemVersion: "13.0"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+
+schemes:
+  "3ds2apple-launcher":
+    build:
+      targets:
+        "3ds2apple-launcher": all
+    run:
+      config: Debug
+    archive:
+      config: Release

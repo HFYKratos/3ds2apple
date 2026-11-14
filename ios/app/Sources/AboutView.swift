@@ -95,7 +95,7 @@ struct AboutView: View {
             }
             Divider()
             aboutRow("Controller", model.controllerName ?? L10n.tr("Not connected"))
-            Text("Games are built ahead of time on your computer with your own game dump, then installed as AOT packages. The app only runs AOT code and never enables a CPU JIT.")
+            Text("Games come from the 3ds2apple desktop launcher: it imports a game you own, builds its AOT pack on the computer and copies the game into this app. The app only runs AOT code and never enables a CPU JIT.")
                 .font(.caption2)
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -105,7 +105,7 @@ struct AboutView: View {
 
     private var gameCard: some View {
         card(title: "Your game", systemImage: "shield.lefthalf.filled") {
-            Text("This app ships without any game data. Build a game you own on your computer with the desktop app and install that build; the game appears in the library. The app has no ROMs, decryption keys, system files or game assets.")
+            Text("This app ships without any game data. Use the 3ds2apple desktop launcher to import a game you own; it installs this app and copies the game into Documents/Games, where the library finds it. The app has no ROMs, decryption keys, system files or game assets.")
                 .font(.footnote)
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

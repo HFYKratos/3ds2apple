@@ -16,6 +16,7 @@ generated C, dylib or IPA is committed.
 | `build-game-ipa.sh` | Build the per-game app with `-lzakuro_ios -lgame`, add the one-game `GameCatalog.json`, package the AOT IPA |
 | `build-game-pack.sh` | Build/adopt one per-game AOT pack package (`out/packages/<TITLE_ID>/{GameInfo.json,GamePack.dylib}`); macOS for a real `--dylib`/`--from-libs` pack, `--fake`/`--dry-run` on any host |
 | `build-multi-game-ipa.sh` | Allocate several per-game packs into ONE unsigned shell IPA with a generated schema-v2 `GameCatalog.json`; `--base-app` on macOS, `--fake-shell` layout preview anywhere |
+| `build-game-pack-llvm.sh` | Build a real GamePack dylib with **open-source LLVM/Clang + LLD, no Apple SDK/macOS** (Linux/WSL/Windows); wrapper over `tools/winbuild/build-gamepack.sh`, same output layout as `build-game-pack.sh`; see `tools/winbuild/README.md` and `docs/windows-build.md` §7 |
 | `build-ios-app-sim.sh` | Runtime-simulator workstream (not part of the AOT-first desktop pipeline): build the iOS Simulator app variant |
 | `build-zakuro-ios-sim.sh` | Runtime-simulator workstream: build the x86_64/Simulator Zakuro static library |
 | `ios-ui-preview.sh` | Build and screenshot the shell UI in the iOS Simulator on the macOS VM (auto-generated `zk_*` stubs; no device, no static library, no ROM) |
@@ -49,8 +50,11 @@ scripts/build-game-ipa.sh <name> \
 
 The AOT-first flow builds one package per game on the computer and one shell IPA
 that carries several packs (schema-v2 `GameCatalog.json`). The pure
-desktop work runs natively on Linux/Windows/macOS; only the Apple
-compile/link/package steps need macOS (see `docs/desktop-aot.md`).
+desktop work runs natively on Linux/Windows/macOS; the Apple
+compile/link/package steps need macOS (see `docs/desktop-aot.md`). A phase-2
+prototype can also compile/link the GamePack on Linux/Windows with open-source
+LLVM/LLD and no Apple SDK: `scripts/build-game-pack-llvm.sh` (see
+`tools/winbuild/README.md` and `docs/windows-build.md` §7).
 
 ```bash
 # 1. desktop CLI (Rust workspace member; no Xcode needed)

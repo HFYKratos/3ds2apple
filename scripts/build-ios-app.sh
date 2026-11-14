@@ -18,10 +18,11 @@
 #   scripts/build-ios-app.sh --game-catalog build/catalog/pokemon-y.json
 #
 # GameCatalog.json (the build-time AOT manifest): a plain shell build writes an
-# EMPTY catalog ({"schemaVersion":1,"games":[]}) so every ROM runs in interpreter
-# mode. scripts/build-game-ipa.sh installs its one-game catalog itself; here the
-# optional --game-catalog PATH lets an advanced shell build ship a pre-generated
-# multi-game catalog. The catalog is copied into <app-dir>/Resources/ for the
+# EMPTY schema-2 catalog ({"schemaVersion":2,"games":[]}); the desktop launcher
+# injects per-game GamePack dylibs + a populated catalog into this ROM-free shell
+# template before signing. scripts/build-game-ipa.sh installs its one-game catalog
+# itself; the optional --game-catalog PATH lets an advanced build ship a
+# pre-generated multi-game catalog. The catalog is copied into <app-dir>/Resources/ for the
 # build only and removed (or restored) afterwards, so `git status` stays clean
 # (.gitignore covers it as a safeguard).
 #
@@ -282,7 +283,7 @@ else
   fi
   CATALOG_SRC="$CATALOG_TMP"
   CATALOG_SUMMARY="$(game_catalog_summary_text)"
-  log "game catalog: empty (no --game-catalog; interpreter-only shell)"
+  log "game catalog: empty schema 2 (ROM-free shell template; launcher injects games)"
 fi
 if ! game_catalog_install "$CATALOG_SRC" "$CATALOG_DEST"; then
   die "could not install the game catalog: ${GAME_CATALOG_ERROR:-unknown error}"
