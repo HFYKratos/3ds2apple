@@ -32,7 +32,8 @@ struct StorageSnapshot {
     var totalBytes: UInt64 { romBytes + saveDataBytes + logBytes + cacheBytes }
 
     static func sizeText(_ bytes: UInt64) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+        // ByteCountFormatter renders 0 as "Zero KB", which reads like a bug.
+        bytes == 0 ? "0 KB" : ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 
     var totalText: String { Self.sizeText(totalBytes) }

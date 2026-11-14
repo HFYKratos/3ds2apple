@@ -220,10 +220,11 @@ struct GameView: View {
             }
 
             if isLoaded && !isMenuPresented {
+                // Bottom centre: the top corners belong to L/R and the top middle
+                // to Select/Start, so the pause button stays clear of all of them.
                 pauseButton(size: 36)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(.top, 12)
-                    .padding(.trailing, 16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 16)
             }
         }
         .ignoresSafeArea(edges: [.horizontal])

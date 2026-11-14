@@ -18,4 +18,4 @@ ZKPREVIEW_SHOT_DIR=/tmp/ui-shots "$APP/Contents/MacOS/3ds2apple-preview"
 ZKPREVIEW_SHOT_DIR=/tmp/ui-shots-zh "$APP/Contents/MacOS/3ds2apple-preview" -AppleLanguages "(zh-Hans)"
 ```
 
-The images here were taken for v0.1.5-beta1 (2026-11-14); `game-en.png` shows the redesigned game screen chrome (no console is started, so the screens show the waiting placeholder).
+The images here were taken for v0.1.5-beta2 (2026-11-14); `game-en.png`/`game-landscape-en.png` show the redesigned game screen chrome (no console is started, so the screens show the waiting placeholder). `about-*.png`, `savemanager-*.png`, `quick-*.png` and `ingame-*.png` cover the card pages and the in-game menu; Chinese counterparts use the `-zh` suffix.
