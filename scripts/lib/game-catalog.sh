@@ -34,6 +34,8 @@
 # State used by game_catalog_install/game_catalog_cleanup:
 #   GAME_CATALOG_INSTALLED    path installed into the app resources
 #   GAME_CATALOG_BACKUP       saved copy of a pre-existing catalog (restored)
+# State set by game_catalog_verify_rom_files:
+#   GAME_CATALOG_ROM_COUNT    number of catalogue entries with a bundled romFile
 
 GAME_CATALOG_SCHEMA_VERSION=1
 
@@ -363,4 +365,81 @@ game_catalog_find_in_app() {
     fi
   done
   return 1
+}
+
+# Print one "<TITLE_ID><TAB><romFile>" line per catalogue game that names bundled
+# game data (nothing when the catalogue carries no ROMs).
+# Usage: game_catalog_rom_files CATALOG
+game_catalog_rom_files() {
+  local catalog="${1:-}"
+  [[ -f "$catalog" ]] || return 1
+  python3 - "$catalog" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    data = json.load(handle)
+for game in data.get("games") or []:
+    rom = game.get("romFile")
+    if rom is None:
+        continue
+    sys.stdout.write("%s\t%s\n" % (game.get("titleID", "?"), rom))
+PY
+}
+
+# Verify every catalogue romFile exists inside the staged app bundle (the
+# installed shell opens these files directly, so a missing one would only fail
+# at launch). Sets GAME_CATALOG_ROM_COUNT /
+# GAME_CATALOG_ERROR; rejects absolute/traversal paths.
+# Usage: game_catalog_verify_rom_files CATALOG APP_PATH
+game_catalog_verify_rom_files() {
+  local catalog="${1:-}" app_dir="${2:-}" output
+  GAME_CATALOG_ROM_COUNT=0
+  GAME_CATALOG_ERROR=""
+  if [[ -z "$catalog" || ! -f "$catalog" ]]; then
+    GAME_CATALOG_ERROR="catalog file not found: $catalog"
+    return 1
+  fi
+  if [[ -z "$app_dir" || ! -d "$app_dir" ]]; then
+    GAME_CATALOG_ERROR="app bundle not found: $app_dir"
+    return 1
+  fi
+  if ! output="$(python3 - "$catalog" "$app_dir" 2>&1 <<'PY'
+import json
+import os
+import sys
+
+catalog_path, app_dir = sys.argv[1], sys.argv[2]
+try:
+    with open(catalog_path, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
+except OSError as exc:
+    sys.exit("cannot read %s: %s" % (catalog_path, exc))
+count = 0
+missing = []
+for game in data.get("games") or []:
+    rom = game.get("romFile")
+    if rom is None:
+        continue
+    count += 1
+    if not isinstance(rom, str) or not rom or os.path.isabs(rom) \
+            or ".." in rom.split("/"):
+        missing.append("%s: unsafe romFile %r" % (game.get("titleID", "?"), rom))
+        continue
+    if not os.path.isfile(os.path.join(app_dir, rom)):
+        missing.append("%s: %s" % (game.get("titleID", "?"), rom))
+if missing:
+    sys.stderr.write("missing bundled game data: %s" % ", ".join(missing))
+    sys.exit(1)
+sys.stdout.write("rom_count=%d\n" % count)
+PY
+)"; then
+    GAME_CATALOG_ERROR="$output"
+    return 1
+  fi
+  GAME_CATALOG_ROM_COUNT="$(printf '%s\n' "$output" | sed -n 's/^rom_count=//p' | sed -n '1p')"
+  case "$GAME_CATALOG_ROM_COUNT" in
+    ''|*[!0-9]*) GAME_CATALOG_ERROR="could not parse the bundled-ROM validator output"; return 1 ;;
+  esac
+  return 0
 }

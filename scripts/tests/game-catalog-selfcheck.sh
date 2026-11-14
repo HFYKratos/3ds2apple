@@ -196,6 +196,80 @@ else
   expect_contains "missing catalog message mentions the path" 'not found' "$GAME_CATALOG_ERROR"
 fi
 
+# Bundled game data (schema v2 romFile): valid forms accepted, unsafe forms
+# rejected, and the staged app bundle must actually contain the file.
+ROM_CATALOG="${WORK}/rom-catalog.json"
+python3 - "$ROM_CATALOG" <<'PY'
+import json
+import sys
+
+destination = sys.argv[1]
+catalog = {
+    "schemaVersion": 2,
+    "games": [{
+        "titleID": "0004000000055E00",
+        "displayName": "Pokemon Y",
+        "productCode": "CTR-P-EK2A",
+        "packFile": "Frameworks/GamePack-0004000000055E00.dylib",
+        "romFile": "Roms/0004000000055E00.cci",
+        "aot": True,
+        "aotVersion": 1,
+        "packABIVersion": 1,
+        "notes": "",
+    }],
+}
+with open(destination, "w", encoding="utf-8") as handle:
+    json.dump(catalog, handle, ensure_ascii=False, separators=(",", ":"))
+    handle.write("\n")
+PY
+if game_catalog_validate "$ROM_CATALOG"; then
+  pass "validator accepts a bundle-relative romFile"
+else
+  fail "validator accepts a bundle-relative romFile ($GAME_CATALOG_ERROR)"
+fi
+for bad_rom in "Roms/000400000011C500.cci" "Roms/0004000000055E00.cia" "../Roms/0004000000055E00.cci" "Roms/0004000000055E00.cci/extra"; do
+  python3 - "$ROM_CATALOG" "${WORK}/bad-rom.json" "$bad_rom" <<'PY'
+import json
+import sys
+
+source, destination, rom = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(source, "r", encoding="utf-8") as handle:
+    data = json.load(handle)
+data["games"][0]["romFile"] = rom
+with open(destination, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, ensure_ascii=False, separators=(",", ":"))
+    handle.write("\n")
+PY
+  expect_reject "reject romFile '$bad_rom'" "romFile" "${WORK}/bad-rom.json"
+done
+
+# game_catalog_verify_rom_files: every catalogue romFile must be staged.
+ROM_APP="${WORK}/rom-app"
+mkdir -p "${ROM_APP}/Roms"
+printf 'fake rom bytes' > "${ROM_APP}/Roms/0004000000055E00.cci"
+if game_catalog_verify_rom_files "$ROM_CATALOG" "$ROM_APP"; then
+  expect_eq "bundled ROM count is reported" '1' "$GAME_CATALOG_ROM_COUNT"
+  pass "verify_rom_files accepts a staged ROM"
+else
+  fail "verify_rom_files accepts a staged ROM ($GAME_CATALOG_ERROR)"
+fi
+if [[ "$(game_catalog_rom_files "$ROM_CATALOG")" == *"Roms/0004000000055E00.cci"* ]]; then
+  pass "rom_files lists the catalogue romFile"
+else
+  fail "rom_files lists the catalogue romFile"
+fi
+rm -f "${ROM_APP}/Roms/0004000000055E00.cci"
+if game_catalog_verify_rom_files "$ROM_CATALOG" "$ROM_APP"; then
+  fail "verify_rom_files rejects a missing staged ROM"
+else
+  expect_contains "missing-ROM message names the file" 'missing bundled game data' "$GAME_CATALOG_ERROR"
+fi
+if game_catalog_verify_rom_files "$ROM_CATALOG" "${WORK}/no-app"; then
+  fail "verify_rom_files rejects a missing app bundle"
+else
+  pass "verify_rom_files rejects a missing app bundle"
+fi
+
 # ---------------------------------------------------------------------------
 # 3. install / cleanup (the build must never leave the generated file behind)
 # ---------------------------------------------------------------------------
@@ -271,6 +345,7 @@ wire_check "build-game-ipa.sh still delegates packaging" "$GAME_IPA_SH" 'scripts
 
 wire_check "package-ipa.sh sources the catalog helper" "$PACKAGE_SH" 'source "${SCRIPT_DIR}/lib/game-catalog.sh"'
 wire_check "package-ipa.sh validates the bundle catalog" "$PACKAGE_SH" 'game_catalog_validate'
+wire_check "package-ipa.sh verifies bundled romFile files" "$PACKAGE_SH" 'game_catalog_verify_rom_files'
 wire_check "package-ipa.sh reports games/AOT" "$PACKAGE_SH" 'CATALOG_REPORT'
 wire_check "package-ipa.sh keeps --name/--out-dir compatibility" "$PACKAGE_SH" '--out-dir'
 

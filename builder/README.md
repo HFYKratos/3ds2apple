@@ -125,7 +125,7 @@ cleanup) on Linux.
 | Piece | Implemented now | Verified where |
 |---|---|---|
 | `builder/core` | protocol types, framing, versioning, validation, hashing, SSH/local transports, client state, config | `cargo test -p builder-core`, golden fixtures |
-| `builder/pack` (`3ds2apple-pack`) | ROM header detection (NCSD/NCCH), import queue, per-game package manifests, deterministic schema-v2 catalogue allocation, macOS script plan, fake/preview packs + preview multi-game IPA | `cargo test -p builder-pack` (unit + CLI integration on Linux); `scripts/tests/desktop-aot-selfcheck.sh` (55 checks) |
+| `builder/pack` (`3ds2apple-pack`) | ROM header detection (NCSD/NCCH), import queue, per-game package manifests, self-contained packages with a bundled user ROM (`--include-rom`), deterministic schema-v2 catalogue allocation, macOS script plan, fake/preview packs + preview multi-game IPA | `cargo test -p builder-pack` (unit + CLI integration on Linux); `scripts/tests/desktop-aot-selfcheck.sh` (68 checks) |
 | `builder/windows` | Windows frontend: guided session, `doctor`/`self-test`, build/status/logs/cancel/download/jobs, install guide, long-path and CJK handling, portable packaging | `cargo test -p builder-windows` (unit + real-Agent E2E on Linux); run on Windows 11 incl. a build over SSH |
 | `builder/cli` (`zkb`) | `host add/list/test/remove`, `build`, `status`, `logs`, `cancel`, `download`, `jobs`, `delete`, `doctor`, `config` | `cargo test -p builder-cli` (E2E against the real Agent) |
 | `builder/agent` | daemon + stdio sessions, `ssh-dispatch` forced command, queue with one build slot, store/recovery, NDJSON events, cancellation with process groups, cleanup, artifact verification, `doctor`, `gc`, fake-build mode | unit tests + CLI E2E on Linux |
@@ -161,6 +161,17 @@ target/debug/3ds2apple-pack build --queued          # print the macOS plan
 target/debug/3ds2apple-pack build --queued --fake   # local preview packs
 target/debug/3ds2apple-pack catalog --all
 target/debug/3ds2apple-pack pack --all --execute --fake-shell --ipa-out ../IPA
+```
+
+Self-contained packages copy the user's ROM into the package as
+`GameRom.<ext>`, hashed and recorded as `romFile`/`romSha256`/`romBytes`, so the
+phone never imports game data. Pass `--include-rom` to `packages add`,
+`packages record` or `build --roms`; `packages verify` re-hashes the copy and
+the catalogue names it as `Roms/<TITLE_ID>.<ext>`:
+
+```bash
+target/debug/3ds2apple-pack packages add --roms "../ROM/Game.cci" --include-rom
+target/debug/3ds2apple-pack packages verify
 ```
 
 Contract, package layout, catalogue schema v2 and the GamePack ABI hand-off:

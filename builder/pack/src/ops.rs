@@ -889,4 +889,78 @@ mod tests {
         assert_eq!(catalog.to_json().unwrap(), GOLDEN);
         assert_eq!(allocate_dirs(&dirs[..1]).unwrap().0.len(), 1);
     }
+
+    #[test]
+    fn include_rom_copies_hashes_and_stays_deterministic() {
+        let temp = tempdir().unwrap();
+        let out = temp.path().join("out");
+        let roms = write_roms(temp.path());
+        let options = ImportOptions {
+            include_rom: true,
+            ..ImportOptions::default()
+        };
+        let first = import_rom(&out, &roms[0], &options).unwrap();
+        assert_eq!(first.game_info.rom_file.as_deref(), Some("GameRom.cci"));
+        let dir = gameinfo::package_dir(&out, "0004000000055E00");
+        let bundled = dir.join("GameRom.cci");
+        assert!(bundled.is_file());
+        let first_json = first.game_info.to_json().unwrap();
+        let first_sha = builder_core::hash::sha256_file(&bundled).unwrap().sha256;
+        assert!(gameinfo::verify_package(&dir).unwrap().ok);
+
+        // Re-import keeps the copy and writes byte-identical metadata.
+        let second = import_rom(&out, &roms[0], &options).unwrap();
+        assert_eq!(second.status, ImportStatus::Refreshed);
+        assert_eq!(second.game_info.to_json().unwrap(), first_json);
+        assert_eq!(
+            builder_core::hash::sha256_file(&bundled).unwrap().sha256,
+            first_sha
+        );
+        assert!(gameinfo::verify_package(&dir).unwrap().ok);
+
+        // Without --include-rom the ROM is not copied (header-only import).
+        let plain_out = temp.path().join("plain-out");
+        import_rom(&plain_out, &roms[0], &ImportOptions::default()).unwrap();
+        assert!(!gameinfo::package_dir(&plain_out, "0004000000055E00")
+            .join("GameRom.cci")
+            .exists());
+    }
+
+    #[test]
+    fn record_with_include_rom_bundles_the_rom() {
+        let temp = tempdir().unwrap();
+        let out = temp.path().join("out");
+        let roms = write_roms(temp.path());
+        import_rom(&out, &roms[0], &ImportOptions::default()).unwrap();
+        let info = record_pack(
+            &out,
+            &RecordOptions {
+                title_id: "0004000000055E00".to_string(),
+                fake_placeholder: true,
+                rom: Some(roms[0].clone()),
+                include_rom: true,
+                ..RecordOptions::default()
+            },
+        )
+        .unwrap();
+        let dir = gameinfo::package_dir(&out, "0004000000055E00");
+        assert_eq!(info.rom_file.as_deref(), Some("GameRom.cci"));
+        assert_eq!(info.rom_bytes, info.rom.as_ref().map(|rom| rom.bytes));
+        assert!(dir.join("GameRom.cci").is_file());
+        assert!(gameinfo::verify_package(&dir).unwrap().ok);
+
+        // --include-rom without --rom is refused instead of silently bundling
+        // nothing.
+        let error = record_pack(
+            &out,
+            &RecordOptions {
+                title_id: "0004000000055E00".to_string(),
+                fake_placeholder: true,
+                include_rom: true,
+                ..RecordOptions::default()
+            },
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("--rom"), "{error}");
+    }
 }

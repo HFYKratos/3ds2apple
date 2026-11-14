@@ -176,7 +176,8 @@ xcrun simctl terminate "$UDID" com.kratos.3ds2apple.sim 2>/dev/null || true
 
 > Filled in from the 2026-11-14 run; the evidence files are listed in
 > [§7](#7-evidence-from-the-2026-11-14-run). Numbers are for one ROM
-> (Pokémon Y, interpreter path, software renderer) on the 6-vCPU VM.
+> (Pokémon Y, interpreter path, software renderer) on the VM as it was then (6 vCPU;
+> it now has 8).
 
 - Metal probe inside the Simulator (iOS 26.5, SIMULATOR_MODEL_IDENTIFIER
   `iPhone18,1`): `MTLCreateSystemDefaultDevice=nil` and

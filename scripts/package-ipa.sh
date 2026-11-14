@@ -140,7 +140,16 @@ if [[ -n "$CATALOG_FILE" ]]; then
     die "invalid GameCatalog.json in $APP_PATH:
      $GAME_CATALOG_ERROR"
   fi
+  # A self-contained package names the user ROM it boots; the app bundle must
+  # actually carry that file or the installed shell fails only at launch.
+  if ! game_catalog_verify_rom_files "$CATALOG_FILE" "$APP_PATH"; then
+    die "invalid bundled game data in GameCatalog.json of $APP_PATH:
+     $GAME_CATALOG_ERROR"
+  fi
   CATALOG_REPORT="$(game_catalog_summary_text)"
+  if [[ "${GAME_CATALOG_ROM_COUNT:-0}" -gt 0 ]]; then
+    CATALOG_REPORT="${CATALOG_REPORT}; ${GAME_CATALOG_ROM_COUNT} bundled ROM(s) verified"
+  fi
   log "GameCatalog: $(basename "$CATALOG_FILE") ($CATALOG_REPORT)"
 else
   log "GameCatalog: not found (legacy/interpreter-only build)"

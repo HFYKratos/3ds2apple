@@ -527,3 +527,90 @@ fn pack_all_with_no_packages_errors_cleanly() {
     );
     assert!(!out.join("packages/GameCatalog.json").exists());
 }
+
+#[test]
+fn include_rom_copies_the_rom_and_is_deterministic() {
+    // S2: --include-rom must actually bundle the user ROM, record it in the
+    // manifest/catalogue and produce byte-identical metadata on a re-import.
+    let temp = TempDir::new().unwrap();
+    let out = temp.path().join("out");
+    let roms = write_roms(temp.path());
+    let out_arg = out.display().to_string();
+    let package_dir = out.join("packages/0004000000055E00");
+    let bundled = package_dir.join("GameRom.cci");
+
+    let add = |force: bool| {
+        let mut args = vec![
+            "--out".to_string(),
+            out_arg.clone(),
+            "packages".to_string(),
+            "add".to_string(),
+            "--roms".to_string(),
+            roms[0].display().to_string(),
+            "--include-rom".to_string(),
+        ];
+        if force {
+            args.push("--force".to_string());
+        }
+        run(&args)
+    };
+    let first = add(false);
+    assert!(first.success, "stderr: {}", first.stderr);
+    assert!(bundled.is_file(), "the ROM copy must be in the package");
+    let first_manifest = std::fs::read(package_dir.join("GameInfo.json")).unwrap();
+    let manifest: serde_json::Value = serde_json::from_slice(&first_manifest).unwrap();
+    assert_eq!(manifest["romFile"], "GameRom.cci");
+    assert_eq!(manifest["romBytes"], 16_896);
+    assert!(manifest["romSha256"]
+        .as_str()
+        .is_some_and(|sha| sha.len() == 64));
+
+    let second = add(true);
+    assert!(second.success, "stderr: {}", second.stderr);
+    assert_eq!(
+        std::fs::read(package_dir.join("GameInfo.json")).unwrap(),
+        first_manifest,
+        "re-import with --include-rom must be deterministic"
+    );
+
+    // Fake-build so the catalogue can be generated, then verify the ROM too.
+    let build = run(&[
+        "--out".to_string(),
+        out_arg.clone(),
+        "build".to_string(),
+        "--queued".to_string(),
+        "--fake".to_string(),
+    ]);
+    assert!(build.success, "stderr: {}", build.stderr);
+    let verify = run(&[
+        "--out".to_string(),
+        out_arg.clone(),
+        "packages".to_string(),
+        "verify".to_string(),
+    ]);
+    assert!(verify.success, "stderr: {}", verify.stderr);
+    assert!(verify.stdout.contains("ok"), "stdout: {}", verify.stdout);
+
+    let catalog_cmd = run(&["--out".to_string(), out_arg, "catalog".to_string()]);
+    assert!(catalog_cmd.success, "stderr: {}", catalog_cmd.stderr);
+    let catalog = std::fs::read_to_string(out.join("packages/GameCatalog.json")).unwrap();
+    assert!(
+        catalog.contains("\"romFile\":\"Roms/0004000000055E00.cci\""),
+        "{catalog}"
+    );
+
+    // Without --include-rom no ROM copy is added.
+    let plain_out = temp.path().join("plain-out");
+    let plain = run(&[
+        "--out".to_string(),
+        plain_out.display().to_string(),
+        "packages".to_string(),
+        "add".to_string(),
+        "--roms".to_string(),
+        roms[0].display().to_string(),
+    ]);
+    assert!(plain.success, "stderr: {}", plain.stderr);
+    assert!(!plain_out
+        .join("packages/0004000000055E00/GameRom.cci")
+        .exists());
+}

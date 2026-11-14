@@ -410,6 +410,82 @@ PY
     fail "multi-game --dry-run exits 0"
   fi
 
+  # S2: a Linux-runnable self-contained preview: a package that records a tiny
+  # fake GameRom.cci must be staged as Roms/<TITLE_ID>.cci and named by the
+  # catalogue, exactly like the real bundled-ROM flow.
+  ROM_PACKAGE="${OUT}/packages/0004000000055E00"
+  printf 'selfcheck-fake-rom' > "${ROM_PACKAGE}/GameRom.cci"
+  FAKE_ROM_SHA="$(desktop_aot_sha256 "${ROM_PACKAGE}/GameRom.cci")"
+  FAKE_ROM_BYTES="$(desktop_aot_file_bytes "${ROM_PACKAGE}/GameRom.cci")"
+  python3 - "${ROM_PACKAGE}/GameInfo.json" "$FAKE_ROM_SHA" "$FAKE_ROM_BYTES" <<'PY'
+import json
+import sys
+
+path, sha, byte_count = sys.argv[1], sys.argv[2], int(sys.argv[3])
+with open(path, "r", encoding="utf-8") as handle:
+    data = json.load(handle)
+# Keep the provenance record consistent with the tiny fake copy: the manifest
+# validator refuses a bundled ROM whose size disagrees with rom.bytes.
+if isinstance(data.get("rom"), dict):
+    data["rom"]["fileName"] = "GameRom.cci"
+    data["rom"]["bytes"] = byte_count
+data["romFile"] = "GameRom.cci"
+data["romSha256"] = sha
+data["romBytes"] = byte_count
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, ensure_ascii=False, indent=2)
+    handle.write("\n")
+PY
+  if "${PACK_BIN}" --out "$OUT" catalog >/dev/null 2>&1; then
+    pass "catalogue with a bundled ROM generated"
+  else
+    fail "catalogue with a bundled ROM generated"
+  fi
+  if grep -Fq '"romFile":"Roms/0004000000055E00.cci"' "${OUT}/packages/GameCatalog.json"; then
+    pass "catalogue names the bundled ROM (romFile)"
+  else
+    fail "catalogue names the bundled ROM (romFile)"
+  fi
+  if "${SCRIPTS_DIR}/build-multi-game-ipa.sh" --packages-dir "$OUT/packages" --all \
+      --allow-placeholder-dylibs --fake-shell --pack-bin "$PACK_BIN" \
+      --out-dir "${WORK}/ipa-rom" >"${WORK}/multi-rom.log" 2>&1; then
+    pass "self-contained fake-shell IPA builds"
+  else
+    fail "self-contained fake-shell IPA builds ($(tail -2 "${WORK}/multi-rom.log" | tr '\n' ' '))"
+  fi
+  ROM_IPA="$(ls "${WORK}/ipa-rom"/*.ipa 2>/dev/null | head -1 || true)"
+  if command -v unzip >/dev/null 2>&1 && [[ -n "$ROM_IPA" ]]; then
+    ROM_LISTING="$(unzip -l "$ROM_IPA" 2>/dev/null || true)"
+    expect_contains "IPA carries the bundled ROM under Roms/" "Payload/3ds2apple.app/Roms/0004000000055E00.cci" "$ROM_LISTING"
+    unzip -p "$ROM_IPA" "Payload/3ds2apple.app/GameCatalog.json" > "${WORK}/rom-catalog.json" 2>/dev/null || true
+    if grep -Fq '"romFile":"Roms/0004000000055E00.cci"' "${WORK}/rom-catalog.json"; then
+      pass "IPA embedded catalogue names the bundled ROM"
+    else
+      fail "IPA embedded catalogue names the bundled ROM"
+    fi
+  else
+    pass "skipped bundled-ROM unzip checks (unzip not installed)"
+  fi
+  ROM_MANIFEST="$(ls "${WORK}/ipa-rom"/*.pack-manifest.txt 2>/dev/null | head -1 || true)"
+  if [[ -n "$ROM_MANIFEST" ]] && grep -Fq "package_0004000000055E00_rom_sha256=${FAKE_ROM_SHA}" "$ROM_MANIFEST"; then
+    pass "IPA manifest records the bundled-ROM SHA256"
+  else
+    fail "IPA manifest records the bundled-ROM SHA256"
+  fi
+  # A package that promises a ROM it does not carry must fail the build.
+  rm -f "${ROM_PACKAGE}/GameRom.cci"
+  if "${SCRIPTS_DIR}/build-multi-game-ipa.sh" --packages-dir "$OUT/packages" --all \
+      --allow-placeholder-dylibs --fake-shell --pack-bin "$PACK_BIN" \
+      --out-dir "${WORK}/ipa-missing-rom" >/dev/null 2>"${WORK}/missing-rom.err"; then
+    fail "IPA build fails when the recorded ROM is missing"
+  else
+    if grep -q 'bundled ROM' "${WORK}/missing-rom.err"; then
+      pass "IPA build fails when the recorded ROM is missing"
+    else
+      fail "IPA build fails when the recorded ROM is missing (stderr: $(tail -1 "${WORK}/missing-rom.err"))"
+    fi
+  fi
+
   # -------------------------------------------------------------------------
   section 4 "per-game pack script (--fake recording) and gitignore coverage"
   # -------------------------------------------------------------------------
@@ -427,6 +503,45 @@ PY
     pass "build-game-pack.sh --dry-run prints the plan"
   else
     fail "build-game-pack.sh --dry-run prints the plan"
+  fi
+
+  # S3: --fake previews wire --rom/--include-rom through instead of dropping them.
+  FAKE_ROM="${ROMS}/Pokémon Y.cci"
+  if "${SCRIPTS_DIR}/build-game-pack.sh" pokemon-y-00055e00 --title-id 0004000000055E00 \
+      --display-name "Pokémon Y" --product-code CTR-P-EK2A --out "${WORK}/packout-rom" \
+      --fake --rom "$FAKE_ROM" --include-rom --pack-bin "$PACK_BIN" >/dev/null 2>&1; then
+    pass "build-game-pack.sh --fake --include-rom records the ROM"
+  else
+    fail "build-game-pack.sh --fake --include-rom records the ROM"
+  fi
+  expect_file "build-game-pack.sh --fake copies GameRom.cci" "${WORK}/packout-rom/packages/0004000000055E00/GameRom.cci"
+  if grep -Fq '"romFile": "GameRom.cci"' "${WORK}/packout-rom/packages/0004000000055E00/GameInfo.json" 2>/dev/null; then
+    pass "build-game-pack.sh --fake --include-rom records romFile"
+  else
+    fail "build-game-pack.sh --fake --include-rom records romFile"
+  fi
+  if "${SCRIPTS_DIR}/build-game-pack.sh" pokemon-y-00055e00 --title-id 0004000000055E00 \
+      --out "${WORK}/packout-norom" --fake --include-rom --pack-bin "$PACK_BIN" \
+      >/dev/null 2>"${WORK}/norom.err"; then
+    fail "--include-rom without --rom is rejected"
+  else
+    if grep -q 'include-rom requires --rom' "${WORK}/norom.err"; then
+      pass "--include-rom without --rom is rejected"
+    else
+      fail "--include-rom without --rom is rejected (stderr: $(tail -1 "${WORK}/norom.err"))"
+    fi
+  fi
+  # S4 wiring (the simulator app builder only runs on macOS): --game-rom alone
+  # is refused and an explicit ROM is cross-checked against GameInfo.json.
+  if grep -Fq -- '--game-rom requires --game-pack' "${SCRIPTS_DIR}/build-ios-app-sim.sh"; then
+    pass "build-ios-app-sim.sh rejects --game-rom without a pack"
+  else
+    fail "build-ios-app-sim.sh rejects --game-rom without a pack"
+  fi
+  if grep -Fq -- '--game-rom SHA256 mismatch' "${SCRIPTS_DIR}/build-ios-app-sim.sh"; then
+    pass "build-ios-app-sim.sh cross-checks the ROM against GameInfo.json"
+  else
+    fail "build-ios-app-sim.sh cross-checks the ROM against GameInfo.json"
   fi
 
   if command -v git >/dev/null 2>&1 && [[ -e "${ROOT}/.git" ]]; then

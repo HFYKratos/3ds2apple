@@ -120,7 +120,14 @@ mkdir -p "$OUTDIR"
 prepare_game_args() {
   GAME_DISPLAY_NAME="$GAME_DISPLAY_ARG"
   if [[ -z "$GAME_DISPLAY_NAME" ]]; then GAME_DISPLAY_NAME="$GAME_NAME_ARG"; fi
-  if [[ -z "$GAME_CODE_DIR_ARG" && -z "$GAME_PACK_ARG" ]]; then return 0; fi
+  if [[ -z "$GAME_CODE_DIR_ARG" && -z "$GAME_PACK_ARG" ]]; then
+    # A ROM without a pack would be silently dropped (the catalogue needs a
+    # title ID and a packFile); refuse it instead of ignoring the flag.
+    if [[ -n "$GAME_ROM_ARG" ]]; then
+      die "--game-rom requires --game-pack or --game-code-dir (the catalogue entry needs --game-title-id and a pack)"
+    fi
+    return 0
+  fi
   if [[ -n "$GAME_CODE_DIR_ARG" && -n "$GAME_PACK_ARG" ]]; then
     die "choose one of --game-code-dir or --game-pack"
   fi
@@ -174,6 +181,26 @@ build_game_pack() {
     desktop_aot_pack_exports_gamepack "$GAME_PACK" \
       || die "--game-pack does not export the GamePack ABI (zk_gamepack_title_id / zk_gamepack_abi_version / zk_gamepack_register)"
     log "adopting GamePack: $GAME_PACK ($(desktop_aot_pack_arch "$GAME_PACK") slice)"
+    if [[ -f "$GAME_PACK_ARG/GameInfo.json" ]]; then
+      # The desktop CLI records the bundled ROM's size and SHA256; verify the
+      # ROM this build is about to embed against that record.
+      local rom_record expected_file expected_bytes expected_sha actual_bytes actual_sha
+      rom_record="$(desktop_aot_package_rom "$GAME_PACK_ARG")" \
+        || die "cannot read the bundled-ROM record from $GAME_PACK_ARG/GameInfo.json"
+      if [[ -n "$rom_record" ]]; then
+        IFS="$(printf '\t')" read -r expected_file expected_bytes expected_sha <<< "$rom_record"
+        if [[ -z "$GAME_ROM" ]]; then
+          die "--game-pack records bundled ROM '$expected_file' but no --game-rom was given and no GameRom.<ext> was found next to GamePack.dylib"
+        fi
+        actual_bytes="$(desktop_aot_file_bytes "$GAME_ROM")"
+        [[ "$actual_bytes" == "$expected_bytes" ]] \
+          || die "--game-rom size mismatch for $GAME_TITLE_ID: GameInfo.json records $expected_bytes bytes, $GAME_ROM is $actual_bytes"
+        actual_sha="$(desktop_aot_sha256 "$GAME_ROM")"
+        [[ "$actual_sha" == "$expected_sha" ]] \
+          || die "--game-rom SHA256 mismatch for $GAME_TITLE_ID: GameInfo.json records $expected_sha, $GAME_ROM is $actual_sha"
+        log "verified bundled ROM against GameInfo.json: $expected_file $expected_bytes bytes sha256 $expected_sha"
+      fi
+    fi
   else
     log "building the GamePack for $GAME_TITLE_ID from $GAME_CODE_DIR_ARG (compiles the game C)"
     "$ROOT/scripts/build-game-pack.sh" "$GAME_NAME_ARG" \

@@ -53,12 +53,12 @@ cargo build -p builder-pack --release
 ## 2. Host-native split (Linux-first heavy compute)
 
 The flow is designed so expensive host-native steps run on the desktop, not in
-the 6 vCPU macOS VM:
+the 8 vCPU macOS VM:
 
 | Stage | Preferred host | Why / status |
 |---|---|---|
 | ROM import: header parse, title detection, queue, package metadata | **Linux/Windows/macOS natively** | Implemented in `builder/pack`; header-only, milliseconds even for 3+ GB ROMs |
-| 3dsrecomp: ROM → generated C | **Linux host natively** (Rust tool, multi-threaded; 16 threads on the reference WSL host vs 6 vCPU VM) | **Planned hand-off**; see below |
+| 3dsrecomp: ROM → generated C | **Linux host natively** (Rust tool, multi-threaded; 16 threads on the reference WSL host vs 8 vCPU VM) | **Planned hand-off**; see below |
 | iOS clang compile of generated C → `libgame.a` | macOS + Xcode SDK | Apple toolchain/legal boundary; macOS only |
 | Linked Zakuro runtime (`libzakuro_ios.a`) | macOS (Xcode + Rust `aarch64-apple-ios`) | Existing scripts; a Linux cross build of the Rust staticlib is unverified |
 | `GamePack.dylib` link | macOS (Xcode clang) | `build-game-pack.sh --from-libs` (experimental) or `--dylib` adoption |
@@ -322,8 +322,10 @@ dlopen handle, checks `zk_registered_gamepack_title_id()` before every launch an
 re-runs the cached pack's hook when the slot names another title, so **launching
 A, then B, then A again runs A's AOT tables each time**; a hook that fails or
 registers the wrong title is unregistered and reported unavailable. The
-"available" badge on the library card is the cheap allocation/bundle check, not
-a guarantee that the pack loads — `resolve(for:)` performs the real admission.
+"available" badge on the library card is the cheap allocation/bundle check (the
+dylib, and for a self-contained package its bundled game data, must be in the
+app bundle), not a guarantee that the pack loads — `resolve(for:)` performs the
+real admission.
 
 Implementation status:
 
@@ -522,7 +524,7 @@ Implemented and verified:
   the iOS Simulator (task-10 pack admission + task-11 shell launch; see
   [build-simulator.md §9](build-simulator.md#9-per-game-aot-gamepack-on-the-simulator-aot-first-proof)).
 - [x] Golden-fixture + unit/integration tests + `desktop-aot-selfcheck.sh`
-  (55 checks) + `game-catalog-selfcheck.sh` (71 checks).
+  (68 checks) + `game-catalog-selfcheck.sh` (82 checks).
 - [x] Docs: this file, `docs/build.md`, `docs/build-simulator.md`,
   `builder/README.md`.
 
@@ -552,8 +554,8 @@ Gaps / follow-ups (owners):
 ```bash
 cd builder && cargo test --workspace         # incl. builder-pack unit + CLI integration tests
 cd builder && cargo test -p builder-pack     # this pipeline only
-bash scripts/tests/desktop-aot-selfcheck.sh  # 55 checks, no Xcode/ROM
-bash scripts/tests/game-catalog-selfcheck.sh # 71 checks, catalogue helper
+bash scripts/tests/desktop-aot-selfcheck.sh  # 68 checks, no Xcode/ROM
+bash scripts/tests/game-catalog-selfcheck.sh # 82 checks, catalogue helper
 ```
 
 The CLI integration test drives synthetic NCSD headers through the real binary

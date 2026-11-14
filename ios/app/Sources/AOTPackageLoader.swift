@@ -24,26 +24,30 @@
 //
 //      #include <stdint.h>
 //
-//      /* Title this pack was built for (0x0004000000055E00). Optional: when
-//         exported, the shell compares it with the catalog entry and refuses a
-//         pack built for another game. */
+//      /* Title this pack was built for (0x0004000000055E00). Optional
+//         diagnostic: when exported, the shell compares it with the catalog
+//         entry and refuses a pack built for another game. */
 //      uint64_t zk_gamepack_title_id — returns the pack's title ID; no arguments.
 //
-//      /* ABI version the pack implements. Optional: when exported it must be
-//         ZK_GAMEPACK_ABI_VERSION (1); the shell refuses a mismatch. */
+//      /* ABI version the pack implements. Optional diagnostic: when exported it
+//         must be ZK_GAMEPACK_ABI_VERSION (1); the shell refuses a mismatch. */
 //      uint32_t zk_gamepack_abi_version — returns the pack's ABI version; no arguments.
 //
-//      /* Registration hook. Optional. Called once, on the main thread, right
-//         after a successful dlopen with the host's ABI version. Return 0 when
-//         the pack accepted the host; a non-zero result unloads the pack and
-//         reports the game as unavailable. The catalog entry can point the
-//         loader at a differently named symbol with "registrationSymbol". */
+//      /* Registration hook. REQUIRED. Called on the main thread after dlopen and
+//         again whenever the runtime's single registration slot names another
+//         title (launching A -> B -> A must run A's tables). 0 = accepted,
+//         1 = host ABI mismatch, 2 = the runtime refused the recomp tables. Any
+//         non-zero result makes the shell unregister and unload the pack and
+//         report the game as unavailable; a pack that does not export the hook
+//         is refused before it is cached. The catalog entry can point the loader
+//         at a differently named symbol with "registrationSymbol". */
 //      int32_t zk_gamepack_register — one uint32_t argument (host_abi_version).
 //
-//  The registration hook is where a pack hands its AOT code image to the
-//  runtime. That image hand-off is runtime work (ios/zakuro-ios): this shell
-//  version loads and validates packs, and starts the statically linked game.
-//  See docs/aot-first.md ("GamePack dylib 契约") for the current status.
+//  The registration hook is where a pack hands its AOT code image to the runtime
+//  (ios/zakuro-ios/src/gamepack.rs). This loader dlopen()s the pack, validates
+//  its title/ABI, registers the tables, and then ROMSession.start() calls
+//  zk_create() with the ROM the package bundles. See docs/desktop-aot.md §6 and
+//  docs/build-simulator.md §9 for the verified contract.
 //
 
 import Darwin
@@ -65,6 +69,10 @@ enum AOTUnavailableReason: Equatable {
     case packageMissing(String)
     /// dlopen()/registration/title/ABI validation failed; detail is technical.
     case packageInvalid(String)
+    /// The catalog entry is a package but does not name bundled game data.
+    case noBundledGameData
+    /// The catalog names bundled game data that is not in the app bundle.
+    case packageGameDataMissing(String)
     /// The linked AOT code belongs to another title.
     case linkedTitleMismatch(expected: String, linked: String)
     /// The catalog expects static AOT code but the binary has none.
@@ -79,6 +87,10 @@ enum AOTUnavailableReason: Equatable {
             return L10n.format("The game package “%@” is missing from this app. Repackage the app on your computer and reinstall it.", path)
         case .packageInvalid(let detail):
             return L10n.format("The game package could not be loaded: %@", detail)
+        case .noBundledGameData:
+            return L10n.tr("This game package does not bundle its game data. Build it on your computer with the ROM included and install that build.")
+        case .packageGameDataMissing(let path):
+            return L10n.format("The game data “%@” is missing from this app. Repackage the app on your computer with the ROM included and reinstall it.", path)
         case .linkedTitleMismatch(let expected, let linked):
             return L10n.format("The AOT code linked into this app is for title %@, not %@. Rebuild the app for this game.", linked, expected)
         case .noLinkedCode:
@@ -91,7 +103,7 @@ enum AOTUnavailableReason: Equatable {
 enum AOTResolution {
     /// The build has statically linked AOT code for the title.
     case staticLinked
-    /// The pack was loaded (and registered when it exports the hook).
+    /// The pack was loaded and its AOT tables registered for this launch.
     case package(AOTPackage)
     /// The game cannot run: the UI reports it as "No AOT build for this game".
     case unavailable(AOTUnavailableReason)
@@ -108,8 +120,8 @@ struct AOTPackage {
     let url: URL
     /// dlopen() handle; never closed for a pack that registered successfully.
     let handle: UnsafeMutableRawPointer
-    /// Registration symbol the pack exported and accepted, nil when it exports
-    /// none (a pack without a hook is still a valid AOT package).
+    /// Registration symbol the pack exports and accepted. Required: a pack
+    /// without it is refused before it is cached (see `loadPackage`).
     let registrationSymbol: String?
 }
 
@@ -143,13 +155,15 @@ final class AOTPackageLoader {
     private init() {}
 
     // MARK: - Queries
-    /// Cheap check for the home-page badge and launch gating: no dlopen, only
-    /// the catalog flag, the static-link probe and a file check.
+    /// Cheap check for the home-page badge and launch gating: no dlopen, no
+    /// registration, only catalog/file checks.
     ///
-    /// "Available" here means the build **allocated** AOT code for the title and
-    /// the pack/ROM files are present; it is not a promise that the pack will
-    /// load and register. `resolve(for:)` does that work and can still refuse a
-    /// corrupt, wrong-title or wrong-ABI pack.
+    /// "Available" means this build allocated AOT code for the title **and** the
+    /// package's dylib and bundled game data are present in the app bundle with a
+    /// compatible catalog ABI. It does not promise that the dylib loads and
+    /// registers - `resolve(for:)` does that and can still refuse a corrupt,
+    /// wrong-title or wrong-ABI pack - but the card then describes a game this
+    /// build can actually try to start.
     func availability(for game: GameEntry) -> AOTAvailability {
         guard game.aot else { return .unavailable(.noAOTAllocated) }
         if let packFile = game.packFile, !packFile.isEmpty {
@@ -165,6 +179,16 @@ final class AOTPackageLoader {
                         Self.hostABIVersion
                     )
                 ))
+            }
+            // AOT-first packages are self-contained: the catalogue must name the
+            // bundled ROM and the file must be there, or zk_create cannot run.
+            guard let romFile = game.romFile?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !romFile.isEmpty else {
+                return .unavailable(.noBundledGameData)
+            }
+            guard let romURL = Self.bundleURL(forBundleRelativePath: romFile),
+                  FileManager.default.fileExists(atPath: romURL.path) else {
+                return .unavailable(.packageGameDataMissing(romFile))
             }
             return .available(.bundlePackage(packFile))
         }
@@ -222,11 +246,15 @@ final class AOTPackageLoader {
 
     /// Absolute URL of a bundle-relative path, or nil when the path escapes the
     /// app bundle (a catalog from the desktop build is still untrusted input).
+    ///
+    /// Symlinks are resolved before the containment check, so a link placed in
+    /// the bundle cannot make the loader read a file outside it.
     static func bundleURL(forBundleRelativePath path: String,
                           bundle: Bundle = .main) -> URL? {
         guard isValidBundleRelativePath(path) else { return nil }
-        let base = bundle.bundleURL.standardizedFileURL
-        let url = base.appendingPathComponent(path, isDirectory: false).standardizedFileURL
+        let base = bundle.bundleURL.resolvingSymlinksInPath().standardizedFileURL
+        let candidate = base.appendingPathComponent(path, isDirectory: false)
+        let url = candidate.resolvingSymlinksInPath()
         guard url.path.hasPrefix(base.path + "/") else { return nil }
         return url
     }
@@ -268,8 +296,12 @@ final class AOTPackageLoader {
             case .registered:
                 return .package(loaded)
             case .failed(let detail):
-                // A cached pack that no longer registers must not be reused.
+                // A cached pack that no longer registers must not be reused:
+                // drop it from the cache and unload it so a later resolve() can
+                // retry from a clean dlopen. register() already unregistered the
+                // tables before reporting the failure.
                 invalidatePackage(titleID: game.titleID)
+                dlclose(loaded.handle)
                 return .unavailable(.packageInvalid(detail))
             }
         }

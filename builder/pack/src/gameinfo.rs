@@ -418,45 +418,94 @@ pub fn is_game_rom_file_name(name: &str) -> bool {
 /// The ROM is stored raw (never compressed): the runtime `zk_create()` opens it
 /// as a file and the package builder only copies bytes, so the cost is disk
 /// space equal to the ROM (1.8 GB for Pokemon Y) in the gitignored output tree.
-/// The copy is hashed and compared with the source before the manifest is
-/// written, so a package can never claim a ROM it does not actually carry.
+///
+/// Safety properties (mirroring `install_pack`):
+/// - the copy is written to a temporary file next to the destination, hashed and
+///   compared with the source, and only then renamed over `GameRom.<ext>`; a
+///   failed or interrupted copy never leaves a truncated ROM and never deletes a
+///   previously bundled one;
+/// - passing the package's own `GameRom.<ext>` as the source (re-recording a
+///   package) is a no-op re-verification, not a self-copy: `std::fs::copy` on the
+///   same path truncates the file;
+/// - a ROM whose size disagrees with the package's provenance record is refused
+///   before anything is written.
 pub fn install_rom(dir: &Path, source: &Path) -> Result<GameInfo> {
     let mut info = read_package(dir)?;
     let file_name = game_rom_file_name(source)?;
     let destination = dir.join(&file_name);
+    std::fs::create_dir_all(dir).map_err(|error| PackError::io(dir, error))?;
+
     let source_hash =
         builder_core::hash::sha256_file(source).map_err(|error| PackError::io(source, error))?;
-    std::fs::create_dir_all(dir).map_err(|error| PackError::io(dir, error))?;
-    std::fs::copy(source, &destination).map_err(|error| PackError::io(&destination, error))?;
-    let copied = builder_core::hash::sha256_file(&destination)
-        .map_err(|error| PackError::io(&destination, error))?;
-    if copied.sha256 != source_hash.sha256 || copied.bytes != source_hash.bytes {
-        std::fs::remove_file(&destination).ok();
-        return Err(PackError::invalid(format!(
-            "{}: the bundled ROM copy does not match its source ({} bytes / {}, copy {} bytes / {})",
-            destination.display(),
-            source_hash.bytes,
-            source_hash.sha256,
-            copied.bytes,
-            copied.sha256
-        )));
-    }
-    if let Some(rom) = &info.rom {
-        if rom.bytes != copied.bytes {
-            std::fs::remove_file(&destination).ok();
+    validate_rom_copy(&info, source, source_hash.bytes)?;
+
+    // Same file guard: if the source is already the package's ROM copy, re-hash
+    // it instead of copying a file onto itself (that would truncate it).
+    let source_canonical = source
+        .canonicalize()
+        .map_err(|error| PackError::io(source, error))?;
+    let same_file = destination
+        .canonicalize()
+        .map(|destination| destination == source_canonical)
+        .unwrap_or(false);
+
+    let copied = if same_file {
+        source_hash
+    } else {
+        let temporary = dir.join(format!(".{file_name}.tmp"));
+        let copy_result = std::fs::copy(source, &temporary)
+            .map_err(|error| PackError::io(&temporary, error))
+            .and_then(|_| {
+                builder_core::hash::sha256_file(&temporary)
+                    .map_err(|error| PackError::io(&temporary, error))
+            });
+        let copied = match copy_result {
+            Ok(copied) => copied,
+            Err(error) => {
+                std::fs::remove_file(&temporary).ok();
+                return Err(error);
+            }
+        };
+        if copied.sha256 != source_hash.sha256 || copied.bytes != source_hash.bytes {
+            std::fs::remove_file(&temporary).ok();
             return Err(PackError::invalid(format!(
-                "{}: the ROM is {} bytes but the package was imported with {} bytes; re-import it first",
-                source.display(),
+                "{}: the bundled ROM copy does not match its source ({} bytes / {}, copy {} bytes / {})",
+                destination.display(),
+                source_hash.bytes,
+                source_hash.sha256,
                 copied.bytes,
-                rom.bytes
+                copied.sha256
             )));
         }
-    }
+        std::fs::rename(&temporary, &destination).map_err(|error| {
+            std::fs::remove_file(&temporary).ok();
+            PackError::io(&destination, error)
+        })?;
+        copied
+    };
+    validate_rom_copy(&info, source, copied.bytes)?;
+
     info.rom_file = Some(file_name);
     info.rom_sha256 = Some(copied.sha256);
     info.rom_bytes = Some(copied.bytes);
     info.write(dir)?;
     Ok(info)
+}
+
+/// Refuse a ROM whose size disagrees with the provenance record the package was
+/// imported with: a stale or wrong `--rom` must never be bundled silently.
+fn validate_rom_copy(info: &GameInfo, source: &Path, bytes: u64) -> Result<()> {
+    if let Some(rom) = &info.rom {
+        if rom.bytes != bytes {
+            return Err(PackError::invalid(format!(
+                "{}: the ROM is {} bytes but the package was imported with {} bytes; re-import it first",
+                source.display(),
+                bytes,
+                rom.bytes
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Check the bundled ROM of one package against the manifest (size + SHA256).
@@ -986,5 +1035,132 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("does not match"));
+    }
+
+    #[test]
+    fn install_rom_copies_hashes_and_records_it() {
+        let temp = tempdir().unwrap();
+        let rom = rom_info(temp.path());
+        let info = GameInfo::new(&rom, "Pokémon Y", "CTR-P-EK2A", 1).unwrap();
+        let dir = package_dir(temp.path(), &info.title_id);
+        info.write(&dir).unwrap();
+        install_placeholder_pack(&dir, &info.title_id).unwrap();
+
+        let installed = install_rom(&dir, &rom.path).unwrap();
+        assert_eq!(installed.rom_file.as_deref(), Some("GameRom.cci"));
+        assert_eq!(installed.rom_bytes, Some(rom.bytes));
+        let copy = dir.join("GameRom.cci");
+        assert!(copy.is_file());
+        let hash = builder_core::hash::sha256_file(&copy).unwrap();
+        assert_eq!(installed.rom_sha256.as_deref(), Some(hash.sha256.as_str()));
+        // The manifest on disk carries the same triplet.
+        let manifest = GameInfo::read(&dir).unwrap();
+        assert_eq!(manifest.rom_file, installed.rom_file);
+        assert_eq!(manifest.rom_sha256, installed.rom_sha256);
+        assert_eq!(manifest.rom_bytes, installed.rom_bytes);
+        let report = verify_package(&dir).unwrap();
+        assert!(report.ok, "unexpected issues: {:?}", report.issues);
+    }
+
+    #[test]
+    fn install_rom_from_the_packages_own_copy_is_safe() {
+        let temp = tempdir().unwrap();
+        let rom = rom_info(temp.path());
+        let info = GameInfo::new(&rom, "Pokémon Y", "CTR-P-EK2A", 1).unwrap();
+        let dir = package_dir(temp.path(), &info.title_id);
+        info.write(&dir).unwrap();
+        let first = install_rom(&dir, &rom.path).unwrap();
+        let copy = dir.join("GameRom.cci");
+        let bytes_before = std::fs::metadata(&copy).unwrap().len();
+
+        // Re-recording with the package's own copy must not truncate it
+        // (std::fs::copy on the same path would zero the file).
+        let again = install_rom(&dir, &copy).unwrap();
+        assert_eq!(again.rom_sha256, first.rom_sha256);
+        assert_eq!(again.rom_bytes, first.rom_bytes);
+        assert_eq!(std::fs::metadata(&copy).unwrap().len(), bytes_before);
+        assert!(verify_package(&dir).unwrap().ok);
+    }
+
+    #[test]
+    fn install_rom_rejects_unsupported_extensions() {
+        let temp = tempdir().unwrap();
+        let rom = rom_info(temp.path());
+        let info = GameInfo::new(&rom, "Pokémon Y", "CTR-P-EK2A", 1).unwrap();
+        let dir = package_dir(temp.path(), &info.title_id);
+        info.write(&dir).unwrap();
+        let cia = temp.path().join("game.cia");
+        std::fs::write(&cia, b"not a bootable image").unwrap();
+        let error = install_rom(&dir, &cia).unwrap_err().to_string();
+        assert!(error.contains(".cia"), "{error}");
+        assert!(!dir.join("GameRom.cia").exists());
+    }
+
+    #[test]
+    fn bundled_rom_fields_must_be_a_complete_triplet() {
+        let mut info =
+            GameInfo::new_without_rom("0004000000055E00", "Pokémon Y", "CTR-P-EK2A", 1).unwrap();
+        info.rom_file = Some("GameRom.cci".to_string());
+        assert!(info.validate().is_err(), "rom_file alone must be refused");
+        info.rom_sha256 = Some("a".repeat(64));
+        assert!(info.validate().is_err(), "rom_bytes must be present too");
+        info.rom_bytes = Some(16_896);
+        assert!(info.validate().is_ok());
+
+        info.rom_file = Some("GameRom.cia".to_string());
+        assert!(
+            info.validate().is_err(),
+            ".cia is not a bootable package ROM"
+        );
+        info.rom_file = Some("../GameRom.cci".to_string());
+        assert!(info.validate().is_err(), "path traversal must be refused");
+        info.rom_file = Some("GameRom.cci".to_string());
+        info.rom_sha256 = Some("A".repeat(64));
+        assert!(
+            info.validate().is_err(),
+            "upper-case sha256 must be refused"
+        );
+        info.rom_sha256 = Some("a".repeat(64));
+        info.rom_bytes = Some(0);
+        assert!(info.validate().is_err(), "zero-size ROM must be refused");
+    }
+
+    #[test]
+    fn bundled_rom_verification_detects_tampering() {
+        let temp = tempdir().unwrap();
+        let rom = rom_info(temp.path());
+        let info = GameInfo::new(&rom, "Pokémon Y", "CTR-P-EK2A", 1).unwrap();
+        let dir = package_dir(temp.path(), &info.title_id);
+        info.write(&dir).unwrap();
+        let installed = install_rom(&dir, &rom.path).unwrap();
+        let copy = dir.join("GameRom.cci");
+        let size = installed.rom_bytes.unwrap() as usize;
+
+        // Wrong size: append one byte.
+        let mut bytes = std::fs::read(&copy).unwrap();
+        bytes.push(0xFF);
+        std::fs::write(&copy, &bytes).unwrap();
+        let report = verify_package(&dir).unwrap();
+        assert!(!report.ok);
+        assert!(
+            report
+                .issues
+                .iter()
+                .any(|issue| issue.contains("bundled ROM") && issue.contains("bytes")),
+            "{:?}",
+            report.issues
+        );
+
+        // Right size, different bytes: SHA256 mismatch.
+        bytes.truncate(size);
+        bytes[0] = bytes[0].wrapping_add(1);
+        std::fs::write(&copy, &bytes).unwrap();
+        let report = verify_package(&dir).unwrap();
+        assert!(!report.ok);
+        assert!(
+            report.issues.iter().any(|issue| issue.contains("SHA256")),
+            "{:?}",
+            report.issues
+        );
     }
 }

@@ -1,13 +1,15 @@
 //! `GameCatalog.json` generation for one shell carrying several AOT game packs.
 //!
-//! Schema (schemaVersion 1, additive to the single-game catalog the scripts
-//! already write; see docs/desktop-aot.md):
+//! Schema (schemaVersion 2, what this pipeline writes and the AOT shell reads;
+//! schemaVersion 1 legacy static-link catalogs are still accepted; see
+//! docs/desktop-aot.md):
 //!
 //! ```json
-//! {"schemaVersion":1,"games":[
+//! {"schemaVersion":2,"games":[
 //!   {"titleID":"0004000000055E00","displayName":"Pokémon Y",
 //!    "productCode":"CTR-P-EK2A","packFile":"Frameworks/GamePack-0004000000055E00.dylib",
-//!    "aot":true,"aotVersion":1,"notes":""}]}
+//!    "romFile":"Roms/0004000000055E00.cci",
+//!    "aot":true,"aotVersion":1,"packABIVersion":1,"notes":""}]}
 //! ```
 //!
 //! Rules enforced here (and by `scripts/lib/game-catalog.sh`):
@@ -89,7 +91,7 @@ fn default_pack_abi_version() -> u32 {
 /// The whole `GameCatalog.json` document.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GameCatalog {
-    /// Schema version (currently 1).
+    /// Schema version: 2 for this pipeline, 1 for legacy static-link catalogs.
     #[serde(rename = "schemaVersion")]
     pub schema_version: u32,
     /// Games, sorted by title ID.
@@ -520,5 +522,53 @@ mod tests {
             "catalog must be one line + newline"
         );
         assert!(catalog.all_placeholders(std::slice::from_ref(&package)));
+    }
+
+    #[test]
+    fn rom_file_paths_are_derived_and_validated() {
+        let temp = tempdir().unwrap();
+        let mut info = built_package(
+            temp.path(),
+            0x0004_0000_0005_5E00,
+            "Pokémon Y",
+            "CTR-P-EK2A",
+        );
+        info.rom_file = Some("GameRom.cci".to_string());
+        info.rom_sha256 = Some("a".repeat(64));
+        info.rom_bytes = info.rom.as_ref().map(|rom| rom.bytes);
+        let catalog = GameCatalog::from_packages(&[info]).unwrap();
+        assert_eq!(
+            catalog.games[0].rom_file.as_deref(),
+            Some("Roms/0004000000055E00.cci")
+        );
+        let text = catalog.to_json().unwrap();
+        assert!(
+            text.contains("\"romFile\":\"Roms/0004000000055E00.cci\""),
+            "{text}"
+        );
+        let reparsed = GameCatalog::from_json(&text, Path::new("GameCatalog.json")).unwrap();
+        assert_eq!(reparsed, catalog);
+        // Catalogue generation is deterministic with a bundled ROM too.
+        let mut again = catalog.games[0].clone();
+        again.rom_file = Some("Roms/0004000000055E00.cci".to_string());
+        let second = GameCatalog {
+            schema_version: catalog.schema_version,
+            games: vec![again],
+        };
+        assert_eq!(second.to_json().unwrap(), text);
+
+        for bad in [
+            "Roms/000400000011C500.cci",
+            "Roms/0004000000055E00.cia",
+            "../Roms/0004000000055E00.cci",
+            "Roms/0004000000055E00.cci/extra",
+        ] {
+            let mut broken = catalog.clone();
+            broken.games[0].rom_file = Some(bad.to_string());
+            assert!(broken.validate().is_err(), "must refuse romFile {bad:?}");
+        }
+        let mut valid = catalog.clone();
+        valid.games[0].rom_file = Some("Roms/0004000000055E00.3ds".to_string());
+        assert!(valid.validate().is_ok());
     }
 }

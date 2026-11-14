@@ -81,7 +81,9 @@ Options:
   --rom FILE         ROM provenance to record (optional, must match the title)
   --include-rom      Copy --rom FILE into the package as GameRom.<ext> and
                      record romFile/romSha256/romBytes, so the package is
-                     self-contained (the phone never imports game data)
+                     self-contained (the phone never imports game data). It is
+                     wired through --fake/--dry-run previews too, so a preview
+                     package has the same shape as the real one.
   --target KIND      device (arm64-apple-ios16.0, default) or sim
                      (x86_64-apple-ios16.0-simulator on this build VM), or a
                      full clang target triple
@@ -520,27 +522,6 @@ if [[ -n "$DYLIB_ARG" ]]; then
       die "adopted dylib does not export the required GamePack ABI (zk_gamepack_title_id / zk_gamepack_abi_version / zk_gamepack_register); pass --allow-non-gamepack to adopt a non-GamePack dylib for preview tooling"
     fi
   fi
-  if [[ "$DRY_RUN" -eq 0 ]]; then
-    if ! desktop_aot_pack_matches_target "$DYLIB" "$TRIPLE"; then
-      if [[ "$ALLOW_NON_GAMEPACK" -eq 1 ]]; then
-        warn "adopted dylib slice ($(desktop_aot_pack_arch "$DYLIB" 2>/dev/null || echo unknown)) does not match the requested target ($TRIPLE); --allow-non-gamepack"
-      else
-        die "adopted dylib is not a $TRIPLE Mach-O (slice: $(desktop_aot_pack_arch "$DYLIB" 2>/dev/null || echo unknown)); pass --target matching the dylib, or --allow-non-gamepack for preview tooling"
-      fi
-    fi
-    if ! desktop_aot_pack_exports_gamepack "$DYLIB"; then
-      if [[ "$ALLOW_NON_GAMEPACK" -eq 1 ]]; then
-        warn "adopted dylib does not export the GamePack ABI; the shell will refuse it (--allow-non-gamepack)"
-      else
-        die "adopted dylib does not export the required GamePack ABI (zk_gamepack_title_id/abi_version/register); pass --allow-non-gamepack to adopt a non-GamePack dylib for preview tooling"
-      fi
-    fi
-    defined_adopted="$WORK/adopted-defined.txt"
-    nm -gU "$DYLIB" >"$defined_adopted" 2>/dev/null || nm -g "$DYLIB" >"$defined_adopted" 2>/dev/null || true
-    if ! aot_nm_has_symbol "$defined_adopted" _zk_gamepack_register; then
-      warn "adopted dylib does not export the registration hook zk_gamepack_register"
-    fi
-  fi
 elif [[ "$FROM_LIBS" -eq 1 || -n "$CODE_DIR_ARG" ]]; then
   if [[ "$DRY_RUN" -eq 0 ]]; then
     LIBGAME=""
@@ -599,8 +580,15 @@ fi
 
 log "recording package metadata in $PACKAGE_DIR"
 if [[ "$FAKE" -eq 1 ]]; then
-  "$PACK_BIN" packages record --title-id "$TITLE_ID" --display-name "$DISPLAY_NAME" \
-    --out "$OUT_ROOT" --aot-version "$AOT_VERSION_ARG" --fake-placeholder
+  # --fake previews must not silently drop --rom/--include-rom: record the same
+  # provenance (and optionally the bundled ROM copy) a real pack record gets.
+  fake_record=(packages record --title-id "$TITLE_ID" --display-name "$DISPLAY_NAME"
+    --out "$OUT_ROOT" --aot-version "$AOT_VERSION_ARG" --fake-placeholder)
+  if [[ -n "$ROM_ARG" ]]; then
+    fake_record+=(--rom "$(resolve_path "$ROM_ARG")")
+    if [[ "$INCLUDE_ROM" -eq 1 ]]; then fake_record+=(--include-rom); fi
+  fi
+  "$PACK_BIN" "${fake_record[@]}"
 elif [[ -n "$DYLIB_ARG" ]]; then
   if [[ -n "$PRODUCT_CODE" && -n "$ROM_ARG" ]]; then
     "$PACK_BIN" packages record --title-id "$TITLE_ID" --display-name "$DISPLAY_NAME" \
