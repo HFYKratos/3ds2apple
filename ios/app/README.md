@@ -1,9 +1,11 @@
 # iOS app
 
-The SwiftUI shell for 3ds2apple. It imports the user's own ROM, displays the two
-3DS screens, drives the Zakuro runtime and exposes input, audio, fast-forward,
-save data, diagnostics and settings. The app is organised as a home page, the
-running game, a settings page and a few supporting pages.
+The SwiftUI shell for 3ds2apple. It is an AOT-only app: the games come from the
+build-time `GameCatalog.json` that the desktop build writes into the app bundle,
+and the shell never imports, copies or scans game data. It displays the two 3DS
+screens, drives the Zakuro runtime and exposes input, audio, fast-forward, save
+data, diagnostics and settings. The app is organised as a home page, the running
+game, a settings page and a few supporting pages.
 
 The UI follows the system language: Simplified Chinese gets Chinese, every other
 language gets English. Static text lives in `Resources/<lang>.lproj/
@@ -14,7 +16,7 @@ views do not carry duplicated strings.
 
 | Page | Contents |
 |---|---|
-| **Home** | Current game card (ROM name), Play / Load, Import / Change ROM, and tools: Settings, Save Manager, Diagnostics export, About. |
+| **Home** | Read-only game library (the build's AOT catalog), last-played state and AOT availability per card; tapping a game starts it, a game without AOT in this build shows "No AOT build for this game". Settings entry. No import action. |
 | **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), on-screen controls, the optional "Preparing graphics" warm-up overlay and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. |
 | **Settings** | Display, Audio, Controls, Performance (frame cap, fast-forward, system Metal HUD, optional graphics warm-up), Storage and About sections. |
 | **Save Manager** | The battery save files of the current game (size, date, export as ZIP, import, delete), the three instant save-state slots (save, load, delete) and the container usage. |
@@ -28,8 +30,10 @@ on-screen controls, so no input or audio advances behind it.
 
 ## Features
 
-- Import a decrypted `.3ds` / `.cci` from the Files app; the file stays in the
-  app's Documents directory and is never included in the app bundle.
+- Games come from the build-time catalog only: the desktop build compiles each
+  game ahead of time and writes `GameCatalog.json` (+ optional per-game
+  `Frameworks/GamePack-<titleID>.dylib`) into the app. The phone never imports a
+  ROM and never copies game data; an empty build says so on the home page.
 - Upper screen 400×240 and lower screen 320×240, arranged stacked, side by side
   or one at a time, optionally turned a quarter turn; the lower screen also acts
   as the 3DS touchscreen.
@@ -41,7 +45,7 @@ on-screen controls, so no input or audio advances behind it.
 - Audio through `zk_take_audio` and AVAudioEngine, with volume, mute and an IO
   buffer size preference.
 - Instant save states: three slots per game, one file per slot under
-  `Documents/states/<game>/`. The in-game menu saves to and loads from slot 1;
+  `Documents/states/<title id>/`. The in-game menu saves to and loads from slot 1;
   the Save Manager page manages all three.
 - Save-data management: export the game's battery saves as a ZIP archive through
   the share sheet, import a ZIP archive or single save files back, and delete
@@ -64,10 +68,11 @@ on-screen controls, so no input or audio advances behind it.
   runs; the render resolution resizes the presented drawable at once, while the
   internal 3D render scale is applied when a game loads. See "Display settings"
   below.
-- AOT status (`linked, active` / `linked, interpreting` / `interpreter shell`)
-  and emulation speed relative to the 3DS 60 Hz timeline.
-- Storage page: save-data / ROM / log / pipeline-cache usage and a "clear
-  graphics pipeline cache" action (only while no game is running).
+- AOT status (`AOT not loaded` / `AOT · linked`), emulation speed relative to
+  the 3DS 60 Hz timeline, and a hard AOT-only launch rule: a game is never started
+  through the interpreter.
+- Storage page: save-data / legacy game-file / log / pipeline-cache usage and a
+  "clear graphics pipeline cache" action (only while no game is running).
 - Settings are persisted in `UserDefaults` and restored at launch.
 - Optional first-load graphics warm-up, **off by default**: when enabled, the
   first frames after a load run behind an opaque "Preparing graphics" overlay
@@ -274,7 +279,7 @@ Without it the app still builds and runs, on the readback path.
 | `App.swift` | SwiftUI entry point; cache directory, logging and the app delegate. |
 | `ApplicationDelegate.swift` | UIKit delegate used for the orientation preference. |
 | `ContentView.swift` | Root router: home page or game for the current session phase; applies settings to the session. |
-| `HomeView.swift` | Home page: current game card, Play/Import, tools. |
+| `HomeView.swift` | Home page: catalog library grid, last-played dates, AOT badges, "No AOT build for this game" notice, settings entry. |
 | `GameView.swift` | Running game: responsive portrait/landscape layout, screens, status line, on-screen controls, warm-up overlay, in-game menu. |
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, reset, display settings, save manager, diagnostics, exit) and quick toggles. |
 | `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. |
@@ -287,10 +292,13 @@ Without it the app still builds and runs, on the readback path.
 | `SaveDataStore.swift` | Battery save-data folder, file list, ZIP export, ZIP/file import and delete. |
 | `ZipArchive.swift` | Small ZIP writer (stored entries) and reader (stored and deflated entries) used for save-data backups. |
 | `SaveArchivePicker.swift` | Files picker for importing a save-data ZIP or individual save files. |
-| `ROMSession.swift` | Runtime handle, ROM import, frame loop, presenter lifecycle, input/audio plumbing, pause/resume/reset and the settings that change runtime behaviour. |
+| `ROMSession.swift` | Runtime handle, AOT-only game launch gate, frame loop, presenter lifecycle, input/audio plumbing, pause/resume/reset and the settings that change runtime behaviour. |
 | `MetalScreenView.swift` | `UIView` with a `CAMetalLayer` the presenter draws into (A1); drawable size for the chosen layout/rotation and the render scale (1×–4×), plus the integer-scaling magnification filter. |
 | `ScreenGeometry.swift` | The drawable size of each layout/rotation and the box the screens occupy for the aspect/integer-scale settings. |
-| `ROMDocumentPicker.swift` | Files document picker wrapper. |
+| `GameCatalog.swift` | The build-time `GameCatalog.json` schema (v2, v1 compatible): per-game title ID, display name, AOT flags, `packFile`, cover. |
+| `GameLibrary.swift` | Read-only library: catalog entries + `Documents/Library/playHistory.json`; no ROM scanning or importing. |
+| `AOTPackageLoader.swift` | Resolves/loads per-game `GamePack-<titleID>.dylib` (`dlopen`, optional title/ABI/registration symbols), documents the C ABI, and falls back to the statically linked single-game build. |
+| `LegacyGameData.swift` | One-time migration for apps updated from 0.1.x: cartridge lookup for the statically linked title, play times, and renaming ROM-named save folders to the title-id namespace. |
 | `ScreenImage.swift` | Reusable RGBA buffers and `CGImage` conversion. |
 | `InputState.swift` | Thread-safe merge of touch, overlay and controller input. |
 | `TouchControlsView.swift` | On-screen button controls: the portrait pad and the landscape top bar / side rails (opacity and haptics options). |
@@ -429,8 +437,11 @@ Instant save states:
   layout and rotation, but it copies both screens to the CPU each frame and is
   slower than the presented path; its stretch mode divides the space between the
   two screens rather than reproducing the presenter's exact sub-screen split.
-- Games run only when a matching recompiled `libgame.a` is linked into the app.
-  A generic interpreter-only build exists but is much slower.
+- A game runs only when this build contains its AOT code: either the statically
+  linked single-game `libgame.a` (0.1.x shape, cartridge required in
+  Documents/roms) or a desktop-built `Frameworks/GamePack-<titleID>.dylib`. There
+  is no interpreter fallback; starting a package game needs the runtime hand-off
+  that is still being added in `ios/zakuro-ios`.
 - The first release does not include camera, microphone, online play or a full
   game library UI.
 - Button remapping is not available in this build. Save states are not
@@ -459,7 +470,7 @@ The status line in the game view includes:
 
 ```text
 audio: on
-AOT: linked, active   fast-forward: 2×
+AOT · linked   fast-forward: 2×
 loop: free-run · cap 60 fps   display: CAMetalLayer · GPU direct
 warm-up ready in 2.40 s · 146 frames · max 586 ms · 3 spiky (>50 ms)
 ```

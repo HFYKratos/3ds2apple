@@ -4,6 +4,13 @@ This guide builds the app on macOS with Xcode and packages an unsigned IPA.
 It does not include or require any game data in the repository; you need your
 own legally obtained, decrypted `.3ds` / `.cci` for the game build step.
 
+The **AOT-first desktop flow** (import several ROMs on a computer, build one
+package per game, then package one shell IPA carrying all of them) is a preview
+documented in [desktop-aot.md](desktop-aot.md). It is driven by the Rust CLI in
+[../builder/pack](../builder/pack) and the new scripts
+`build-game-pack.sh` / `build-multi-game-ipa.sh`; on Linux/Windows it can run a
+complete fake/dry-run pipeline (labelled placeholder packs) without Xcode.
+
 ## Requirements
 
 - macOS with Xcode and the iOS SDK (tested with Xcode 16.4 / iOS 18.5 SDK).
@@ -70,6 +77,7 @@ is ever committed.
 |---|---|---|---|
 | Shell IPA | `build-ios-app.sh` then `package-ipa.sh` | interpreter runtime only; empty catalog | `3ds2apple-shell-<version>.ipa` |
 | Game IPA | `build-recomp-ios.sh` -> `build-linked-ios-lib.sh` -> `build-game-ipa.sh` | linked runtime + `libgame.a` for one title + one-game catalog | `3ds2apple-<game>-<version>.ipa` |
+| Multi-game shell IPA (AOT-first preview) | per game: `build-recomp-ios.sh` -> `build-linked-ios-lib.sh` -> `build-game-pack.sh`; then `build-multi-game-ipa.sh --base-app ...` | linked packs (`GamePack-<TITLE>.dylib`) for several titles + schema-v2 catalog | `3ds2apple-multi-game-<version>.ipa` |
 
 On a game IPA the selected ROM runs the linked AOT code; on a shell IPA (or for a
 ROM that is not in the catalog) the runtime uses the interpreter fallback.
@@ -153,6 +161,60 @@ by `build-game-ipa.sh` itself with the same script.)
 
 The IPA is unsigned. Sign and install it with Sideloadly or AltStore using your
 own Apple ID. The app is not intended for App Store distribution.
+
+## 6. AOT-first desktop flow (multi-game shell IPA, preview)
+
+The AOT-first model builds **one package per game** on the computer and one
+**shell IPA** that carries several packages; the phone then only lists them from
+`GameCatalog.json` and launches an already compiled pack. This is the preview
+implemented in this tree; the full contract is in
+[desktop-aot.md](desktop-aot.md).
+
+```bash
+# Desktop side (Linux/Windows/macOS; no Xcode needed for this part)
+cd builder && cargo build -p builder-pack --release
+CLI=target/release/3ds2apple-pack
+
+# 1. import the user's own decrypted ROMs (headers only; nothing copied/hashed)
+"$CLI" packages add --roms "ROM/Pokémon Y.cci" "ROM/Pokémon Alpha Sapphire.cci"
+"$CLI" packages list
+"$CLI" build --queued            # print the exact macOS build plan
+"$CLI" build --queued --fake     # OR: preview packs locally (not installable)
+
+# 2. macOS: real AOT packs through the existing scripts
+scripts/build-game-pack.sh pokemon-y-00055e00 --title-id 0004000000055E00 \
+  --display-name "Pokémon Y" --product-code CTR-P-EK2A --out out \
+  --dylib <runtime-provided GamePack.dylib>
+
+# 3. one shell IPA with the selected games (unsigned)
+"$CLI" pack --all --execute --base-app ios/app/build/Release-iphoneos/3ds2apple.app
+
+# Linux/Windows layout preview (fake shell app, placeholder packs; NOT installable)
+scripts/build-multi-game-ipa.sh --packages-dir out/packages --all \
+  --allow-placeholder-dylibs --fake-shell
+```
+
+Outputs: `out/packages/<TITLE_ID>/{GameInfo.json,GamePack.dylib}`,
+`out/packages/GameCatalog.json`, `IPA/3ds2apple-multi-game-<version>.ipa` and
+`IPA/<name>.pack-manifest.txt` (all gitignored). The catalogue is schema version
+2 (`packFile`, `packABIVersion`, optional `registrationSymbol`/`coverFile`);
+legacy version 1 catalogs are still accepted by the shell and by
+`scripts/lib/game-catalog.sh`.
+
+Behaviour notes: `build --roms ...` exits 1 if any requested ROM could not be
+imported (accepted ROMs are still built/planned); `--fake` cannot be combined
+with `--execute`; `build --queued --force` rebuilds packages that already have a
+pack. The desktop CLI and the new scripts are documented in
+[desktop-aot.md](desktop-aot.md).
+
+Not done yet in this preview: the runtime hand-off that starts a game from a
+`GamePack.dylib` (runtime-ffi task), the real `--from-libs` dylib link (unverified
+on macOS), nested-dylib re-signing on device, a generate-only 3dsrecomp mode for
+a fully Linux-native recomp step, and the Windows/macOS GUI launchers. See
+[desktop-aot.md §10](desktop-aot.md).
+
+Proof without Xcode: `cargo test -p builder-pack` and
+`bash scripts/tests/desktop-aot-selfcheck.sh`.
 
 ## Troubleshooting
 

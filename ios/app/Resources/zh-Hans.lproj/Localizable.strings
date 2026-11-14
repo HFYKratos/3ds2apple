@@ -305,7 +305,7 @@
 "The interface stays portrait." = "界面保持竖屏。";
 "The on-screen pad and a connected controller are merged. Dragging on the lower screen is the 3DS touchscreen." = "屏幕按键与已连接的手柄会合并输入。在下屏拖动即为 3DS 触摸屏。";
 "The runtime is released and the game closes. Imported ROMs and save data stay on the device." = "运行时已释放，游戏已关闭。已导入的 ROM 与存档数据仍保留在设备上。";
-"The runtime was stopped when the app went to the background. Load the ROM again to continue." = "应用进入后台时运行时已停止。再次载入 ROM 即可继续。";
+"The runtime was stopped when the app went to the background. Open the game again to continue." = "应用进入后台时运行时已停止。再次打开游戏即可继续。";
 "The save data is too large for a ZIP archive (4 GB limit)." = "存档数据太大，无法放入 ZIP 压缩包（4 GB 上限）。";
 "The selected file is empty." = "所选文件为空。";
 "The selected file is not a ZIP archive." = "所选文件不是 ZIP 压缩包。";
@@ -370,3 +370,38 @@
 "“%@” is too large to include in a save-data archive." = "“%@”太大，无法放入存档数据压缩包。";
 "Large top screen" = "大画面上屏";
 "Large upper screen with the lower one small at its lower right. The landscape default." = "上屏放大、下屏缩小放在右下角；横屏默认布局。";
+
+/* --- 纯 AOT 壳：游戏由电脑构建并随 catalog 安装，手机端不导入、不使用解释器 --- */
+"AOT · linked" = "AOT · 已链接";
+"AOT code available" = "AOT 代码可用";
+"AOT not loaded" = "未载入 AOT";
+"AOT package ready" = "AOT 游戏包已就绪";
+"Game data missing" = "缺少游戏数据";
+"Game files" = "游戏文件";
+"Games are added on your computer: build an AOT package for a game you own and reinstall this app. Built games appear here." = "游戏需要在电脑上添加：为你拥有的游戏构建 AOT 游戏包，然后重新安装本应用。构建好的游戏会显示在这里。";
+"Games are built ahead of time on your computer with your own game dump, then installed as AOT packages. The app only runs AOT code and never enables a CPU JIT." = "游戏会在电脑上用你自己的游戏数据提前编译，并以 AOT 游戏包的形式安装。应用只运行 AOT 代码，绝不启用 CPU JIT。";
+"No AOT" = "无 AOT";
+"No AOT build for this game" = "此游戏没有 AOT 构建";
+"No AOT build for this game: “%@” was loaded, but the runtime is not executing AOT code (linked title %@)." = "此游戏没有 AOT 构建：“%@”已载入，但运行时没有执行 AOT 代码（已链接的游戏 ID 为 %@）。";
+"No game selected" = "未选择游戏";
+"No games in this build" = "此构建中没有游戏";
+"Something went wrong" = "出现问题";
+"Start a game first: battery saves are listed per game." = "请先开始游戏：电池存档按游戏分别列出。";
+"The AOT code linked into this app is for title %@, not %@. Rebuild the app for this game." = "本应用链接的 AOT 代码属于游戏 %@，而不是 %@。请为该游戏重新构建应用。";
+"The desktop build did not allocate AOT code for this game. Build it on your computer and install that build." = "桌面端构建没有为该游戏分配 AOT 代码。请在电脑上构建该游戏并安装该构建。";
+"The game package “%@” is installed and registered for “%@”. Starting games from a package needs the next runtime build; this shell can only start the game whose AOT code is linked into it." = "游戏包“%@”已安装并为“%@”注册。从游戏包启动游戏需要下一版运行时；此版本只能启动 AOT 代码已链接进应用的游戏。";
+"The game package “%@” is missing from this app. Repackage the app on your computer and reinstall it." = "本应用缺少游戏包“%@”。请在电脑上重新打包并重新安装本应用。";
+"The game package could not be loaded: %@" = "无法载入游戏包：%@";
+"The game restarts from the beginning. Battery saves are kept." = "游戏将从头重新开始。电池存档会保留。";
+"The runtime is released and the game closes. Save data stays on the device." = "运行时会释放，游戏关闭。存档数据仍保留在设备上。";
+"This app contains no linked AOT code. Build the game on your computer and install that build." = "本应用没有链接任何 AOT 代码。请在电脑上构建该游戏并安装该构建。";
+"This app ships without any game data. Build a game you own on your computer with the desktop app and install that build; the game appears in the library. The app has no ROMs, decryption keys, system files or game assets." = "本应用不附带任何游戏数据。请在电脑上用桌面端构建你拥有的游戏并安装该构建；游戏会出现在游戏库中。应用不含 ROM、解密密钥、系统文件或游戏资源。";
+"This build contains the AOT code for “%@”, but its game data is not in this app any more. Reinstall the game build from your computer, or build it again with the desktop app." = "此构建包含“%@”的 AOT 代码，但游戏数据已不在本应用中。请重新安装电脑上生成的游戏构建，或用桌面端重新构建。";
+"Zakuro (MIT): 3DS runtime, HLE services and GPU." = "Zakuro（MIT）：3DS 运行时、HLE 系统服务与 GPU。";
+"dlopen failed" = "dlopen 失败";
+"the pack uses ABI version %ld, this app speaks %ld" = "该游戏包使用 ABI 版本 %ld，本应用支持 %ld";
+"the catalog says the pack uses ABI version %ld, this app speaks %ld" = "catalog 记录的游戏包 ABI 版本为 %ld，本应用支持 %ld";
+"“%@” refused this app (result %ld)" = "“%@”拒绝了本应用（返回值 %ld）";
+"%@ — %@" = "%@ — %@";
+"The Zakuro runtime could not load this game (empty error text)." = "Zakuro 运行时无法载入此游戏（错误信息为空）。";
+"The Zakuro runtime could not load this game (no error text was reported)." = "Zakuro 运行时无法载入此游戏（运行时未提供错误信息）。";

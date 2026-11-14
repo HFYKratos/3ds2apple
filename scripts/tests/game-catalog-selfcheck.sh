@@ -174,8 +174,8 @@ expect_reject() { # label expected-message-fragment file
 
 printf '{"schemaVersion":1,"games":[{"titleID":"0004000000055e00","displayName":"x","productCode":"","aot":false,"aotVersion":0,"notes":""}]}' > "${WORK}/bad-lower.json"
 expect_reject "reject lower-case title ID" "upper-case hex digits" "${WORK}/bad-lower.json"
-printf '{"schemaVersion":2,"games":[]}' > "${WORK}/bad-schema.json"
-expect_reject "reject schemaVersion 2" "unsupported schemaVersion" "${WORK}/bad-schema.json"
+printf '{"schemaVersion":3,"games":[]}' > "${WORK}/bad-schema.json"
+expect_reject "reject schemaVersion 3" "unsupported schemaVersion" "${WORK}/bad-schema.json"
 printf '{"schemaVersion":1,"games":[{"titleID":"0004000000055E00","displayName":"x","productCode":"","aot":true,"aotVersion":0,"notes":""}]}' > "${WORK}/bad-aot-version.json"
 expect_reject "reject aot=true with aotVersion 0" "aotVersion" "${WORK}/bad-aot-version.json"
 printf '{"schemaVersion":1,"games":[{"titleID":"0004000000055E00","displayName":"x","productCode":"","aot":false,"aotVersion":0,"notes":""},{"titleID":"0004000000055E00","displayName":"y","productCode":"","aot":false,"aotVersion":0,"notes":""}]}' > "${WORK}/bad-duplicate.json"

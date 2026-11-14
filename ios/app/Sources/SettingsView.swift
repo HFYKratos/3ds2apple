@@ -205,7 +205,7 @@ struct SettingsView: View {
     private var storageSection: some View {
         Section {
             infoRow("Save data", StorageFormat.size(storage.saveDataBytes))
-            infoRow("Imported ROMs", StorageFormat.size(storage.romBytes))
+            infoRow("Game files", StorageFormat.size(storage.romBytes))
             infoRow("App logs", StorageFormat.size(storage.logBytes))
             infoRow("Graphics pipeline cache", StorageFormat.size(storage.cacheBytes))
             Button("Clear graphics pipeline cache") {

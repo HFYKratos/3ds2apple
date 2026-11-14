@@ -19,7 +19,7 @@
 //  interrupted save cannot destroy a good slot.
 //
 //  This type is the single place the UI asks about save states. Battery save
-//  data (Documents/data/<game>) is handled by SaveDataStore.
+//  data (Documents/data/<title id>) is handled by SaveDataStore.
 //
 
 import Combine
@@ -57,8 +57,8 @@ struct SaveStateError: Error, LocalizedError {
 protocol SaveStateRuntime: AnyObject {
     /// True while a game is loaded and its handle is alive.
     var isRuntimeLoaded: Bool { get }
-    /// Name of the last imported ROM, used to find its slot folder.
-    var saveStateROMName: String? { get }
+    /// Title-id namespace of the loaded game, used to find its slot folder.
+    var saveStateNamespace: String? { get }
     /// Stops the frame loop and the audio engine before the console is
     /// serialized or restored. Returns true when it stopped a running session.
     func suspendForStateWork() -> Bool
@@ -116,8 +116,8 @@ final class SaveStateSupport: ObservableObject {
 
     // MARK: - State
 
-    /// ROM name the slots belong to (nil before a game was imported).
-    var gameName: String? { runtime?.saveStateROMName }
+    /// Title-id namespace the slots belong to (nil before a game is loaded).
+    var namespace: String? { runtime?.saveStateNamespace }
 
     /// True while a game is loaded: a state can be taken or restored.
     var isRuntimeLoaded: Bool { runtime?.isRuntimeLoaded ?? false }
@@ -150,8 +150,8 @@ final class SaveStateSupport: ObservableObject {
     /// Re-reads the slots from disk. Call from `onAppear` of the pages that show
     /// them, and after an operation changed a slot.
     func refresh() {
-        let gameName = runtime?.saveStateROMName
-        let read = SaveStateSupport.readSlots(gameName: gameName)
+        let namespace = runtime?.saveStateNamespace
+        let read = SaveStateSupport.readSlots(namespace: namespace)
         let publish: () -> Void = { [weak self] in
             guard let self else { return }
             self.slots = read
@@ -182,7 +182,7 @@ final class SaveStateSupport: ObservableObject {
             completion?(.failure(error))
             return
         }
-        guard let runtime, let gameName = runtime.saveStateROMName, runtime.isRuntimeLoaded else {
+        guard let runtime, let namespace = runtime.saveStateNamespace, runtime.isRuntimeLoaded else {
             let error = SaveStateError(message: L10n.tr("Start a game before saving a state."))
             publish(error)
             completion?(.failure(error))
@@ -193,7 +193,7 @@ final class SaveStateSupport: ObservableObject {
         errorMessage = nil
         statusText = L10n.format("Saving to slot %ld…", number)
         let suspended = runtime.suspendForStateWork()
-        let slotURL = SaveStateSupport.slotURL(gameName: gameName, slot: number)
+        let slotURL = SaveStateSupport.slotURL(namespace: namespace, slot: number)
         runtime.runOnRuntimeQueue { [weak self] handle in
             let result: Result<SaveStateSlot, SaveStateError>
             if let handle {
@@ -238,7 +238,7 @@ final class SaveStateSupport: ObservableObject {
         completion: ((Result<SaveStateSlot, SaveStateError>) -> Void)? = nil
     ) {
         guard !busy else { return }
-        guard let runtime, let gameName = runtime.saveStateROMName, runtime.isRuntimeLoaded else {
+        guard let runtime, let namespace = runtime.saveStateNamespace, runtime.isRuntimeLoaded else {
             let error = SaveStateError(message: L10n.tr("Start a game before loading a state."))
             publish(error)
             completion?(.failure(error))
@@ -255,7 +255,7 @@ final class SaveStateSupport: ObservableObject {
         errorMessage = nil
         statusText = L10n.format("Loading %@…", slot.title)
         let suspended = runtime.suspendForStateWork()
-        let slotURL = SaveStateSupport.slotURL(gameName: gameName, slot: number)
+        let slotURL = SaveStateSupport.slotURL(namespace: namespace, slot: number)
         runtime.runOnRuntimeQueue { [weak self] handle in
             let result: Result<SaveStateSlot, SaveStateError>
             if let handle {
@@ -305,7 +305,7 @@ final class SaveStateSupport: ObservableObject {
         completion: ((SaveStateError?) -> Void)? = nil
     ) {
         guard !busy else { return }
-        guard let gameName = runtime?.saveStateROMName else {
+        guard let namespace = runtime?.saveStateNamespace else {
             let error = SaveStateError(message: L10n.tr("No game is selected."))
             publish(error)
             completion?(error)
@@ -319,7 +319,7 @@ final class SaveStateSupport: ObservableObject {
         busy = true
         errorMessage = nil
         statusText = L10n.format("Deleting %@…", slot.title)
-        let slotURL = SaveStateSupport.slotURL(gameName: gameName, slot: number)
+        let slotURL = SaveStateSupport.slotURL(namespace: namespace, slot: number)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             var failure: SaveStateError?
             do {
@@ -358,17 +358,17 @@ final class SaveStateSupport: ObservableObject {
         StorageInspector.documentsURL.appendingPathComponent("states", isDirectory: true)
     }
 
-    /// A game's slot folder: Documents/states/<game>.
-    static func statesDirectory(gameName: String) -> URL {
+    /// A game's slot folder: Documents/states/<title-id namespace>.
+    static func statesDirectory(namespace: String) -> URL {
         statesRootURL.appendingPathComponent(
-            SaveDataStore.gameDirectoryName(for: gameName),
+            SaveDataStore.directoryName(forNamespace: namespace),
             isDirectory: true
         )
     }
 
-    /// One slot's file: Documents/states/<game>/slot<N>.bin.
-    static func slotURL(gameName: String, slot: Int) -> URL {
-        statesDirectory(gameName: gameName)
+    /// One slot's file: Documents/states/<namespace>/slot<N>.bin.
+    static func slotURL(namespace: String, slot: Int) -> URL {
+        statesDirectory(namespace: namespace)
             .appendingPathComponent("slot\(slot).bin", isDirectory: false)
     }
 
@@ -424,10 +424,10 @@ final class SaveStateSupport: ObservableObject {
         }
     }
 
-    private static func readSlots(gameName: String?) -> [SaveStateSlot] {
-        guard let gameName else { return emptySlots() }
+    private static func readSlots(namespace: String?) -> [SaveStateSlot] {
+        guard let namespace else { return emptySlots() }
         return (1...slotCount).map { number in
-            let url = slotURL(gameName: gameName, slot: number)
+            let url = slotURL(namespace: namespace, slot: number)
             guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
                   let size = (attributes[.size] as? NSNumber)?.uint64Value,
                   size > 0 else {

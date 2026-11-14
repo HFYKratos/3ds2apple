@@ -11,19 +11,21 @@
 //
 //  The screen is chosen with the ZKPREVIEW_SCREEN environment variable:
 //
-//      home (default)   HomeView(model:settings:library:)
+//      home (default)   HomeView(model:settings:library:), catalog-seeded
 //      settings         NavigationStack { SettingsView(settings:model:) }
 //      quick            QuickDisplaySettingsView(settings:)
 //      ingame           InGameMenuView(romName:settings:saveStates:callbacks:)
 //      savemanager      NavigationStack { SaveManagerView(model:saveStates:) }
 //      about            NavigationStack { AboutView(model:) }
+//      home-empty       HomeView with an empty library
+//      home-no-aot      HomeView after tapping a game the build did not compile
 //
 //  ZKPREVIEW_DARK=1 forces the dark appearance. The app never calls zk_create()
 //  or any other runtime function that would start a console: the zk_* names the
 //  shell sources reference resolve to the empty stubs.
 //
-//  scripts/ios-ui-preview.sh builds this target, boots a simulator, seeds a
-//  synthetic game library and screenshots every screen.
+//  scripts/ios-ui-preview.sh builds this target and screenshots every screen;
+//  the headless Catalyst path is the one used on this VM.
 //
 
 import SwiftUI
@@ -31,8 +33,8 @@ import SwiftUI
 @main
 struct PreviewApp: App {
     /// The same shared singletons the shell uses. GameLibrary.load() runs in its
-    /// initializer; the script writes Documents/Library/library.json before the
-    /// first launch so the home screen has games to show.
+    /// initializer; the preview app carries no GameCatalog.json, so
+    /// SnapshotRenderer installs a synthetic catalog before the library shots.
     @StateObject private var library = GameLibrary.shared
     @StateObject private var settings = AppSettings.shared
     @StateObject private var model: ROMSession

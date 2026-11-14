@@ -3,8 +3,9 @@
 //  3ds2apple
 //
 //  The battery save data the Zakuro runtime writes into
-//  Documents/data/<game>/: listing it for the Save Manager, and moving it in
-//  and out of the app as a ZIP archive or as single files.
+//  Documents/data/<title id>/: listing it for the Save Manager, and moving it
+//  in and out of the app as a ZIP archive or as single files. The title id is
+//  the save namespace, so two games can never share a save folder.
 //
 //  The runtime owns the directory contents; the app only reads it, exports it,
 //  and (while no game is running) replaces or removes files the user picked.
@@ -52,32 +53,32 @@ enum SaveDataStore {
     /// The largest archive or file the importer reads.
     static let maximumImportBytes: UInt64 = 512 * 1024 * 1024
 
-    /// Directory name for a ROM: the `Documents/data/<name>` folder the runtime
-    /// receives as its data directory, and the folder save states use under
-    /// `Documents/states`. Sanitised so a ROM name cannot escape the directory.
-    static func gameDirectoryName(for romName: String) -> String {
-        let stem = (romName as NSString).deletingPathExtension
-        let sanitized = stem.map { character -> Character in
+    /// Directory name for a game's save namespace: the `Documents/data/<name>`
+    /// folder the runtime receives as its data directory, and the folder save
+    /// states use under `Documents/states`. The AOT-only shell passes the title
+    /// ID as the namespace; the sanitiser still guards hand-made values.
+    static func directoryName(forNamespace namespace: String) -> String {
+        let sanitized = namespace.map { character -> Character in
             if character.isLetter || character.isNumber
                 || character == "-" || character == "_" || character == "." {
                 return character
             }
             return "_"
         }
-        return sanitized.isEmpty ? "rom" : String(sanitized)
+        return sanitized.isEmpty ? "game" : String(sanitized)
     }
 
-    /// `Documents/data/<game>` for `romName`.
-    static func batterySaveDirectory(forROMName romName: String) -> URL {
+    /// `Documents/data/<namespace>` for a game's title-id namespace.
+    static func batterySaveDirectory(namespace: String) -> URL {
         StorageInspector.dataURL.appendingPathComponent(
-            gameDirectoryName(for: romName),
+            directoryName(forNamespace: namespace),
             isDirectory: true
         )
     }
 
     /// Every regular file under the game's data directory, newest first.
-    static func batterySaveFiles(forROMName romName: String) -> [BatterySaveFile] {
-        let directory = batterySaveDirectory(forROMName: romName)
+    static func batterySaveFiles(namespace: String) -> [BatterySaveFile] {
+        let directory = batterySaveDirectory(namespace: namespace)
         let fileManager = FileManager.default
         let keys: Set<URLResourceKey> = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
         guard let enumerator = fileManager.enumerator(
@@ -111,9 +112,9 @@ enum SaveDataStore {
         return files
     }
 
-    /// Absolute URL of one row from `batterySaveFiles(forROMName:)`.
-    static func batterySaveURL(for file: BatterySaveFile, forROMName romName: String) -> URL {
-        batterySaveDirectory(forROMName: romName)
+    /// Absolute URL of one row from `batterySaveFiles(namespace:)`.
+    static func batterySaveURL(for file: BatterySaveFile, namespace: String) -> URL {
+        batterySaveDirectory(namespace: namespace)
             .appendingPathComponent(file.relativePath, isDirectory: false)
     }
 
@@ -124,8 +125,8 @@ enum SaveDataStore {
 
     /// Removes one battery save file. The runtime must not have it open, so the
     /// Save Manager only offers this while no game is running.
-    static func remove(_ file: BatterySaveFile, forROMName romName: String) throws {
-        let directory = batterySaveDirectory(forROMName: romName)
+    static func remove(_ file: BatterySaveFile, namespace: String) throws {
+        let directory = batterySaveDirectory(namespace: namespace)
         let url = directory.appendingPathComponent(file.relativePath, isDirectory: false)
         let basePath = directory.standardizedFileURL.path
         guard url.standardizedFileURL.path.hasPrefix(basePath + "/") else {
@@ -147,18 +148,18 @@ enum SaveDataStore {
     /// returns its URL, ready for the share sheet. The archive stores paths
     /// relative to the game's data directory, so importing it restores the same
     /// layout.
-    static func exportArchive(forROMName romName: String) throws -> URL {
-        let files = batterySaveFiles(forROMName: romName)
+    static func exportArchive(namespace: String) throws -> URL {
+        let files = batterySaveFiles(namespace: namespace)
         guard !files.isEmpty else {
             throw SaveDataError(
                 message: L10n.tr("There is no battery save data to export yet. Save in the game's own menu first.")
             )
         }
-        let directory = batterySaveDirectory(forROMName: romName)
+        let directory = batterySaveDirectory(namespace: namespace)
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let baseName = "\(gameDirectoryName(for: romName))-save-\(formatter.string(from: Date()))"
+        let baseName = "\(directoryName(forNamespace: namespace))-save-\(formatter.string(from: Date()))"
         let archiveURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(baseName).zip", isDirectory: false)
         let writer: ZipArchiveWriter
@@ -196,8 +197,8 @@ enum SaveDataStore {
     ///
     /// The runtime must not be running when this is called: it may hold save
     /// files open, and replacing them underneath it could corrupt a save.
-    static func importSaveData(from source: URL, forROMName romName: String) throws -> SaveDataImportSummary {
-        let directory = batterySaveDirectory(forROMName: romName)
+    static func importSaveData(from source: URL, namespace: String) throws -> SaveDataImportSummary {
+        let directory = batterySaveDirectory(namespace: namespace)
         let fileManager = FileManager.default
         let scoped = source.startAccessingSecurityScopedResource()
         defer {
@@ -225,7 +226,7 @@ enum SaveDataStore {
                 summary = try ZipArchiveReader.extract(
                     from: source,
                     into: directory,
-                    strippingWrapperNamed: gameDirectoryName(for: romName)
+                    strippingWrapperNamed: directoryName(forNamespace: namespace)
                 )
             } catch let zipError as ZipArchiveError {
                 throw SaveDataError(message: zipError.message)

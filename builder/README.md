@@ -125,6 +125,7 @@ cleanup) on Linux.
 | Piece | Implemented now | Verified where |
 |---|---|---|
 | `builder/core` | protocol types, framing, versioning, validation, hashing, SSH/local transports, client state, config | `cargo test -p builder-core`, golden fixtures |
+| `builder/pack` (`3ds2apple-pack`) | ROM header detection (NCSD/NCCH), import queue, per-game package manifests, deterministic schema-v2 catalogue allocation, macOS script plan, fake/preview packs + preview multi-game IPA | `cargo test -p builder-pack` (unit + CLI integration on Linux); `scripts/tests/desktop-aot-selfcheck.sh` (55 checks) |
 | `builder/windows` | Windows frontend: guided session, `doctor`/`self-test`, build/status/logs/cancel/download/jobs, install guide, long-path and CJK handling, portable packaging | `cargo test -p builder-windows` (unit + real-Agent E2E on Linux); run on Windows 11 incl. a build over SSH |
 | `builder/cli` (`zkb`) | `host add/list/test/remove`, `build`, `status`, `logs`, `cancel`, `download`, `jobs`, `delete`, `doctor`, `config` | `cargo test -p builder-cli` (E2E against the real Agent) |
 | `builder/agent` | daemon + stdio sessions, `ssh-dispatch` forced command, queue with one build slot, store/recovery, NDJSON events, cancellation with process groups, cleanup, artifact verification, `doctor`, `gc`, fake-build mode | unit tests + CLI E2E on Linux |
@@ -141,6 +142,31 @@ both Tauri GUIs remain design-only, see
 [linux/README.md](linux/README.md#gui) and
 [windows/README.md](windows/README.md#gui-status)) and a run of the real macOS
 pipeline from this repository.
+
+## Desktop AOT-first pipeline (`builder/pack`, preview)
+
+The AOT-first route builds one package per game and one shell IPA that carries
+several packages, instead of one IPA per game. `3ds2apple-pack` owns the pure
+desktop logic (detect, queue, package manifests, catalogue, command plan); the
+existing macOS scripts still do the compile/link/package. On Linux/Windows the
+CLI can run the whole pipeline with labelled placeholder packs and a fake shell
+app for layout previews.
+
+```bash
+cd builder && cargo build -p builder-pack
+target/debug/3ds2apple-pack --help
+
+target/debug/3ds2apple-pack packages add --roms "../ROM/Game.cci"
+target/debug/3ds2apple-pack build --queued          # print the macOS plan
+target/debug/3ds2apple-pack build --queued --fake   # local preview packs
+target/debug/3ds2apple-pack catalog --all
+target/debug/3ds2apple-pack pack --all --execute --fake-shell --ipa-out ../IPA
+```
+
+Contract, package layout, catalogue schema v2 and the GamePack ABI hand-off:
+[../docs/desktop-aot.md](../docs/desktop-aot.md). The zkb/Agent remote flow is
+unchanged in this preview; extending the Agent's packaging stage to these
+packages is a follow-up.
 
 ## Why a Mac is still needed
 
@@ -220,6 +246,7 @@ Data flow:
 |---|---|---|---|
 | **Shared core** | `builder/core/` | All platforms | Protocol types and versioning, transports, job client state machine, hashing/verification, host profiles, secret storage, log redaction. No UI, no process execution. |
 | **CLI** | `builder/cli/` | Windows, Linux, macOS | `zkb` (working name): add/test build hosts, start a build, tail progress and logs, download and verify the IPA, show doctor output. The reference client and the Linux MVP. |
+| **Desktop AOT pipeline** | `builder/pack/` (binary `3ds2apple-pack`) | Linux, Windows, macOS | AOT-first desktop flow: ROM header detection, import queue, per-game package directories (`GameInfo.json`), deterministic `GameCatalog.json` allocation and the command plan for the macOS scripts. The real compile/link stays in `scripts/` on macOS; `--fake` produces labelled placeholder packs and a layout-preview IPA on Linux/Windows. See [../docs/desktop-aot.md](../docs/desktop-aot.md). |
 | **Windows frontend** | `builder/windows/` | Windows 10/11 | CLI-first desktop frontend over the shared core: guided session, host profiles, transfer/build progress, log streaming, artifact page and install guide; a Tauri graphical shell over the same engine is still design only. |
 | **Linux frontend** | `builder/linux/` | Linux desktops and headless | `3ds2apple-builder`: CLI frontend over `zkb` with QEMU/KVM VM SSH discovery, host pairing, build wrapper, local SHA256 re-verification and install guide, packaged for Arch/CachyOS and Debian/Ubuntu. A Tauri GUI over the shared `builder/ui` is still planned for both desktops. |
 | **Build Agent** | `builder/agent/` | macOS (Apple Silicon or Intel) | Long-lived daemon plus `ssh` dispatch and CLI: pairing, `doctor` toolchain checks, job queue with build slots, per-job runner that invokes the existing scripts, NDJSON logs, cancellation, cleanup, artifact serving, data-root GC. |

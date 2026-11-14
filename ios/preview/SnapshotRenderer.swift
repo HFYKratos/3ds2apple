@@ -59,9 +59,50 @@ enum SnapshotRenderer {
             }
         }
 
+        // Empty library first: a shell built without any game catalog.
         shot("home-empty", AnyView(HomeView(model: model, settings: settings, library: library)))
-        seedLibrary(library)
+
+        // Catalog-seeded library. The preview app carries no generated
+        // GameCatalog.json, so the catalog is installed in memory; one entry is
+        // statically linked for the screenshot (the real build's zk_linked_code()
+        // is a C stub here) and one is deliberately not built by the desktop
+        // step. Built games get the green AOT badge.
+        let previewCatalog = GameCatalog(games: [
+            GameCatalogGame(
+                titleID: "0004000000055E00",
+                displayName: "Pokémon Y",
+                productCode: "CTR-P-EK2A",
+                aot: true,
+                aotVersion: 1
+            ),
+            GameCatalogGame(
+                titleID: "0004000000086400",
+                displayName: "Animal Crossing: New Leaf",
+                productCode: "CTR-P-ECJE",
+                aot: true,
+                aotVersion: 1,
+                packFile: "Frameworks/GamePack-0004000000086400.dylib"
+            ),
+            GameCatalogGame(
+                titleID: "0004000000030600",
+                displayName: "Super Mario 3D Land",
+                productCode: "CTR-P-AREJ",
+                aot: false
+            ),
+        ])
+        library.installPreviewLibrary(previewCatalog, playTimes: [
+            "0004000000055E00": Date().addingTimeInterval(-2 * 86_400),
+            "0004000000086400": Date().addingTimeInterval(-6 * 86_400),
+        ])
+        AOTPackageLoader.shared.previewStaticTitleIDs = ["0004000000055E00"]
         shot("home", AnyView(HomeView(model: model, settings: settings, library: library)))
+
+        // "No AOT build for this game": tapping the entry the desktop build did
+        // not compile publishes the same notice the shipping app shows.
+        if let notBuilt = library.entries.first(where: { !$0.aot }) {
+            model.start(notBuilt)
+        }
+        shot("home-no-aot", AnyView(HomeView(model: model, settings: settings, library: library)))
         shot("settings", AnyView(NavigationStack { SettingsView(settings: settings, model: model) }))
         shot("quick", AnyView(QuickDisplaySettingsView(settings: settings)))
         shot("ingame", AnyView(ZStack {
@@ -87,29 +128,6 @@ enum SnapshotRenderer {
         model.previewSetLoaded(name: "Pokemon Y")
         shot("game", AnyView(GameView(model: model, settings: settings)))
         return written
-    }
-
-    static func seedLibrary(_ library: GameLibrary) {
-        guard library.entries.isEmpty else { return }
-        let entries: [(String, String, String?, Int64, TimeInterval?)] = [
-            ("Pokemon Y", "Pokemon Y.cci", "0004000000055E00", 4_294_967_296, 0),
-            ("Pokemon Alpha Sapphire", "Pokemon Alpha Sapphire.cci", "000400000011C500", 2_147_483_648, -86_400),
-            ("Mario Land", "mario land.cia", "0004000000089F00", 268_435_456, nil),
-        ]
-        for (title, file, titleID, bytes, playedOffset) in entries {
-            library.add(GameEntry(
-                id: UUID(),
-                title: title,
-                fileName: file,
-                relativePath: "roms/" + file,
-                titleID: titleID,
-                productCode: nil,
-                coverRelativePath: nil,
-                importedAt: Date().addingTimeInterval(-172_800),
-                lastPlayedAt: playedOffset.map { Date().addingTimeInterval($0) },
-                sizeBytes: bytes
-            ))
-        }
     }
 
     private static func render(_ name: String, _ view: AnyView, to directory: URL) -> URL? {

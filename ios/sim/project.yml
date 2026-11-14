@@ -1,0 +1,47 @@
+# XcodeGen spec for the iOS Simulator runtime harness (ios/sim).
+#
+# The harness is a development-only app: it drives zk_create/zk_run_frame
+# directly against build/ios/libzakuro_ios_sim.a so the x86_64 Simulator
+# runtime can be verified without tapping through the shipping shell.
+#
+# __REPO_ROOT__ is replaced with the absolute repository path by
+# scripts/build-ios-app-sim.sh before xcodegen runs (the generated project
+# lives under build/, so no relative SRCROOT tricks).
+#
+# Generate/build with: scripts/build-ios-app-sim.sh --app harness
+
+name: 3ds2apple-sim-harness
+
+options:
+  bundleIdPrefix: com.kratos
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+targets:
+  "3ds2apple-sim-harness":
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: __REPO_ROOT__/ios/sim/Sources
+    settings:
+      base:
+        PRODUCT_NAME: "3ds2apple-sim-harness"
+        EXECUTABLE_NAME: "3ds2apple-sim-harness"
+        PRODUCT_BUNDLE_IDENTIFIER: "com.kratos.3ds2apple.sim"
+        MARKETING_VERSION: "0.1.5-beta3"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_KEY_CFBundleDisplayName: "3ds2apple sim"
+        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: "YES"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGNING_REQUIRED: "NO"
+        SWIFT_VERSION: "5.0"
+        SWIFT_OBJC_BRIDGING_HEADER: "__REPO_ROOT__/ios/ZakuroBridge.h"
+        HEADER_SEARCH_PATHS: ["__REPO_ROOT__/ios"]
+        OTHER_LDFLAGS: ["-L__REPO_ROOT__/build/ios", "-lzakuro_ios_sim"]

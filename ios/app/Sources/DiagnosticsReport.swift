@@ -91,7 +91,7 @@ enum DiagnosticsExporter {
         device=\(device.model) · \(device.systemName) \(device.systemVersion)
         screen=\(Int(screen.bounds.width * screen.scale))x\(Int(screen.bounds.height * screen.scale)) @\(screen.scale)x
         phase=\(phaseDescription(model.phase))
-        rom=\(model.lastROM?.name ?? "none")
+        game=\(model.currentGame.map { "\($0.title) (\($0.titleID))" } ?? "none")
         paused=\(model.isPaused ? 1 : 0)
         aot=\(model.aotStatus.label)
         display=\(model.displayPath.label)
@@ -157,7 +157,6 @@ enum DiagnosticsExporter {
     static func phaseDescription(_ phase: ROMSession.Phase) -> String {
         switch phase {
         case .idle: return "idle"
-        case .importing(let name): return "importing \(name)"
         case .starting(let name): return "starting \(name)"
         case .preparing(let name): return "preparing graphics: \(name)"
         case .loaded(let name): return "loaded \(name)"

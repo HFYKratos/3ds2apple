@@ -131,6 +131,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "builder-pack"
+version = "0.1.0"
+dependencies = [
+ "builder-core",
+ "clap",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "builder-windows"
 version = "0.1.0"
 dependencies = [

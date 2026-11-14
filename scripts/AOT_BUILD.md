@@ -9,6 +9,9 @@ ROM → 3dsrecomp (generated C) → clang for arm64-apple-ios → libgame.a
 
 The repository never stores the ROM, the generated C or the resulting IPA.
 
+> For running the runtime in the iOS Simulator on the Intel build VM, see
+> [docs/build-simulator.md](../docs/build-simulator.md).
+
 Each game IPA also carries a build-time `GameCatalog.json` (see
 [GameCatalog and the per-game IPA](#gamecatalog-and-the-per-game-ipa-s2arm-style-distribution)
 below): the phone only selects and launches the AOT code already linked into the

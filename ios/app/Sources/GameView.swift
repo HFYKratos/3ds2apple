@@ -64,7 +64,7 @@ struct GameView: View {
         return false
     }
 
-    private var romName: String { model.lastROM?.name ?? L10n.tr("Game") }
+    private var romName: String { model.currentGame?.title ?? L10n.tr("Game") }
 
     var body: some View {
         GeometryReader { geometry in
@@ -315,9 +315,9 @@ struct GameView: View {
     private var confirmationMessage: String {
         switch confirmationKind {
         case .reset:
-            return L10n.tr("The game restarts from the beginning with the current ROM. Battery saves are kept.")
+            return L10n.tr("The game restarts from the beginning. Battery saves are kept.")
         case .exit:
-            return L10n.tr("The runtime is released and the game closes. Imported ROMs and save data stay on the device.")
+            return L10n.tr("The runtime is released and the game closes. Save data stays on the device.")
         }
     }
 

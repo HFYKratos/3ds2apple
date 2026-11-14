@@ -2,28 +2,45 @@
 //  GameCatalog.swift
 //  3ds2apple
 //
-//  The games this build carries linked AOT code for. The desktop build scripts
-//  write Resources/GameCatalog.json into the app bundle (fixed schema below);
-//  the shell only reads it, to badge a library card as AOT and to skip the
-//  interpreter confirmation when a game matches.
+//  The games this build can run as AOT code. The desktop build writes
+//  Resources/GameCatalog.json into the app bundle; the shell only reads it.
+//  The catalog is the ONLY source of the home-page library: the app never
+//  scans for ROMs and never imports game data on the device.
 //
-//  Schema:
+//  Schema version 2 (this file). Version 1 catalogs still decode unchanged:
+//
 //  {
-//    "schemaVersion": 1,
+//    "schemaVersion": 2,
 //    "games": [
-//      { "titleID": "0004000000055E00", "displayName": "Pokémon Y",
-//        "productCode": "CTR-P-EK2A", "aot": true, "aotVersion": 1, "notes": "" }
+//      { "titleID": "0004000000055E00",          // 16 upper-case hex digits
+//        "displayName": "Pokémon Y",
+//        "productCode": "CTR-P-EK2A",            // optional
+//        "aot": true,                            // AOT code allocated for this game
+//        "aotVersion": 1,                        // optional, >= 1 when aot is true
+//        "packFile": "Frameworks/GamePack-0004000000055E00.dylib",  // optional
+//        "packABIVersion": 1,                    // optional, default 1
+//        "registrationSymbol": "zk_gamepack_register",  // optional override
+//        "coverFile": "Covers/0004000000055E00.png",    // optional
+//        "notes": "" }                           // optional
 //    ]
 //  }
 //
-//  A missing or unreadable GameCatalog.json is not an error: a plain shell
-//  build has no linked game, so the catalog is empty and every game is shown
-//  as interpreter-only.
+//  - "packFile" is a path RELATIVE TO THE APP BUNDLE of the per-game AOT dylib.
+//    When it is absent, the AOT code is statically linked into the app binary
+//    (today's single-game IPA): that is the compatibility fallback.
+//  - "aot": false lists a game the desktop build did not compile. It is shown
+//    in the library as "No AOT" and cannot be started.
+//  - "schemaVersion": 1 catalogs have no packFile, so every AOT entry is treated
+//    as statically linked; that keeps every 0.1.x build working.
+//
+//  A missing or unreadable GameCatalog.json is not an error: a shell build with
+//  no games simply has an empty library, and the home page says games are added
+//  from the computer.
 //
 
 import Foundation
 
-/// One game the build may carry linked AOT code for.
+/// One game this build carries AOT code for, as written by the desktop build.
 struct GameCatalogGame: Codable, Hashable, Identifiable {
     /// 16 upper-case hex digits, e.g. "0004000000055E00".
     let titleID: String
@@ -31,11 +48,20 @@ struct GameCatalogGame: Codable, Hashable, Identifiable {
     let displayName: String
     /// 3DS product code, e.g. "CTR-P-EK2A".
     let productCode: String?
-    /// Whether the static library linked into this build has AOT code for it.
+    /// Whether the desktop build allocated AOT code for this game.
     let aot: Bool
-    /// Version of the linked AOT artifact (informational).
+    /// Version of the AOT artifact itself (informational, >= 1 when aot).
     let aotVersion: Int?
-    /// Free-form note from the build scripts (informational).
+    /// Bundle-relative path of the per-game AOT dylib, nil when the AOT code is
+    /// statically linked into the app binary (today's single-game builds).
+    let packFile: String?
+    /// ABI version of the GamePack dylib contract (AOTPackageLoader.hostABIVersion).
+    let packABIVersion: Int?
+    /// Optional override of the registration symbol the loader looks up.
+    let registrationSymbol: String?
+    /// Optional bundle-relative cover image.
+    let coverFile: String?
+    /// Free-form note from the build pipeline (informational).
     let notes: String?
 
     var id: String { titleID }
@@ -46,6 +72,10 @@ struct GameCatalogGame: Codable, Hashable, Identifiable {
         case productCode
         case aot
         case aotVersion
+        case packFile
+        case packABIVersion
+        case registrationSymbol
+        case coverFile
         case notes
     }
 
@@ -55,6 +85,10 @@ struct GameCatalogGame: Codable, Hashable, Identifiable {
         productCode: String? = nil,
         aot: Bool,
         aotVersion: Int? = nil,
+        packFile: String? = nil,
+        packABIVersion: Int? = nil,
+        registrationSymbol: String? = nil,
+        coverFile: String? = nil,
         notes: String? = nil
     ) {
         self.titleID = titleID.uppercased()
@@ -62,28 +96,42 @@ struct GameCatalogGame: Codable, Hashable, Identifiable {
         self.productCode = productCode
         self.aot = aot
         self.aotVersion = aotVersion
+        self.packFile = packFile
+        self.packABIVersion = packABIVersion
+        self.registrationSymbol = registrationSymbol
+        self.coverFile = coverFile
         self.notes = notes
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let rawTitleID = try container.decodeIfPresent(String.self, forKey: .titleID) ?? ""
-        titleID = rawTitleID.uppercased()
+        titleID = rawTitleID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
         let rawName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? ""
-        displayName = rawName.isEmpty ? titleID : rawName
+        let trimmedName = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        displayName = trimmedName.isEmpty ? titleID : trimmedName
         productCode = try container.decodeIfPresent(String.self, forKey: .productCode)
+        // Version 1 wrote "aot" for every entry; a value this shell cannot see
+        // means "not built", never "assume AOT".
         aot = try container.decodeIfPresent(Bool.self, forKey: .aot) ?? false
         aotVersion = try container.decodeIfPresent(Int.self, forKey: .aotVersion)
+        packFile = try container.decodeIfPresent(String.self, forKey: .packFile)
+        packABIVersion = try container.decodeIfPresent(Int.self, forKey: .packABIVersion)
+        registrationSymbol = try container.decodeIfPresent(String.self, forKey: .registrationSymbol)
+        coverFile = try container.decodeIfPresent(String.self, forKey: .coverFile)
         notes = try container.decodeIfPresent(String.self, forKey: .notes)
     }
 }
 
-/// The linked-game catalog of this build.
+/// The AOT game manifest of this build.
 struct GameCatalog: Codable {
-    /// Schema this shell understands.
-    static let supportedSchemaVersion = 1
+    /// Schema this shell understands. Version 1 catalogs decode as a version 2
+    /// catalog whose entries have no packFile (static-link fallback).
+    static let supportedSchemaVersion = 2
 
-    /// Used when no catalog is bundled (a plain shell build).
+    /// Used when no catalog is bundled (a shell build with no AOT games).
     static let empty = GameCatalog(schemaVersion: GameCatalog.supportedSchemaVersion, games: [])
 
     let schemaVersion: Int
@@ -106,24 +154,27 @@ struct GameCatalog: Codable {
         games = try container.decodeIfPresent([GameCatalogGame].self, forKey: .games) ?? []
     }
 
+    // MARK: - Queries
+
     /// The catalog entry for a title id, nil for a game this build has no data
     /// for. Comparisons are case-insensitive and ignore surrounding spaces.
-    func linkedGame(titleID: String?) -> GameCatalogGame? {
+    func game(titleID: String?) -> GameCatalogGame? {
         guard let normalized = GameCatalog.normalizedTitleID(titleID) else { return nil }
         return games.first { $0.titleID == normalized }
     }
 
-    /// Whether this build has linked AOT code for the title id. The home page
-    /// uses it for the card badge and to decide whether to warn that the game
-    /// runs in the interpreter.
-    func isAOTPlayable(titleID: String?) -> Bool {
-        linkedGame(titleID: titleID)?.aot == true
+    /// Whether the manifest allocates AOT code for the title id.
+    func isAOTBuilt(titleID: String?) -> Bool {
+        guard let game = game(titleID: titleID) else { return false }
+        return game.aot
     }
 
-    /// The games with linked AOT code.
-    var linkedGames: [GameCatalogGame] {
+    /// The games the manifest marks as built.
+    var aotGames: [GameCatalogGame] {
         games.filter { $0.aot }
     }
+
+    // MARK: - Loading
 
     /// 16 upper-case hex digits, or nil when the value is not a title id.
     static func normalizedTitleID(_ raw: String?) -> String? {
@@ -133,8 +184,92 @@ struct GameCatalog: Codable {
         return trimmed
     }
 
-    /// The catalog shipped in the app bundle, written by the desktop build
-    /// scripts. Missing or unreadable means no linked game (empty catalog).
+    /// Decodes a catalog file, drops entries the shell cannot use and logs why.
+    /// Throws only when the JSON itself is unreadable so the caller can fall
+    /// back to an empty catalog.
+    static func load(from url: URL) throws -> GameCatalog {
+        let data = try Data(contentsOf: url)
+        let decoded = try JSONDecoder().decode(GameCatalog.self, from: data)
+        return sanitized(decoded, source: url.lastPathComponent)
+    }
+
+    /// Drops invalid entries and normalizes the catalog. Keeps every valid
+    /// entry, including "aot": false ones, so the library can show them as
+    /// unavailable instead of silently hiding data a build intended to ship.
+    private static func sanitized(_ decoded: GameCatalog, source: String) -> GameCatalog {
+        if decoded.schemaVersion > supportedSchemaVersion {
+            AppLog.log(
+                "[3ds2apple] game catalog: %@ uses schemaVersion %ld, newer than the %ld this shell understands; decoding the fields it knows",
+                source,
+                decoded.schemaVersion,
+                supportedSchemaVersion
+            )
+        } else if decoded.schemaVersion < supportedSchemaVersion {
+            AppLog.log(
+                "[3ds2apple] game catalog: %@ uses legacy schemaVersion %ld; AOT entries without packFile are treated as statically linked",
+                source,
+                decoded.schemaVersion
+            )
+        }
+
+        var games: [GameCatalogGame] = []
+        var seen = Set<String>()
+        for game in decoded.games {
+            guard normalizedTitleID(game.titleID) != nil else {
+                AppLog.log(
+                    "[3ds2apple] game catalog: skipping an entry with invalid titleID '%@'",
+                    game.titleID
+                )
+                continue
+            }
+            guard !seen.contains(game.titleID) else {
+                AppLog.log(
+                    "[3ds2apple] game catalog: skipping duplicate titleID %@",
+                    game.titleID
+                )
+                continue
+            }
+            seen.insert(game.titleID)
+
+            var packFile = game.packFile?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let rawPackFile = packFile, !rawPackFile.isEmpty {
+                if AOTPackageLoader.isValidBundleRelativePath(rawPackFile) {
+                    packFile = rawPackFile
+                } else {
+                    AppLog.log(
+                        "[3ds2apple] game catalog: %@ has an invalid packFile '%@' (must be a relative path inside the app bundle); treating it as statically linked",
+                        game.titleID,
+                        rawPackFile
+                    )
+                    packFile = nil
+                }
+            } else {
+                packFile = nil
+            }
+
+            var coverFile = game.coverFile?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let rawCover = coverFile, rawCover.isEmpty || !AOTPackageLoader.isValidBundleRelativePath(rawCover) {
+                coverFile = nil
+            }
+
+            games.append(GameCatalogGame(
+                titleID: game.titleID,
+                displayName: game.displayName,
+                productCode: game.productCode,
+                aot: game.aot,
+                aotVersion: game.aotVersion,
+                packFile: packFile,
+                packABIVersion: game.packABIVersion,
+                registrationSymbol: game.registrationSymbol,
+                coverFile: coverFile,
+                notes: game.notes
+            ))
+        }
+        return GameCatalog(schemaVersion: decoded.schemaVersion, games: games)
+    }
+
+    /// The catalog shipped in the app bundle (bundle root or Resources/),
+    /// written by the desktop build. Missing or unreadable means no games.
     static let bundled: GameCatalog = loadBundled()
 
     private static func loadBundled(bundle: Bundle = .main) -> GameCatalog {
@@ -142,21 +277,18 @@ struct GameCatalog: Codable {
             ?? bundle.url(forResource: "GameCatalog", withExtension: "json", subdirectory: "Resources")
         else {
             AppLog.log(
-                "[3ds2apple] game catalog: GameCatalog.json is not in the app bundle; every game runs in the interpreter"
+                "[3ds2apple] game catalog: GameCatalog.json is not in the app bundle; the library is empty (build games on the computer and reinstall)"
             )
             return .empty
         }
         do {
-            let data = try Data(contentsOf: url)
-            let decoded = try JSONDecoder().decode(GameCatalog.self, from: data)
-            let games = decoded.games.filter { game in
-                normalizedTitleID(game.titleID) != nil && !game.displayName.isEmpty
-            }
-            let catalog = GameCatalog(schemaVersion: decoded.schemaVersion, games: games)
+            let catalog = try load(from: url)
             AppLog.log(
-                "[3ds2apple] game catalog: %ld game(s), %ld with linked AOT code",
+                "[3ds2apple] game catalog: %@ · schemaVersion %ld · %ld game(s), %ld built",
+                url.lastPathComponent,
+                catalog.schemaVersion,
                 catalog.games.count,
-                catalog.linkedGames.count
+                catalog.aotGames.count
             )
             return catalog
         } catch {

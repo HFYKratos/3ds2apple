@@ -2,7 +2,7 @@
 //  ROMSession.swift
 //  3ds2apple
 //
-//  I2-T1: ROM import + zk_create() wiring.
+//  I2-T1: zk_create() wiring.
 //  I2-T2: frame loop (zk_run_frame → zk_read_screen → CGImage) on the same
 //         serial queue.
 //  I3-T6: per-phase timing for diagnostics and a reusable RGBA /
@@ -45,14 +45,24 @@ import Foundation
 import QuartzCore
 import UIKit
 
-/// A ROM stored in the app's Documents directory.
-struct ImportedROM {
-    /// Display name, e.g. "game.3ds".
-    let name: String
-    /// Path relative to the app's Documents directory, e.g. "roms/game.3ds".
-    /// Persisted instead of an absolute path because the app container path
-    /// changes between installs and updates.
-    let relativePath: String
+/// A catalog game that passed the AOT checks and is ready to load.
+struct GameLaunch {
+    /// The catalog entry being started.
+    let entry: GameEntry
+    /// The cartridge image the runtime reads at load time. Only statically
+    /// linked single-game builds need one: package builds load their image
+    /// through the GamePack registration hook instead.
+    let cartridgeURL: URL
+    /// Documents/data/<title ID>: the runtime's battery-save directory.
+    let dataDirectory: URL
+}
+
+/// A user-facing message on the home page: an AOT-only launch refusal or a
+/// missing-game-data hint. Dismissed with the card's Dismiss button.
+struct SessionNotice: Identifiable, Equatable {
+    let id: UUID
+    let title: String
+    let message: String
 }
 
 /// Rolling status of the frame loop, shown in the UI status line and diagnostics.
@@ -68,18 +78,17 @@ struct FrameStats {
     var timing = FrameTimingSnapshot()
 }
 
-/// Whether this build carries linked 3dsrecomp code and whether the loaded
-/// title is actually executing it (rather than falling back to the interpreter).
+/// The AOT state of the running session. The shell only ever starts a game
+/// whose AOT code this build contains: there is no interpreter fallback, so a
+/// title that is not executing AOT code is stopped instead of reported.
 enum AOTStatus: String {
-    case unknown = "?"
-    case shell = "interpreter shell"
-    case linkedInterpreting = "linked, interpreting"
-    case linkedActive = "linked, active"
+    case notLoaded = "AOT not loaded"
+    case staticLinked = "AOT · linked"
 
     /// Stable English label for the device log and the diagnostics report.
     var label: String { rawValue }
 
-    /// Localized label for the status line and the About/Settings pages.
+    /// Localized label for the About page and diagnostics.
     var title: String { L10n.tr(rawValue) }
 }
 
@@ -114,13 +123,11 @@ enum Presentation: Equatable {
     }
 }
 
-/// Owns the Zakuro runtime handle, the ROM import pipeline and the frame loop.
+/// Owns the Zakuro runtime handle, the AOT game launch pipeline and the frame loop.
 final class ROMSession: ObservableObject, SaveStateRuntime {
     enum Phase {
-        /// Nothing imported or loaded yet.
+        /// Nothing loaded yet.
         case idle
-        /// Copying the picked file into Documents/roms.
-        case importing(name: String)
         /// zk_create() is running on the runtime queue.
         case starting(name: String)
         /// zk_create() succeeded and the first frames are running behind the
@@ -136,8 +143,11 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     }
 
     @Published private(set) var phase: Phase = .idle
-    /// Most recent successfully loaded ROM (nil before the first success).
-    @Published private(set) var lastROM: ImportedROM? = nil
+    /// The catalog game of this session: the game being loaded, loaded, or
+    /// the last one started (nil before the first launch).
+    @Published private(set) var currentGame: GameEntry? = nil
+    /// A user-facing refusal/hint shown on the home page (AOT-only launches).
+    @Published private(set) var notice: SessionNotice? = nil
     /// Latest upper screen frame (400x240), nil until the first frame arrives.
     @Published private(set) var topScreenImage: CGImage? = nil
     /// Latest lower screen frame (320x240), nil until the first frame arrives.
@@ -148,8 +158,8 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     @Published private(set) var controllerName: String? = nil
     /// Audio path state for the status line.
     @Published private(set) var audioState: AudioState = .off
-    /// AOT/linked-code state for the status line.
-    @Published private(set) var aotStatus: AOTStatus = .unknown
+    /// AOT state for the About page and diagnostics.
+    @Published private(set) var aotStatus: AOTStatus = .notLoaded
     /// Active frame-loop driver (`free-run · cap 60 fps` or
     /// `CADisplayLink · 60 Hz`). Stable English for logs and diagnostics.
     @Published private(set) var frameLoopLabel: String = "—"
@@ -211,7 +221,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// runtime queue; the automatic fallback lowers it from the runtime queue.
     private let playbackSpeedState = LockedIntState(initialValue: 1)
     /// Optional first-load graphics warm-up (Settings, off by default). Read
-    /// when a load starts, so it can be toggled without re-loading a ROM.
+    /// when a load starts, so it can be toggled without re-loading the game.
     private let graphicsWarmUpSetting = LockedIntState(initialValue: 0)
     /// A1: drawable size of `metalScreenView` in pixels. Main queue only.
     private(set) var presentedDrawableSize = CGSize.zero
@@ -229,13 +239,6 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Serial queue that owns every zk_* call.
     private let runtimeQueue = DispatchQueue(
         label: "com.kratos.3ds2apple.zakuro-runtime",
-        qos: .userInitiated
-    )
-    /// Serial queue for library imports: copying a multi-GB ROM must not block
-    /// the main thread, and one import at a time keeps the progress status
-    /// honest.
-    private let importQueue = DispatchQueue(
-        label: "com.kratos.3ds2apple.rom-import",
         qos: .userInitiated
     )
     /// Runtime handle; only read/written on `runtimeQueue` (except deinit).
@@ -295,12 +298,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private var warmUpRun: GraphicsWarmUpRun?
 
     init() {
-        // The library is the source of truth for "last game": restore its most
-        // recent entry so the diagnostics line and loadLastROM have context
-        // before the user taps a card.
-        if let entry = GameLibrary.shared.entries.first {
-            lastROM = ImportedROM(name: entry.fileName, relativePath: entry.relativePath)
-        }
+        // The catalog decides what exists; log it once like the old shell logged
+        // the ROMs it had imported.
+        AppLog.log("[3ds2apple] game library: %ld game(s)", GameLibrary.shared.entries.count)
     }
 
     deinit {
@@ -336,99 +336,111 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
 
     // MARK: - Commands (main queue)
 
-    /// Copies the picked file into Documents/roms and adds it to the game
-    /// library. Nothing is loaded: tapping the card starts it later.
-    func importROM(from url: URL) {
-        importROMs(from: [url])
-    }
-
-    /// Imports picked ROM files into the library, one at a time on a private
-    /// queue so several multi-GB copies never run at once and the main thread
-    /// stays responsive. `phase` reports the file being copied; failures are
-    /// collected into one readable message.
-    func importROMs(from urls: [URL]) {
-        guard !urls.isEmpty, !isImporting else { return }
-        let names = urls.map { $0.lastPathComponent }
-        if let unsupported = names.first(where: { !GameLibrary.isSupportedROM($0) }) {
-            setPhase(.failed(message: L10n.format(
-                "Unsupported file “%@”. Choose a decrypted .3ds, .cci or .cia ROM.",
-                unsupported
-            )))
-            return
-        }
-        setPhase(.importing(name: names[0]))
-        importQueue.async { [weak self] in
-            var failures: [String] = []
-            for (index, url) in urls.enumerated() {
-                let name = names[index]
-                DispatchQueue.main.async { [weak self] in
-                    self?.setPhase(.importing(name: name))
-                }
-                do {
-                    let entry = try GameLibrary.makeEntry(importing: url)
-                    DispatchQueue.main.async {
-                        GameLibrary.shared.add(entry)
-                    }
-                } catch {
-                    let reason = error.localizedDescription
-                    failures.append(L10n.format("“%@”: %@", name, reason))
-                    AppLog.log("[3ds2apple] ROM import failed for %@: %@", name, reason)
-                }
-            }
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                if failures.isEmpty {
-                    self.setPhase(.idle)
-                } else {
-                    self.setPhase(.failed(message: failures.joined(separator: "\n")))
-                }
-            }
-        }
-    }
-
-    /// Whether an import is running (the home page disables import and play).
-    var isImporting: Bool {
-        if case .importing = phase { return true }
-        return false
-    }
-
-    /// Starts a game from the library: marks it played and loads its ROM. The
-    /// runtime path (beginLoad then startRuntime) is unchanged.
+    /// Starts a catalog game. The shell only runs AOT code: a game without AOT
+    /// in this build (or whose package is missing) is refused with a clear
+    /// notice instead of falling back to the interpreter.
     func start(_ entry: GameEntry) {
-        let url = GameLibrary.fileURL(for: entry)
-        guard fileManager.fileExists(atPath: url.path) else {
-            setPhase(.failed(message: L10n.format(
-                "“%@” is no longer in this app's Documents folder. Import it again.",
-                entry.title
-            )))
+        guard !isRuntimeActive else { return }
+
+        switch AOTPackageLoader.shared.availability(for: entry) {
+        case .unavailable(let reason):
+            presentNoAOTNotice(for: entry, reason: reason)
+        case .available(.bundlePackage):
+            switch AOTPackageLoader.shared.resolve(for: entry) {
+            case .package(let package):
+                presentNotice(
+                    title: L10n.tr("AOT package ready"),
+                    message: L10n.format(
+                        "The game package “%@” is installed and registered for “%@”. Starting games from a package needs the next runtime build; this shell can only start the game whose AOT code is linked into it.",
+                        package.bundleRelativePath,
+                        entry.title
+                    )
+                )
+            case .unavailable(let reason):
+                presentNoAOTNotice(for: entry, reason: reason)
+            case .staticLinked:
+                startStaticallyLinked(entry)
+            }
+        case .available(.staticLinked):
+            startStaticallyLinked(entry)
+        }
+    }
+
+    /// Loads the game whose recompiled code is linked into this binary (the
+    /// 0.1.x single-game IPA shape). The cartridge image comes from the old
+    /// Documents/roms library; the save folders are moved to the title-id
+    /// namespace first.
+    private func startStaticallyLinked(_ entry: GameEntry) {
+        guard let cartridgeURL = LegacyGameData.cartridgeURL(forTitleID: entry.titleID) else {
+            presentNotice(
+                title: L10n.tr("Game data missing"),
+                message: L10n.format(
+                    "This build contains the AOT code for “%@”, but its game data is not in this app any more. Reinstall the game build from your computer, or build it again with the desktop app.",
+                    entry.title
+                )
+            )
             return
         }
-        GameLibrary.shared.markPlayed(id: entry.id)
-        lastROM = ImportedROM(name: entry.fileName, relativePath: entry.relativePath)
+        LegacyGameData.migrateSaveDirectories(
+            titleID: entry.titleID,
+            legacyFileName: cartridgeURL.lastPathComponent
+        )
+        let dataDirectory = documentsDirectory
+            .appendingPathComponent("data", isDirectory: true)
+            .appendingPathComponent(
+                SaveDataStore.directoryName(forNamespace: entry.titleID),
+                isDirectory: true
+            )
+
+        GameLibrary.shared.markPlayed(titleID: entry.titleID)
+        let game = GameLibrary.shared.entry(titleID: entry.titleID) ?? entry
+        currentGame = game
+        notice = nil
         stopFrameLoop()
         stopAudio()
         inputState.clearAll()
         isPaused = false
         warmUp = GraphicsWarmUpStatus()
-        setPhase(.starting(name: entry.fileName))
+        setPhase(.starting(name: game.title))
+        let launch = GameLaunch(entry: game, cartridgeURL: cartridgeURL, dataDirectory: dataDirectory)
         runtimeQueue.async { [weak self] in
             guard let self else { return }
-            self.beginLoad(ImportedROM(name: entry.fileName, relativePath: entry.relativePath))
+            self.beginLoad(launch)
         }
     }
 
-    /// Loads the most recently played game in the library.
-    func loadLastROM() {
-        guard let entry = GameLibrary.shared.mostRecentlyPlayed
-            ?? GameLibrary.shared.entries.first else {
-            setPhase(.failed(message: L10n.tr("No games in your library yet. Import a ROM first.")))
-            return
-        }
-        start(entry)
+    /// Shows the "No AOT build for this game" state on the home page.
+    func presentNoAOTNotice(for entry: GameEntry, reason: AOTUnavailableReason) {
+        presentNotice(
+            title: L10n.tr("No AOT build for this game"),
+            message: L10n.format("%@ — %@", entry.title, reason.localizedMessage)
+        )
     }
 
-    /// Releases the runtime handle and returns to the "no ROM loaded" state.
-    /// The imported file stays in Documents so it can be loaded again.
+    /// Publishes one dismissible notice on the home page.
+    func presentNotice(title: String, message: String) {
+        let notice = SessionNotice(id: UUID(), title: title, message: message)
+        if Thread.isMainThread {
+            self.notice = notice
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.notice = notice
+            }
+        }
+        AppLog.log("[3ds2apple] notice: %@ — %@", title, message)
+    }
+
+    /// Publishes an AOT-only refusal that arrives from the runtime queue. Call
+    /// it on the main queue (startRuntime hops there first).
+    func presentNoAOTMessage(_ message: String) {
+        currentGame = nil
+        aotStatus = .notLoaded
+        presentNotice(title: L10n.tr("No AOT build for this game"), message: message)
+        setPhase(.idle)
+    }
+
+    /// Releases the runtime handle and returns to the home page. The game stays
+    /// selected so its save data can still be managed from the Save Manager.
     func unload() {
         stopFrameLoop()
         stopAudio()
@@ -441,6 +453,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
                 guard let self else { return }
                 self.clearScreens()
                 self.warmUp = GraphicsWarmUpStatus()
+                self.aotStatus = .notLoaded
                 self.setPhase(.idle)
             }
         }
@@ -464,7 +477,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
                 self.clearScreens()
                 self.warmUp = GraphicsWarmUpStatus()
                 self.setPhase(.finished(
-                    message: L10n.tr("The runtime was stopped when the app went to the background. Load the ROM again to continue.")
+                    message: L10n.tr("The runtime was stopped when the app went to the background. Open the game again to continue.")
                 ))
             }
         }
@@ -480,8 +493,13 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         }
     }
 
-    /// Clears a failure/finished notice without touching a loaded runtime.
+    /// Clears the home-page notice or a failure/finished state without
+    /// touching a loaded runtime.
     func dismissNotice() {
+        if notice != nil {
+            notice = nil
+            return
+        }
         if case .failed = phase {
             setPhase(.idle)
         } else if case .finished = phase {
@@ -527,7 +545,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     var isRuntimeActive: Bool {
         switch phase {
         case .starting, .preparing, .loaded: return true
-        case .idle, .importing, .failed, .finished: return false
+        case .idle, .failed, .finished: return false
         }
     }
 
@@ -613,7 +631,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
 
     /// Shows or hides the system Metal Performance HUD on the presented layer.
     /// Applies immediately when the layer exists and is re-applied whenever the
-    /// Metal view is (re)used, so the choice survives menu navigation and ROM
+    /// Metal view is (re)used, so the choice survives menu navigation and a
     /// reloads. The readback path has no CAMetalLayer, so the setting only
     /// matters there once a presented load runs.
     func setSystemMetalHUD(_ enabled: Bool) {
@@ -642,7 +660,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     // MARK: - Graphics warm-up (main queue sets, runtimeQueue reads)
 
     /// Turns the optional first-load graphics warm-up on or off. Off (the
-    /// default) reveals the game as soon as the ROM is loaded; the runtime's
+    /// default) reveals the game as soon as it is loaded; the runtime's
     /// pipeline-cache persistence is not affected either way.
     func setGraphicsWarmUpEnabled(_ enabled: Bool) {
         graphicsWarmUpSetting.set(enabled ? 1 : 0)
@@ -722,7 +740,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
 
     /// Pauses the frame loop and the audio engine for the in-game menu. The
     /// runtime and the last frame stay; `resumeFromMenu()` continues the same
-    /// session without re-loading the ROM.
+    /// session without re-loading the game.
     func pauseForMenu() {
         guard !isPaused, case .loaded = phase else { return }
         isPaused = true
@@ -736,19 +754,23 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     func resumeFromMenu() {
         guard isPaused else { return }
         isPaused = false
-        guard case .loaded = phase, let rom = lastROM else { return }
-        startFrameLoop(warmUp: nil, romKey: rom.relativePath)
+        guard case .loaded = phase, let game = currentGame else { return }
+        startFrameLoop(warmUp: nil, romKey: game.titleID)
         startAudio()
         AppLog.log("[3ds2apple] runtime resumed")
     }
 
-    /// Restarts the loaded game from its ROM. Save data is kept: the same
-    /// per-ROM data directory is passed to the new runtime.
+    /// Restarts the loaded game. Save data is kept: the same per-title data
+    /// directory is passed to the new runtime.
     func resetRuntime() {
-        guard case .loaded = phase else { return }
+        guard case .loaded = phase, let game = currentGame else { return }
         AppLog.log("[3ds2apple] runtime reset requested")
         isPaused = false
-        loadLastROM()
+        stopFrameLoop()
+        stopAudio()
+        inputState.clearAll()
+        setPhase(.idle)
+        start(game)
     }
 
     // MARK: - Save states (main queue control, runtimeQueue executes)
@@ -765,8 +787,8 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         return false
     }
 
-    /// ROM name used to name the save-state folder (the last imported game).
-    var saveStateROMName: String? { lastROM?.name }
+    /// Title-id namespace used for the save-state folder of the loaded game.
+    var saveStateNamespace: String? { currentGame?.titleID }
 
     /// Stops the frame loop and the audio engine before the console is
     /// serialized or restored, so a state is always taken between frames.
@@ -788,9 +810,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// nothing (the caller paused the game separately).
     func resumeAfterStateWork(_ suspended: Bool) {
         guard suspended else { return }
-        guard case .loaded = phase, let rom = lastROM else { return }
+        guard case .loaded = phase, let game = currentGame else { return }
         isPaused = false
-        startFrameLoop(warmUp: nil, romKey: rom.relativePath)
+        startFrameLoop(warmUp: nil, romKey: game.titleID)
         startAudio()
         AppLog.log("[3ds2apple] runtime resumed after the save-state operation")
     }
@@ -833,23 +855,23 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// presenter are main-queue objects, so this hops over, creates them if
     /// needed, and starts the load back on the runtime queue. runtimeQueue only
     /// (the calls themselves follow the queue rules above).
-    private func beginLoad(_ rom: ImportedROM) {
+    private func beginLoad(_ launch: GameLaunch) {
         // Show "Starting Zakuro…" (and the Metal view, once it exists) while
-        // the ROM loads; `importROM` was still showing the copy phase.
-        setPhase(.starting(name: rom.name))
+        // the runtime loads.
+        setPhase(.starting(name: launch.entry.title))
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let presenter = self.presenterForLoadOnMain()
             let drawableSize = self.presentedDrawableSize
             self.runtimeQueue.async { [weak self] in
-                self?.startRuntime(for: rom, presenter: presenter, drawableSize: drawableSize)
+                self?.startRuntime(for: launch, presenter: presenter, drawableSize: drawableSize)
             }
         }
     }
 
     /// Creates the `MetalScreenView` and its presenter the first time a load
     /// asks for them and reuses them afterwards (the layer outlives a single
-    /// ROM). Main queue only.
+    /// game). Main queue only.
     ///
     /// Returns `nil` when the Metal path is off or unavailable; the caller then
     /// uses `zk_create` + `zk_read_screen`. A failure is remembered, so later
@@ -1025,21 +1047,24 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         }
     }
 
-    /// zk_create() for `rom`: destroy old handle, create new one, publish state
-    /// and start the frame loop. Must run on `runtimeQueue`.
+    /// zk_create() for a launch: destroy the old handle, create the new one,
+    /// publish state and start the frame loop. Must run on `runtimeQueue`.
     ///
-    /// A1: with a non-nil `presenter` the ROM loads through
+    /// A1: with a non-nil `presenter` the game loads through
     /// `zk_create_presented`, so its screens are shown on the app's
     /// CAMetalLayer. A presented load that fails is retried once with the plain
-    /// `zk_create` readback path, so a presenter problem cannot make a ROM
+    /// `zk_create` readback path, so a presenter problem cannot make a game
     /// unplayable.
-    private func startRuntime(for rom: ImportedROM,
+    ///
+    /// AOT-only: after zk_create() the handle must report linked AOT code
+    /// (zk_recompiled() == 1). A title the runtime would interpret is stopped
+    /// here with the "No AOT build for this game" notice; there is no
+    /// interpreter fallback any more.
+    private func startRuntime(for launch: GameLaunch,
                               presenter: UnsafeMutableRawPointer?,
                               drawableSize: CGSize) {
-        let romURL = documentsDirectory.appendingPathComponent(rom.relativePath)
-        let dataDirectory = documentsDirectory
-            .appendingPathComponent("data", isDirectory: true)
-            .appendingPathComponent(SaveDataStore.gameDirectoryName(for: rom.name), isDirectory: true)
+        let romURL = launch.cartridgeURL
+        let dataDirectory = launch.dataDirectory
         do {
             try fileManager.createDirectory(at: dataDirectory, withIntermediateDirectories: true)
         } catch {
@@ -1047,7 +1072,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             return
         }
 
-        // Replacing a ROM always releases the previous handle first, and that
+        // Replacing a game always releases the previous handle first, and that
         // release is when Zakuro writes the pipelines it compiled to its cache
         // (Caches/zakuro/pipelines, one file per title). Read the directory
         // after it so the log/plan says whether this is a cold first run or a
@@ -1108,16 +1133,35 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         case 2: displayPath = .metalUploaded
         default: displayPath = .readback
         }
-        let linked = zk_linked_code() == 1
-        let recompiled = zk_recompiled(handle) == 1
         let programID = zk_linked_program_id()
-        let aot: AOTStatus = linked ? (recompiled ? .linkedActive : .linkedInterpreting) : .shell
+        let recompiled = zk_recompiled(handle) == 1
         let hardwareStatus = Self.hardwareStatusText(handle)
-        AppLog.log("[3ds2apple] AOT linked=%d recompiled=%d program=0x%016llx status=%@",
-              linked ? 1 : 0, recompiled ? 1 : 0, programID, aot.label)
+        guard recompiled else {
+            // No interpreter fallback: a title the runtime would interpret must
+            // not run at all. Release the handle again and tell the user why.
+            let linkedTitle = String(format: "%016llX", programID)
+            zk_destroy(handle)
+            system = nil
+            framePresenter = nil
+            presentFailures = 0
+            let message = L10n.format(
+                "No AOT build for this game: “%@” was loaded, but the runtime is not executing AOT code (linked title %@).",
+                launch.entry.title,
+                linkedTitle
+            )
+            AppLog.log("[3ds2apple] %@", message)
+            DispatchQueue.main.async { [weak self] in
+                self?.presentNoAOTMessage(message)
+            }
+            return
+        }
+        let aot: AOTStatus = .staticLinked
+        AppLog.log("[3ds2apple] AOT linked=1 recompiled=1 program=0x%016llX status=%@",
+              programID, aot.label)
         AppLog.log("[3ds2apple] display: %@", displayPath.label)
         AppLog.log("[3ds2apple] hardware: %@", hardwareStatus)
-        AppLog.log("[3ds2apple] zk_create OK after %.1f s: %@", elapsed, rom.relativePath)
+        AppLog.log("[3ds2apple] zk_create OK after %.1f s: %@ (%@)",
+              elapsed, launch.entry.title, romURL.lastPathComponent)
 
         // A cold first run spends hundreds of milliseconds per new GPU pipeline
         // inside a frame while the driver compiles it. The optional warm-up runs
@@ -1127,10 +1171,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         // regardless. A software renderer has no pipelines to warm.
         let warmUpSettingOn = graphicsWarmUpSetting.current == 1
         let plan = warmUpSettingOn
-            ? Self.graphicsWarmUpPlan(hardwareStatus: hardwareStatus, cache: cacheAtLoad, rom: rom)
+            ? Self.graphicsWarmUpPlan(hardwareStatus: hardwareStatus, cache: cacheAtLoad, romKey: launch.entry.titleID)
             : nil
         if !warmUpSettingOn {
-            AppLog.log("[3ds2apple] graphics warm-up: off in Settings; revealing the game as soon as the ROM loads")
+            AppLog.log("[3ds2apple] graphics warm-up: off in Settings; revealing the game as soon as it loads")
         } else if let plan {
             AppLog.log("[3ds2apple] graphics warm-up: planned %@ (%@, max %.0f s, %ld quiet frames)",
                   plan.fromWarmCache ? "short (pipelines cached)" : "full (cold cache)",
@@ -1139,7 +1183,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.lastROM = rom
+            self.currentGame = launch.entry
             self.inputState.clearAll()
             self.clearScreens()
             self.aotStatus = aot
@@ -1147,15 +1191,15 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             self.hardwareStatus = hardwareStatus
             self.pipelineCacheStats = cacheAtLoad
             if let plan {
-                self.beginGraphicsWarmUp(plan: plan, rom: rom)
+                self.beginGraphicsWarmUp(plan: plan, launch: launch)
             } else {
                 // Disabled by the setting, or a software renderer: reveal now.
                 self.warmUp = warmUpSettingOn
                     ? GraphicsWarmUpStatus.skippedForSoftware()
                     : GraphicsWarmUpStatus.skippedForDisabledSetting()
                 AppLog.log("[3ds2apple] graphics warm-up: %@", self.warmUp.logLine)
-                self.setPhase(.loaded(name: rom.name))
-                self.startFrameLoop(warmUp: nil, romKey: rom.relativePath)
+                self.setPhase(.loaded(name: launch.entry.title))
+                self.startFrameLoop(warmUp: nil, romKey: launch.entry.titleID)
                 self.startAudio()
             }
         }
@@ -1164,26 +1208,26 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Whether (and how long) to warm the GPU pipelines for this load.
     ///
     /// Only a renderer drawing on the host GPU compiles Vulkan pipelines; a
-    /// software renderer is revealed immediately. A ROM whose warm-up completed
+    /// software renderer is revealed immediately. A game whose warm-up completed
     /// in this app install, with cache files still on disk, gets the shorter
     /// `warm` plan: its pipelines only need to be loaded from the cache.
     private static func graphicsWarmUpPlan(hardwareStatus: String,
                                            cache: PipelineCacheStats,
-                                           rom: ImportedROM) -> GraphicsWarmUpPlan? {
+                                           romKey: String) -> GraphicsWarmUpPlan? {
         guard hardwareStatus.contains("draws on the host GPU") else { return nil }
-        let alreadyWarmed = GraphicsWarmUpMarker.wasCompleted(romKey: rom.relativePath)
+        let alreadyWarmed = GraphicsWarmUpMarker.wasCompleted(romKey: romKey)
         return alreadyWarmed && cache.isWarm ? .warm : .cold
     }
 
     /// Starts the warm-up behind the "Preparing graphics" overlay: publishes the
     /// phase, sets the runtime queue's tracker and starts the frame loop.
     /// Main queue only.
-    private func beginGraphicsWarmUp(plan: GraphicsWarmUpPlan, rom: ImportedROM) {
+    private func beginGraphicsWarmUp(plan: GraphicsWarmUpPlan, launch: GameLaunch) {
         warmUp = GraphicsWarmUpStatus.starting(plan: plan)
-        setPhase(.preparing(name: rom.name))
+        setPhase(.preparing(name: launch.entry.title))
         AppLog.log("[3ds2apple] graphics warm-up: starting (%@)",
               plan.fromWarmCache ? "cached pipelines, short run" : "cold cache, full run")
-        startFrameLoop(warmUp: plan, romKey: rom.relativePath)
+        startFrameLoop(warmUp: plan, romKey: launch.entry.titleID)
         startAudio()
     }
 
@@ -1199,10 +1243,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// that just saw `zk_create()` fail (the error slot is thread-local).
     private static func currentRuntimeError() -> String {
         guard let pointer = zk_last_error() else {
-            return L10n.tr("The Zakuro runtime could not load this ROM (no error text was reported).")
+            return L10n.tr("The Zakuro runtime could not load this game (no error text was reported).")
         }
         let text = String(cString: pointer)
-        return text.isEmpty ? L10n.tr("The Zakuro runtime could not load this ROM (empty error text).") : text
+        return text.isEmpty ? L10n.tr("The Zakuro runtime could not load this game (empty error text).") : text
     }
 
     // MARK: - Frame loop (main thread starts/stops, runtimeQueue executes)
@@ -1577,7 +1621,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
                 GraphicsWarmUpMarker.markCompleted(romKey: run.romKey)
             }
             if case .preparing = self.phase {
-                self.setPhase(.loaded(name: self.lastROM?.name ?? ""))
+                self.setPhase(.loaded(name: self.currentGame?.title ?? ""))
             }
         }
     }
@@ -1876,10 +1920,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         }
     }
 
-    // MARK: - ROM storage
+    // MARK: - Game storage
 
-    /// The app's Documents folder: the library keeps ROMs under roms/, the
-    /// runtime writes its battery save data under data/.
+    /// The app's Documents folder: 0.1.x cartridges still live under roms/,
+    /// the runtime writes battery saves under data/<title id>/.
     private var documentsDirectory: URL {
         fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
@@ -1888,10 +1932,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     // MARK: - State (main queue)
 
     /// UI preview only: pretend a game is loaded so `GameView` can be rendered
-    /// headlessly by ios/preview. No console exists and no Zakuro call is made;
-    /// compiled only in Debug builds.
+    /// headlessly by ios/preview. No console exists and no Zakuro call is made.
     func previewSetLoaded(name: String) {
-        lastROM = ImportedROM(name: name, relativePath: "roms/preview.cci")
+        currentGame = GameEntry(titleID: "0004000000055E00", title: name, aot: true)
+        aotStatus = .staticLinked
         setPhase(.loaded(name: name))
         // Solid stand-ins so headless UI snapshots show where each screen lands.
         topScreenImage = previewScreenImage(width: 400, height: 240, red: 0.05, green: 0.18, blue: 0.30)
@@ -1928,7 +1972,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     }
 
     private func publishFailure(_ message: String) {
-        AppLog.log("[3ds2apple] ROM load failed: %@", message)
+        AppLog.log("[3ds2apple] game load failed: %@", message)
         setPhase(.failed(message: message))
     }
 }
@@ -1947,7 +1991,7 @@ private final class FrameLoopProxy: NSObject {
 /// Generation-guarded on/off switch for the free-run frame loop (I3-T9).
 ///
 /// The main thread calls `start()` when a runtime is loaded and `stop()` on
-/// Unload / Change ROM / background / exit / fault / deinit. The runtime queue
+/// Unload / background / exit / fault / deinit. The runtime queue
 /// checks `isCurrent(_:)` before every frame and before scheduling the next one.
 ///
 /// The generation is what makes stopping safe: a frame that was queued before

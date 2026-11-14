@@ -3,7 +3,7 @@
 //  3ds2apple
 //
 //  Filesystem facts for the Storage settings and the Save Manager: how much
-//  space the imported ROMs, the runtime save data, the app logs and the
+//  space the legacy game files, the runtime save data, the app logs and the
 //  regenerable graphics pipeline cache use, and which save files exist.
 //
 //  Everything stays inside the app container. The inspector itself only reads

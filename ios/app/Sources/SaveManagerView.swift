@@ -148,11 +148,11 @@ struct SaveManagerView: View {
 
     private var summaryCard: some View {
         card(title: "Summary", systemImage: "externaldrive.fill") {
-            Text(gameName ?? L10n.tr("No game imported"))
+            Text(gameTitle ?? L10n.tr("No game selected"))
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
                 .truncationMode(.middle)
-            if gameName != nil {
+            if gameTitle != nil {
                 statRow("Battery saves", L10n.format("%@ · %@", L10n.fileCount(files.count), StorageFormat.size(batterySaveBytes)))
                 statRow("Save states", L10n.format("%@ · %@", L10n.slotCount(savedSlotCount, of: SaveStateSupport.slotCount), StorageFormat.size(saveStates.totalBytes)))
                 statRow("App storage", snapshot.totalText)
@@ -162,8 +162,8 @@ struct SaveManagerView: View {
 
     private var batterySaveCard: some View {
         card(title: "Battery saves", systemImage: "sdcard.fill") {
-            if gameName == nil {
-                emptyHint("Import a game first: battery saves are listed per game.")
+            if gameTitle == nil {
+                emptyHint("Start a game first: battery saves are listed per game.")
             } else if files.isEmpty {
                 emptyHint("No battery save data yet. Save from the game's own menu and the files appear here.")
             } else {
@@ -216,7 +216,7 @@ struct SaveManagerView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .disabled(gameName == nil || !canChangeBatterySaves)
+                .disabled(gameTitle == nil || !canChangeBatterySaves)
                 .accessibilityIdentifier("save-data-import")
             }
 
@@ -325,7 +325,11 @@ struct SaveManagerView: View {
 
     // MARK: - State helpers
 
-    private var gameName: String? { model.lastROM?.name }
+    /// Display name of the game whose saves are shown.
+    private var gameTitle: String? { model.currentGame?.title }
+
+    /// Title-id namespace of that game's save-data / save-state folders.
+    private var namespace: String? { model.currentGame?.titleID }
 
     private var isBusy: Bool { busyMessage != nil }
 
@@ -363,9 +367,9 @@ struct SaveManagerView: View {
 
     private func refresh() {
         saveStates.refresh()
-        let gameName = self.gameName
+        let namespace = self.namespace
         DispatchQueue.global(qos: .userInitiated).async {
-            let files = gameName.map { SaveDataStore.batterySaveFiles(forROMName: $0) } ?? []
+            let files = namespace.map { SaveDataStore.batterySaveFiles(namespace: $0) } ?? []
             let snapshot = StorageInspector.snapshot()
             DispatchQueue.main.async {
                 self.files = files
@@ -385,9 +389,9 @@ struct SaveManagerView: View {
         statusMessage = nil
         switch deletion {
         case .batterySave(let file):
-            guard let gameName else { return }
+            guard let namespace else { return }
             do {
-                try SaveDataStore.remove(file, forROMName: gameName)
+                try SaveDataStore.remove(file, namespace: namespace)
                 statusMessage = L10n.format("Deleted “%@”.", file.name)
                 refresh()
             } catch {
@@ -403,18 +407,18 @@ struct SaveManagerView: View {
     }
 
     private func share(_ file: BatterySaveFile) {
-        guard let gameName else { return }
-        sheet = .share(SaveDataStore.batterySaveURL(for: file, forROMName: gameName))
+        guard let namespace else { return }
+        sheet = .share(SaveDataStore.batterySaveURL(for: file, namespace: namespace))
     }
 
     private func exportArchive() {
-        guard let gameName, !isBusy else { return }
+        guard let namespace, !isBusy else { return }
         errorMessage = nil
         statusMessage = nil
         busyMessage = L10n.tr("Packing battery saves into a ZIP archive…")
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                let url = try SaveDataStore.exportArchive(forROMName: gameName)
+                let url = try SaveDataStore.exportArchive(namespace: namespace)
                 DispatchQueue.main.async {
                     self.busyMessage = nil
                     self.statusMessage = L10n.tr("The backup is ready to share.")
@@ -430,13 +434,13 @@ struct SaveManagerView: View {
     }
 
     private func importSaveData(from url: URL) {
-        guard let gameName, !model.isRuntimeActive, !isBusy else { return }
+        guard let namespace, !model.isRuntimeActive, !isBusy else { return }
         errorMessage = nil
         statusMessage = nil
         busyMessage = L10n.tr("Importing battery saves…")
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                let summary = try SaveDataStore.importSaveData(from: url, forROMName: gameName)
+                let summary = try SaveDataStore.importSaveData(from: url, namespace: namespace)
                 let skipped = summary.skippedEntries
                 DispatchQueue.main.async {
                     self.busyMessage = nil

@@ -6,7 +6,7 @@
 //  session phase, and keeps the runtime in step with the persisted settings.
 //
 //  Phase-driven navigation: the home page is shown while nothing is loaded;
-//  from the moment a ROM starts loading, the game view owns the screen (it
+//  from the moment a game starts loading, the game view owns the screen (it
 //  shows the optional warm-up overlay until the game is revealed). Unload /
 //  exit returns to the home page.
 //
@@ -98,7 +98,7 @@ struct ContentView: View {
         switch model.phase {
         case .starting, .preparing, .loaded:
             return true
-        case .idle, .importing, .failed, .finished:
+        case .idle, .failed, .finished:
             return false
         }
     }
@@ -121,7 +121,7 @@ struct ContentView: View {
     // MARK: - Diagnostics
 
     /// One line in `idevicesyslog` that proves the static library was linked and
-    /// called on device, plus the ROM state at launch.
+    /// called on device, plus the catalog/library state at launch.
     private func logRuntimeProbe() {
         let top = ZakuroScreen(which: 0)
         let bottom = ZakuroScreen(which: 1)
@@ -135,10 +135,10 @@ struct ContentView: View {
         )
         AppLog.log("[3ds2apple] language: %@", L10n.diagnosticsLine)
         AppLog.log("[3ds2apple] library: %ld game(s)", library.entries.count)
-        if let last = model.lastROM {
-            AppLog.log("[3ds2apple] last imported ROM: %@", last.relativePath)
+        if let game = model.currentGame {
+            AppLog.log("[3ds2apple] current game: %@ (%@)", game.title, game.titleID)
         } else {
-            AppLog.log("[3ds2apple] no ROM imported yet")
+            AppLog.log("[3ds2apple] no game loaded yet")
         }
     }
 }

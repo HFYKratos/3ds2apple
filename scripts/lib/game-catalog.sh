@@ -156,9 +156,10 @@ if not isinstance(data, dict):
 
 schema_version = data.get("schemaVersion")
 if isinstance(schema_version, bool) or not isinstance(schema_version, int):
-    fail("schemaVersion must be the integer 1")
-if schema_version != 1:
-    fail("unsupported schemaVersion %r (expected 1)" % (schema_version,))
+    fail("schemaVersion must be the integer 1 or 2")
+if schema_version not in (1, 2):
+    fail("unsupported schemaVersion %r (expected 1 for the legacy statically linked"
+         " single-game catalog, or 2 for the multi-game package catalog)" % (schema_version,))
 
 games = data.get("games")
 if not isinstance(games, list):
@@ -201,6 +202,33 @@ for index, game in enumerate(games):
     notes = game["notes"]
     if not isinstance(notes, str) or len(notes) > 500:
         fail("%s.notes must be a string of at most 500 characters" % where)
+    # Multi-game extension (schemaVersion 2): every entry written by the desktop
+    # pipeline names its app-bundle-relative AOT pack. An absent packFile is only
+    # valid for the legacy static-link schemaVersion 1 catalog (see
+    # ios/app/Sources/GameCatalog.swift + AOTPackageLoader.swift).
+    if schema_version == 2 and not game.get("packFile"):
+        fail("%s: schemaVersion 2 requires packFile 'Frameworks/GamePack-%s.dylib'"
+             % (where, title_id))
+    if "packFile" in game:
+        pack_file = game["packFile"]
+        expected_pack = "Frameworks/GamePack-%s.dylib" % title_id
+        if not isinstance(pack_file, str) or pack_file != expected_pack:
+            fail("%s.packFile must be '%s' (got %r)" % (where, expected_pack, pack_file))
+        pack_abi = game.get("packABIVersion")
+        if pack_abi is not None:
+            if isinstance(pack_abi, bool) or not isinstance(pack_abi, int) or pack_abi < 1:
+                fail("%s.packABIVersion must be an integer >= 1 (got %r)" % (where, pack_abi))
+        registration = game.get("registrationSymbol")
+        if registration is not None:
+            if not isinstance(registration, str) or not registration \
+                    or not all(char.isalnum() or char == "_" for char in registration):
+                fail("%s.registrationSymbol must be a C identifier (got %r)"
+                     % (where, registration))
+        cover = game.get("coverFile")
+        if cover is not None:
+            expected_cover = "Covers/%s.png" % title_id
+            if not isinstance(cover, str) or cover != expected_cover:
+                fail("%s.coverFile must be '%s' (got %r)" % (where, expected_cover, cover))
     if aot:
         aot_lines.append("%s (%s)" % (display_name, title_id))
 

@@ -61,7 +61,9 @@ installed) from the repository root:
     scripts/ios-ui-preview.sh --help
 
 Screens: `home` (default), `settings`, `quick`, `ingame`, `savemanager`,
-`about`. The default set is `home,settings,quick,ingame,savemanager`.
+`about`. The headless renderer additionally writes `home-empty`, the
+catalog-seeded `home` and `home-no-aot` (the AOT-only refusal notice). The
+simulator script's default set is `home,settings,quick,ingame,savemanager`.
 PNGs go to `ios/preview/build/screenshots/<screen>.png` and the script prints
 their absolute paths at the end. `--dark` sets `ZKPREVIEW_DARK=1`, and
 `--launch-delay` tunes the wait between launch and screenshot.
@@ -81,11 +83,12 @@ their absolute paths at the end. `--dark` sets `ZKPREVIEW_DARK=1`, and
 4. Picks the newest available iOS runtime and prefers an `iPhone 14 Pro Max`
    device type (falling back to the first iPhone), creates a device when none
    exists, boots it headless and waits with `simctl bootstatus -b`.
-5. Installs the app, writes three synthetic `GameEntry` records to
-   `Documents/Library/library.json` plus few-KB placeholder files under
-   `Documents/roms/` (never real ROM data), then launches once per screen
-   with `SIMCTL_CHILD_ZKPREVIEW_SCREEN=<screen>` and captures
-   `xcrun simctl io <udid> screenshot`.
+5. Installs the app and launches once per screen with
+   `SIMCTL_CHILD_ZKPREVIEW_SCREEN=<screen>`, capturing
+   `xcrun simctl io <udid> screenshot`. NOTE: the simulator path still seeds
+   the old `Documents/Library/library.json` (0.1.x library); the AOT-only shell
+   reads `GameCatalog.json`, so the Catalyst headless path below (which seeds a
+   synthetic catalog in memory) is the one to use until this script is updated.
 6. Shuts the simulator down (or deletes it when the script created it) unless
    `--keep-simulator` is passed.
 
@@ -104,9 +107,11 @@ prefix, which the script adds.
 ## Known caveats
 
 - The stubs return 0 or NULL, so runtime-derived values are neutral in the
-  screenshots: `zk_screen_width()` is 0, `zk_linked_code()` is 0, and the
-  bundled game catalog is empty. The home screen's AOT badge therefore reads
-  "interpreter" for every seeded game. Layout must not depend on those values.
+  screenshots: `zk_screen_width()` is 0 and `zk_linked_code()` is 0. The
+  headless renderer installs a synthetic in-memory catalog and marks one title
+  as statically linked (`AOTPackageLoader.previewStaticTitleIDs`) so the home
+  screen shows the real AOT/No-AOT badge and notice states. Layout must not
+  depend on those values.
 - The preview compiles whatever is in `ios/app/Sources` right now. If the
   working tree does not compile, the preview does not compile either; fix the
   shell first.
