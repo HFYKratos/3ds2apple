@@ -8,16 +8,16 @@
 
 平台：iPhone / iPad（iOS 16+） · 构建：macOS + Xcode · 安装：Sideloadly / SideStore / AltStore 侧载 · 许可：Apache-2.0 · **自带游戏**
 
-> **当前 shell 版本：v0.1.4（2026-11-14）** — [GitHub Release](https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.4)
+> **当前 shell 版本：v0.1.5-beta1（2026-11-14）** — [GitHub Release](https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.5-beta1)
 >
-> 界面排版：游戏库卡片对齐、AOT 徽标移到封面、补充“3D 分辨率”标签、日期本地化，并修复英文界面混入中文的问题。
-> UI layout pass: aligned game-library cards with the AOT badge on the cover, a labelled 3D-resolution picker, localized relative dates, repaired English strings.
+> 界面打磨：存档/诊断/关于移入设置，免责声明居中；设置项提示统一放在控件下方；游戏画面重设计为圆角画面舞台、标题/暂停栏和玻璃质感触摸按键。
+> UI polish: Saves / Diagnostics / About moved into Settings, the disclaimer is centered, every Settings hint sits inline under its control, and the game screen is redesigned with a rounded stage, a title/pause bar and glass touch controls.
 
 **状态：早期开发。** shell 可以导入你自己的 ROM、维护多游戏库并通过解释器运行；要达到接近 60fps 需要在自己 Mac 上用自有 ROM 构建 per-game AOT 版本。兼容性、稳定性和支持的游戏数量仍在验证中。
 
 ## 试用 shell 构建
 
-v0.1.4 GitHub Release 里的 `3ds2apple-shell-0.1.4.ipa` 是**无游戏数据的通用壳**：
+v0.1.5-beta1 GitHub Release 里的 `3ds2apple-shell-0.1.5-beta1.ipa` 是**无游戏数据的通用壳**：
 
 - 可以一次导入多个你自己已解密的 `.3ds` / `.cci` / `.cia`，文件复制进 App 并持久保存在游戏库中；
 - 它**不包含**任何 per-game AOT 代码，游戏由 Zakuro 解释器运行，速度会明显低于 AOT 版本；
@@ -71,6 +71,10 @@ iOS 侧通过一套小型 C ABI（`ios/zakuro-ios/`）调用 Zakuro：加载 ROM
 
 > 游戏画面和测试数据只用于本地验证，不进入仓库；本仓库不包含任何 ROM、密钥、系统文件或游戏资源。
 
+## 路线图
+
+下一版转向纯 AOT：用户在自己的电脑（Linux / Windows / macOS）上导入 ROM 并提前编译，手机端只安装每游戏 AOT 包，并移除解释器兜底。包结构与里程碑见 [docs/aot-first.md](docs/aot-first.md)。
+
 ## 平台与限制
 
 | 项目 | 说明 |
@@ -92,7 +96,7 @@ scripts/build-zakuro-ios.sh
 
 # 2. 构建 shell App，产出 unsigned IPA
 scripts/build-ios-app.sh
-scripts/package-ipa.sh ios/app/build/Release-iphoneos/3ds2apple.app 3ds2apple-shell-0.1.4
+scripts/package-ipa.sh ios/app/build/Release-iphoneos/3ds2apple.app 3ds2apple-shell-0.1.5-beta1
 
 # 3. 每款游戏：3dsrecomp → libgame.a → linked 静态库 → IPA
 scripts/build-recomp-ios.sh "path/to/game.cci" pokemon-y --auto-serial
@@ -123,6 +127,7 @@ builder/                 Windows/Linux 桌面 Builder + macOS Build Agent
 scripts/                 静态库 / AOT / IPA 构建脚本
 docs/architecture.md     架构与设计说明
 docs/build.md            构建指南
+docs/aot-first.md        下一版纯 AOT / 桌面端导入编译规划
 docs/related-projects.md 同类项目与许可证调研
 docs/qa/ui/              当前 UI 截图与重新生成方法
 THIRD_PARTY.md           第三方组件与许可证

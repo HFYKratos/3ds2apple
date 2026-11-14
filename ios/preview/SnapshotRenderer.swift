@@ -72,6 +72,9 @@ enum SnapshotRenderer {
             SaveManagerView(model: model, saveStates: saveStates)
         }))
         shot("about", AnyView(NavigationStack { AboutView(model: model) }))
+        // Game screen chrome with a fake loaded session (no console is created).
+        model.previewSetLoaded(name: "Pokemon Y")
+        shot("game", AnyView(GameView(model: model, settings: settings)))
         return written
     }
 

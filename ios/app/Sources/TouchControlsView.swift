@@ -36,7 +36,7 @@ struct TouchControlsView: View {
     var body: some View {
         VStack(spacing: 10) {
             shoulderRow
-            HStack(alignment: .center, spacing: 18) {
+            HStack(alignment: .center, spacing: 16) {
                 dpad
                 Spacer(minLength: 0)
                 faceButtons
@@ -44,8 +44,12 @@ struct TouchControlsView: View {
         }
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(Color.black.opacity(backgroundOpacity))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
         )
         .accessibilityIdentifier("touch-controls")
     }
@@ -62,25 +66,25 @@ struct TouchControlsView: View {
     }
 
     private var dpad: some View {
-        VStack(spacing: 6) {
-            TouchButton(label: "▲", bit: ZKButton.up, haptics: haptics, onButton: onButton)
-            HStack(spacing: 6) {
-                TouchButton(label: "◀", bit: ZKButton.left, haptics: haptics, onButton: onButton)
-                Color.clear.frame(width: 48, height: 48)
-                TouchButton(label: "▶", bit: ZKButton.right, haptics: haptics, onButton: onButton)
+        VStack(spacing: 7) {
+            TouchButton(label: "▲", width: 52, bit: ZKButton.up, haptics: haptics, onButton: onButton)
+            HStack(spacing: 7) {
+                TouchButton(label: "◀", width: 52, bit: ZKButton.left, haptics: haptics, onButton: onButton)
+                Color.clear.frame(width: 52, height: 52)
+                TouchButton(label: "▶", width: 52, bit: ZKButton.right, haptics: haptics, onButton: onButton)
             }
-            TouchButton(label: "▼", bit: ZKButton.down, haptics: haptics, onButton: onButton)
+            TouchButton(label: "▼", width: 52, bit: ZKButton.down, haptics: haptics, onButton: onButton)
         }
     }
 
     private var faceButtons: some View {
-        VStack(spacing: 6) {
-            TouchButton(label: "Y", bit: ZKButton.y, haptics: haptics, onButton: onButton)
-            HStack(spacing: 6) {
-                TouchButton(label: "X", bit: ZKButton.x, haptics: haptics, onButton: onButton)
-                TouchButton(label: "A", bit: ZKButton.a, haptics: haptics, onButton: onButton)
+        VStack(spacing: 7) {
+            TouchButton(label: "Y", width: 52, bit: ZKButton.y, haptics: haptics, onButton: onButton)
+            HStack(spacing: 7) {
+                TouchButton(label: "X", width: 52, bit: ZKButton.x, haptics: haptics, onButton: onButton)
+                TouchButton(label: "A", width: 52, bit: ZKButton.a, haptics: haptics, onButton: onButton)
             }
-            TouchButton(label: "B", bit: ZKButton.b, haptics: haptics, onButton: onButton)
+            TouchButton(label: "B", width: 52, bit: ZKButton.b, haptics: haptics, onButton: onButton)
         }
     }
 }
@@ -116,16 +120,26 @@ private struct TouchButton: View {
     var body: some View {
         Text(label)
             .font(.system(size: width > 50 ? 12 : 17, weight: .semibold, design: .rounded))
-            .foregroundColor(.white)
+            .foregroundColor(.white.opacity(isPressed ? 1 : 0.92))
             .frame(width: width, height: height)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isPressed ? Color.white.opacity(0.45) : Color.white.opacity(0.16))
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: isPressed
+                                ? [Color.white.opacity(0.42), Color.white.opacity(0.26)]
+                                : [Color.white.opacity(0.16), Color.white.opacity(0.08)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.white.opacity(0.28), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.white.opacity(isPressed ? 0.5 : 0.22), lineWidth: 1)
             )
+            .scaleEffect(isPressed ? 0.94 : 1)
+            .animation(.easeOut(duration: 0.08), value: isPressed)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
@@ -152,7 +166,7 @@ private struct TouchButton: View {
 /// the 3x3 D-pad and the A/B/X/Y diamond, and the screens keep the space between
 /// them, so no button overlaps a screen.
 enum LandscapeControlsLayout {
-    static let buttonSize: CGFloat = 44
+    static let buttonSize: CGFloat = 46
     static let railWidth: CGFloat = 150
     static let shoulderWidth: CGFloat = 58
     static let shoulderHeight: CGFloat = 30

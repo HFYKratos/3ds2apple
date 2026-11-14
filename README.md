@@ -8,16 +8,16 @@ Game code is translated from ARM to C at build time by [3dsrecomp](https://githu
 
 Platform: iPhone / iPad (iOS 16+) · Build: macOS + Xcode · Install: Sideloadly / SideStore / AltStore sideload · License: Apache-2.0 · **Bring your own game**
 
-> **Latest shell build: v0.1.4 (2026-11-14)** — [GitHub Release](https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.4)
+> **Latest shell build: v0.1.5-beta1 (2026-11-14)** — [GitHub Release](https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.5-beta1)
 >
-> UI layout pass: aligned game-library cards with the AOT badge on the cover, a labelled 3D-resolution picker, localized relative dates, repaired English strings.
-> 界面排版：游戏库卡片对齐、AOT 徽标移到封面、补充“3D 分辨率”标签、日期本地化，并修复英文界面混入中文的问题。
+> UI polish: Saves / Diagnostics / About moved into Settings, the disclaimer is centered, every Settings hint sits inline under its control, and the game screen is redesigned with a rounded stage, a title/pause bar and glass touch controls.
+> 界面打磨：存档/诊断/关于移入设置，免责声明居中；设置项提示统一放在控件下方；游戏画面重设计为圆角画面舞台、标题/暂停栏和玻璃质感触摸按键。
 
 **Status: early development.** The shell imports your own ROMs, keeps a multi-game library and runs them through the interpreter; a per-game AOT build (compiled locally from your own ROM) is what reaches near-60 fps. Compatibility, stability and the number of supported games are still being verified.
 
 ## Try the shell build
 
-`3ds2apple-shell-0.1.4.ipa` in the v0.1.4 GitHub Release is a **universal shell without game data**:
+`3ds2apple-shell-0.1.5-beta1.ipa` in the v0.1.5-beta1 GitHub Release is a **universal shell without game data**:
 
 - import one or more of your own decrypted `.3ds` / `.cci` / `.cia` files; they are copied into the app and kept in a persistent game library;
 - it contains **no** per-game AOT code, so games run through the Zakuro interpreter and are noticeably slower than an AOT build;
@@ -71,6 +71,10 @@ UI screenshots of the current shell (headless Mac Catalyst renders, no game cont
 
 > Game screens and test data are used only for local verification and never enter the repository; this repository contains no ROM, key, system file or game asset.
 
+## Roadmap
+
+The next version moves to AOT only: you import your own ROMs and precompile them on a desktop (Linux, Windows or macOS), the phone only installs per-game AOT packages, and the interpreter fallback is removed. The plan, package layout and milestones are in [docs/aot-first.md](docs/aot-first.md).
+
 ## Platforms and limitations
 
 | Item | Details |
@@ -92,7 +96,7 @@ scripts/build-zakuro-ios.sh
 
 # 2. Build the shell app and package an unsigned IPA
 scripts/build-ios-app.sh
-scripts/package-ipa.sh ios/app/build/Release-iphoneos/3ds2apple.app 3ds2apple-shell-0.1.4
+scripts/package-ipa.sh ios/app/build/Release-iphoneos/3ds2apple.app 3ds2apple-shell-0.1.5-beta1
 
 # 3. Per game: 3dsrecomp → libgame.a → linked static library → IPA
 scripts/build-recomp-ios.sh "path/to/game.cci" pokemon-y --auto-serial
@@ -123,6 +127,7 @@ builder/                 Desktop Builder (Windows/Linux) + macOS Build Agent
 scripts/                 Static library / AOT / IPA build scripts
 docs/architecture.md     Architecture and design notes
 docs/build.md            Build guide
+docs/aot-first.md       AOT-only desktop import plan for the next version
 docs/related-projects.md Survey of similar projects and their licenses
 docs/qa/ui/              Current UI screenshots and how to regenerate them
 THIRD_PARTY.md           Third-party components and licenses

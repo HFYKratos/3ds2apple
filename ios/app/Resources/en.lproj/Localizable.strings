@@ -173,6 +173,7 @@
 "Lower screen only" = "Lower screen only";
 "Lowered automatically from %@ because frames stayed below 20 fps." = "Lowered automatically from %@ because frames stayed below 20 fps.";
 "MoltenVK (Apache-2.0): Vulkan over Metal, used by the presented renderer." = "MoltenVK (Apache-2.0): Vulkan over Metal, used by the presented renderer.";
+"More" = "More";
 "Multi-disk ZIP archives are not supported." = "Multi-disk ZIP archives are not supported.";
 "Mute" = "Mute";
 "Mute audio" = "Mute audio";

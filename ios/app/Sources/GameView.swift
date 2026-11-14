@@ -70,7 +70,7 @@ struct GameView: View {
         GeometryReader { geometry in
             let isLandscape = geometry.size.width > geometry.size.height
             ZStack {
-                Color.black.ignoresSafeArea()
+                gameBackground
 
                 if isLandscape {
                     landscapeContent
@@ -91,11 +91,6 @@ struct GameView: View {
                         onExit: { requestConfirmation(.exit) },
                         onLoadStateCompleted: resumeAfterStateLoad
                     )
-                }
-            }
-            .overlay(alignment: .topTrailing) {
-                if isLoaded && !isMenuPresented && !isLandscape {
-                    menuButton
                 }
             }
         }
@@ -129,22 +124,15 @@ struct GameView: View {
     // MARK: - Portrait layout
 
     private var portraitContent: some View {
-        ScrollView {
-            VStack(spacing: 10) {
-                screenCard
+        VStack(spacing: 10) {
+            if isLoaded && !isMenuPresented {
+                portraitTopBar
             }
-            .padding(12)
-            .frame(maxWidth: 900)
-            .frame(maxWidth: .infinity)
-        }
-    }
 
-    @ViewBuilder
-    private var screenCard: some View {
-        if isShowingScreens {
-            VStack(spacing: 8) {
-                portraitScreenArea
-                    .overlay { graphicsWarmUpOverlay }
+            if isShowingScreens {
+                screenStage
+                    .frame(maxHeight: .infinity)
+                    .accessibilityIdentifier("screens")
 
                 if showsTouchControls {
                     TouchControlsView(
@@ -153,31 +141,65 @@ struct GameView: View {
                     ) { bit, pressed in
                         model.setOverlayButton(bit, pressed: pressed)
                     }
+                    .padding(.horizontal, 2)
                 }
-
             }
-            .accessibilityIdentifier("screens")
         }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
     }
 
-    /// The screens in portrait: an area whose shape follows the aspect setting
-    /// (the picture's own shape for Fit, 4:3 for 4:3 and Stretch), with the
-    /// picture fitted/stretched and integer-scaled inside it.
-    private var portraitScreenArea: some View {
+    /// Title + pause button above the screens in portrait. Kept on the black
+    /// background instead of over the picture, so nothing covers the 3DS image.
+    private var portraitTopBar: some View {
+        HStack(spacing: 10) {
+            Text(romName)
+                .font(.footnote.weight(.semibold))
+                .foregroundColor(.white.opacity(0.62))
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            pauseButton(size: 36)
+        }
+        .frame(height: 36)
+    }
+
+    /// The picture area: rounded, subtly bordered black stage that centres the
+    /// scaled 3DS screens and carries the warm-up cover.
+    private var screenStage: some View {
         GeometryReader { geometry in
             screenContent(available: geometry.size)
         }
-        .aspectRatio(screenFrameAspect, contentMode: .fit)
         .background(Color.black)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.55), radius: 18, x: 0, y: 8)
+        .overlay { graphicsWarmUpOverlay }
         .accessibilityIdentifier("screens-area")
+    }
+
+    private var gameBackground: some View {
+        ZStack {
+            Color.black
+            RadialGradient(
+                colors: [Color(red: 0.06, green: 0.10, blue: 0.13), .black],
+                center: .top,
+                startRadius: 20,
+                endRadius: 520
+            )
+            .opacity(0.85)
+        }
+        .ignoresSafeArea()
     }
 
     // MARK: - Landscape layout
 
     private var landscapeContent: some View {
-        VStack(spacing: 6) {
-            ZStack(alignment: .trailing) {
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
                 if showsTouchControls {
                     LandscapeControlsTopBar(
                         backgroundOpacity: settings.controlsBackgroundOpacity,
@@ -186,16 +208,15 @@ struct GameView: View {
                         model.setOverlayButton(bit, pressed: pressed)
                     }
                 } else {
-                    Color.clear
+                    Spacer(minLength: 0)
                 }
                 if isLoaded && !isMenuPresented {
-                    landscapeMenuButton
-                        .padding(.trailing, 8)
+                    pauseButton(size: 34)
                 }
             }
             .frame(height: LandscapeControlsLayout.topBarHeight)
 
-            HStack(alignment: .center, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
                 if showsTouchControls {
                     LandscapeControlsLeftRail(
                         backgroundOpacity: settings.controlsBackgroundOpacity,
@@ -206,13 +227,9 @@ struct GameView: View {
                     .frame(width: LandscapeControlsLayout.railWidth)
                 }
 
-                GeometryReader { geometry in
-                    screenContent(available: geometry.size)
-                }
-                .background(Color.black)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay { graphicsWarmUpOverlay }
-                .accessibilityIdentifier("screens-area")
+                screenStage
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityIdentifier("screens-area")
 
                 if showsTouchControls {
                     LandscapeControlsRightRail(
@@ -226,51 +243,28 @@ struct GameView: View {
             }
             .frame(maxHeight: .infinity)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .accessibilityIdentifier("screens")
     }
 
     // MARK: - Menu
 
-    private var menuButton: some View {
+    /// Glass pause button; opens the in-game menu and pauses the runtime.
+    private func pauseButton(size: CGFloat) -> some View {
         Button {
             isMenuPresented = true
             model.pauseForMenu()
         } label: {
-            Image(systemName: "pause.circle.fill")
-                .font(.system(size: 30))
-                .foregroundColor(.white.opacity(0.9))
-                .background(
-                    Circle()
-                        .fill(Color.black.opacity(0.5))
-                        .frame(width: 40, height: 40)
-                )
-        }
-        .padding(.top, 8)
-        .padding(.trailing, 14)
-        .accessibilityIdentifier("in-game-menu")
-    }
-
-    /// The same pause button, sized for the landscape top bar (the portrait
-    /// overlay sits over the screens, which would cover them here).
-    private var landscapeMenuButton: some View {
-        Button {
-            isMenuPresented = true
-            model.pauseForMenu()
-        } label: {
-            Image(systemName: "pause.circle.fill")
-                .font(.system(size: 26))
-                .foregroundColor(.white.opacity(0.9))
-                .background(
-                    Circle()
-                        .fill(Color.black.opacity(0.5))
-                        .frame(width: 36, height: 36)
-                )
+            Image(systemName: "pause.fill")
+                .font(.system(size: size * 0.36, weight: .bold))
+                .foregroundColor(.white)
+                .frame(width: size, height: size)
+                .background(Circle().fill(Color.white.opacity(0.14)))
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.24), lineWidth: 1))
         }
         .accessibilityIdentifier("in-game-menu")
     }
-
     private func resumeGame() {
         // A save or load is mid-serialization on the runtime queue; let it
         // finish (the menu disables Resume meanwhile, this is the guard).
@@ -492,7 +486,7 @@ struct GameView: View {
     private var graphicsWarmUpOverlay: some View {
         if isPreparingGraphics {
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(Color.black.opacity(0.94))
                 VStack(spacing: 12) {
                     ProgressView()

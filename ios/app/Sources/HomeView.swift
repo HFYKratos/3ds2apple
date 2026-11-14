@@ -2,8 +2,8 @@
 //  HomeView.swift
 //  3ds2apple
 //
-//  Landing page: the game library, one import action and a small toolbar for
-//  settings/tools. The library is a grid of cards, one per imported ROM: a
+//  Landing page: the game library and one import action, plus the settings
+//  entry. The library is a grid of cards, one per imported ROM: a
 //  cover placeholder tinted from the title id, the title, when it was last
 //  played and whether this build links AOT code for it.
 //
@@ -21,8 +21,6 @@ import UIKit
 /// Pages pushed from the home page.
 private enum HomeRoute: Hashable {
     case settings
-    case saveManager
-    case about
 }
 
 struct HomeView: View {
@@ -38,14 +36,8 @@ struct HomeView: View {
     /// One sheet slot for the pages the home page can present.
     private enum HomeSheet: Identifiable {
         case filesPicker
-        case diagnostics(URL)
 
-        var id: String {
-            switch self {
-            case .filesPicker: return "files-picker"
-            case .diagnostics(let url): return "diagnostics-\(url.path)"
-            }
-        }
+        var id: String { "files-picker" }
     }
 
     /// One confirmation/error alert; a single alert slot keeps the destructive
@@ -70,7 +62,6 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     header
                     librarySection
-                    tools
                     footer
                 }
                 .padding(20)
@@ -79,26 +70,14 @@ struct HomeView: View {
             }
             .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: HomeRoute.self) { route in
-                switch route {
-                case .settings:
-                    SettingsView(settings: settings, model: model)
-                case .saveManager:
-                    SaveManagerView(model: model, saveStates: model.saveStates)
-                case .about:
-                    AboutView(model: model)
-                }
+            .navigationDestination(for: HomeRoute.self) { _ in
+                SettingsView(settings: settings, model: model)
             }
         }
-        .sheet(item: $sheet) { sheet in
-            switch sheet {
-            case .filesPicker:
-                ROMDocumentPicker { urls in
-                    self.sheet = nil
-                    model.importROMs(from: urls)
-                }
-            case .diagnostics(let url):
-                ShareSheet(items: [url])
+        .sheet(item: $sheet) { _ in
+            ROMDocumentPicker { urls in
+                self.sheet = nil
+                model.importROMs(from: urls)
             }
         }
         .alert(item: $alert) { alert in
@@ -408,62 +387,16 @@ struct HomeView: View {
         }
     }
 
-    private func exportDiagnostics() {
-        if let url = DiagnosticsExporter.write(model: model, settings: settings) {
-            sheet = .diagnostics(url)
-        }
-    }
-
-    // MARK: - Tools
-
-    private var tools: some View {
-        HStack(spacing: 10) {
-            NavigationLink(value: HomeRoute.saveManager) {
-                toolButton(title: "Saves", systemImage: "externaldrive.fill")
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("save-manager-link")
-
-            Button {
-                exportDiagnostics()
-            } label: {
-                toolButton(title: "Diagnostics", systemImage: "square.and.arrow.up")
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("export-diagnostics")
-
-            NavigationLink(value: HomeRoute.about) {
-                toolButton(title: "About", systemImage: "info.circle.fill")
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("about-link")
-        }
-    }
-
-    private func toolButton(title: LocalizedStringKey, systemImage: String) -> some View {
-        VStack(spacing: 7) {
-            Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .semibold))
-            Text(title)
-                .font(.caption2)
-                .lineLimit(1)
-        }
-        .foregroundStyle(.primary)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(cardBackground)
-    }
-
     // MARK: - Footer
 
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("AOT native · no CPU JIT · your ROMs stay on this device.")
-            Text("Not affiliated with Nintendo. Use only your own game dumps.")
-        }
-        .font(.caption2)
-        .foregroundStyle(Color.secondary.opacity(0.7))
-        .padding(.top, 2)
+        Text("Not affiliated with Nintendo. Use only your own game dumps.")
+            .font(.caption2)
+            .foregroundStyle(Color.secondary.opacity(0.7))
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
     }
 
     // MARK: - Helpers

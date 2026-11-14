@@ -41,6 +41,7 @@ struct SettingsView: View {
 
     @State private var storage = StorageSnapshot.empty
     @State private var isClearCacheConfirmationPresented = false
+    @State private var shareItem: SettingsShareItem?
 
     var body: some View {
         Form {
@@ -49,12 +50,15 @@ struct SettingsView: View {
             controlsSection
             performanceSection
             storageSection
-            aboutSection
+            toolsSection
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             refreshStorage()
+        }
+        .sheet(item: $shareItem) { item in
+            ShareSheet(items: [item.url])
         }
         .alert("Clear the graphics pipeline cache?", isPresented: $isClearCacheConfirmationPresented) {
             Button("Clear", role: .destructive) {
@@ -88,10 +92,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Toggle("Integer scaling", isOn: persistedBinding(settings, \.integerScale))
                     .disabled(settings.screenAspect == .stretch)
-                Text("Whole-pixel scaling: every 3DS pixel becomes a whole block of screen pixels, so the picture stays sharp.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                hintText(L10n.tr("Whole-pixel scaling: every 3DS pixel becomes a whole block of screen pixels, so the picture stays sharp."))
             }
             VStack(alignment: .leading, spacing: 8) {
                 Text("3D resolution")
@@ -103,10 +104,7 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                Text("1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                hintText(L10n.tr("1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads."))
             }
             Picker("Orientation", selection: persistedBinding(settings, \.orientation)) {
                 ForEach(OrientationLock.allCases) { lock in
@@ -115,8 +113,6 @@ struct SettingsView: View {
             }
         } header: {
             Text("Display")
-        } footer: {
-            Text("Changes apply immediately while a game is running.")
         }
     }
 
@@ -124,28 +120,26 @@ struct SettingsView: View {
 
     private var audioSection: some View {
         Section {
-            HStack {
-                Text("Volume")
-                Spacer()
+            settingRow("Volume") {
+                Slider(value: persistedBinding(settings, \.audioVolume), in: 0...1, step: 0.05)
+                    .labelsHidden()
+            } hint: {
                 Text(L10n.format("%ld%%", Int((settings.audioVolume * 100).rounded())))
-                    .foregroundColor(.secondary)
                     .monospacedDigit()
             }
-            Slider(
-                value: persistedBinding(settings, \.audioVolume),
-                in: 0...1,
-                step: 0.05
-            )
             Toggle("Mute", isOn: persistedBinding(settings, \.audioMuted))
-            Picker("Buffer size", selection: persistedBinding(settings, \.audioBuffer)) {
-                ForEach(AudioBufferSize.allCases) { size in
-                    Text(size.title).tag(size)
+            settingRow("Buffer size") {
+                Picker("Buffer size", selection: persistedBinding(settings, \.audioBuffer)) {
+                    ForEach(AudioBufferSize.allCases) { size in
+                        Text(size.title).tag(size)
+                    }
                 }
+                .labelsHidden()
+            } hint: {
+                Text("A different buffer size restarts audio once while a game is running.")
             }
         } header: {
             Text("Audio")
-        } footer: {
-            Text("A different buffer size restarts audio once while a game is running.")
         }
     }
 
@@ -154,29 +148,17 @@ struct SettingsView: View {
     private var controlsSection: some View {
         Section {
             Toggle("Show on-screen controls", isOn: persistedBinding(settings, \.showTouchControls))
-            HStack {
-                Text("Overlay opacity")
-                Spacer()
+            settingRow("Overlay opacity") {
+                Slider(value: persistedBinding(settings, \.controlsOpacity), in: 0.15...1.0, step: 0.05)
+                    .labelsHidden()
+            } hint: {
                 Text(L10n.format("%ld%%", Int((settings.controlsOpacity * 100).rounded())))
-                    .foregroundColor(.secondary)
                     .monospacedDigit()
             }
-            Slider(
-                value: persistedBinding(settings, \.controlsOpacity),
-                in: 0.15...1.0,
-                step: 0.05
-            )
             Toggle("Haptic feedback on button press", isOn: persistedBinding(settings, \.haptics))
-            HStack {
-                Text("Controller")
-                Spacer()
-                Text(model.controllerName ?? L10n.tr("Not connected"))
-                    .foregroundColor(.secondary)
-            }
+            infoRow("Controller", model.controllerName ?? L10n.tr("Not connected"))
         } header: {
             Text("Controls")
-        } footer: {
-            Text("The on-screen pad and a connected controller are merged.")
         }
     }
 
@@ -193,33 +175,27 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                if model.playbackSpeedAutoReduced {
+                    hintText(autoReducedText)
+                } else if settings.playbackSpeed == .normal {
+                    hintText(L10n.tr("Fast-forward runs extra console frames per presented frame."))
+                }
             }
-            if model.playbackSpeedAutoReduced {
-                Text(autoReducedText)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle("System Metal HUD", isOn: persistedBinding(settings, \.systemMetalHUD))
+                    .accessibilityIdentifier("settings-system-metal-hud")
+                if settings.systemMetalHUD {
+                    hintText(L10n.tr("Restart the app to apply. If it still does not appear, check System Settings."))
+                }
             }
-            Toggle("System Metal HUD", isOn: persistedBinding(settings, \.systemMetalHUD))
-                .accessibilityIdentifier("settings-system-metal-hud")
-            if settings.systemMetalHUD {
-                Text("Restart the app to apply. If it still does not appear, check System Settings.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle("First-load graphics warm-up (optional)", isOn: persistedBinding(settings, \.graphicsWarmUpEnabled))
+                hintText(warmUpStatusText)
             }
-            Toggle("First-load graphics warm-up (optional)", isOn: persistedBinding(settings, \.graphicsWarmUpEnabled))
-            Text(warmUpStatusText)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         } header: {
             Text("Performance")
-        } footer: {
-            Text("Fast-forward runs extra console frames per presented frame.")
         }
     }
-
     // MARK: - Storage
 
     private var storageSection: some View {
@@ -240,34 +216,72 @@ struct SettingsView: View {
             }
         } header: {
             Text("Storage")
-        } footer: {
-            Text("Save data, ROMs, logs and the shader cache live in the app's Documents folder.")
         }
     }
 
-    // MARK: - About
+    // MARK: - Tools
 
-    private var aboutSection: some View {
+    private var toolsSection: some View {
         Section {
-            infoRow("Version", versionText)
-            infoRow("Device", deviceText)
-            infoRow("AOT code", model.aotStatus.title)
-            infoRow("Language", L10n.languageSummary)
-            if let url = URL(string: "https://github.com/HFYKratos/3ds2apple") {
-                Link(destination: url) {
-                    HStack {
-                        Text("Project page")
-                        Spacer()
-                        Image(systemName: "arrow.up.right")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                    }
-                }
+            NavigationLink {
+                SaveManagerView(model: model, saveStates: model.saveStates)
+            } label: {
+                Label("Save Manager", systemImage: "externaldrive.fill")
+            }
+            Button {
+                exportDiagnostics()
+            } label: {
+                Label("Export diagnostics", systemImage: "square.and.arrow.up")
+            }
+            NavigationLink {
+                AboutView(model: model)
+            } label: {
+                Label("About", systemImage: "info.circle.fill")
             }
         } header: {
-            Text("About")
-        } footer: {
-            Text("Apache-2.0; the app ships without game data, so use only your own game dumps.")
+            Text("More")
+        }
+    }
+
+    /// Standard inline hint under a control: one caption style everywhere, no
+    /// separate row/divider.
+    private func hintText(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+    /// One settings row: the control, with an optional one-line hint directly
+    /// underneath it (no extra divider row), so every hint in the page has the
+    /// same shape.
+    @ViewBuilder
+    private func settingRow<Control: View, Hint: View>(
+        _ title: LocalizedStringKey,
+        @ViewBuilder control: () -> Control,
+        @ViewBuilder hint: () -> Hint
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+            control()
+            hint()
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private func settingRow<Control: View>(_ title: LocalizedStringKey,
+                                           @ViewBuilder control: () -> Control) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+            control()
+        }
+    }
+
+    private func exportDiagnostics() {
+        if let url = DiagnosticsExporter.write(model: model, settings: settings) {
+            shareItem = SettingsShareItem(url: url)
         }
     }
 
@@ -408,8 +422,6 @@ struct QuickDisplaySettingsView: View {
                     }
                 } header: {
                     Text("Display")
-                } footer: {
-                    Text("Changes apply immediately while a game is running.")
                 }
             }
             .navigationTitle("Display settings")
@@ -423,4 +435,10 @@ struct QuickDisplaySettingsView: View {
             }
         }
     }
+}
+
+/// Share sheet payload for the diagnostics export from Settings.
+private struct SettingsShareItem: Identifiable {
+    let id = UUID()
+    let url: URL
 }

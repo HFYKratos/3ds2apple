@@ -1887,6 +1887,14 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
 
     // MARK: - State (main queue)
 
+    /// UI preview only: pretend a game is loaded so `GameView` can be rendered
+    /// headlessly by ios/preview. No console exists and no Zakuro call is made;
+    /// compiled only in Debug builds.
+    func previewSetLoaded(name: String) {
+        lastROM = ImportedROM(name: name, relativePath: "roms/preview.cci")
+        setPhase(.loaded(name: name))
+    }
+
     private func setPhase(_ phase: Phase) {
         if Thread.isMainThread {
             self.phase = phase

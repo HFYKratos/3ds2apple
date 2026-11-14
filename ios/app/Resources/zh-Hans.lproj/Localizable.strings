@@ -177,6 +177,7 @@
 "Lower screen only" = "仅下屏";
 "Lowered automatically from %@ because frames stayed below 20 fps." = "由于帧率持续低于 20 fps，已从 %@ 自动下调。";
 "MoltenVK (Apache-2.0): Vulkan over Metal, used by the presented renderer." = "MoltenVK（Apache-2.0）：Vulkan over Metal，供呈现渲染器使用。";
+"More" = "更多";
 "Multi-disk ZIP archives are not supported." = "不支持多卷 ZIP 压缩包。";
 "Mute" = "静音";
 "Mute audio" = "静音音频";

@@ -18,4 +18,4 @@ ZKPREVIEW_SHOT_DIR=/tmp/ui-shots "$APP/Contents/MacOS/3ds2apple-preview"
 ZKPREVIEW_SHOT_DIR=/tmp/ui-shots-zh "$APP/Contents/MacOS/3ds2apple-preview" -AppleLanguages "(zh-Hans)"
 ```
 
-The images here were taken for v0.1.4 (2026-11-14).
+The images here were taken for v0.1.5-beta1 (2026-11-14); `game-en.png` shows the redesigned game screen chrome (no console is started, so the screens show the waiting placeholder).
