@@ -22,7 +22,7 @@ Input: the real Pokemon Y 3dsrecomp output (`build/game/pokemon-y`, 637 MB,
 | Artifact | Command | Result |
 |---|---|---|
 | device GamePack | `tools/winbuild/build-gamepack.sh pokemon-y --code-dir build/game/pokemon-y --title-id 0004000000055E00 --target device --out build/winbuild --jobs 16` | **230,000,000-ish bytes Mach-O arm64 dylib**, `platform ios`, `minos 16.0`, install name `@rpath/GamePack-0004000000055E00.dylib`, 11 exports (GamePack ABI + recomp tables), **1** undefined import (`_zk_register_gamepack`), sha256 `8c03c33882189f810cbce2089ee20176a21900dab431402020e085d3327fbce2` |
-| simulator GamePack | same with `--target sim` | **270,093,816 B** x86_64 Mach-O, `platform iossimulator`, sha256 `41a470ea4471c77868786391301311aeb7249cf29666cf1a4491e92506303162`; **dlopen-tested in the iOS Simulator** (10 min 16 s wall / 148 min 49 s CPU with `--jobs 16`) |
+| simulator GamePack | same with `--target sim` | **270,093,816 B** x86_64 Mach-O, `platform iossimulator`; **ran in the real iOS Simulator shell+harness with AOT active and 0.00% interpreted** (10 min 16 s wall / 148 min 49 s CPU with `--jobs 16`); sha256 `61a1d89b…` for the task-26 fresh-C build (`41a470ea…` differs only in the 8-byte `LC_UUID`) |
 | toolchain selfcheck | `tools/winbuild/build-gamepack.sh --selfcheck` | 30 checks, 0 failures (both targets: compile, link, ABI exports, undefined host symbol, Mach-O validation) |
 
 Full build wall time: **9 min 10 s** with `--jobs 16` (135 min 51 s user CPU; the
@@ -115,6 +115,71 @@ everything else (title id, jobs, target, `--llvm-dir`, `--pack-bin`, `--dry-run`
    **Native Windows command lines** below.
 3. `python3`/`py` is optional: `check-gamepack.py` gives the full Mach-O report;
    without Python the script falls back to `llvm-nm`/`llvm-objdump` checks.
+
+## 3dsrecomp on the same PC (ROM -> generated C, no Mac)
+
+3dsrecomp is a Rust CLI that upstream documents as working on Linux and Windows;
+its compile step only needs a C compiler. The no-SDK trick is the same one as
+above: let 3dsrecomp generate the C, and give its compile step our arm64 iOS
+clang + Darwin stubs.
+
+**Linux / WSL / macOS (host recipe, used for the task-26 end-to-end proof):**
+
+```sh
+# once per machine: Rust + a 3dsrecomp checkout at the pinned revision
+git clone https://github.com/fearkov/3dsrecomp third_party/3dsrecomp
+(cd third_party/3dsrecomp && git checkout df82e6e && cargo build --release)
+
+# generate C for the user's own ROM and compile it for arm64 iOS (one step):
+tools/winbuild/recomp-port.sh "ROM/Pokemon Y.cci" build/game/pokemon-y-host
+
+# then link the GamePack from that C with LLVM/LLD:
+tools/winbuild/build-gamepack.sh pokemon-y \
+  --code-dir build/game/pokemon-y-host/code \
+  --title-id 0004000000055E00 --out build/winbuild
+```
+
+`recomp-port.sh` sets `CC=tools/winbuild/darwin-cc.sh` (adds
+`-target arm64-apple-ios16.0 -nostdinc -isystem <clang resource> -isystem
+<darwin-stubs>`) and `AR=<llvm-ar>` for the child 3dsrecomp, so the generated C
+is compiled for iOS as 3dsrecomp writes it. Nothing Apple is involved.
+
+**Windows (what the launcher does; no bash needed):** 3dsrecomp splits `CC` on
+spaces and runs the first word as the compiler program, so set:
+
+```bat
+set CC=clang.exe --target=arm64-apple-ios16.0
+set AR=C:\path\to\llvm-ar.exe
+set CPATH=<repo>\tools\winbuild\darwin-stubs\include
+set PATH=C:\path\to\llvm\bin;%PATH%
+3dsrecomp.exe port "<user ROM>.cci" <work>\recomp --name <slug>
+```
+
+(`CPATH` gets the hand-written ISO C headers into clang's include search without
+a path-with-spaces problem; clang's own `<stdint.h>` comes from its resource dir.
+The launcher does exactly this in
+`launcher/windows/.../LocalWinbuildPackProvider.cs`, then compiles the shim and
+links the dylib with `ld64.lld.exe` using the native command lines above.)
+3dsrecomp's own build on Windows needs the Rust toolchain; upstream suggests
+MinGW-w64 gcc (MSYS2/WinLibs) or clang as the compiler it runs, and rustup's MSVC
+target needs the Visual Studio C++ build tools. That Windows-native build has not
+been executed in this environment (no Windows host) — it is the documented recipe
+plus a unit-tested command construction, not a claimed Windows run.
+
+**Evidence (2026-11-15, task-26):**
+
+* 3dsrecomp `df82e6e` on the Linux host generated **624 files / 635 MiB of C
+  (489 .c + 136 .h)** from the user's Pokémon Y ROM; the combined SHA-256 of all
+  generated `.c/.h` files is `4a58182e96c6557a39f018152faed113fe495adeb0d24ac611eb12e130e80363`,
+  **identical** to the tree the macOS VM generated from the same ROM.
+* `tools/winbuild/build-gamepack.sh` on that host-generated C produced the device
+  GamePack `229,999,112 B`, sha256 `8c03c33882189f810cbce2089ee20176a21900dab431402020e085d3327fbce2`
+  — **byte-identical** to the task-22 pack built from the VM-generated C.
+* The same fresh C also produced the x86_64 simulator pack
+  (270,093,816 B, sha256 `61a1d89bafb7c92cb7fa59033821d0ca5e51d2ba5cc42217ca665d22617ae943`; the
+  task-22 sim pack differs only in ld64.lld's 8-byte `LC_UUID`). That fresh pack ran in the real
+  iOS Simulator shell and harness with **AOT active and 0.00% interpreted of 19,294,073
+  instructions (0 fallbacks)** — see docs/windows-build.md section 8.3.
 
 ## Native Windows command lines (for the C#/.NET launcher)
 
@@ -244,9 +309,32 @@ tools/winbuild/sim-probe/run-sim-probe.sh /path/to/GamePack-0004000000055E00.dyl
 | `check-gamepack.py` | pure-Python Mach-O/GamePack ABI validator + JSON report |
 | `darwin-stubs/include/*.h` | hand-written ISO C headers replacing the SDK headers (see its README) |
 | `fetch-llvm-ubuntu.sh` | no-root LLVM install for Ubuntu/WSL from apt packages, SHA512-verified |
+| `darwin-cc.sh` | `$CC` wrapper that turns a host tool's C compile into an arm64-apple-ios compile with the darwin stubs (no Apple SDK) |
+| `recomp-port.sh` | ROM -> generated C -> arm64 objects on Linux/WSL/macOS via 3dsrecomp + `darwin-cc.sh` (the host half of the local build) |
 | `llvm-manifest.json` | pinned LLVM 21.1.8 release URLs + SHA-256 + licence facts + tool requirements |
 | `sim-probe/` | iOS Simulator dlopen probe (host app built with Xcode on the reference VM) |
 | `../../scripts/build-game-pack-llvm.sh` | repo-facing wrapper with the desktop AOT conventions |
+
+## Launcher integration (task-26, feature-flagged)
+
+The Windows launcher now has an experimental provider that does the whole local
+build on the PC, implemented in
+`launcher/windows/src/ThreeDsTwoApple.Launcher.Core/BuildPipeline/LocalWinbuildPackProvider.cs`:
+
+1. `3dsrecomp.exe port <rom> <work>/recomp --name <slug>` with
+   `CC=clang.exe --target=arm64-apple-ios16.0`, `AR=llvm-ar.exe`,
+   `CPATH=<stubs>` and `PATH=<llvm bin>` (ROM -> C -> arm64 objects).
+2. shim compile + `ld64.lld.exe` link with `-platform_version ios 16.0.0`,
+   `-undefined dynamic_lookup`, `@rpath/GamePack-<TITLE>.dylib`.
+3. Mach-O validation (thin arm64 dylib) and `3ds2apple-pack packages record` so
+   `GameInfo.json` keeps its single schema writer.
+
+It is gated by `LauncherStateDocument.LocalBuildEnabled` (Settings checkbox,
+default off) and shown as a readiness row; the macOS Build Agent stays the
+supported path. Tests: command construction/environment, missing-tool errors,
+recompile/link failures, invalid Mach-O rejection, and the feature flag gating
+creation (`LocalWinbuildPackProviderTests`, 6 tests; full launcher suite 63/63).
+See [docs/windows-launcher.md](../../docs/windows-launcher.md) section 13.
 
 ## Next steps (for the Windows launcher, task-19/task-21)
 

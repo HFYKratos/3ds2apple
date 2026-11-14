@@ -525,3 +525,71 @@ Mode/Trust, and the bundled Impactor/plumesign (tools/fetch-impactor.ps1).
 - Lead/integration: review launcher/windows/.gitignore (bin/obj and downloaded
   binaries untracked); do not commit Shell/*.ipa, composed IPAs or .exe; update
   .internal/PROJECT_HANDOFF.md with the new architecture + evidence paths.
+## 13. Experimental local build (task-26): 3dsrecomp + LLVM/LLD on the Windows PC
+
+> Status: implemented and unit-tested in `launcher/windows`; **off by default**. The mac build
+> Agent remains the supported path until a runtime end-to-end check on a real phone is signed off.
+> This section documents what is wired and what was actually proven.
+
+The launcher can now build a per-game GamePack **on the Windows PC itself**, with no Mac and no
+Apple SDK, using the open-source toolchain proven in [windows-build.md](windows-build.md) §7-8:
+
+1. **ROM → generated C → arm64 objects** — `3dsrecomp.exe port <rom> <work>/recomp --name <slug>`.
+   The launcher sets the child environment so 3dsrecomp's compile step targets iOS with the
+   hand-written Darwin headers:
+   `CC=clang.exe --target=arm64-apple-ios16.0`, `AR=<llvm>/llvm-ar.exe`,
+   `CPATH=<repo>/tools/winbuild/darwin-stubs/include`, `PATH=<llvm>/bin;%PATH%`.
+   (3dsrecomp splits `CC` on spaces and runs the first word as the program, so no wrapper script
+   is needed and the bundled LLVM install path may contain spaces.)
+2. **GamePack link** — compile `zk_gamepack_shim.c` with `clang.exe`
+   (`-nostdinc -isystem <clang resource> -isystem <darwin-stubs> -DZK_GAMEPACK_TITLE_ID=...`), then
+   `ld64.lld.exe -arch arm64 -platform_version ios 16.0.0 16.0.0 -dylib -undefined dynamic_lookup
+   -dead_strip -install_name @rpath/GamePack-<TITLE>.dylib`. The dylib carries only the game code;
+   libSystem and `zk_register_gamepack` resolve from the signed app at `dlopen()` time (same contract
+   as the Xcode-built pack).
+3. **Validation + record** — the launcher checks the output is a thin arm64 Mach-O dylib, then
+   `3ds2apple-pack packages record` writes `GameInfo.json` (the single schema writer). IPA
+   composition/catalogue/signing are unchanged (§1 steps 3-4).
+
+**Tool requirements** (all checked before a build; missing pieces are reported, never faked):
+
+| Tool | Source | Notes |
+|---|---|---|
+| `3dsrecomp.exe` | built once from the pinned upstream revision (Rust) | cloned at build time, never vendored (no upstream LICENSE file; Cargo.toml declares MIT) |
+| `clang.exe`, `llvm-ar.exe`, `ld64.lld.exe` | official LLVM 21.1.8 release | Apache-2.0 WITH LLVM-exception; SHA-256 pins in `tools/winbuild/llvm-manifest.json`; user-installed or bundled unmodified with licence |
+| `tools/winbuild/darwin-stubs/include` | this repo | hand-written ISO C declarations; no Apple header |
+| `ios/zakuro-ios/gamepack/zk_gamepack_shim.c`, `ios/zakuro-ios/include` | this repo | pack ABI shim/header |
+| `3ds2apple-pack.exe` | this repo (`builder/pack`) | package record / catalogue |
+
+**Feature flag and UI:** `LauncherStateDocument.LocalBuildEnabled` (Settings →
+“Experimental local build”, default off) controls whether the provider and its build-mode entry
+exist at all; `LauncherServices.CreateBuildProvider(LocalWinbuild)` returns null while the flag is
+off so nothing can silently use the experimental path. On enable, Settings also takes explicit
+paths for `3dsrecomp.exe` and the LLVM bin folder (tool overrides, same mechanism as the other
+tools). Readiness gains a “local build (3dsrecomp + LLVM/LLD)” row and `HostReadiness.CanLocalBuild`.
+
+**Tests (no Windows/phone needed):** 6 new unit tests in
+`launcher/windows/tests/.../LocalWinbuildPackProviderTests.cs` cover the exact recompile env/argv,
+the shim/link/record command construction, missing-tool and recompile/link failure codes, rejection
+of a non-Mach-O link output before recording, and the feature flag gating provider creation. Full
+suite: **63/63 passing** (`dotnet test`, .NET 10); `dotnet build` of the Core + Avalonia Desktop
+projects: 0 warnings / 0 errors.
+
+**Proven outside the launcher (see windows-build.md §8):** 3dsrecomp ran on a Linux host with the
+same CC/CPATH trick, generated C identical (combined SHA-256) to the macOS-VM-generated tree, and
+the LLVM/LLD device GamePack built from that fresh C is byte-identical (same SHA-256) to the
+task-22 pack. The LLVM-built x86_64 simulator pack also ran in the real iOS Simulator shell/harness
+with AOT active and 0.00% interpreted instructions.
+
+**Limits / honest gaps:**
+
+* No real Windows PC was available: the provider is unit-tested and the identical command shapes
+  were exercised on Linux; the Windows-native 3dsrecomp build/link still needs a first-run smoke
+  test on hardware (see the manual test plan §11).
+* The local build currently targets **device (arm64)** only; simulator packs need a second compile
+  pass for `x86_64-apple-ios16.0-simulator` (the toolchain supports it, the launcher does not offer
+  it).
+* Generated C and intermediate objects stay in the launcher workspace (never in git, never in the
+  IPA); the ROM is read from the user's library path only.
+* Codegen is upstream LLVM, not Apple clang: runtime correctness was checked in the simulator
+  (AOT active, 0.00% interpreted) but a device AOT run is still part of the device acceptance.

@@ -342,4 +342,130 @@ it removes the Mac from the loop for users who need it, is fully legal (open-sou
 files), and reuses the existing GamePack ABI, `zk_gamepack_register`, catalogue and signing flow.
 Evidence for this section is reproducible from the gitignored artifacts under `build/winbuild/`
 (dylib + `GamePack-check.json` + build logs); nothing game-derived was committed.
+## 8. End-to-end proof (task-26, 2026-11-15): ROM → C on the PC → LLVM GamePack → real shell AOT run
+
+> Status: **passed in this environment** (Linux/WSL host + the reference macOS VM simulator).
+> The Windows launcher provider is implemented, unit-tested and feature-flagged; Windows-native
+> execution of 3dsrecomp/LLVM still needs a first-run smoke test on a real Windows PC.
+> Commands: [tools/winbuild/README.md](../tools/winbuild/README.md) §"3dsrecomp on the same PC".
+
+§7 proved the *link* half (generated C → Mach-O with LLVM/LLD, no Apple SDK) and that the Mach-O
+loads/registers in the iOS Simulator. This section proves the two halves the product needs: the
+**recompiler on the PC** and **LLVM-generated GamePack code running in the real shell**, not just a
+dlopen probe.
+
+### 8.1 3dsrecomp on the host (ROM → generated C)
+
+3dsrecomp is a Rust CLI; upstream documents Linux and Windows support ("You need Rust and a C
+compiler … gcc from MinGW-w64 … works" on Windows). The only iOS-specific piece is its compile step:
+it runs `$CC` with `-O2 -ffp-contract=off -fno-math-errno -w -fPIC -fvisibility=hidden -c`, so we set
+`CC` to our arm64-iOS clang + Darwin stubs and `AR` to `llvm-ar` (new helper
+`tools/winbuild/recomp-port.sh` + `tools/winbuild/darwin-cc.sh`):
+
+```sh
+git clone https://github.com/fearkov/3dsrecomp third_party/3dsrecomp   # pinned df82e6e
+(cd third_party/3dsrecomp && cargo build --release)                    # 6.7 s on the host
+tools/winbuild/recomp-port.sh "ROM/Pokemon Y.cci" build/game/pokemon-y-host
+# -> 489 .c + 136 .h (635 MiB) and arm64 objects, no Apple SDK
+```
+
+**Evidence (host, 2026-11-15):**
+
+* 3dsrecomp `df82e6e` generated **624 files / 635 MiB of C** from the user's own Pokémon Y ROM
+  (gitignored `build/game/pokemon-y-host/`).
+* Combined SHA-256 over all generated `.c/.h` files:
+  `4a58182e96c6557a39f018152faed113fe495adeb0d24ac611eb12e130e80363`, **identical** to the tree
+  the same revision generated on the macOS VM — deterministic across hosts.
+* `recomp.h` reports `RECOMP_ABI 5`, the interface version the runtime accepts.
+
+**Windows recipe** (what the launcher does, no bash): 3dsrecomp splits `CC` on spaces and runs the
+first word as the compiler program, so the launcher sets
+`CC=clang.exe --target=arm64-apple-ios16.0`, `AR=<llvm>\llvm-ar.exe`,
+`CPATH=<repo>\tools\winbuild\darwin-stubs\include`, `PATH=<llvm>\bin;%PATH%` and runs
+`3dsrecomp.exe port <rom> <work>\recomp --name <slug>`. Building 3dsrecomp on Windows needs the Rust
+toolchain (upstream: MinGW-w64 gcc/clang for its compile step; rustup's MSVC target needs the Visual
+Studio C++ build tools). That recipe is documented and its command construction unit-tested, but it
+has **not been executed on a real Windows host** in this environment.
+
+### 8.2 GamePacks from the host-generated C (byte-identical to the VM path)
+
+| Artifact | Command | Result |
+|---|---|---|
+| device pack | `tools/winbuild/build-gamepack.sh pokemon-y --code-dir build/game/pokemon-y-host/code --target device` | 229,999,112 B arm64, sha256 `8c03c33882189f810cbce2089ee20176a21900dab431402020e085d3327fbce2` — **byte-identical** to the task-22 pack built from VM-generated C; 9 min 9 s with `--jobs 16` |
+| simulator pack | same with `--target sim` | 270,093,816 B x86_64, sha256 `61a1d89bafb7c92cb7fa59033821d0ca5e51d2ba5cc42217ca665d22617ae943`; 9 min 21 s |
+
+The simulator pack differs from the task-22 sim pack (sha `41a470ea…`) in exactly **8 bytes: the
+`LC_UUID`**; `cmp` finds 8 differing bytes and the only load-command difference is the UUID, while
+code/data/symbols/exports are identical (`diff` of `llvm-objdump --private-headers`/`llvm-nm`).
+ld64.lld chooses that UUID; it has no runtime meaning.
+
+### 8.3 Runtime correctness in the real shell and harness (iOS Simulator, fresh pack)
+
+The fresh simulator pack (`61a1d89b…`) was embedded in both Simulator apps
+(`scripts/build-ios-app-sim.sh --game-pack … --game-title-id 0004000000055E00`), the user's own ROM
+was placed in the app container (fixture), and both apps ran on iPhone 17 Pro / iOS 26.5 x86_64
+(software PICA200; the VM has no Metal):
+
+**Harness** (`ios/sim`, drives the runtime headlessly and now logs the runtime's own AOT accounting
+*after 60 frames*; the log line is test-only evidence, it is not shown to users):
+
+```text
+gamepack: GamePack-0004000000055E00.dylib: dlopen OK
+gamepack: title id 0004000000055E00 / pack ABI 1 (host ABI 1)
+gamepack: registered with the runtime; AOT code is active
+zk_recompiled: 1 (1 = Zakuro is running AOT code)
+zk_linked_code: 1 (1 = AOT code is available to this build)
+zk_recompiled_status: AOT active: linked code for title 0004000000055E00, 173131 entry points,
+  133 modules, 0 instruction fallbacks, interpreted 0.00% of 19294073 instructions
+```
+
+**Shipping shell** (`ios/app`, the real SwiftUI shell, launched with the debug hooks
+`-gamesRoot Documents/GamesFixtures -openAOTTitleID 0004000000055E00`):
+
+```text
+[3ds2apple] game catalog: GameCatalog.json · schemaVersion 2 · 1 game(s), 1 built
+[runtime] zk_register_gamepack: accepted title 0004000000055E00
+[runtime] zk_create: AOT active: linked code, 173131 entry points, 133 modules, 0 instruction fallbacks
+[3ds2apple] AOT linked=1 recompiled=1 program=0x0004000000055E00 status=AOT · package
+[3ds2apple] starting Pokemon Y from …/GamesFixtures/0004000000055E00/GameRom.cci
+```
+
+The shell has no interpreter fallback, so AOT-active + running frames is the LLVM-codegen
+correctness gate at load/registration/first-frames level; the harness reports the runtime's own
+instruction accounting: **0.00% interpreted of 19,294,073 instructions, 0 fallbacks**, matching the
+Xcode-built pack's expectations (software renderer ~4-5 fps, no Metal). The simulator was shut down
+afterwards (`simctl shutdown all`; verified no booted device). Raw logs are kept in the gitignored
+`build/winbuild-host/evidence/` (`sim-harness-fresh-pack.log`, `sim-shell-fresh-pack.log`).
+
+### 8.4 Windows launcher: feature-flagged LocalPackBuildProvider
+
+`launcher/windows` implements the local build behind an off-by-default flag
+(`LauncherStateDocument.LocalBuildEnabled`, Settings checkbox). Flow: 3dsrecomp port under the
+CC/CPATH environment above → shim compile + `ld64.lld` link (`-platform_version ios 16.0.0`,
+`-undefined dynamic_lookup`, `@rpath/GamePack-<TITLE>.dylib`) → thin-arm64 Mach-O check →
+`3ds2apple-pack packages record`. See [windows-launcher.md](windows-launcher.md) §13 for the tool
+requirements, readiness row and limitations. Tests: 6 provider tests + full suite **63/63**
+(`dotnet test`, .NET 10); Core + Avalonia Desktop build 0 warnings / 0 errors. The macOS Build Agent
+stays the supported, default path.
+
+### 8.5 Residual gaps (honest)
+
+* **No real Windows PC here:** 3dsrecomp-on-Windows and the launcher provider were exercised via the
+  identical command lines on Linux plus unit tests; the first Windows smoke test (build 3dsrecomp with
+  rustup, `tools/winbuild/build-gamepack.sh --selfcheck`, one real pack) is still required.
+* **No device AOT run** (no iPhone here): the simulator proves load/registration/instruction
+  accounting; a phone run (AOT active, ~0% interpreted, playable frames) remains device acceptance.
+* **3dsrecomp has no upstream LICENSE file** (Cargo.toml declares MIT). It is cloned at a pinned
+  revision at build time, run only as a build tool, never vendored and never redistributed; that is
+  why the shipping recipe builds it on the user's PC with rustup instead of bundling a binary.
+* Device/simulator outputs stay distinct (`GamePack-<TID>.dylib` vs `GamePack-<TID>-sim.dylib`) so
+  one output root can hold both.
+
+### 8.6 Recommendation update (after task-26)
+
+Keep **option A (macOS Build Agent) as the supported default**. The local path is now proven
+end-to-end for ROM → C → pack → **simulator AOT run (0.00% interpreted)** and is implemented in the
+Windows launcher behind a flag. Promote it after (1) a real-Windows smoke test and (2) a device AOT
+acceptance run. No Apple SDK is involved anywhere in the local path; the LLVM toolchain is
+redistributable under Apache-2.0 WITH LLVM-exception (THIRD_PARTY/NOTICE updated in this task).
 
