@@ -19,6 +19,16 @@
 #   scripts/build-ios-app-sim.sh --install        # then simctl install both
 #   ZKSIM_UDID=<udid> scripts/build-ios-app-sim.sh --install
 #
+# Per-game AOT proof: add a real GamePack dylib to both apps (the shell shows
+# the library entry, the harness drives the same pack) with
+#   scripts/build-ios-app-sim.sh --game-code-dir build/game/pokemon-y \
+#       --game-title-id 0004000000055E00 --game-display-name "Pokemon Y"
+# The generated C is compiled for x86_64-apple-ios-simulator by
+# scripts/build-game-pack.sh --target sim, and the app bundle gets
+# Frameworks/GamePack-<TITLE_ID>.dylib plus the GameCatalog.json the AOT shell
+# reads. This is the Simulator proof path (build-game-pack.sh --no-record);
+# shipped packs still get their GameInfo.json/catalogue from the Rust CLI.
+#
 # Outputs (all under the gitignored build/):
 #   build/sim/shell/out/Release-iphonesimulator/3ds2apple.app
 #   build/sim/harness/out/Release-iphonesimulator/3ds2apple-sim-harness.app
@@ -33,6 +43,15 @@ OUTDIR="$ROOT/build/sim"
 APP="both"
 CONFIG="Release"
 INSTALL=0
+GAME_CODE_DIR_ARG=""
+GAME_PACK_ARG=""
+GAME_TITLE_ARG=""
+GAME_NAME_ARG="pokemon-y"
+GAME_DISPLAY_ARG=""
+GAME_PRODUCT_ARG=""
+GAME_TITLE_ID=""
+GAME_DISPLAY_NAME=""
+GAME_PACK=""
 UDID="${ZKSIM_UDID:-3CBF5A62-AE12-47E8-803D-1D77BED85A66}"
 
 die() { printf 'build-ios-app-sim: %s\n' "$*" >&2; exit 1; }
@@ -49,6 +68,12 @@ while [[ $# -gt 0 ]]; do
     --configuration) CONFIG="${2:?--configuration needs a value}"; shift 2 ;;
     --udid) UDID="${2:?--udid needs a value}"; shift 2 ;;
     --install) INSTALL=1; shift ;;
+    --game-code-dir) [[ $# -ge 2 ]] || die "--game-code-dir needs a value"; GAME_CODE_DIR_ARG="$2"; shift 2 ;;
+    --game-pack) [[ $# -ge 2 ]] || die "--game-pack needs a value"; GAME_PACK_ARG="$2"; shift 2 ;;
+    --game-title-id) [[ $# -ge 2 ]] || die "--game-title-id needs a value"; GAME_TITLE_ARG="$2"; shift 2 ;;
+    --game-name) [[ $# -ge 2 ]] || die "--game-name needs a value"; GAME_NAME_ARG="$2"; shift 2 ;;
+    --game-display-name) [[ $# -ge 2 ]] || die "--game-display-name needs a value"; GAME_DISPLAY_ARG="$2"; shift 2 ;;
+    --game-product-code) [[ $# -ge 2 ]] || die "--game-product-code needs a value"; GAME_PRODUCT_ARG="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) die "unknown option: $1 (try --help)" ;;
   esac
@@ -67,6 +92,74 @@ command -v xcodegen >/dev/null 2>&1 || die "xcodegen is not in PATH"
 [[ "$(lipo -info "$LIB" 2>/dev/null)" == *x86_64* ]] || die "$LIB is not the x86_64 Simulator slice"
 
 mkdir -p "$OUTDIR"
+
+# --- per-game GamePack (AOT-first proof) ------------------------------------
+# Builds one real GamePack dylib from generated 3dsrecomp C (or adopts one),
+# embeds it under the app Frameworks/ directory and writes the
+# GameCatalog.json the AOT shell reads. Both generated apps get the same pack,
+# so the shell shows the library entry and the harness can drive the exact same
+# dylib headless.
+prepare_game_args() {
+  GAME_DISPLAY_NAME="$GAME_DISPLAY_ARG"
+  if [[ -z "$GAME_DISPLAY_NAME" ]]; then GAME_DISPLAY_NAME="$GAME_NAME_ARG"; fi
+  if [[ -z "$GAME_CODE_DIR_ARG" && -z "$GAME_PACK_ARG" ]]; then return 0; fi
+  if [[ -n "$GAME_CODE_DIR_ARG" && -n "$GAME_PACK_ARG" ]]; then
+    die "choose one of --game-code-dir or --game-pack"
+  fi
+  if [[ -z "$GAME_TITLE_ARG" ]]; then
+    die "--game-title-id is required with --game-code-dir/--game-pack"
+  fi
+  GAME_TITLE_ID="$(printf '%s' "$GAME_TITLE_ARG" | tr '[:lower:]' '[:upper:]')"
+  local len
+  len="$(printf '%s' "$GAME_TITLE_ID" | wc -c | tr -d '[:space:]')"
+  if [[ "$len" -ne 16 ]]; then die "invalid --game-title-id '$GAME_TITLE_ARG' (16 hex digits expected)"; fi
+  case "$GAME_TITLE_ID" in *[!0-9A-F]*) die "invalid --game-title-id '$GAME_TITLE_ARG' (16 hex digits expected)" ;; esac
+  if [[ -n "$GAME_CODE_DIR_ARG" ]]; then
+    [[ -d "$GAME_CODE_DIR_ARG" ]] || die "--game-code-dir is not a directory: $GAME_CODE_DIR_ARG"
+    GAME_CODE_DIR_ARG="$(cd "$GAME_CODE_DIR_ARG" && pwd)"
+  fi
+  if [[ -n "$GAME_PACK_ARG" ]]; then
+    [[ -d "$GAME_PACK_ARG" ]] || die "--game-pack is not a directory: $GAME_PACK_ARG"
+    GAME_PACK_ARG="$(cd "$GAME_PACK_ARG" && pwd)"
+  fi
+}
+
+build_game_pack() {
+  local out="$OUTDIR/game"
+  if [[ -n "$GAME_PACK_ARG" ]]; then
+    GAME_PACK="$GAME_PACK_ARG/GamePack.dylib"
+    [[ -f "$GAME_PACK" ]] || die "--game-pack has no GamePack.dylib: $GAME_PACK_ARG"
+    log "adopting GamePack: $GAME_PACK"
+  else
+    log "building the GamePack for $GAME_TITLE_ID from $GAME_CODE_DIR_ARG (compiles the game C)"
+    "$ROOT/scripts/build-game-pack.sh" "$GAME_NAME_ARG" \
+      --title-id "$GAME_TITLE_ID" --display-name "$GAME_DISPLAY_NAME" \
+      --product-code "$GAME_PRODUCT_ARG" --code-dir "$GAME_CODE_DIR_ARG" \
+      --target sim --out "$out" --no-record \
+      || die "build-game-pack.sh failed (see its output above)"
+    GAME_PACK="$out/packages/$GAME_TITLE_ID/GamePack.dylib"
+    [[ -f "$GAME_PACK" ]] || die "build-game-pack.sh produced no GamePack at $GAME_PACK"
+  fi
+  log "GamePack: $GAME_PACK"
+}
+
+write_game_catalog() { # output-file
+  local name="$1"
+  printf '{"schemaVersion":2,"games":[{"titleID":"%s","displayName":"%s","productCode":"%s","aot":true,"aotVersion":1,"packFile":"Frameworks/GamePack-%s.dylib","packABIVersion":1,"notes":"simulator proof build"}]}\n' \
+    "$GAME_TITLE_ID" "$GAME_DISPLAY_NAME" "$GAME_PRODUCT_ARG" "$GAME_TITLE_ID" > "$name"
+}
+
+embed_game_pack() { # app-bundle
+  local app="$1" frameworks
+  if [[ -z "$GAME_PACK" ]]; then return 0; fi
+  frameworks="$app/Frameworks"
+  mkdir -p "$frameworks"
+  cp -f "$GAME_PACK" "$frameworks/GamePack-$GAME_TITLE_ID.dylib" \
+    || die "could not copy the GamePack into $app"
+  write_game_catalog "$app/GameCatalog.json"
+  log "embedded: $frameworks/GamePack-$GAME_TITLE_ID.dylib"
+  log "embedded: $app/GameCatalog.json"
+}
 
 # --- shell ------------------------------------------------------------------
 build_shell() {
@@ -104,6 +197,7 @@ PY
   SHELL_APP="$dir/out/$CONFIG-iphonesimulator/3ds2apple.app"
   [[ -d "$SHELL_APP" ]] || die "shell build produced no app at $SHELL_APP"
   log "shell: $SHELL_APP"
+  embed_game_pack "$SHELL_APP"
   log "shell binary: $(lipo -info "$SHELL_APP/3ds2apple" 2>/dev/null)"
 }
 
@@ -125,11 +219,16 @@ build_harness() {
   HARNESS_APP="$dir/out/$CONFIG-iphonesimulator/3ds2apple-sim-harness.app"
   [[ -d "$HARNESS_APP" ]] || die "harness build produced no app at $HARNESS_APP"
   log "harness: $HARNESS_APP"
+  embed_game_pack "$HARNESS_APP"
   log "harness binary: $(lipo -info "$HARNESS_APP/3ds2apple-sim-harness" 2>/dev/null)"
 }
 
 SHELL_APP=""
 HARNESS_APP=""
+prepare_game_args
+if [[ -n "$GAME_CODE_DIR_ARG" || -n "$GAME_PACK_ARG" ]]; then
+  build_game_pack
+fi
 [[ "$APP" == shell || "$APP" == both ]] && build_shell
 [[ "$APP" == harness || "$APP" == both ]] && build_harness
 

@@ -311,3 +311,141 @@ library is empty` (the script builds the shell without a per-game catalog).
   `.3ds`/`.cci` is required (encrypted ROMs and arbitrary files fail).
 - VM becomes unresponsive during Simulator boot — start `caffeinate` first, do
   not build while the Simulator boots, and `xcrun simctl shutdown all` after.
+
+## 9. Per-game AOT GamePack on the Simulator (AOT-first proof)
+
+The runs in sections 1-7 drive the interpreter-only runtime. The AOT-first build
+adds one dylib per game ("GamePack") that hands 3dsrecomp-generated tables to
+the same runtime at run time; this section builds and runs that path in the
+Simulator, where it can be proven headless.
+
+### 9.1 The contract in one paragraph
+
+The pack is a Mach-O dylib that exports GamePack C ABI v1
+(ios/zakuro-ios/include/zakuro_gamepack.h): zk_gamepack_title_id(),
+zk_gamepack_abi_version() and zk_gamepack_register(host_abi). Its C shim
+(ios/zakuro-ios/gamepack/zk_gamepack_shim.c) forwards the generated recomp
+tables to the runtime through zk_register_gamepack(), then zk_create() hands
+them to Zakuro through the same Config.linked path a statically linked build
+uses, so zk_recompiled() returns 1. The pack carries the game code only: the
+runtime (libzakuro_ios.a / libzakuro_ios_sim.a) stays in the app and the pack's
+undefined host symbols are resolved at dlopen() time (-undefined
+dynamic_lookup). The shipping shell's AOTPackageLoader is unchanged: it already
+dlopen()s the catalog packFile, checks the title id, the ABI version and the
+registration result.
+
+### 9.2 Build the runtime, the pack and the apps
+
+Run on the build VM from the repository root:
+
+    scripts/build-zakuro-ios-sim.sh          # runtime with the GamePack API
+    scripts/build-game-pack.sh --selfcheck   # shim ABI + Mach-O export checks
+
+The generated C for one game must be on the VM (build/game/<name>; the
+desktop machine produces it, see docs/desktop-aot.md). Compile it for the
+Simulator and link the real pack (this compiles 489 C files in the Pokemon Y
+case; give it 20-40 minutes on this VM):
+
+    nohup scripts/build-game-pack.sh pokemon-y \
+      --title-id 0004000000055E00 --display-name "Pokemon Y" --product-code CTR-P-EK2A \
+      --code-dir build/game/pokemon-y --target sim \
+      --out build/sim/game --no-record > /tmp/gp-pack.log 2>&1 &
+
+Then build both simulator apps with the pack and the catalogue embedded:
+
+    scripts/build-ios-app-sim.sh --app both \
+      --game-pack build/sim/game/packages/0004000000055E00
+
+The script copies GamePack-<TITLE_ID>.dylib under the app's Frameworks/ and
+writes the schema v2 GameCatalog.json (packFile pointing at it) into both the
+shell and the harness. --no-record is the Simulator proof path: the shipped
+pipeline still gets its GameInfo.json/catalogue from the Rust desktop CLI, which
+is the single schema writer.
+
+### 9.3 Run and read the evidence
+
+Boot/install/seed as in section 3. The harness log then shows the pack path
+before any frame runs:
+
+    gamepack: candidates=["GamePack-0004000000055E00.dylib"]
+    gamepack: ...: dlopen OK
+    gamepack: ...: title id 0004000000055E00
+    gamepack: ...: pack ABI 1 (host ABI 1)
+    gamepack: ...: registered with the runtime; AOT code is active
+    zk_create: game package registered for title 0004000000055E00, handing its AOT code to the loader
+    zk_create: recomp-abi accepted the game package tables: ...
+    zk_create: AOT active: linked code, ...
+    zk_recompiled: 1 (1 = Zakuro is running AOT code)
+    zk_linked_program_id: 0004000000055E00
+
+Photos and logs stay outside the repository (/tmp/gp-evidence/ on the VM).
+
+Measured on 2026-11-14 (iPhone 17 Pro simulator, iOS 26.5, x86_64, software
+PICA200 only):
+
+- GamePack.dylib: 250,834,744 bytes, sha256
+  92bab7aaf4fbe7628ed82d392792f8bbc2085423f8518f830160ec1ba2145da2,
+  linked from the 489 generated C files (173,131 entry points, 133 modules).
+- harness: gamepack dlopen at +0.234 s, registered at +0.303 s, zk_create OK
+  after 0.33 s, zk_recompiled() == 1, zk_linked_program_id 0004000000055E00,
+  zk_linked_code() == 1.
+- runtime stderr on the console-pty launch (zk_create's own log):
+  zk_register_gamepack: registered title 0004000000055E00: recomp interface ABI
+  5, generation 5, 173131 entry points, 133 modules; zk_create: game package
+  registered for title 0004000000055E00; zk_create: AOT active: linked code,
+  173131 entry points, 133 modules, 0 instruction fallbacks, ... ; zk_perf ...
+  interpreted 0.00% | AOT active.
+- frames: 353 frames in 60 s (4.1-5.3 fps) - the AOT CPU is not the limit, the
+  software PICA200 is: the first 60 frames averaged 3.24 ms/frame (the boot
+  screen barely draws) and later frames 121-205 ms with 50-190 ms/frame in the
+  software GPU.
+- evidence on the build VM: /tmp/gp-evidence/01-harness-aot.png (harness
+  running the game), frames/top-frame300.png + frames/bottom-frame300.png (raw
+  400x240 / 320x240 reads), sim-harness-aot.log.
+
+### 9.4 Limitations of this proof
+
+- The runtime still needs the decrypted ROM at zk_create (Zakuro boots the
+  console from the NCSD: exheader, exefs and romfs). The AOT-first package
+  therefore has to carry the game data or the shell has to copy it from an
+  import; GameCatalog v2 has no romDataFile yet. For the Simulator proof the
+  ROM is seeded into the app container (section 3) - this is the same
+  user-owned-ROM rule as the interpreter runs, not a shipping flow.
+- One registered pack wins per process: the shell resolves one catalog game
+  before launching it, and the loader still checks the pack's title id against
+  the ROM, but a build that loaded two packs would use the last registration.
+- Nested-dylib signing (SideStore/Sideloadly must re-sign
+  Frameworks/GamePack-*.dylib) and a device dlopen are unverified here.
+- No Metal on this VM, so the same software PICA200/readback path of section 5
+  is what the AOT code draws through.
+
+### 9.5 A two-entry catalogue: real pack + placeholder (T3 result)
+
+A second, 13 KB placeholder pack was built with the same shim and stand-in
+tables but a recomp interface version this runtime refuses (recomp_abi 3 vs 5),
+for title 000400000000FF00 (sorts before the real pack so it is tried first).
+Both packs embedded, both apps installed:
+
+- harness log (fails the placeholder, then runs the real pack):
+      gamepack: candidates=["GamePack-000400000000FF00.dylib", "GamePack-0004000000055E00.dylib"]
+      gamepack: GamePack-000400000000FF00.dylib: dlopen OK
+      gamepack: GamePack-000400000000FF00.dylib: registration refused (result 2); skipped
+      gamepack: GamePack-0004000000055E00.dylib: registered with the runtime; AOT code is active
+      zk_recompiled: 1 (1 = Zakuro is running AOT code)
+- runtime console-pty log: "zk_register_gamepack: refused title
+  000400000000FF00: it was built for version 3 of the interface, this is 5",
+  then the real pack registered and zk_create reported AOT active.
+- shell (2-entry GameCatalog.json): home shows two library cards, "Placeholder
+  (fake pack)" and "Pokemon Y", each with the green AOT badge; the shell log
+  says "game catalog: GameCatalog.json - schemaVersion 2 - 2 game(s), 2 built"
+  and "library: 2 game(s) from GameCatalog.json".
+- evidence: /tmp/gp-evidence/02-harness-two-packs.png (harness running Pokemon Y
+  with both packs in the bundle), 03-shell-two-entries.png (shell home with the
+  two entries), harness-console-t3.log, sim-harness-t3.log, shell-log-t3.log.
+
+Only the real pack is admitted, and only the real game runs. The last shell-side
+step - a person tapping the Pokemon Y card - cannot be automated from simctl;
+the shipping shell's AOTPackageLoader is unchanged and was mirrored line by line
+by the harness (dlopen, title id, ABI version, registration result), so the
+pack admission and zk_create path proven above is the shell's path too.
+

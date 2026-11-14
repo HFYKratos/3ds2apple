@@ -25,6 +25,14 @@
 //! [`zk_recompiled`] report what a build and a loaded system ended up using,
 //! and [`zk_recompiled_status`] explains a fallback.
 //!
+//! The interpreter-only shell can also take one game's AOT code at run time:
+//! the AOT-first build ships a per-game GamePack dylib in the app bundle, the
+//! shell dlopen()s it and the pack registers its tables with
+//! [`gamepack::zk_register_gamepack`], which [`zk_create`] then runs through
+//! the same `Config.linked` path. GamePack C ABI v1 is declared in
+//! `ios/zakuro-ios/include/zakuro_gamepack.h`; the statically linked
+//! single-game flow above is unchanged and keeps precedence when present.
+//!
 //! ## Performance diagnostics
 //!
 //! [`zk_last_frame_micros`], [`zk_last_screen_read_micros`] and
@@ -99,6 +107,7 @@ use zakuro_core::services::hid::{InputState, PadState};
 use zakuro_core::{Config, FrameOutcome, System};
 use zakuro_gpu::SharedDevice;
 
+mod gamepack;
 mod perf;
 mod presenter;
 mod savestate;
@@ -307,11 +316,12 @@ mod linked {
 /// loading so the reason is known even when the loader's log is not kept.
 static LINKED_REFUSAL: Mutex<Option<String>> = Mutex::new(None);
 
-/// Records why the linked tables cannot be run.
+/// Records why the AOT code handed to the loader cannot be run.
 ///
-/// Only a `linked` build can discover such a reason, so the interpreter-only
-/// build does not carry the function (the status path still reads the note).
-#[cfg(feature = "linked")]
+/// A statically `linked` build discovers such a reason from its build-time
+/// tables and the interpreter-only shell from a GamePack registered at run time
+/// ([gamepack::zk_register_gamepack]); the status path reads it back through
+/// [`linked_refusal`].
 fn set_linked_refusal(reason: impl Into<String>) {
     *LINKED_REFUSAL
         .lock()
@@ -560,6 +570,20 @@ fn recompiled_status_text(system: *mut c_void) -> String {
     }
 
     if !cfg!(feature = "linked") {
+        // A GamePack can register at run time in this interpreter-only build;
+        // when the loader still did not run its code, name the pack's title and
+        // the recorded reason instead of claiming there is no AOT code.
+        if let Some(title) = gamepack::registered_title_id() {
+            let detail = linked_refusal().unwrap_or_else(|| {
+                "the loader did not accept the game package; look for the zk[WARN] lines in \
+                 the log for the reason (title/ABI mismatch, or a pack for another game)"
+                    .to_owned()
+            });
+            return format!(
+                "interpreting: the game package for title {title:016X} was registered but not \
+                 accepted: {detail}"
+            );
+        }
         return "interpreting: interpreter-only build, no linked code is compiled in".to_owned();
     }
     let Some(linked) = linked else {
@@ -610,14 +634,26 @@ fn log_linked_outcome(system: &System) {
         .map(|linked| linked.program_id());
     let rom = system.title.as_ref().map(|title| title.program_id());
     let reason = match (linked, rom) {
-        _ if !cfg!(feature = "linked") => "this is the interpreter-only build".to_owned(),
-        (None, _) => "this linked build handed no code to the loader".to_owned(),
         (Some(linked), Some(rom)) if linked != rom => {
-            format!("the code linked in is for title {linked:016X}, but the ROM is {rom:016X}")
+            format!(
+                "the AOT code handed to the loader is for title {linked:016X}, but the ROM is \
+                 {rom:016X}"
+            )
         }
         (Some(_), _) => linked_refusal().unwrap_or_else(|| {
-            "the loader did not accept the linked code; check the zk[WARN] lines above".to_owned()
+            "the loader did not accept the AOT code; check the zk[WARN] lines above".to_owned()
         }),
+        (None, _) if !cfg!(feature = "linked") => match gamepack::registered_title_id() {
+            Some(title) => linked_refusal().unwrap_or_else(|| {
+                format!(
+                    "the game package for title {title:016X} was registered but handed no usable \
+                     code"
+                )
+            }),
+            None => "this is the interpreter-only build and no game package is registered"
+                .to_owned(),
+        },
+        (None, _) => "this linked build handed no code to the loader".to_owned(),
     };
     eprintln!("zk_create: AOT inactive: interpreting everything: {reason}");
 }
@@ -651,29 +687,32 @@ pub extern "C" fn zk_last_error() -> *const c_char {
     }
 }
 
-/// 1 when this static library was built with one game's recompiled code linked
-/// in (`--features linked`, see `scripts/AOT_BUILD.md`), 0 for the interpreter-only shell.
+/// 1 when AOT code is available for the next [`zk_create`]: either one game's
+/// recompiled tables linked in at build time (`--features linked`, see
+/// `scripts/AOT_BUILD.md`) or a GamePack dylib registered at run time
+/// ([gamepack]), 0 for a shell with neither.
 #[no_mangle]
 pub extern "C" fn zk_linked_code() -> i32 {
-    if cfg!(feature = "linked") {
+    if cfg!(feature = "linked") || gamepack::registered_title_id().is_some() {
         1
     } else {
         0
     }
 }
 
-/// The 3DS title ID (`0004xxxxxxxxxxxx`) the linked recompiled code was built
-/// from, or 0 when this library has no linked code.
+/// The 3DS title ID (`0004xxxxxxxxxxxx`) of the AOT code this build will hand
+/// the next [`zk_create`]: the statically linked title, or the GamePack
+/// registered at run time, or 0 when there is no AOT code.
 ///
 /// The loader compares it with the title in the ROM: a mismatch logs a warning
 /// and interprets everything rather than running code meant for another game.
 #[no_mangle]
 pub extern "C" fn zk_linked_program_id() -> u64 {
     #[cfg(feature = "linked")]
-    let id = linked::program_id().unwrap_or(0);
-    #[cfg(not(feature = "linked"))]
-    let id = 0;
-    id
+    if let Some(id) = linked::program_id() {
+        return id;
+    }
+    gamepack::registered_title_id().unwrap_or(0)
 }
 
 /// Loads a decrypted `.3ds` / `.cci` and returns an opaque `System*`.
@@ -795,6 +834,47 @@ pub(crate) fn create_system(
     }
     #[cfg(not(feature = "linked"))]
     eprintln!("zk_create: interpreter-only build, no linked code is compiled in");
+
+    // A per-game AOT GamePack dylib may have registered its tables at run time
+    // (AOT-first shell, docs/desktop-aot.md section 6). This is the AOT source
+    // of the interpreter-only shell; a statically linked build keeps precedence
+    // because its compile-time title check is stricter.
+    if config.linked.is_none() {
+        if let Some(title_id) = gamepack::registered_title_id() {
+            match gamepack::registered_code() {
+                Some(code) => {
+                    eprintln!(
+                        "zk_create: game package registered for title {title_id:016X}, handing \
+                         its AOT code to the loader"
+                    );
+                    match zakuro_core::recompiled::Library::linked(&code) {
+                        Ok(library) => eprintln!(
+                            "zk_create: recomp-abi accepted the game package tables: {}",
+                            library.describe()
+                        ),
+                        Err(error) => {
+                            let reason = format!(
+                                "the game package tables were built for an interface version \
+                                 this Zakuro refuses: {error}"
+                            );
+                            eprintln!("zk_create: {reason}; the loader will interpret everything");
+                            set_linked_refusal(reason);
+                        }
+                    }
+                    config.linked = Some(code);
+                }
+                None => eprintln!(
+                    "zk_create: a game package is registered for title {title_id:016X} but its \
+                     tables are unusable"
+                ),
+            }
+        }
+    }
+
+    // The pack's host entry point must stay resolvable from a dlopen()ed pack
+    // even though the app never calls it directly: taking its address in code
+    // this app does call keeps the linker from dropping the symbol.
+    let _ = std::hint::black_box(gamepack::zk_register_gamepack as *const () as usize);
 
     match loader::load(&rom, config) {
         Ok(system) => {

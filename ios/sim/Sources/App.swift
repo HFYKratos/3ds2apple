@@ -19,6 +19,7 @@
 //
 
 import CoreGraphics
+import Darwin
 import Metal
 import SwiftUI
 import UIKit
@@ -81,6 +82,9 @@ final class HarnessModel: ObservableObject {
     private let documents: URL
     private var started = false
     private var systemHandle: zk_system_t?
+    /// dlopen() handle of the embedded per-game GamePack dylib, if any; kept
+    /// open for the whole run because its AOT tables stay registered.
+    private var gamepackHandle: UnsafeMutableRawPointer?
 
     init() {
         documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -114,6 +118,7 @@ final class HarnessModel: ObservableObject {
         log("documents: \(documents.path)")
         log("log file: \(SimLog.shared.path)")
         probeMetal()
+        loadGamePack()
 
         guard let rom = findROM() else {
             log("rom: no .cci/.3ds in Documents/roms (seed one and relaunch)")
@@ -134,6 +139,10 @@ final class HarnessModel: ObservableObject {
         }
         systemHandle = system
         log("zk_create: OK after \(fmt(Date().timeIntervalSince(createStart))) s")
+        let recompiled = zk_recompiled(system)
+        log(String(format: "zk_recompiled: %d (1 = Zakuro is running AOT code)", recompiled))
+        log(String(format: "zk_linked_program_id: %016llX", zk_linked_program_id()))
+        log("zk_linked_code: \(zk_linked_code()) (1 = AOT code is available to this build)")
 
         let topWidth = Int(zk_screen_width(0))
         let topHeight = Int(zk_screen_height(0))
@@ -222,6 +231,66 @@ final class HarnessModel: ObservableObject {
             }
         }
         log("run: finished with \(frames) frames, \(savedFrames) saved png steps")
+    }
+
+    // MARK: GamePack (AOT-first proof)
+
+    /// Loads the per-game GamePack dylib the simulator build embeds under
+    /// Frameworks/ and lets it register its AOT code with this harness's
+    /// runtime. The shipping shell's AOTPackageLoader does the same checks
+    /// (title id, ABI version, registration hook); the harness mirrors them so
+    /// the pack path can be proven headless, without tapping the library.
+    private func loadGamePack() {
+        let frameworks = Bundle.main.bundleURL.appendingPathComponent("Frameworks", isDirectory: true)
+        let urls = (try? FileManager.default.contentsOfDirectory(at: frameworks, includingPropertiesForKeys: nil)) ?? []
+        let packs = urls.filter { $0.pathExtension == "dylib" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        log("gamepack: candidates=\(packs.map { $0.lastPathComponent })")
+        guard !packs.isEmpty else {
+            log("gamepack: none in the app bundle; this run exercises the interpreter-only runtime")
+            return
+        }
+        // Mirrors AOTPackageLoader: a pack is usable when it loads, states its
+        // title and ABI, and accepts the host ABI through its registration hook.
+        // Packs that fail are skipped (the shell reports that catalog entry as
+        // unavailable); the first one that registers is the AOT code this run uses.
+        for pack in packs {
+            guard let handle = dlopen(pack.path, RTLD_NOW | RTLD_LOCAL) else {
+                let detail = dlerror().map { String(cString: $0) } ?? "unknown dlopen error"
+                log("gamepack: \(pack.lastPathComponent): dlopen FAILED: \(detail)")
+                continue
+            }
+            log("gamepack: \(pack.lastPathComponent): dlopen OK")
+            if let symbol = dlsym(handle, "zk_gamepack_title_id") {
+                typealias TitleIDFunction = @convention(c) () -> UInt64
+                let titleID = unsafeBitCast(symbol, to: TitleIDFunction.self)()
+                log(String(format: "gamepack: \(pack.lastPathComponent): title id %016llX", titleID))
+            } else {
+                log("gamepack: \(pack.lastPathComponent): no zk_gamepack_title_id export")
+            }
+            if let symbol = dlsym(handle, "zk_gamepack_abi_version") {
+                typealias ABIVersionFunction = @convention(c) () -> UInt32
+                let abi = unsafeBitCast(symbol, to: ABIVersionFunction.self)()
+                log("gamepack: \(pack.lastPathComponent): pack ABI \(abi) (host ABI 1)")
+            } else {
+                log("gamepack: \(pack.lastPathComponent): no zk_gamepack_abi_version export")
+            }
+            guard let symbol = dlsym(handle, "zk_gamepack_register") else {
+                log("gamepack: \(pack.lastPathComponent): no zk_gamepack_register export; skipped")
+                dlclose(handle)
+                continue
+            }
+            typealias RegisterFunction = @convention(c) (UInt32) -> Int32
+            let result = unsafeBitCast(symbol, to: RegisterFunction.self)(1)
+            guard result == 0 else {
+                log("gamepack: \(pack.lastPathComponent): registration refused (result \(result)); skipped")
+                dlclose(handle)
+                continue
+            }
+            gamepackHandle = handle
+            log("gamepack: \(pack.lastPathComponent): registered with the runtime; AOT code is active")
+            return
+        }
+        log("gamepack: no pack registered; this run has no AOT code")
     }
 
     // MARK: helpers

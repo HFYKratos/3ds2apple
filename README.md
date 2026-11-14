@@ -6,7 +6,7 @@
 
 Game code is translated from ARM to C at build time by [3dsrecomp](https://github.com/fearkov/3dsrecomp) and compiled into ARM64; at runtime [Zakuro](https://github.com/fearkov/zakuro) provides the 3DS system services, GPU and a small interpreter fallback. **No CPU JIT.**
 
-Platform: iPhone / iPad (iOS 16+) · Build: macOS + Xcode · Install: Sideloadly / SideStore / AltStore sideload · License: Apache-2.0 · **Bring your own game**
+Platform: iPhone / iPad (iOS 16+) · Build: macOS Tahoe 26.2+ with Xcode 26.6 (iOS 26.5 SDK) · Install: Sideloadly / SideStore / AltStore sideload · License: Apache-2.0 · **Bring your own game**
 
 > **Latest shell build: v0.1.5-beta3 (2026-11-14)** — [GitHub Release](https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.5-beta3)
 >

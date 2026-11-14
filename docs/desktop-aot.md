@@ -299,6 +299,48 @@ Until then the end-to-end proof in this repository is the **preview IPA**
 (fake shell + placeholder packs, catalog verified inside the IPA) plus the
 unchanged single-game static-link IPA path.
 
+> **2026-11-14 update (task-10, runtime-ffi): the hand-off gap is closed for
+> the runtime + pack builds; the Simulator proof runs.** The GamePack C ABI v1
+> is implemented and exercised:
+>
+> - **Runtime side** (ios/zakuro-ios): ios/zakuro-ios/include/zakuro_gamepack.h
+>   declares it; ios/zakuro-ios/src/gamepack.rs implements
+>   zk_register_gamepack(title_id, recomp_abi, generation, entries,
+>   entry_count, modules, module_count, origins), zk_unregister_gamepack(),
+>   zk_gamepack_registered() and zk_registered_gamepack_title_id(). zk_create()
+>   hands registered tables to Zakuro through Config.linked (the statically
+>   linked single-game path still wins when present), so zk_recompiled() == 1
+>   and the AOT-only shell's post-create check passes.
+> - **Pack side**: ios/zakuro-ios/gamepack/zk_gamepack_shim.c implements the
+>   pack's three exports and calls the host API; the pack links the game's
+>   generated archive plus the shim only (no copy of the runtime) with
+>   -undefined dynamic_lookup.
+> - **Pipeline**: scripts/build-game-pack.sh now builds a real pack:
+>   --code-dir DIR compiles the 3dsrecomp-generated C for the target
+>   (--target device|sim), --from-libs links build/ios/<name>/libgame.a and the
+>   shim, and --selfcheck runs the shim + Mach-O export checks without a ROM.
+>   --target sim --no-record is the Simulator proof path;
+>   scripts/build-ios-app-sim.sh --game-code-dir/--game-pack embeds the dylib
+>   and the catalogue into the simulator shell + harness.
+> - **Proof**: Pokemon Y, 489 generated C files compiled for
+>   x86_64-apple-ios-simulator into a 250,834,744 byte
+>   GamePack-0004000000055E00.dylib (sha256
+>   92bab7aaf4fbe7628ed82d392792f8bbc2085423f8518f830160ec1ba2145da2),
+>   dlopen()ed and registered in the iPhone 17 Pro simulator: zk_recompiled()
+>   == 1, zk_linked_program_id 0004000000055E00, zk_perf lines say "AOT active |
+>   interpreted 0.00%", 353 frames in 60 s against the software renderer. A
+>   two-entry catalogue (real pack + a placeholder pack whose recomp ABI the
+>   runtime refuses) installs and displays in the shell; the harness skips the
+>   placeholder and runs the real game. Evidence: docs/build-simulator.md
+>   section 9, /tmp/gp-evidence/ on the build VM.
+>
+> Still open for the phone flow: the AOT-first package has to carry the game
+> data/ROM (or import it during a desktop-to-phone transfer - GameCatalog v2 has
+> no romDataFile yet; Zakuro's loader still boots from the NCSD), nested-dylib
+> re-signing plus a device dlopen are unverified, and only one registered pack
+> is used per process.
+
+
 ## 7. Multi-game IPA (allocation)
 
 ```bash

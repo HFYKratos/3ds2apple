@@ -13,8 +13,22 @@ complete fake/dry-run pipeline (labelled placeholder packs) without Xcode.
 
 ## Requirements
 
-- macOS with Xcode and the iOS SDK (tested with Xcode 16.4 / iOS 18.5 SDK).
-- Rust stable with the `aarch64-apple-ios` target.
+- **Build machine: macOS Tahoe 26.2–26.x + Xcode 26.6 with the iOS 26.5
+  SDK** (tested; Intel and Apple Silicon). This is a build-tool requirement
+  only.
+  - **The app's minimum runtime stays iOS 16.** Xcode 26.6 supports
+    deployment targets iOS 15–26.5, so the project's `iOS 16.0` target builds
+    unchanged; do not raise the user-facing iOS minimum just because the
+    build Xcode changed.
+  - Xcode 27 requires an Apple Silicon Mac and macOS Tahoe 26.6+; it is an
+    optional future toolchain, not the minimum here. Xcode 26.6 remains the
+    pinned, tested baseline for reproducible release builds.
+  - Xcode 26 simulator runtimes no longer include Intel support by default;
+    this build VM still runs the installed iOS 26.5 x86_64 simulator, but a
+    future move to Apple Silicon is recommended for simulator testing.
+- Rust stable with the `aarch64-apple-ios` target. For the iOS Simulator
+  runtime, also add `x86_64-apple-ios` (Intel build host) or
+  `aarch64-apple-ios-sim` (Apple Silicon host).
 - `xcodegen` (for the SwiftUI project).
 - Python 3.
 - For a game build: a local checkout/toolchain of
