@@ -29,6 +29,17 @@
 # reads. This is the Simulator proof path (build-game-pack.sh --no-record);
 # shipped packs still get their GameInfo.json/catalogue from the Rust CLI.
 #
+# Self-contained package (task-11): add the user's decrypted ROM so the shell
+# boots it straight from the app bundle with no Documents/roms import:
+#   scripts/build-ios-app-sim.sh --app shell \
+#       --game-pack build/sim/game/packages/0004000000055E00 \
+#       --game-rom "/path/to/your/Pokemon Y.cci"
+# The ROM is copied to Roms/<TITLE_ID>.<ext> inside the shell app and named by
+# the generated catalog's "romFile". With --game-pack DIR the script also picks
+# up a GameRom.<ext> file from that package directory automatically. The ROM is
+# a user-owned local file: never commit it, and it is only embedded in the shell,
+# not in the harness.
+#
 # Outputs (all under the gitignored build/):
 #   build/sim/shell/out/Release-iphonesimulator/3ds2apple.app
 #   build/sim/harness/out/Release-iphonesimulator/3ds2apple-sim-harness.app
@@ -38,6 +49,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/desktop-aot.sh
+source "$ROOT/scripts/lib/desktop-aot.sh"
 LIB="$ROOT/build/ios/libzakuro_ios_sim.a"
 OUTDIR="$ROOT/build/sim"
 APP="both"
@@ -52,6 +65,10 @@ GAME_PRODUCT_ARG=""
 GAME_TITLE_ID=""
 GAME_DISPLAY_NAME=""
 GAME_PACK=""
+GAME_ROM_ARG=""
+GAME_ROM=""
+ROM_EXT=""
+ROM_BUNDLE_FILE=""
 UDID="${ZKSIM_UDID:-3CBF5A62-AE12-47E8-803D-1D77BED85A66}"
 
 die() { printf 'build-ios-app-sim: %s\n' "$*" >&2; exit 1; }
@@ -74,6 +91,7 @@ while [[ $# -gt 0 ]]; do
     --game-name) [[ $# -ge 2 ]] || die "--game-name needs a value"; GAME_NAME_ARG="$2"; shift 2 ;;
     --game-display-name) [[ $# -ge 2 ]] || die "--game-display-name needs a value"; GAME_DISPLAY_ARG="$2"; shift 2 ;;
     --game-product-code) [[ $# -ge 2 ]] || die "--game-product-code needs a value"; GAME_PRODUCT_ARG="$2"; shift 2 ;;
+    --game-rom) [[ $# -ge 2 ]] || die "--game-rom needs a value"; GAME_ROM_ARG="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) die "unknown option: $1 (try --help)" ;;
   esac
@@ -122,6 +140,28 @@ prepare_game_args() {
     [[ -d "$GAME_PACK_ARG" ]] || die "--game-pack is not a directory: $GAME_PACK_ARG"
     GAME_PACK_ARG="$(cd "$GAME_PACK_ARG" && pwd)"
   fi
+
+  # Bundled game data (self-contained package): explicit --game-rom wins, then
+  # a GameRom.<ext> the package builder recorded next to GamePack.dylib.
+  if [[ -n "$GAME_ROM_ARG" ]]; then
+    [[ -f "$GAME_ROM_ARG" ]] || die "--game-rom is not a file: $GAME_ROM_ARG"
+    GAME_ROM="$(cd "$(dirname "$GAME_ROM_ARG")" && pwd)/$(basename "$GAME_ROM_ARG")"
+  elif [[ -n "$GAME_PACK_ARG" ]]; then
+    for candidate in "$GAME_PACK_ARG"/GameRom.*; do
+      if [[ -f "$candidate" ]]; then GAME_ROM="$candidate"; break; fi
+    done
+  fi
+  if [[ -n "$GAME_ROM" ]]; then
+    local rom_extension
+    rom_extension="$(printf '%s' "${GAME_ROM##*.}" | tr '[:upper:]' '[:lower:]')"
+    case "$rom_extension" in
+      cci|3ds|ncch|cxi) ;;
+      *) die "unsupported --game-rom extension '.$rom_extension' (expected .cci/.3ds/.ncch/.cxi; .cia is not a runtime format)" ;;
+    esac
+    ROM_EXT=".$rom_extension"
+    ROM_BUNDLE_FILE="Roms/$GAME_TITLE_ID$ROM_EXT"
+    log "bundled ROM: $GAME_ROM ($(desktop_aot_file_bytes "$GAME_ROM") bytes) -> $ROM_BUNDLE_FILE"
+  fi
 }
 
 build_game_pack() {
@@ -129,7 +169,11 @@ build_game_pack() {
   if [[ -n "$GAME_PACK_ARG" ]]; then
     GAME_PACK="$GAME_PACK_ARG/GamePack.dylib"
     [[ -f "$GAME_PACK" ]] || die "--game-pack has no GamePack.dylib: $GAME_PACK_ARG"
-    log "adopting GamePack: $GAME_PACK"
+    desktop_aot_pack_matches_target "$GAME_PACK" "x86_64-apple-ios16.0-simulator" \
+      || die "--game-pack is not an x86_64 iOS Simulator dylib (slice: $(desktop_aot_pack_arch "$GAME_PACK" 2>/dev/null || echo unknown)); build it with --target sim"
+    desktop_aot_pack_exports_gamepack "$GAME_PACK" \
+      || die "--game-pack does not export the GamePack ABI (zk_gamepack_title_id / zk_gamepack_abi_version / zk_gamepack_register)"
+    log "adopting GamePack: $GAME_PACK ($(desktop_aot_pack_arch "$GAME_PACK") slice)"
   else
     log "building the GamePack for $GAME_TITLE_ID from $GAME_CODE_DIR_ARG (compiles the game C)"
     "$ROOT/scripts/build-game-pack.sh" "$GAME_NAME_ARG" \
@@ -143,22 +187,56 @@ build_game_pack() {
   log "GamePack: $GAME_PACK"
 }
 
-write_game_catalog() { # output-file
-  local name="$1"
-  printf '{"schemaVersion":2,"games":[{"titleID":"%s","displayName":"%s","productCode":"%s","aot":true,"aotVersion":1,"packFile":"Frameworks/GamePack-%s.dylib","packABIVersion":1,"notes":"simulator proof build"}]}\n' \
-    "$GAME_TITLE_ID" "$GAME_DISPLAY_NAME" "$GAME_PRODUCT_ARG" "$GAME_TITLE_ID" > "$name"
+write_game_catalog() { # output-file [rom-bundle-file]
+  # Written with python3 so a display name/product code containing quotes or
+  # backslashes still produces valid JSON (the desktop pipeline's single schema
+  # writer is the Rust CLI; this Simulator-only path mirrors its fields).
+  local name="$1" rom_file="${2:-}" game
+  python3 - "$name" "$GAME_TITLE_ID" "$GAME_DISPLAY_NAME" "$GAME_PRODUCT_ARG" "$rom_file" <<'PY'
+import json
+import sys
+
+destination, title_id, display_name, product_code, rom_file = sys.argv[1:6]
+game = {
+    "titleID": title_id,
+    "displayName": display_name,
+    "productCode": product_code,
+    "aot": True,
+    "aotVersion": 1,
+    "packFile": "Frameworks/GamePack-%s.dylib" % title_id,
+    "packABIVersion": 1,
+    "notes": "simulator proof build",
+}
+if rom_file:
+    game["romFile"] = rom_file
+with open(destination, "w", encoding="utf-8") as handle:
+    handle.write(json.dumps({"schemaVersion": 2, "games": [game]}, ensure_ascii=False,
+                            separators=(",", ":")) + "\n")
+PY
 }
 
-embed_game_pack() { # app-bundle
-  local app="$1" frameworks
+embed_game_pack() { # app-bundle [embed-rom]
+  local app="$1" with_rom="${2:-}" frameworks
   if [[ -z "$GAME_PACK" ]]; then return 0; fi
   frameworks="$app/Frameworks"
   mkdir -p "$frameworks"
   cp -f "$GAME_PACK" "$frameworks/GamePack-$GAME_TITLE_ID.dylib" \
     || die "could not copy the GamePack into $app"
-  write_game_catalog "$app/GameCatalog.json"
+  write_game_catalog "$app/GameCatalog.json" ""
   log "embedded: $frameworks/GamePack-$GAME_TITLE_ID.dylib"
   log "embedded: $app/GameCatalog.json"
+  if [[ "$with_rom" == "1" && -n "$GAME_ROM" ]]; then
+    local rom_dir="$app/Roms" source_sha copied_sha
+    mkdir -p "$rom_dir"
+    source_sha="$(desktop_aot_sha256 "$GAME_ROM")" || die "cannot hash $GAME_ROM"
+    cp -f "$GAME_ROM" "$rom_dir/$GAME_TITLE_ID$ROM_EXT" \
+      || die "could not copy the ROM into $app"
+    copied_sha="$(desktop_aot_sha256 "$rom_dir/$GAME_TITLE_ID$ROM_EXT")"
+    [[ "$source_sha" == "$copied_sha" ]] \
+      || die "the embedded ROM copy does not match its source ($source_sha vs $copied_sha)"
+    write_game_catalog "$app/GameCatalog.json" "$ROM_BUNDLE_FILE"
+    log "embedded: $rom_dir/$GAME_TITLE_ID$ROM_EXT ($(desktop_aot_file_bytes "$GAME_ROM") bytes, sha256 $copied_sha)"
+  fi
 }
 
 # --- shell ------------------------------------------------------------------
@@ -197,7 +275,7 @@ PY
   SHELL_APP="$dir/out/$CONFIG-iphonesimulator/3ds2apple.app"
   [[ -d "$SHELL_APP" ]] || die "shell build produced no app at $SHELL_APP"
   log "shell: $SHELL_APP"
-  embed_game_pack "$SHELL_APP"
+  embed_game_pack "$SHELL_APP" 1
   log "shell binary: $(lipo -info "$SHELL_APP/3ds2apple" 2>/dev/null)"
 }
 
@@ -219,7 +297,7 @@ build_harness() {
   HARNESS_APP="$dir/out/$CONFIG-iphonesimulator/3ds2apple-sim-harness.app"
   [[ -d "$HARNESS_APP" ]] || die "harness build produced no app at $HARNESS_APP"
   log "harness: $HARNESS_APP"
-  embed_game_pack "$HARNESS_APP"
+  embed_game_pack "$HARNESS_APP" 0
   log "harness binary: $(lipo -info "$HARNESS_APP/3ds2apple-sim-harness" 2>/dev/null)"
 }
 

@@ -224,7 +224,7 @@ mod tests {
     /// ROM or generated archive is needed for this path.
     #[test]
     fn register_rejects_empty_tables() {
-        clear_registered();
+        zk_unregister_gamepack();
         let marker = 1u32;
         let pointer = (&marker as *const u32).cast::<c_void>();
         assert_eq!(
@@ -239,6 +239,6 @@ mod tests {
         );
         assert_eq!(zk_gamepack_registered(), 0);
         assert_eq!(zk_registered_gamepack_title_id(), 0);
-        clear_registered();
+        zk_unregister_gamepack();
     }
 }

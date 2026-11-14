@@ -330,9 +330,12 @@ them to Zakuro through the same Config.linked path a statically linked build
 uses, so zk_recompiled() returns 1. The pack carries the game code only: the
 runtime (libzakuro_ios.a / libzakuro_ios_sim.a) stays in the app and the pack's
 undefined host symbols are resolved at dlopen() time (-undefined
-dynamic_lookup). The shipping shell's AOTPackageLoader is unchanged: it already
-dlopen()s the catalog packFile, checks the title id, the ABI version and the
-registration result.
+dynamic_lookup). The shipping shell's AOTPackageLoader dlopen()s the catalog
+packFile, checks the title id and the ABI version, and **requires** the
+registration hook: a pack without it is refused (it could only fall back to the
+interpreter). The runtime has one registration slot, so the loader re-runs the
+cached pack's hook when the registered title is another game (A -> B -> A runs
+A's AOT tables each time).
 
 ### 9.2 Build the runtime, the pack and the apps
 
@@ -354,18 +357,43 @@ case; give it 20-40 minutes on this VM):
 Then build both simulator apps with the pack and the catalogue embedded:
 
     scripts/build-ios-app-sim.sh --app both \
-      --game-pack build/sim/game/packages/0004000000055E00
+      --game-pack build/sim/game/packages/0004000000055E00 \
+      --game-title-id 0004000000055E00 \
+      --game-display-name "Pokemon Y" --game-product-code CTR-P-EK2A
 
-The script copies GamePack-<TITLE_ID>.dylib under the app's Frameworks/ and
-writes the schema v2 GameCatalog.json (packFile pointing at it) into both the
-shell and the harness. --no-record is the Simulator proof path: the shipped
-pipeline still gets its GameInfo.json/catalogue from the Rust desktop CLI, which
-is the single schema writer.
+--game-title-id is required with --game-pack/--game-code-dir (the catalogue
+entry and the Frameworks/ file name are derived from it); --game-display-name
+defaults to the game name. The script copies GamePack-<TITLE_ID>.dylib under the
+app's Frameworks/ and writes the schema v2 GameCatalog.json (packFile pointing
+at it) into both the shell and the harness. --no-record is the Simulator proof
+path: the shipped pipeline still gets its GameInfo.json/catalogue from the Rust
+desktop CLI, which is the single schema writer.
+
+Self-contained package (task-11): add the user's decrypted ROM so the shell boots
+it straight from the app bundle with no Documents/roms import:
+
+    # stage the ROM next to the pack (the same shape the desktop CLI writes)
+    cp "/path/to/your/Pokemon Y.cci" \
+       build/sim/game/packages/0004000000055E00/GameRom.cci
+
+    scripts/build-ios-app-sim.sh --app shell \
+      --game-pack build/sim/game/packages/0004000000055E00 \
+      --game-title-id 0004000000055E00 --game-display-name "Pokemon Y" \
+      --game-product-code CTR-P-EK2A \
+      --game-rom build/sim/game/packages/0004000000055E00/GameRom.cci
+
+The script copies the ROM to Roms/<TITLE_ID>.<ext> in the **shell** app (not the
+harness), verifies the copy's SHA256, and writes "romFile" into the shell's
+GameCatalog.json. It also auto-detects a GameRom.<ext> file in the --game-pack
+directory when --game-rom is omitted. The ROM is user-owned test data: keep it
+out of the repository and delete it from the output tree when done.
 
 ### 9.3 Run and read the evidence
 
-Boot/install/seed as in section 3. The harness log then shows the pack path
-before any frame runs:
+Boot/install as in section 3 (the harness can still use a Documents/roms seed).
+The harness log then shows the pack path before any frame runs. This is the
+**pack admission** proof (dlopen, title id, ABI, registration); the shipping
+shell's launch from a bundled ROM is documented in section 9.6.
 
     gamepack: candidates=["GamePack-0004000000055E00.dylib"]
     gamepack: ...: dlopen OK
@@ -405,17 +433,16 @@ PICA200 only):
 
 ### 9.4 Limitations of this proof
 
-- The runtime still needs the decrypted ROM at zk_create (Zakuro boots the
-  console from the NCSD: exheader, exefs and romfs). The AOT-first package
-  therefore has to carry the game data or the shell has to copy it from an
-  import; GameCatalog v2 has no romDataFile yet. For the Simulator proof the
-  ROM is seeded into the app container (section 3) - this is the same
-  user-owned-ROM rule as the interpreter runs, not a shipping flow.
-- One registered pack wins per process: the shell resolves one catalog game
-  before launching it, and the loader still checks the pack's title id against
-  the ROM, but a build that loaded two packs would use the last registration.
+- The runtime needs the decrypted ROM at zk_create (Zakuro boots the console
+  from the NCSD: exheader, exefs and romfs). The package closes that gap by
+  carrying the ROM (section 9.6); the harness in this section still seeds its
+  ROM into the container, which is only a test convenience.
+- One registered pack wins per process. The runtime's registration slot is
+  replaced by each successful registration; the shipping shell re-registers the
+  cached dylib when the slot names another title, but two games are never
+  registered at once.
 - Nested-dylib signing (SideStore/Sideloadly must re-sign
-  Frameworks/GamePack-*.dylib) and a device dlopen are unverified here.
+  Frameworks/GamePack-*.dylib) and a **device** dlopen are unverified here.
 - No Metal on this VM, so the same software PICA200/readback path of section 5
   is what the AOT code draws through.
 
@@ -443,9 +470,82 @@ Both packs embedded, both apps installed:
   with both packs in the bundle), 03-shell-two-entries.png (shell home with the
   two entries), harness-console-t3.log, sim-harness-t3.log, shell-log-t3.log.
 
-Only the real pack is admitted, and only the real game runs. The last shell-side
-step - a person tapping the Pokemon Y card - cannot be automated from simctl;
-the shipping shell's AOTPackageLoader is unchanged and was mirrored line by line
-by the harness (dlopen, title id, ABI version, registration result), so the
-pack admission and zk_create path proven above is the shell's path too.
+Only the real pack is admitted, and only the real game runs. This section proves
+**pack admission** in the harness (the shell shows the same library). The
+shipping shell's own launch path - tapping a card, or the `-openAOTTitleID`
+debug argument - is proven end-to-end in section 9.6.
+
+### 9.6 Self-contained package: the shipping shell launches from a bundled ROM (task-11)
+
+The AOT-first package must not ask the phone to import game data. Task-11 changed
+the contract and the shell so a package carries the user's ROM:
+
+- **GameInfo.json** (desktop package) gains `romFile`/`romSha256`/`romBytes`;
+  `3ds2apple-pack packages add|record --include-rom` copies the ROM into the
+  package as `GameRom.<ext>` and hashes it (raw, uncompressed: the copy costs
+  the ROM's size, 1.8 GB for Pokemon Y).
+- **GameCatalog.json v2** gains the optional app-bundle-relative `romFile`
+  (`Roms/<TITLE_ID>.<ext>`). The shell resolves it through the same
+  bundle-relative path check as `packFile` (`AOTPackageLoader.bundleROMURL`).
+- **Shell**: `ROMSession.start()` now launches a `packFile` game through the
+  package path - pack loaded and registered, ROM read from the bundle, then
+  `zk_create()` - instead of showing a notice. The legacy static-link path still
+  reads `Documents/roms`. `-openAOTTitleID <TITLE_ID>` (DebugLaunch.swift)
+  starts one catalog game from the command line because simctl cannot tap the
+  UI; the argument is inert in normal launches.
+
+Exact run (iPhone 17 Pro simulator, iOS 26.5, x86_64; the VM was concurrently
+compiling the arm64 device pack, so the fps below is not representative):
+
+    # 1. stage the ROM into the package and build the shell (1.9 GB app)
+    cp "/path/to/Pokemon Y.cci" build/sim/game/packages/0004000000055E00/GameRom.cci
+    scripts/build-ios-app-sim.sh --app shell \
+      --game-pack build/sim/game/packages/0004000000055E00 \
+      --game-title-id 0004000000055E00 --game-display-name "Pokemon Y" \
+      --game-product-code CTR-P-EK2A \
+      --game-rom build/sim/game/packages/0004000000055E00/GameRom.cci
+
+    # 2. install with no ROM in the data container (the old on-device flow)
+    xcrun simctl uninstall "$UDID" com.kratos.3ds2apple || true
+    xcrun simctl install "$UDID" build/sim/shell/out/Release-iphonesimulator/3ds2apple.app
+    CONTAINER=$(xcrun simctl get_app_container "$UDID" com.kratos.3ds2apple data)
+    ls "$CONTAINER/Documents"            # no roms/ and no library.json before launch
+
+    # 3. launch the catalog game through the debug argument
+    xcrun simctl launch --console-pty "$UDID" com.kratos.3ds2apple \
+      -openAOTTitleID 0004000000055E00
+
+Measured (2026-11-14, task-11; evidence in /tmp/gp-evidence/ on the build VM,
+kept out of the repository):
+
+- install: 34 s for the 1.9 GB app. The app bundle carries
+  1,807,118,336-byte `Roms/0004000000055E00.cci` (the script SHA256-checked the
+  copy against the staged source). After the run the data container's
+  `Documents` held only `Library/`, `logs/` and `data/`: **there was never a
+  `Documents/roms`**, and the runtime read
+  `.../3ds2apple.app/Roms/0004000000055E00.cci`.
+- shell log (`Documents/logs/latest.log`):
+      game catalog: GameCatalog.json - schemaVersion 2 - 1 game(s), 1 built
+      -openAOTTitleID: starting Pokemon Y (0004000000055E00) from the command line
+      game package Frameworks/GamePack-0004000000055E00.dylib: registered for 0004000000055E00 (abi 1)
+      starting Pokemon Y from the package ROM Roms/0004000000055E00.cci (0004000000055E00.cci)
+      zk_create: loading .../3ds2apple.app/Roms/0004000000055E00.cci (CAMetalLayer: no)
+      zk_create: game package registered for title 0004000000055E00, handing its AOT code to the loader
+      zk_create: recomp-abi accepted the game package tables: 173131 entry points, 133 modules
+      zk_create: AOT active: linked code, 173131 entry points, 133 modules, 0 instruction fallbacks
+      AOT linked=1 recompiled=1 program=0x0004000000055E00 status=AOT - package
+      zk_create OK after 0.3 s: Pokemon Y (0004000000055E00.cci)
+      zk_perf: ... | interpreted 0.00% | AOT active
+- screenshot evidence: `/tmp/gp-evidence/04-shell-boot-25s.png` (also
+  `-50s` and `04-shell-bundled-rom.png`): the shipping SwiftUI shell (title bar
+  "Pokemon Y", pause button, on-screen controls) shows Pokemon Y's
+  language-select screen on both 3DS screens. The frames come from the package
+  ROM and the registered pack; no game data was imported.
+- fps: 1-4 in this run because the arm64 device GamePack compile was running on
+  the same 8-vCPU VM (load >60). The task-10 idle-VM measurement was 4.1-5.3 fps
+  with the software PICA200, which is the environment limit here.
+
+What this does not prove: an arm64 **device** pack with a device `dlopen()`;
+nested-dylib re-signing (SideStore/Sideloadly); hardware/Metal rendering
+(section 5 covers the software-only VM).
 

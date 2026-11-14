@@ -49,12 +49,15 @@ import UIKit
 struct GameLaunch {
     /// The catalog entry being started.
     let entry: GameEntry
-    /// The cartridge image the runtime reads at load time. Only statically
-    /// linked single-game builds need one: package builds load their image
-    /// through the GamePack registration hook instead.
+    /// The cartridge image the runtime reads at load time. For a statically
+    /// linked single-game build this is the legacy Documents/roms file; for a
+    /// self-contained AOT package it is the ROM the package bundles in the app.
     let cartridgeURL: URL
     /// Documents/data/<title ID>: the runtime's battery-save directory.
     let dataDirectory: URL
+    /// Where the AOT code came from (diagnostics + status label). Both sources
+    /// still end in zk_create() and the AOT-only post-create check.
+    let aotStatus: AOTStatus
 }
 
 /// A user-facing message on the home page: an AOT-only launch refusal or a
@@ -84,6 +87,7 @@ struct FrameStats {
 enum AOTStatus: String {
     case notLoaded = "AOT not loaded"
     case staticLinked = "AOT · linked"
+    case package = "AOT · package"
 
     /// Stable English label for the device log and the diagnostics report.
     var label: String { rawValue }
@@ -348,14 +352,15 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         case .available(.bundlePackage):
             switch AOTPackageLoader.shared.resolve(for: entry) {
             case .package(let package):
-                presentNotice(
-                    title: L10n.tr("AOT package ready"),
-                    message: L10n.format(
-                        "The game package “%@” is installed and registered for “%@”. Starting games from a package needs the next runtime build; this shell can only start the game whose AOT code is linked into it.",
-                        package.bundleRelativePath,
-                        entry.title
-                    )
+                // The pack is dlopen()ed and its AOT tables are registered with
+                // the runtime; the game data is the ROM the package bundles.
+                AppLog.log(
+                    "[3ds2apple] game package ready: %@ (title %@, registered: %@)",
+                    package.bundleRelativePath,
+                    package.titleID,
+                    package.registrationSymbol ?? "no"
                 )
+                startPackaged(entry)
             case .unavailable(let reason):
                 presentNoAOTNotice(for: entry, reason: reason)
             case .staticLinked:
@@ -385,6 +390,37 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             titleID: entry.titleID,
             legacyFileName: cartridgeURL.lastPathComponent
         )
+        startLaunch(entry: entry, cartridgeURL: cartridgeURL, aotStatus: .staticLinked)
+    }
+
+    /// Loads a catalog game from its self-contained package: the AOT code comes
+    /// from the GamePack dylib (already loaded and registered by
+    /// AOTPackageLoader) and the game data is the ROM the package bundles under
+    /// its catalog "romFile". Nothing is imported or copied on the device.
+    private func startPackaged(_ entry: GameEntry) {
+        guard let cartridgeURL = AOTPackageLoader.bundleROMURL(for: entry) else {
+            presentNotice(
+                title: L10n.tr("Game data missing"),
+                message: L10n.format(
+                    "This build contains the AOT code for “%@”, but its game data (ROM) is not in the app bundle. Rebuild the game on your computer with the ROM included in the package, then install that build.",
+                    entry.title
+                )
+            )
+            return
+        }
+        AppLog.log(
+            "[3ds2apple] starting %@ from the package ROM %@ (%@)",
+            entry.title,
+            entry.romFile ?? "?",
+            cartridgeURL.lastPathComponent
+        )
+        startLaunch(entry: entry, cartridgeURL: cartridgeURL, aotStatus: .package)
+    }
+
+    /// Shared launch path for both AOT code sources: publish the game, reset the
+    /// runtime state, then load on the runtime queue. Save data is namespaced by
+    /// title ID whichever way the game data arrived.
+    private func startLaunch(entry: GameEntry, cartridgeURL: URL, aotStatus: AOTStatus) {
         let dataDirectory = documentsDirectory
             .appendingPathComponent("data", isDirectory: true)
             .appendingPathComponent(
@@ -402,7 +438,12 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         isPaused = false
         warmUp = GraphicsWarmUpStatus()
         setPhase(.starting(name: game.title))
-        let launch = GameLaunch(entry: game, cartridgeURL: cartridgeURL, dataDirectory: dataDirectory)
+        let launch = GameLaunch(
+            entry: game,
+            cartridgeURL: cartridgeURL,
+            dataDirectory: dataDirectory,
+            aotStatus: aotStatus
+        )
         runtimeQueue.async { [weak self] in
             guard let self else { return }
             self.beginLoad(launch)
@@ -1155,7 +1196,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             }
             return
         }
-        let aot: AOTStatus = .staticLinked
+        let aot: AOTStatus = launch.aotStatus
         AppLog.log("[3ds2apple] AOT linked=1 recompiled=1 program=0x%016llX status=%@",
               programID, aot.label)
         AppLog.log("[3ds2apple] display: %@", displayPath.label)

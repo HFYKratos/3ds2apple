@@ -6,6 +6,7 @@
 //! out/packages/<TITLE_ID>/
 //!   GameInfo.json      metadata + provenance (this module)
 //!   GamePack.dylib     AOT game pack produced on macOS (built by the scripts)
+//!   GameRom.<ext>      optional user ROM copy, so the phone never imports data
 //!   cover.png          optional, user-supplied; never committed
 //! ```
 //!
@@ -29,6 +30,11 @@ pub const PACKAGES_DIR: &str = "packages";
 pub const GAME_INFO_FILE: &str = "GameInfo.json";
 /// AOT game pack file name inside a package directory.
 pub const GAME_PACK_FILE: &str = "GamePack.dylib";
+/// File name prefix of the user ROM bundled inside a self-contained package.
+pub const GAME_ROM_PREFIX: &str = "GameRom";
+/// ROM file extensions a self-contained package may bundle (Zakuro boots NCSD
+/// images; `.cia` archives are not a runtime format).
+pub const GAME_ROM_EXTENSIONS: &[&str] = &["cci", "3ds", "ncch", "cxi"];
 /// Generated catalogue file name (written into `<out>/packages/` and the app).
 pub const CATALOG_FILE: &str = "GameCatalog.json";
 /// Schema version of `GameInfo.json`.
@@ -114,6 +120,18 @@ pub struct GameInfo {
     /// Present once the pack has been built/adopted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pack: Option<PackFile>,
+    /// File name of the user ROM copy shipped inside the package
+    /// (`GameRom.<ext>`), written by `--include-rom`. When present the package
+    /// is self-contained: the shell reads the game data from the app bundle and
+    /// the phone never imports a ROM.
+    #[serde(rename = "romFile", default, skip_serializing_if = "Option::is_none")]
+    pub rom_file: Option<String>,
+    /// Lower-case hex SHA256 of the bundled ROM copy.
+    #[serde(rename = "romSha256", default, skip_serializing_if = "Option::is_none")]
+    pub rom_sha256: Option<String>,
+    /// Size in bytes of the bundled ROM copy.
+    #[serde(rename = "romBytes", default, skip_serializing_if = "Option::is_none")]
+    pub rom_bytes: Option<u64>,
     /// ROM provenance.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rom: Option<RomSource>,
@@ -163,6 +181,9 @@ impl GameInfo {
             save_namespace: title_id,
             pack_file: GAME_PACK_FILE.to_string(),
             pack: None,
+            rom_file: None,
+            rom_sha256: None,
+            rom_bytes: None,
             rom: None,
             notes: String::new(),
         };
@@ -208,6 +229,7 @@ impl GameInfo {
         if let Some(pack) = &self.pack {
             validate_pack_file(&self.title_id, pack)?;
         }
+        validate_rom_fields(self)?;
         if self.notes.chars().any(|c| c.is_control()) {
             return Err(PackError::invalid(format!(
                 "{}: notes must not contain control characters",
@@ -309,6 +331,173 @@ fn validate_pack_file(title_id: &str, pack: &PackFile) -> Result<()> {
         )));
     }
     Ok(())
+}
+
+/// Validate the optional bundled-ROM triplet: all three fields or none, a
+/// canonical `GameRom.<ext>` name, a real SHA256 and a size that agrees with the
+/// provenance record.
+fn validate_rom_fields(info: &GameInfo) -> Result<()> {
+    let title = &info.title_id;
+    let present = info.rom_file.is_some() as u8
+        + info.rom_sha256.is_some() as u8
+        + info.rom_bytes.is_some() as u8;
+    if present == 0 {
+        return Ok(());
+    }
+    if present != 3 {
+        return Err(PackError::invalid(format!(
+            "{title}: romFile, romSha256 and romBytes must be present together"
+        )));
+    }
+    let file = info.rom_file.as_deref().unwrap_or_default();
+    if !is_game_rom_file_name(file) {
+        return Err(PackError::invalid(format!(
+            "{title}: romFile must be '{}.<{}>' (got '{file}')",
+            GAME_ROM_PREFIX,
+            GAME_ROM_EXTENSIONS.join("|")
+        )));
+    }
+    let sha = info.rom_sha256.as_deref().unwrap_or_default();
+    if sha.len() != 64
+        || !sha
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+    {
+        return Err(PackError::invalid(format!(
+            "{title}: romSha256 must be 64 lower-case hex digits"
+        )));
+    }
+    let bytes = info.rom_bytes.unwrap_or(0);
+    if bytes == 0 {
+        return Err(PackError::invalid(format!("{title}: romBytes must be > 0")));
+    }
+    if let Some(rom) = &info.rom {
+        if rom.bytes != bytes {
+            return Err(PackError::invalid(format!(
+                "{title}: romBytes is {bytes} but the provenance record says {} (the ROM changed; re-import it)",
+                rom.bytes
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Package-relative file name of a bundled ROM: `GameRom.<ext>`, with the
+/// source extension lower-cased. Only the extensions the runtime can boot are
+/// accepted, so a `.cia` archive is rejected at import time rather than at boot.
+pub fn game_rom_file_name(source: &Path) -> Result<String> {
+    let extension = source
+        .extension()
+        .map(|ext| ext.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    if !GAME_ROM_EXTENSIONS.contains(&extension.as_str()) {
+        return Err(PackError::invalid(format!(
+            "{}: cannot bundle a ROM with extension '.{}' (supported: {})",
+            source.display(),
+            extension,
+            GAME_ROM_EXTENSIONS.join(", ")
+        )));
+    }
+    Ok(format!("{GAME_ROM_PREFIX}.{extension}"))
+}
+
+/// True for a canonical bundled-ROM file name (`GameRom.cci`, `GameRom.3ds`, ...).
+pub fn is_game_rom_file_name(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix(GAME_ROM_PREFIX) else {
+        return false;
+    };
+    let Some(extension) = rest.strip_prefix('.') else {
+        return false;
+    };
+    GAME_ROM_EXTENSIONS.contains(&extension)
+}
+
+/// Copy the user ROM into the package, verify the copy against the source and
+/// record `romFile`/`romSha256`/`romBytes` in the manifest.
+///
+/// The ROM is stored raw (never compressed): the runtime `zk_create()` opens it
+/// as a file and the package builder only copies bytes, so the cost is disk
+/// space equal to the ROM (1.8 GB for Pokemon Y) in the gitignored output tree.
+/// The copy is hashed and compared with the source before the manifest is
+/// written, so a package can never claim a ROM it does not actually carry.
+pub fn install_rom(dir: &Path, source: &Path) -> Result<GameInfo> {
+    let mut info = read_package(dir)?;
+    let file_name = game_rom_file_name(source)?;
+    let destination = dir.join(&file_name);
+    let source_hash =
+        builder_core::hash::sha256_file(source).map_err(|error| PackError::io(source, error))?;
+    std::fs::create_dir_all(dir).map_err(|error| PackError::io(dir, error))?;
+    std::fs::copy(source, &destination).map_err(|error| PackError::io(&destination, error))?;
+    let copied = builder_core::hash::sha256_file(&destination)
+        .map_err(|error| PackError::io(&destination, error))?;
+    if copied.sha256 != source_hash.sha256 || copied.bytes != source_hash.bytes {
+        std::fs::remove_file(&destination).ok();
+        return Err(PackError::invalid(format!(
+            "{}: the bundled ROM copy does not match its source ({} bytes / {}, copy {} bytes / {})",
+            destination.display(),
+            source_hash.bytes,
+            source_hash.sha256,
+            copied.bytes,
+            copied.sha256
+        )));
+    }
+    if let Some(rom) = &info.rom {
+        if rom.bytes != copied.bytes {
+            std::fs::remove_file(&destination).ok();
+            return Err(PackError::invalid(format!(
+                "{}: the ROM is {} bytes but the package was imported with {} bytes; re-import it first",
+                source.display(),
+                copied.bytes,
+                rom.bytes
+            )));
+        }
+    }
+    info.rom_file = Some(file_name);
+    info.rom_sha256 = Some(copied.sha256);
+    info.rom_bytes = Some(copied.bytes);
+    info.write(dir)?;
+    Ok(info)
+}
+
+/// Check the bundled ROM of one package against the manifest (size + SHA256).
+/// Returns false and pushes an issue when it is missing or does not match.
+fn verify_bundled_rom(info: &GameInfo, dir: &Path, issues: &mut Vec<String>) -> bool {
+    let (Some(file), Some(expected_sha), Some(expected_bytes)) =
+        (&info.rom_file, &info.rom_sha256, info.rom_bytes)
+    else {
+        return true;
+    };
+    let path = dir.join(file);
+    if !path.is_file() {
+        issues.push(format!("bundled ROM {} is missing", path.display()));
+        return false;
+    }
+    let hash = match builder_core::hash::sha256_file(&path) {
+        Ok(hash) => hash,
+        Err(error) => {
+            issues.push(format!(
+                "could not hash bundled ROM {}: {error}",
+                path.display()
+            ));
+            return false;
+        }
+    };
+    let mut ok = true;
+    if hash.bytes != expected_bytes {
+        issues.push(format!(
+            "bundled ROM is {} bytes but GameInfo.json records {expected_bytes}",
+            hash.bytes
+        ));
+        ok = false;
+    }
+    if hash.sha256 != *expected_sha {
+        issues.push(format!(
+            "bundled ROM SHA256 is {} but GameInfo.json records {expected_sha}",
+            hash.sha256
+        ));
+        ok = false;
+    }
+    ok
 }
 
 /// Package directory for one title: `<root>/packages/<TITLE_ID>`.
@@ -529,6 +718,9 @@ pub fn verify_package(dir: &Path) -> Result<VerifyReport> {
                 PackageState::Built
             };
         }
+    }
+    if !verify_bundled_rom(&info, dir, &mut issues) {
+        state = PackageState::Broken;
     }
     let blocking = state == PackageState::Broken;
     Ok(VerifyReport {

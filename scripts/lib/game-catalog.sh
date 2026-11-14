@@ -16,6 +16,10 @@
 #     {"titleID":"0004000000055E00","displayName":"Pokémon Y",
 #      "productCode":"CTR-P-EKJA","aot":true,"aotVersion":1,"notes":""}]}
 #
+# Schema 2 (the AOT-first pipeline) additionally carries the per-game pack
+# ("packFile") and, when the package bundles the user ROM, the app-bundle ROM
+# path ("romFile": "Roms/<TITLE_ID>.<cci|3ds|ncch|cxi>").
+#
 # Writing uses printf only; validation uses python3 (listed as a prerequisite in
 # docs/build.md), so no JSON library is needed by the build itself.
 #
@@ -229,6 +233,18 @@ for index, game in enumerate(games):
             expected_cover = "Covers/%s.png" % title_id
             if not isinstance(cover, str) or cover != expected_cover:
                 fail("%s.coverFile must be '%s' (got %r)" % (where, expected_cover, cover))
+        # Optional bundled game data (task-11): a package that carries the user
+        # ROM names it here as Roms/<TITLE_ID>.<ext>; the shell hands that file
+        # to zk_create(). Absent means "no bundled ROM" (the game cannot start
+        # without an on-device import, which the AOT-first flow forbids).
+        rom_file = game.get("romFile")
+        if rom_file is not None:
+            expected_stem = "Roms/%s." % title_id
+            allowed_extensions = ("cci", "3ds", "ncch", "cxi")
+            if (not isinstance(rom_file, str) or not rom_file.startswith(expected_stem)
+                    or rom_file[len(expected_stem):] not in allowed_extensions):
+                fail("%s.romFile must be 'Roms/%s.<cci|3ds|ncch|cxi>' (got %r)"
+                     % (where, title_id, rom_file))
     if aot:
         aot_lines.append("%s (%s)" % (display_name, title_id))
 

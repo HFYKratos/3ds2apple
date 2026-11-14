@@ -113,6 +113,11 @@ struct PackagesAddArgs {
     /// Re-import already built packages (keeps their pack).
     #[arg(long)]
     force: bool,
+    /// Copy each ROM into its package (GameRom.<ext>) and record
+    /// romFile/romSha256/romBytes, so the package is self-contained and the
+    /// phone never imports game data.
+    #[arg(long)]
+    include_rom: bool,
 }
 
 #[derive(Debug, Args)]
@@ -129,6 +134,10 @@ struct RecordArgs {
     /// ROM to record as provenance (title ID must match).
     #[arg(long, value_name = "ROM")]
     rom: Option<PathBuf>,
+    /// Copy the ROM into the package (requires --rom), making the package
+    /// self-contained: the shell then boots the bundled ROM.
+    #[arg(long)]
+    include_rom: bool,
     /// Display name (required when the package was not imported first).
     #[arg(long, value_name = "NAME")]
     display_name: Option<String>,
@@ -168,6 +177,10 @@ struct BuildArgs {
     /// AOT version for imported packages (default 1).
     #[arg(long, default_value_t = 1, value_name = "N")]
     aot_version: u32,
+    /// With --roms: copy each ROM into its package (GameRom.<ext>), so the
+    /// resulting package is self-contained.
+    #[arg(long)]
+    include_rom: bool,
 }
 
 #[derive(Debug, Args)]
@@ -301,6 +314,7 @@ fn cmd_packages_add(out: &Path, args: PackagesAddArgs, json: bool) -> Result<i32
         force: args.force,
         display_name: args.display_name.clone(),
         aot_version: args.aot_version,
+        include_rom: args.include_rom,
     };
     let mut packages: Vec<Value> = Vec::new();
     let mut errors: Vec<Value> = Vec::new();
@@ -522,11 +536,17 @@ fn cmd_packages_record(out: &Path, args: RecordArgs, json: bool) -> Result<i32> 
             "packages record needs --pack FILE or --fake-placeholder",
         ));
     }
+    if args.include_rom && args.rom.is_none() {
+        return Err(PackError::invalid(
+            "packages record --include-rom needs --rom FILE (the ROM to copy into the package)",
+        ));
+    }
     let options = RecordOptions {
         title_id: args.title_id.clone(),
         pack: args.pack.clone(),
         fake_placeholder: args.fake_placeholder,
         rom: args.rom.clone(),
+        include_rom: args.include_rom,
         display_name: args.display_name.clone(),
         product_code: args.product_code.clone(),
         aot_version: args.aot_version,
@@ -568,6 +588,7 @@ fn cmd_build(out: &Path, args: BuildArgs, json: bool) -> Result<i32> {
             force: args.force,
             display_name: args.display_name.clone(),
             aot_version: args.aot_version,
+            include_rom: args.include_rom,
         };
         for path in &args.roms {
             match ops::import_rom(out, path, &options) {

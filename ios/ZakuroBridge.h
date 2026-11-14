@@ -488,6 +488,19 @@ uint64_t zk_linked_program_id(void);
  */
 int32_t zk_recompiled(zk_system_t system);
 
+/* ------------------------------------------------ GamePack registration (AOT) -- */
+
+/*
+ * Host side of the per-game AOT GamePack C ABI v1
+ * (ios/zakuro-ios/include/zakuro_gamepack.h). AOTPackageLoader.swift calls the
+ * loaded pack's zk_gamepack_register() export, which reaches the runtime through
+ * zk_register_gamepack(); these three are the shell-side read/cleanup calls used
+ * to keep the single registration slot in step across games.
+ */
+int32_t zk_gamepack_registered(void);
+uint64_t zk_registered_gamepack_title_id(void);
+int32_t zk_unregister_gamepack(void);
+
 #ifdef __cplusplus
 }
 #endif

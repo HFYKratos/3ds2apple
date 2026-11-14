@@ -1,14 +1,15 @@
 # Desktop AOT-first pipeline
 
 > Status: MVP, host-native (Linux/Windows/macOS), 2026-11-14 · task-7 ·
+> task-11 added self-contained packages (bundled ROM) and the shell launch path;
 > companion to [aot-first.md](aot-first.md) (route) and
 > [../builder/](../builder/) (builder binaries).
 >
 > This document is the contract between the desktop build and the AOT shell: the
 > per-game package layout, the `GameInfo.json` manifest, the `GameCatalog.json`
-> schema v2 and the `GamePack.dylib` ABI hand-off. The real macOS compile/link is
-> still delegated to the scripts in `scripts/` (or the Build Agent); everything
-> else runs natively on the user's desktop, including on Linux.
+> schema v2 and the `GamePack.dylib` ABI hand-off. The real macOS compile/link
+> runs through the scripts in `scripts/` (or the Build Agent); everything else
+> runs natively on the user's desktop, including on Linux.
 
 The AOT-first model moves ROM import and compilation off the phone:
 
@@ -129,6 +130,14 @@ CLI=builder/target/release/3ds2apple-pack   # or cargo run -p builder-pack --
 
 # Import/queue one or many ROMs (creates out/packages/<TITLE_ID>/GameInfo.json)
 "$CLI" packages add --roms "ROM/Pokémon Y.cci" "ROM/Pokémon Alpha Sapphire.cci"
+
+# Self-contained package: copy the user ROM into the package (GameRom.<ext>)
+"$CLI" packages add --roms "ROM/Pokémon Y.cci" --include-rom
+"$CLI" build --roms "ROM/Pokémon Y.cci" --include-rom --execute
+# ... and record/verify it once the pack exists
+"$CLI" packages record --title-id 0004000000055E00 \
+      --pack build/game/pack/GamePack.dylib --rom "ROM/Pokémon Y.cci" --include-rom
+"$CLI" packages verify        # re-hashes the pack and the bundled ROM
 "$CLI" packages list
 # 0004000000055E00  queued    Pokémon Y              CTR-P-EK2A      not built
 # 000400000011C500  queued    Pokémon Alpha Sapphire CTR-P-ECLA     not built
@@ -167,6 +176,10 @@ Behaviour notes:
 - `build --queued --force` rebuilds packages that already have a pack; plain
   `--queued` only builds packages without one. `build --roms --force` re-imports
   an existing package (keeping its pack) instead of failing.
+- `--include-rom` copies the ROM into the package and records its size and
+  SHA256; it is off by default because it turns the fast header-only import into
+  a full file copy and adds the ROM size to `out/`. It requires a ROM and the
+  recorded size must match the provenance record.
 - Exit codes: 0 success, 1 failure/validation, 2 CLI usage error.
 
 Internally the CLI also has `packages record --title-id ... --pack FILE` (adopt a
@@ -183,6 +196,7 @@ out/
     0004000000055E00/
       GameInfo.json                       manifest (see below)
       GamePack.dylib                      AOT pack: real Mach-O, or --fake placeholder
+      GameRom.cci                         optional bundled user ROM (--include-rom)
       cover.png                           optional user cover; never committed
     000400000011C500/
       ...
@@ -209,9 +223,27 @@ timestamps; the ROM path is provenance only and stays in the gitignored tree):
     "path": "/home/user/ROM/Pokémon Y.cci",
     "fileName": "Pokémon Y.cci",
     "bytes": 1807118336
-  }
+  },
+  "romFile": "GameRom.cci",
+  "romSha256": "64 lower-case hex digits of the bundled copy",
+  "romBytes": 1807118336
 }
 ```
+
+**Bundled game data (self-contained package).** `rom` is provenance only: it
+names where the user's ROM came from. `--include-rom` additionally copies the
+decrypted ROM into the package as `GameRom.<cci|3ds|ncch|cxi>` and records
+`romFile`/`romSha256`/`romBytes`; the copy is hashed and compared with the source
+before the manifest is written, and `packages verify` re-hashes it. The ROM is
+stored **raw (never compressed)**: Zakuro's `zk_create()` opens it as a file and
+the desktop builder only copies bytes, so a package costs its ROM size in the
+gitignored output tree (1.8 GB for Pokemon Y). The app bundle carries it as
+`Roms/<TITLE_ID>.<ext>` and `GameCatalog.json` names it in `romFile`, so the
+installed shell boots the game with **no on-device import** (the
+`-openAOTTitleID` debug launch proves exactly that in the Simulator, see
+[build-simulator.md](build-simulator.md#9-per-game-aot-gamepack-on-the-simulator-aot-first-proof)).
+A package without those fields keeps the old behaviour of needing the ROM
+somewhere else; a phone flow must not use it.
 
 - `pack` is absent while a package is queued; it is written when the pack is
   built/recorded. `format` is `macho` for a real arm64 dylib and `placeholder`
@@ -232,7 +264,7 @@ The catalogue is **compact one-line JSON + trailing newline**, games sorted by
 shell reads; v1 (static single-game builds) remains accepted:
 
 ```json
-{"schemaVersion":2,"games":[{"titleID":"0004000000055E00","displayName":"Pokémon Y","productCode":"CTR-P-EK2A","aot":true,"aotVersion":1,"packFile":"Frameworks/GamePack-0004000000055E00.dylib","packABIVersion":1,"notes":""}]}
+{"schemaVersion":2,"games":[{"titleID":"0004000000055E00","displayName":"Pokémon Y","productCode":"CTR-P-EK2A","aot":true,"aotVersion":1,"packFile":"Frameworks/GamePack-0004000000055E00.dylib","romFile":"Roms/0004000000055E00.cci","packABIVersion":1,"notes":""}]}
 ```
 
 | Field | Required | Meaning |
@@ -244,6 +276,7 @@ shell reads; v1 (static single-game builds) remains accepted:
 | `aot` | yes | true = AOT code allocated for this title |
 | `aotVersion` | yes | pack version (>= 1) |
 | `packFile` | yes for schema 2 | app-bundle-relative dylib: `Frameworks/GamePack-<TITLE_ID>.dylib` |
+| `romFile` | optional | app-bundle-relative game data: `Roms/<TITLE_ID>.<cci|3ds|ncch|cxi>`; present when the package bundles the user ROM (self-contained, no device import). Absent means the game needs an imported ROM and cannot start on the phone. |
 | `packABIVersion` | optional, default 1 | GamePack C ABI version (host ABI = 1) |
 | `registrationSymbol` | optional | override of the registration hook (default `zk_gamepack_register`) |
 | `coverFile` | optional | app-bundle-relative cover, `Covers/<TITLE_ID>.png` when `out/packages/<TITLE_ID>/cover.png` exists |
@@ -252,7 +285,7 @@ shell reads; v1 (static single-game builds) remains accepted:
 Validators: `builder/pack` (`GameCatalog::validate`) and
 `scripts/lib/game-catalog.sh` (`game_catalog_validate`, used by
 `package-ipa.sh`) both accept v1 and v2 and enforce the `packFile`,
-`packABIVersion`, `registrationSymbol` and `coverFile` rules above. The shell
+`romFile`, `packABIVersion`, `registrationSymbol` and `coverFile` rules above. The shell
 task's own validation lives in `ios/app/Sources/GameCatalog.swift` +
 `AOTPackageLoader.isValidBundleRelativePath`. For schemaVersion 2 both desktop
 validators require `packFile`; an entry without it would only be a static-link
@@ -267,78 +300,68 @@ Assumptions agreed with the AOT-shell task (Lead, 2026-11-14):
 `zk_gamepack_register`, optional `coverFile`, legacy v1 accepted,
 `saveNamespace = <TITLEID>`.
 
-## 6. GamePack ABI hand-off (documented gap, owned by runtime-ffi)
+## 6. GamePack ABI hand-off (implemented; Simulator-proven)
 
-The shell loads each `packFile` with `dlopen(RTLD_NOW | RTLD_LOCAL)` and accepts
-these **optional** C symbols (host ABI version 1,
-`AOTPackageLoader.hostABIVersion`):
+The shell loads each `packFile` with `dlopen(RTLD_NOW | RTLD_LOCAL)` and checks
+these C symbols (host ABI version 1, `AOTPackageLoader.hostABIVersion`):
 
 | Symbol | Signature | Meaning |
 |---|---|---|
 | `zk_gamepack_title_id` | `uint64_t zk_gamepack_title_id(void)` | title the pack was built for; mismatch means the pack is refused |
 | `zk_gamepack_abi_version` | `uint32_t zk_gamepack_abi_version(void)` | must equal the host ABI (1) |
-| `zk_gamepack_register` | `int32_t zk_gamepack_register(uint32_t host_abi_version)` | registration hook; 0 = accepted, non-zero means unload |
+| `zk_gamepack_register` | `int32_t zk_gamepack_register(uint32_t host_abi_version)` | **required** registration hook; 0 = accepted, 1 = host ABI mismatch, 2 = runtime refused the recomp tables |
 
-**Status: GAP.** This desktop MVP records `packABIVersion=1` in the catalogue but
-does not yet produce these symbols:
+The first two are optional diagnostics, but a pack without
+`zk_gamepack_register` is refused: it cannot hand its AOT code to the runtime
+and would only produce an interpreter fallback, which the AOT-only shell never
+runs. A shell-side registration can therefore never be silently skipped.
 
-- `--fake` packs are labelled placeholders (never installable);
-- `build-game-pack.sh --from-libs` links the existing static archives into a
-  dylib and is **experimental/unverified** (the linked runtime was designed to be
-  linked into the app binary);
-- a pack that actually hands its AOT image to the runtime (registering the
-  recompiled tables with Zakuro and starting `zk_create` from a pack) is
-  **runtime work in `ios/zakuro-ios`** (runtime-ffi task). The shell side already
-  validates/opens the pack and reports a clear "No AOT build" error when the pack
-  or runtime support is missing, and never falls back to the interpreter;
-- nested-dylib re-signing (SideStore/Sideloadly must sign the embedded
-  `Frameworks/GamePack-*.dylib`) and a real pack `dlopen` on device are
-  unverified in this slice.
+Registration is a process-wide singleton in the runtime
+(`zk_register_gamepack()` replaces the previous pack). The loader remembers the
+dlopen handle, checks `zk_registered_gamepack_title_id()` before every launch and
+re-runs the cached pack's hook when the slot names another title, so **launching
+A, then B, then A again runs A's AOT tables each time**; a hook that fails or
+registers the wrong title is unregistered and reported unavailable. The
+"available" badge on the library card is the cheap allocation/bundle check, not
+a guarantee that the pack loads — `resolve(for:)` performs the real admission.
 
-Until then the end-to-end proof in this repository is the **preview IPA**
-(fake shell + placeholder packs, catalog verified inside the IPA) plus the
-unchanged single-game static-link IPA path.
+Implementation status:
 
-> **2026-11-14 update (task-10, runtime-ffi): the hand-off gap is closed for
-> the runtime + pack builds; the Simulator proof runs.** The GamePack C ABI v1
-> is implemented and exercised:
->
-> - **Runtime side** (ios/zakuro-ios): ios/zakuro-ios/include/zakuro_gamepack.h
->   declares it; ios/zakuro-ios/src/gamepack.rs implements
->   zk_register_gamepack(title_id, recomp_abi, generation, entries,
->   entry_count, modules, module_count, origins), zk_unregister_gamepack(),
->   zk_gamepack_registered() and zk_registered_gamepack_title_id(). zk_create()
->   hands registered tables to Zakuro through Config.linked (the statically
->   linked single-game path still wins when present), so zk_recompiled() == 1
->   and the AOT-only shell's post-create check passes.
-> - **Pack side**: ios/zakuro-ios/gamepack/zk_gamepack_shim.c implements the
->   pack's three exports and calls the host API; the pack links the game's
->   generated archive plus the shim only (no copy of the runtime) with
->   -undefined dynamic_lookup.
-> - **Pipeline**: scripts/build-game-pack.sh now builds a real pack:
->   --code-dir DIR compiles the 3dsrecomp-generated C for the target
->   (--target device|sim), --from-libs links build/ios/<name>/libgame.a and the
->   shim, and --selfcheck runs the shim + Mach-O export checks without a ROM.
->   --target sim --no-record is the Simulator proof path;
->   scripts/build-ios-app-sim.sh --game-code-dir/--game-pack embeds the dylib
->   and the catalogue into the simulator shell + harness.
-> - **Proof**: Pokemon Y, 489 generated C files compiled for
->   x86_64-apple-ios-simulator into a 250,834,744 byte
->   GamePack-0004000000055E00.dylib (sha256
->   92bab7aaf4fbe7628ed82d392792f8bbc2085423f8518f830160ec1ba2145da2),
->   dlopen()ed and registered in the iPhone 17 Pro simulator: zk_recompiled()
->   == 1, zk_linked_program_id 0004000000055E00, zk_perf lines say "AOT active |
->   interpreted 0.00%", 353 frames in 60 s against the software renderer. A
->   two-entry catalogue (real pack + a placeholder pack whose recomp ABI the
->   runtime refuses) installs and displays in the shell; the harness skips the
->   placeholder and runs the real game. Evidence: docs/build-simulator.md
->   section 9, /tmp/gp-evidence/ on the build VM.
->
-> Still open for the phone flow: the AOT-first package has to carry the game
-> data/ROM (or import it during a desktop-to-phone transfer - GameCatalog v2 has
-> no romDataFile yet; Zakuro's loader still boots from the NCSD), nested-dylib
-> re-signing plus a device dlopen are unverified, and only one registered pack
-> is used per process.
+- **Runtime side** (ios/zakuro-ios): `zakuro_gamepack.h` declares the ABI;
+  `src/gamepack.rs` implements `zk_register_gamepack`/`zk_unregister_gamepack`/
+  `zk_gamepack_registered`/`zk_registered_gamepack_title_id`. `zk_create()`
+  hands the registered tables to Zakuro through `Config.linked` (a statically
+  linked build still wins), so `zk_recompiled() == 1`.
+- **Pack side**: `ios/zakuro-ios/gamepack/zk_gamepack_shim.c` implements the
+  pack exports and calls the host API. The pack links the game's generated
+  archive plus the shim only (no runtime copy) with `-undefined dynamic_lookup`.
+- **Pipeline**: `scripts/build-game-pack.sh --code-dir DIR --target device|sim`
+  compiles the 3dsrecomp-generated C and links the pack. `--target sim` is
+  proven end-to-end; the arm64/device pack has **not been dlopen()ed on a device**
+  (see limitations). `--from-libs` (adopting the old linked archive) and
+  `--dylib` adoption remain **unverified/unproven** paths; adoption now checks
+  the Mach-O slice against `--target` and requires the GamePack exports.
+- **Shell**: `AOTPackageLoader` resolves the pack and bundled ROM, registers the
+  tables, then `ROMSession` starts the game with the package ROM (no device
+  import) and keeps the AOT-only post-`zk_create()` check.
+- **Proof**: task-10 proved the dynamic pack admission + `zk_create` with the
+  **harness** (Pokemon Y, 250,834,744 byte pack,
+  sha256 92bab7aaf4fbe7628ed82d392792f8bbc2085423f8518f830160ec1ba2145da2,
+  AOT active, `interpreted 0.00%`, 0% interpreter). task-11 closes the shell
+  launch gap: the shipping shell boots the game from the bundle ROM with no
+  Documents/roms, driven by `-openAOTTitleID` (evidence in
+  [build-simulator.md §9](build-simulator.md#9-per-game-aot-gamepack-on-the-simulator-aot-first-proof)).
+
+Still unverified for the phone flow:
+
+- nested-dylib re-signing (SideStore/Sideloadly must re-sign both the app and
+  `Frameworks/GamePack-*.dylib`) and `dlopen()` of an embedded pack on a real
+  device;
+- a **device** (arm64) pack build and device `zk_create()` from a bundled ROM;
+- two packs registered at once (unsupported by design; switching works, see
+  above).
+
+
 
 
 ## 7. Multi-game IPA (allocation)
@@ -347,6 +370,7 @@ unchanged single-game static-link IPA path.
 scripts/build-multi-game-ipa.sh [options] [PACKAGE_DIR...]
 
 # real mode (macOS): extend an unsigned shell .app built by build-ios-app.sh
+# (packages with GameInfo romFile also embed Roms/<TITLE_ID>.<ext>, verified)
 scripts/build-multi-game-ipa.sh --base-app ios/app/build/Release-iphoneos/3ds2apple.app \
   --packages-dir out/packages --all
 
@@ -372,6 +396,11 @@ Behaviour:
   again after packaging;
 - optional `cover.png` in a package is copied to `Covers/<TITLE_ID>.png` and
   listed as `coverFile`;
+- a package whose `GameInfo.json` records `romFile` is **self-contained**: the
+  script re-verifies the ROM's size/SHA256, copies it to
+  `Roms/<TITLE_ID>.<ext>` in the staged app and fails unless every catalogue
+  `romFile` is staged. The installed shell then boots the game with no
+  on-device import; the manifest records the ROM file/bytes/SHA256 too;
 - packaging reuses `scripts/package-ipa.sh` (unsigned IPA, SHA256 printed) and
   writes `IPA/<name>.pack-manifest.txt` with catalogue/pack/IPA hashes;
 - the IPA is unsigned: signing/installing remains the user's step
@@ -380,25 +409,72 @@ Behaviour:
 Outputs (gitignored): `IPA/<ipa-name>.ipa` and
 `IPA/<ipa-name>.pack-manifest.txt`.
 
-## 8. Real macOS path (delegated, not exercised in this slice)
+### Bundled-ROM device IPA (task-11 result, 2026-11-14)
+
+On the build VM (macOS 26.7.3, Xcode 26.6, iOS 26.5 SDK, 8 vCPU) the real macOS
+path was run end-to-end for the first time:
 
 ```bash
-# 1. recomp + linked runtime (existing, macOS; see docs/build.md / AOT_BUILD.md)
-scripts/build-recomp-ios.sh "ROM/Pokémon Y.cci" pokemon-y-00055e00 --auto-serial
-scripts/build-linked-ios-lib.sh pokemon-y-00055e00 --title-id 0004000000055E00
+# 0. one-time: rebuild the DEVICE runtime, because build/ios/libzakuro_ios.a
+#    predated the GamePack API (the link fails with undefined
+#    zk_register_gamepack/_zk_registered_gamepack_title_id/_zk_unregister_gamepack)
+CARGO_BUILD_JOBS=2 scripts/build-zakuro-ios.sh          # ~2 min incremental
 
-# 2. per-game package (adopt a runtime-provided dylib, or experimental link)
-scripts/build-game-pack.sh pokemon-y-00055e00 --title-id 0004000000055E00 \
-  --display-name "Pokémon Y" --product-code CTR-P-EK2A --out out \
-  --dylib build/ios/pokemon-y-00055e00/GamePack.dylib
-# experimental:  ... --from-libs --lib-dir build/ios/pokemon-y-00055e00
+# 1. device GamePack from the generated C (489 files, arm64-apple-ios16.0)
+scripts/build-game-pack.sh pokemon-y --title-id 0004000000055E00 \
+  --display-name "Pokemon Y" --product-code CTR-P-EK2A \
+  --code-dir build/game/pokemon-y --target device \
+  --out build/game/device --no-record --jobs 7
+#    -> build/game/device/packages/0004000000055E00/GamePack.dylib
+#       218,224,144 bytes, sha256 5be06ebc25b6d55d71f86458240878a5661b71d915f931da52ad5c4d5072e481
 
-# 3. one shell IPA with several packages
-3ds2apple-pack pack --all --execute --base-app ios/app/build/Release-iphoneos/3ds2apple.app
+# 2. record a self-contained package (ROM copied + SHA256 verified by the CLI)
+3ds2apple-pack packages record --title-id 0004000000055E00 \
+  --display-name "Pokemon Y" --product-code CTR-P-EK2A \
+  --pack build/game/device/packages/0004000000055E00/GamePack.dylib \
+  --rom "<user ROM>" --include-rom --out out
+3ds2apple-pack packages verify --out out      # ok 0004000000055E00  Pokemon Y
+#    GameInfo: romFile GameRom.cci, romSha256 7ea17f4d..., romBytes 1807118336
+
+# 3. device shell app + multi-game IPA (real mode, embedded pack + ROM)
+scripts/build-ios-app.sh --keep-project        # arm64 shell .app, unsigned
+scripts/build-multi-game-ipa.sh \
+  --base-app ios/app/build/Release-iphoneos/3ds2apple.app \
+  --packages-dir out/packages --all --out-dir IPA \
+  --ipa-name 3ds2apple-pokemon-y-bundled-rom --ipa-version 0.1.5-beta3
 ```
 
-`3ds2apple-pack build --queued --execute` runs this exact sequence through the
-script plan (the CLI prints it by default for review).
+Measured result: `IPA/3ds2apple-pokemon-y-bundled-rom.ipa`
+(1,457,286,459 bytes, sha256
+22e91de1aca69a89e79bf168aee7a2fbb4a4d459ddf7cee7fdac810d767aebd7).
+`unzip -l` shows the arm64 shell binary (9,438,872 B),
+`Payload/3ds2apple.app/Frameworks/GamePack-0004000000055E00.dylib`
+(218,224,144 B, Mach-O arm64 dylib) and
+`Payload/3ds2apple.app/Roms/0004000000055E00.cci` (1,807,118,336 B); the
+embedded `GameCatalog.json` is
+`{"schemaVersion":2,"games":[{"titleID":"0004000000055E00",...,"packFile":"Frameworks/GamePack-0004000000055E00.dylib","romFile":"Roms/0004000000055E00.cci","packABIVersion":1,"notes":""}]}`,
+and the catalogue-in-IPA check passed. The IPA contains the pack and the ROM,
+so its content is **game-derived and must not be committed or redistributed**.
+
+Not verified on hardware: the device `dlopen()` of the nested GamePack and
+SideStore/Sideloadly re-signing of `Frameworks/GamePack-*.dylib` (a signing tool
+must re-sign the nested Mach-O with the user's certificate; untested here). The
+`Roms/` copy counts as user data in the user's own signed build.
+
+## 8. Real macOS path (exercised by task-11)
+
+Section 7's "Bundled-ROM device IPA" runs the whole real path:
+`build-game-pack.sh --code-dir --target device` -> `packages record
+--include-rom` -> `build-ios-app.sh` -> `build-multi-game-ipa.sh --base-app`.
+`3ds2apple-pack build --queued --execute` still drives the script plan (the CLI
+prints it for review), but it remains a single-game/one-pack plan until the
+Build Agent multi-pack stage lands (section 10).
+
+Two operational notes from the run: rebuild `build/ios/libzakuro_ios.a` with
+`scripts/build-zakuro-ios.sh` whenever the GamePack C ABI changes (the device
+library predated it and the app link failed with undefined `zk_*` symbols); the
+arm64 pack compile takes ~30 min on this 8-vCPU VM, so run it in `nohup` with a
+log and use `--jobs 7`.
 
 ## 9. Library boundary and legal notes
 
@@ -414,45 +490,61 @@ script plan (the CLI prints it by default for review).
 
 ## 10. Implemented vs gaps
 
-Implemented (Linux-verified in this slice):
+Implemented and verified:
 
 - [x] ROM header detection (NCSD `.3ds`/`.cci`, raw NCCH) with title ID,
   product code, title version and sizes; invalid/truncated/CIA files rejected
-  with actionable errors; no ROM copy or full hash.
+  with actionable errors.
 - [x] Import queue + per-game package directories + deterministic
   `GameInfo.json`; add/list/verify/remove/record; **atomic remove** (a partial
   failure never leaves a stale queue entry); re-import/rebuild safety
   (`--force`, `build --queued --force`); partial-import exit code (1) for
   `build --roms`.
+- [x] **Self-contained packages**: `--include-rom` copies the user ROM into the
+  package (`GameRom.<ext>`) and records `romFile`/`romSha256`/`romBytes`; the
+  copy is SHA256-verified, `packages verify` re-hashes it, and
+  `build-multi-game-ipa.sh` embeds it as `Roms/<TITLE_ID>.<ext>` (verified
+  against the catalogue). The installed shell boots the game with no on-device
+  import.
 - [x] Fake AOT builds (`--fake`) and the full macOS command plan on Linux.
-- [x] Deterministic `GameCatalog.json` schema v2 (+ legacy v1 validator support).
-- [x] `build-game-pack.sh` (real adopt/link on macOS, fake/dry-run elsewhere).
-- [x] `build-multi-game-ipa.sh` multi-pack shell IPA with generated catalog;
-  embedded-catalogue verification; preview mode on Linux.
+- [x] Deterministic `GameCatalog.json` schema v2 (+ legacy v1 validator support,
+  `romFile` validator).
+- [x] `build-game-pack.sh`: real pack from `--code-dir` for
+  `--target device|sim` (both proven on the macOS VM), `--selfcheck`, and
+  `--dylib` adoption that checks the Mach-O slice against `--target` and
+  requires the GamePack ABI exports (`--allow-non-gamepack` is preview-only).
+- [x] `build-multi-game-ipa.sh` multi-pack shell IPA with generated catalog,
+  embedded pack + bundled ROM, staged-romFile/catalogue verification and a
+  pack/ROM/IPA-hash manifest; preview mode on Linux.
+- [x] GamePack runtime ABI v1 (`zk_register_gamepack`,
+  `zk_registered_gamepack_title_id`, ...) and the shell's dynamic pack launch
+  (dlopen -> required registration -> bundled ROM -> `zk_create`), proven in
+  the iOS Simulator (task-10 pack admission + task-11 shell launch; see
+  [build-simulator.md §9](build-simulator.md#9-per-game-aot-gamepack-on-the-simulator-aot-first-proof)).
 - [x] Golden-fixture + unit/integration tests + `desktop-aot-selfcheck.sh`
   (55 checks) + `game-catalog-selfcheck.sh` (71 checks).
-- [x] Docs: this file, `docs/build.md` preview section, `builder/README.md`.
+- [x] Docs: this file, `docs/build.md`, `docs/build-simulator.md`,
+  `builder/README.md`.
 
 Gaps / follow-ups (owners):
 
-1. **GamePack runtime hand-off** (runtime-ffi): the `zk_gamepack_*` symbols and
-   starting a game from a registered pack image; until then no real multi-game
-   IPA can run ([aot-first.md §8](aot-first.md)).
-2. **Real dylib link** (build-infra): `--from-libs` needs a macOS run and
-   on-device validation; nested-dylib re-signing must be tested with
-   SideStore/Sideloadly (dlopen of a re-signed nested dylib).
-3. **Build Agent / zkb integration** (task-7 follow-up): the Agent still builds
+1. **Hardware validation + nested-dylib signing** (build-infra/qa): the arm64
+   GamePack and the unsigned bundled-ROM IPA are built (section 7), but no real
+   device has `dlopen()`ed the nested pack; SideStore/Sideloadly must re-sign
+   `Frameworks/GamePack-*.dylib` with the user's certificate. `--from-libs`
+   (linking the old static archive) remains unproven.
+2. **Build Agent / zkb integration** (task-7 follow-up): the Agent still builds
    one static-link game IPA; extend its packaging stage to invoke
    `build-game-pack.sh` / `build-multi-game-ipa.sh` and stream package
    artifacts. The desktop CLI plan already matches the Agent's script contract.
-4. **Host-native 3dsrecomp generation** (build-infra): wire a generate-only mode
+3. **Host-native 3dsrecomp generation** (build-infra): wire a generate-only mode
    on Linux and benchmark; use `--code-dir` adoption on the Mac for the compile.
-5. **CIA support**: the MVP rejects CIA containers (title ID lives in the ticket,
+4. **CIA support**: the MVP rejects CIA containers (title ID lives in the ticket,
    executable encrypted). Requires the user's decrypted `.3ds`/`.cci` or a
    separate safe extraction step (not in scope).
-6. **GUI launchers**: Windows/macOS graphical shells remain design-only; the CLI
+5. **GUI launchers**: Windows/macOS graphical shells remain design-only; the CLI
    is the MVP interface (same as the rest of `builder/`).
-7. **Covers**: `cover.png` is copied if present, but fetching artwork is not
+6. **Covers**: `cover.png` is copied if present, but fetching artwork is not
    implemented (legal/UI decision left to the launcher work).
 
 ## 11. Test commands

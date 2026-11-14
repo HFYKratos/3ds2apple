@@ -97,7 +97,9 @@ enum AOTResolution {
     case unavailable(AOTUnavailableReason)
 }
 
-/// A loaded GamePack dylib.
+/// A loaded GamePack dylib. The pack registration hook is required: a pack
+/// without it cannot hand its AOT code to the runtime, so it is refused before
+/// it is cached (see `loadPackage`).
 struct AOTPackage {
     let titleID: String
     /// Catalog "packFile": path relative to the app bundle.
@@ -143,6 +145,11 @@ final class AOTPackageLoader {
     // MARK: - Queries
     /// Cheap check for the home-page badge and launch gating: no dlopen, only
     /// the catalog flag, the static-link probe and a file check.
+    ///
+    /// "Available" here means the build **allocated** AOT code for the title and
+    /// the pack/ROM files are present; it is not a promise that the pack will
+    /// load and register. `resolve(for:)` does that work and can still refuse a
+    /// corrupt, wrong-title or wrong-ABI pack.
     func availability(for game: GameEntry) -> AOTAvailability {
         guard game.aot else { return .unavailable(.noAOTAllocated) }
         if let packFile = game.packFile, !packFile.isEmpty {
@@ -175,8 +182,10 @@ final class AOTPackageLoader {
         return true
     }
 
-    /// Full resolution: loads and validates the game package when the catalog
-    /// lists one. Safe to call more than once; a loaded pack is cached.
+    /// Full resolution: loads, validates and registers the game package when the
+    /// catalog lists one. Safe to call more than once; a loaded pack is cached,
+    /// but its registration hook is re-run when the runtime's registration slot
+    /// names another title (launching A -> B -> A must run A's AOT tables).
     func resolve(for game: GameEntry) -> AOTResolution {
         switch availability(for: game) {
         case .unavailable(let reason):
@@ -222,6 +231,22 @@ final class AOTPackageLoader {
         return url
     }
 
+    /// Absolute URL of a catalog game's bundled game data (the packaged ROM).
+    ///
+    /// `romFile` comes from GameCatalog.json like `packFile`, so it is untrusted
+    /// input and goes through the same bundle-relative check: a path from the
+    /// catalog can never escape the app bundle. Returns nil when the catalog has
+    /// no romFile, the path is unsafe, or the file is not in the bundle.
+    static func bundleROMURL(for game: GameEntry, bundle: Bundle = .main) -> URL? {
+        guard let romFile = game.romFile?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !romFile.isEmpty,
+              let url = bundleURL(forBundleRelativePath: romFile, bundle: bundle),
+              FileManager.default.fileExists(atPath: url.path) else {
+            return nil
+        }
+        return url
+    }
+
     // MARK: - Static link
 
     /// Title IDs whose AOT code is statically linked into this binary.
@@ -238,12 +263,16 @@ final class AOTPackageLoader {
     private func loadPackage(for game: GameEntry,
                              relativePath: String,
                              url: URL) -> AOTResolution {
-        lock.lock()
-        if let loaded = packages[game.titleID] {
-            lock.unlock()
-            return .package(loaded)
+        if let loaded = cachedPackage(for: game.titleID) {
+            switch register(package: loaded) {
+            case .registered:
+                return .package(loaded)
+            case .failed(let detail):
+                // A cached pack that no longer registers must not be reused.
+                invalidatePackage(titleID: game.titleID)
+                return .unavailable(.packageInvalid(detail))
+            }
         }
-        lock.unlock()
 
         // dlopen errors are per-call state on the calling thread; clear a stale
         // message first so it cannot be attributed to this pack.
@@ -285,46 +314,114 @@ final class AOTPackageLoader {
                 return .unavailable(.packageInvalid(detail))
             }
         }
+        // The hook is REQUIRED. A pack without it can only make the runtime fall
+        // back to the interpreter, and this shell never runs interpreted code.
         let registrationName = game.registrationSymbol ?? Self.defaultRegistrationSymbol
-        var registeredSymbol: String? = nil
-        if let symbol = dlsym(handle, registrationName) {
-            typealias RegisterFunction = @convention(c) (UInt32) -> Int32
-            let result = unsafeBitCast(symbol, to: RegisterFunction.self)(Self.hostABIVersion)
-            guard result == 0 else {
-                dlclose(handle)
-                let detail = L10n.format(
-                    "“%@” refused this app (result %ld)",
-                    registrationName,
-                    result
-                )
-                AppLog.log("[3ds2apple] game package %@: %@", relativePath, detail)
-                return .unavailable(.packageInvalid(detail))
-            }
-            registeredSymbol = registrationName
-        } else {
-            AppLog.log(
-                "[3ds2apple] game package %@: no registration symbol “%@”; the pack is loadable",
+        guard dlsym(handle, registrationName) != nil else {
+            dlclose(handle)
+            let detail = L10n.format(
+                "the game package “%@” does not export the required registration hook “%@”, so it cannot hand its AOT code to the runtime",
                 relativePath,
                 registrationName
             )
+            AppLog.log("[3ds2apple] game package %@: %@", relativePath, detail)
+            return .unavailable(.packageInvalid(detail))
         }
         let package = AOTPackage(
             titleID: game.titleID,
             bundleRelativePath: relativePath,
             url: url,
             handle: handle,
-            registrationSymbol: registeredSymbol
+            registrationSymbol: registrationName
         )
+        switch register(package: package) {
+        case .failed(let detail):
+            // Refused: unload and do not cache, so a retry cannot use it either.
+            dlclose(handle)
+            return .unavailable(.packageInvalid(detail))
+        case .registered:
+            break
+        }
         lock.lock()
         packages[game.titleID] = package
         lock.unlock()
+        return .package(package)
+    }
+
+    // MARK: - Registration
+
+    /// Outcome of (re-)running a pack's registration hook.
+    private enum RegistrationResult {
+        case registered
+        case failed(String)
+    }
+
+    /// Makes the runtime's single GamePack registration slot name this pack.
+    ///
+    /// `zk_register_gamepack()` replaces the previous pack, so the hook is safe to
+    /// re-run. The shell checks the registered title first and re-runs the hook
+    /// when another game is in the slot: launching A, then B, then A again must
+    /// leave A's AOT tables registered, never B's. A pack whose hook fails is
+    /// unregistered again before it is reported unavailable, so a refusal leaves
+    /// no half-registered state behind.
+    private func register(package: AOTPackage) -> RegistrationResult {
+        let expectedTitle = UInt64(package.titleID, radix: 16) ?? 0
+        if expectedTitle != 0, zk_registered_gamepack_title_id() == expectedTitle {
+            // Already in the slot: the normal case for a re-launch of this game.
+            return .registered
+        }
+        guard let registrationName = package.registrationSymbol,
+              let symbol = dlsym(package.handle, registrationName) else {
+            return .failed(L10n.format(
+                "the game package “%@” does not export its registration hook any more",
+                package.bundleRelativePath
+            ))
+        }
+        typealias RegisterFunction = @convention(c) (UInt32) -> Int32
+        _ = dlerror()
+        let result = unsafeBitCast(symbol, to: RegisterFunction.self)(Self.hostABIVersion)
+        guard result == 0 else {
+            _ = zk_unregister_gamepack()
+            let detail = L10n.format(
+                "“%@” refused this app (result %ld)",
+                registrationName,
+                result
+            )
+            AppLog.log("[3ds2apple] game package %@: %@", package.bundleRelativePath, detail)
+            return .failed(detail)
+        }
+        let registeredTitle = zk_registered_gamepack_title_id()
+        guard expectedTitle != 0, registeredTitle == expectedTitle else {
+            _ = zk_unregister_gamepack()
+            let detail = L10n.format(
+                "registering “%@” left title %016llX in the runtime, expected %@",
+                registrationName,
+                registeredTitle,
+                package.titleID
+            )
+            AppLog.log("[3ds2apple] game package %@: %@", package.bundleRelativePath, detail)
+            return .failed(detail)
+        }
         AppLog.log(
-            "[3ds2apple] game package %@: loaded for %@ (registered: %@, abi %ld)",
-            relativePath,
-            game.titleID,
-            registeredSymbol ?? "no",
+            "[3ds2apple] game package %@: registered for %@ (abi %ld)",
+            package.bundleRelativePath,
+            package.titleID,
             Self.hostABIVersion
         )
-        return .package(package)
+        return .registered
+    }
+
+    /// A pack already loaded in this app run, if any.
+    private func cachedPackage(for titleID: String) -> AOTPackage? {
+        lock.lock()
+        defer { lock.unlock() }
+        return packages[titleID]
+    }
+
+    /// Drops a cached pack that failed to (re-)register.
+    private func invalidatePackage(titleID: String) {
+        lock.lock()
+        packages.removeValue(forKey: titleID)
+        lock.unlock()
     }
 }

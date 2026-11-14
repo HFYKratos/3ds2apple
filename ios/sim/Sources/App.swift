@@ -143,6 +143,15 @@ final class HarnessModel: ObservableObject {
         log(String(format: "zk_recompiled: %d (1 = Zakuro is running AOT code)", recompiled))
         log(String(format: "zk_linked_program_id: %016llX", zk_linked_program_id()))
         log("zk_linked_code: \(zk_linked_code()) (1 = AOT code is available to this build)")
+        guard recompiled == 1 else {
+            // This harness exists to prove the AOT path; an interpreter fallback
+            // means the pack did not register, so stop instead of logging frames.
+            log("AOT: not active (zk_recompiled=0); refusing to run interpreted code")
+            publish("AOT not active (recompiled=0)")
+            zk_destroy(system)
+            systemHandle = nil
+            return
+        }
 
         let topWidth = Int(zk_screen_width(0))
         let topHeight = Int(zk_screen_height(0))

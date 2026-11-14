@@ -19,6 +19,9 @@ pub struct ImportOptions {
     pub display_name: Option<String>,
     /// AOT version to request for this game.
     pub aot_version: u32,
+    /// Copy the ROM into the package so it is self-contained (the phone never
+    /// imports game data). Off by default: the import stays header-only/fast.
+    pub include_rom: bool,
 }
 
 impl Default for ImportOptions {
@@ -27,6 +30,7 @@ impl Default for ImportOptions {
             force: false,
             display_name: None,
             aot_version: 1,
+            include_rom: false,
         }
     }
 }
@@ -79,9 +83,13 @@ pub fn import_rom(root: &Path, rom_path: &Path, options: &ImportOptions) -> Resu
                 existing.title_id
             )));
         }
-        // Keep the pack record and any note the user added; refresh detection data.
+        // Keep the pack record, the bundled ROM and any note the user added;
+        // refresh detection data.
         info.pack = existing.pack.clone();
         info.notes = existing.notes.clone();
+        info.rom_file = existing.rom_file.clone();
+        info.rom_sha256 = existing.rom_sha256.clone();
+        info.rom_bytes = existing.rom_bytes.clone();
         if built {
             ImportStatus::AlreadyBuilt
         } else {
@@ -92,6 +100,11 @@ pub fn import_rom(root: &Path, rom_path: &Path, options: &ImportOptions) -> Resu
     };
 
     info.write(&dir)?;
+    if options.include_rom {
+        // Copy + hash the user ROM into the package (verified against the
+        // source) and record romFile/romSha256/romBytes in the manifest.
+        info = gameinfo::install_rom(&dir, rom_path)?;
+    }
     let mut queue = Queue::load(root)?;
     queue.upsert(QueueEntry::from_import(&info, &rom));
     queue.save(root)?;
@@ -457,6 +470,8 @@ pub struct RecordOptions {
     pub fake_placeholder: bool,
     /// ROM to record as provenance (must match the title ID).
     pub rom: Option<PathBuf>,
+    /// Copy the `rom` into the package as well, making it self-contained.
+    pub include_rom: bool,
     /// Override the display name.
     pub display_name: Option<String>,
     /// Override the product code.
@@ -509,7 +524,7 @@ pub fn record_pack(root: &Path, options: &RecordOptions) -> Result<GameInfo> {
     info.validate()?;
     info.write(&dir)?;
 
-    let built = if options.fake_placeholder {
+    let mut built = if options.fake_placeholder {
         gameinfo::install_placeholder_pack(&dir, &title)?
     } else {
         let pack = options.pack.as_ref().ok_or_else(|| {
@@ -517,6 +532,14 @@ pub fn record_pack(root: &Path, options: &RecordOptions) -> Result<GameInfo> {
         })?;
         gameinfo::install_pack(&dir, pack)?
     };
+    if options.include_rom {
+        let rom_path = options.rom.as_ref().ok_or_else(|| {
+            PackError::invalid("--include-rom requires --rom FILE (the ROM to bundle)")
+        })?;
+        // Copy the user ROM into the package and record its hash/size so the
+        // shell can boot straight from the bundle with no on-device import.
+        built = gameinfo::install_rom(&dir, rom_path)?;
+    }
     let mut queue = Queue::load(root)?;
     queue.upsert(QueueEntry {
         title_id: title.clone(),

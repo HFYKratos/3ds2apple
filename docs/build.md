@@ -109,6 +109,13 @@ code linked in:
 
 - `build-ios-app.sh` without `--game-catalog` writes
   `{"schemaVersion":1,"games":[]}` (interpreter-only shell);
+- A game package can carry the user's ROM: `3ds2apple-pack packages add
+  --roms ROM/x.cci --include-rom` (or `packages record ... --include-rom`)
+  copies it into the package and records `romFile`/`romSha256`/`romBytes`.
+  `build-multi-game-ipa.sh` then embeds it as `Roms/<TITLE_ID>.<ext>` and the
+  installed shell boots the game with no on-device import. The ROM copy is raw
+  and as large as the ROM; keep packages and IPAs in the gitignored
+  `out/`/`IPA/` and never commit them.
 - `build-game-ipa.sh` writes exactly one entry, filled from the linked title ID,
   `--display-name`, `--product-code` and `--aot-version`;
 - `package-ipa.sh` validates the catalog inside the `.app` and prints

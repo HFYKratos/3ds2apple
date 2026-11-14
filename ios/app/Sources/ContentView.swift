@@ -47,6 +47,9 @@ struct ContentView: View {
             model.startControllerSupport()
             applySettings()
             logRuntimeProbe()
+            // Automated launch for the Simulator / diagnostics
+            // (`-openAOTTitleID <TITLEID>`); inert in normal use.
+            DebugLaunch.startIfRequested(model: model, library: library)
         }
         .onChange(of: scenePhase) { newPhase in
             // iOS may jettison a backgrounded process; release the runtime.

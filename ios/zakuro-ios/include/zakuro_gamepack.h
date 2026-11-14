@@ -18,11 +18,17 @@
  *       ZK_GAMEPACK_ABI_VERSION (the shell's host ABI is 1).
  *
  *   int32_t zk_gamepack_register(uint32_t host_abi_version);
- *       Registration hook, called once on the main thread right after dlopen.
- *       0 = the pack accepted the host and registered its code; non-zero = the
- *       pack refused this host (the shell unloads the pack and reports the game
- *       as unavailable). The shim shipped in ios/zakuro-ios/gamepack/ calls
- *       zk_register_gamepack() below and returns 0 / 2.
+ *       Registration hook. REQUIRED: the shell refuses a pack that does not
+ *       export it (a pack that cannot hand its AOT code to the runtime would
+ *       only make zk_create fall back to the interpreter). Called on the main
+ *       thread after dlopen, and again whenever the runtime's single
+ *       registration slot names another title. Results:
+ *         0 = accepted, the pack's tables are now the runtime's AOT code;
+ *         1 = host ABI mismatch (the pack does not speak this host's ABI);
+ *         2 = the runtime refused the tables (recomp interface version);
+ *       any non-zero result makes the shell unregister/unload the pack and
+ *       report the game as unavailable. The shim shipped in
+ *       ios/zakuro-ios/gamepack/ returns 1 and 2 respectively.
  *
  * Host side (exported by libzakuro_ios.a / libzakuro_ios_sim.a, implemented in
  * ios/zakuro-ios/src/gamepack.rs)

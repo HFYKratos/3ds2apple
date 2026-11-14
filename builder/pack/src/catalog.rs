@@ -32,6 +32,8 @@ use crate::gameinfo::{GameInfo, PackFormat};
 
 /// Directory inside the app bundle that carries the per-game packs.
 pub const FRAMEWORKS_DIR: &str = "Frameworks";
+/// Directory inside the app bundle that carries the packaged game data (ROMs).
+pub const ROMS_DIR: &str = "Roms";
 
 /// One game entry in `GameCatalog.json` (schema 2; see docs/aot-first.md §7.1
 /// and `ios/app/Sources/GameCatalog.swift`).
@@ -55,6 +57,12 @@ pub struct CatalogGame {
     /// Empty for a legacy schema-1 entry whose AOT code is statically linked.
     #[serde(rename = "packFile", default)]
     pub pack_file: String,
+    /// App-bundle-relative path of the game data the pack runs,
+    /// `Roms/<TITLE_ID>.<ext>`. Absent for a package that does not bundle a ROM
+    /// (legacy/preview catalogs); such a game cannot start on a phone that has
+    /// no imported ROM.
+    #[serde(rename = "romFile", default, skip_serializing_if = "Option::is_none")]
+    pub rom_file: Option<String>,
     /// GamePack C ABI version the pack implements (host ABI, currently 1).
     #[serde(rename = "packABIVersion", default = "default_pack_abi_version")]
     pub pack_abi_version: u32,
@@ -98,6 +106,31 @@ pub fn pack_file_name(title_id: &str) -> String {
     format!("GamePack-{title_id}.dylib")
 }
 
+/// `Roms/<TITLE_ID>.<ext>` (path inside the app bundle) for a package's bundled
+/// ROM. The package stores the ROM as `GameRom.<ext>`; the app bundle uses the
+/// title ID so several games can share the `Roms/` directory.
+pub fn rom_relative_path(title_id: &str, rom_file_name: &str) -> String {
+    let extension = rom_file_name
+        .rsplit_once('.')
+        .map(|(_, extension)| extension)
+        .unwrap_or("cci");
+    format!("{ROMS_DIR}/{title_id}.{extension}")
+}
+
+/// True for a canonical bundled-ROM path: `Roms/<TITLE_ID>.<cci|3ds|ncch|cxi>`.
+fn rom_relative_path_ok(title_id: &str, path: &str) -> bool {
+    let Some(rest) = path.strip_prefix(ROMS_DIR) else {
+        return false;
+    };
+    let Some(rest) = rest.strip_prefix('/') else {
+        return false;
+    };
+    let Some((stem, extension)) = rest.rsplit_once('.') else {
+        return false;
+    };
+    stem == title_id && matches!(extension, "cci" | "3ds" | "ncch" | "cxi")
+}
+
 impl CatalogGame {
     /// Catalogue entry for a built package.
     pub fn from_game_info(info: &GameInfo) -> Result<Self> {
@@ -115,6 +148,10 @@ impl CatalogGame {
             aot: true,
             aot_version: info.aot_version,
             pack_file: pack_relative_path(&info.title_id),
+            rom_file: info
+                .rom_file
+                .as_deref()
+                .map(|name| rom_relative_path(&info.title_id, name)),
             pack_abi_version: crate::GAMEPACK_ABI_VERSION,
             registration_symbol: None,
             cover_file: None,
@@ -239,6 +276,14 @@ impl GameCatalog {
                     return Err(PackError::invalid(format!(
                         "{}: registrationSymbol must be a C identifier (got {:?})",
                         game.title_id, symbol
+                    )));
+                }
+            }
+            if let Some(rom) = &game.rom_file {
+                if !rom_relative_path_ok(&game.title_id, rom) {
+                    return Err(PackError::invalid(format!(
+                        "{}: romFile must be '{}/{}.<cci|3ds|ncch|cxi>' (got '{rom}')",
+                        game.title_id, ROMS_DIR, game.title_id
                     )));
                 }
             }

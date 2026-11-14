@@ -17,8 +17,8 @@
  * Build-time defines (scripts/build-game-pack.sh passes them):
  *   -DZK_GAMEPACK_TITLE_ID=0x0004000000055E00ULL
  *       required: the 3DS title ID the generated code was recompiled for.
- *   -DZK_GAMEPACK_ABI_VERSION=1
- *       optional: defaults to the header's version.
+ *   -DZK_GAMEPACK_PACK_ABI_VERSION=1
+ *       optional: defaults to the header's ZK_GAMEPACK_ABI_VERSION.
  */
 #include <stdint.h>
 

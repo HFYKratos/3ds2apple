@@ -59,6 +59,89 @@ desktop_aot_pack_is_macho() {
   return 1
 }
 
+# Print the CPU architecture of a thin Mach-O ("arm64" or "x86_64"), or return 1.
+# `file` is used instead of lipo because the helper also runs on Linux (the
+# script selfchecks), and a GamePack is always a thin slice.
+# Usage: desktop_aot_pack_arch FILE
+desktop_aot_pack_arch() {
+  local file="${1:-}" info
+  [[ -n "$file" && -f "$file" ]] || return 1
+  info="$(file -b "$file" 2>/dev/null || true)"
+  case "$info" in
+    *Mach-O*arm64*) printf 'arm64\n'; return 0 ;;
+    *Mach-O*x86_64*) printf 'x86_64\n'; return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Expected CPU architecture for a clang target triple (arm64-apple-ios...,
+# x86_64-apple-ios...-simulator). Prints the arch or returns 1.
+# Usage: desktop_aot_target_arch TRIPLE
+desktop_aot_target_arch() {
+  case "${1:-}" in
+    arm64*) printf 'arm64\n' ;;
+    x86_64*) printf 'x86_64\n' ;;
+    *) return 1 ;;
+  esac
+}
+
+# True when a Mach-O's slice matches the given clang target triple's CPU.
+# Usage: desktop_aot_pack_matches_target FILE TRIPLE
+desktop_aot_pack_matches_target() {
+  local file="${1:-}" triple="${2:-}" actual expected
+  actual="$(desktop_aot_pack_arch "$file")" || return 1
+  expected="$(desktop_aot_target_arch "$triple")" || return 1
+  [[ "$actual" == "$expected" ]]
+}
+
+# True when the dylib exports the required GamePack ABI pack symbols
+# (zk_gamepack_title_id / zk_gamepack_abi_version / zk_gamepack_register).
+# The registration hook is required: a pack without it cannot hand its AOT code
+# to the runtime. Used when adopting an already-built dylib.
+# Usage: desktop_aot_pack_exports_gamepack FILE
+desktop_aot_pack_exports_gamepack() {
+  local file="${1:-}" symbols symbol
+  [[ -n "$file" && -f "$file" ]] || return 1
+  symbols="$(nm -gU "$file" 2>/dev/null || nm -g "$file" 2>/dev/null || true)"
+  [[ -n "$symbols" ]] || return 1
+  for symbol in _zk_gamepack_title_id _zk_gamepack_abi_version _zk_gamepack_register; do
+    printf '%s\n' "$symbols" | grep -q " T $symbol$" || return 1
+  done
+  return 0
+}
+
+# Print the bundled-ROM record of a package from its GameInfo.json as
+# "<file>\t<bytes>\t<sha256>", or print nothing when the package has no bundled
+# ROM. Returns 1 when the manifest is unreadable/incomplete.
+# Usage: desktop_aot_package_rom PACKAGE_DIR
+desktop_aot_package_rom() {
+  local dir="${1:-}"
+  [[ -n "$dir" && -d "$dir" ]] || return 1
+  python3 - "$dir" <<'PY'
+import json
+import os
+import sys
+
+directory = sys.argv[1]
+path = os.path.join(directory, "GameInfo.json")
+try:
+    with open(path, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
+except OSError as exc:
+    sys.exit("desktop_aot_package_rom: cannot read %s: %s" % (path, exc))
+file_name = data.get("romFile")
+if file_name is None:
+    sys.exit(0)
+byte_count = data.get("romBytes")
+sha256 = data.get("romSha256")
+if (not isinstance(file_name, str) or not file_name
+        or not isinstance(byte_count, int) or isinstance(byte_count, bool)
+        or not isinstance(sha256, str) or len(sha256) != 64):
+    sys.exit("desktop_aot_package_rom: %s has an incomplete romFile/romBytes/romSha256 record" % path)
+sys.stdout.write("%s\t%d\t%s\n" % (file_name, byte_count, sha256))
+PY
+}
+
 # True when the pack is the deterministic placeholder written by --fake.
 # Usage: desktop_aot_pack_is_placeholder FILE
 desktop_aot_pack_is_placeholder() {

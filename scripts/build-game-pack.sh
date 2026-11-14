@@ -55,6 +55,9 @@ NO_RECORD=0
 SELFCHECK=0
 PACK_BIN_ARG=""
 ROM_ARG=""
+INCLUDE_ROM=0
+ALLOW_NON_GAMEPACK=0
+INCLUDE_ROM_FLAG=""
 WORK=""
 
 usage() {
@@ -76,6 +79,9 @@ Options:
   --out DIR          Output root; the package goes to DIR/packages/<TITLE_ID>/
                      (default: out)
   --rom FILE         ROM provenance to record (optional, must match the title)
+  --include-rom      Copy --rom FILE into the package as GameRom.<ext> and
+                     record romFile/romSha256/romBytes, so the package is
+                     self-contained (the phone never imports game data)
   --target KIND      device (arm64-apple-ios16.0, default) or sim
                      (x86_64-apple-ios16.0-simulator on this build VM), or a
                      full clang target triple
@@ -99,6 +105,8 @@ Other:
                      GamePack.dylib only (used by the simulator shell builder)
   --pack-bin PATH    Desktop CLI binary (default: builder/target/release,
                      builder/target/debug, PATH, or $THREEDS2APPLE_PACK)
+  --allow-non-gamepack  Adopt a --dylib that is not a GamePack (missing ABI
+                     exports / wrong slice); preview tooling only
   --selfcheck        Run the GamePack shim/link self-check and exit
   -h, --help         Show this help and exit
 
@@ -129,6 +137,8 @@ while [[ $# -gt 0 ]]; do
     --aot-version) [[ $# -ge 2 ]] || die "--aot-version requires a value"; AOT_VERSION_ARG="$2"; shift 2 ;;
     --out) [[ $# -ge 2 ]] || die "--out requires a value"; OUT_ARG="$2"; shift 2 ;;
     --rom) [[ $# -ge 2 ]] || die "--rom requires a value"; ROM_ARG="$2"; shift 2 ;;
+    --include-rom) INCLUDE_ROM=1; shift ;;
+    --allow-non-gamepack) ALLOW_NON_GAMEPACK=1; shift ;;
     --lib-dir) [[ $# -ge 2 ]] || die "--lib-dir requires a value"; LIB_DIR_ARG="$2"; shift 2 ;;
     --code-dir) [[ $# -ge 2 ]] || die "--code-dir requires a value"; CODE_DIR_ARG="$2"; shift 2 ;;
     --target) [[ $# -ge 2 ]] || die "--target requires a value"; TARGET_ARG="$2"; shift 2 ;;
@@ -166,7 +176,7 @@ if [[ -n "$SHIM_ARG" ]]; then SHIM_SRC="$(resolve_path "$SHIM_ARG")"; else SHIM_
 SHIM_DIR="$(dirname "$SHIM_SRC")"
 INCLUDE_DIR="$(cd "$SHIM_DIR/../include" && pwd)"
 WORK_ROOT=/tmp
-if [[ -n "$TMPDIR" ]]; then WORK_ROOT="$TMPDIR"; fi
+if [[ -n "${TMPDIR:-}" ]]; then WORK_ROOT="$TMPDIR"; fi
 
 # --- self-check --------------------------------------------------------------
 if [[ "$SELFCHECK" -eq 1 ]]; then
@@ -359,6 +369,11 @@ esac
 [[ "$JOB_COUNT" -ge 1 ]] || die "--jobs must be >= 1"
 [[ "$JOB_COUNT" -le 8 ]] || JOB_COUNT=8
 
+if [[ "$INCLUDE_ROM" -eq 1 && -z "$ROM_ARG" ]]; then
+  die "--include-rom requires --rom FILE (the ROM to copy into the package)"
+fi
+if [[ "$INCLUDE_ROM" -eq 1 ]]; then INCLUDE_ROM_FLAG="--include-rom"; fi
+
 OUT_ROOT="$(resolve_path "$OUT_ARG")"
 mkdir -p "$OUT_ROOT"
 OUT_ROOT="$(cd "$OUT_ROOT" && pwd)"
@@ -491,12 +506,39 @@ if [[ -n "$DYLIB_ARG" ]]; then
   desktop_aot_pack_is_macho "$DYLIB" \
     || die "not a Mach-O dylib: $DYLIB ($TRIPLE Mach-O expected)"
   log "adopting dylib: $DYLIB ($(desktop_aot_file_bytes "$DYLIB") bytes, sha256 $(desktop_aot_sha256 "$DYLIB"))"
+  if ! desktop_aot_pack_matches_target "$DYLIB" "$TRIPLE"; then
+    if [[ "$ALLOW_NON_GAMEPACK" -eq 1 ]]; then
+      warn "adopted dylib slice ($(desktop_aot_pack_arch "$DYLIB" 2>/dev/null || echo unknown)) does not match the requested target ($TRIPLE); --allow-non-gamepack"
+    else
+      die "adopted dylib is not a $TRIPLE Mach-O (slice: $(desktop_aot_pack_arch "$DYLIB" 2>/dev/null || echo unknown)); pass a --target matching the dylib, or --allow-non-gamepack for preview tooling"
+    fi
+  fi
+  if ! desktop_aot_pack_exports_gamepack "$DYLIB"; then
+    if [[ "$ALLOW_NON_GAMEPACK" -eq 1 ]]; then
+      warn "adopted dylib does not export the GamePack ABI; the shell will refuse it (--allow-non-gamepack)"
+    else
+      die "adopted dylib does not export the required GamePack ABI (zk_gamepack_title_id / zk_gamepack_abi_version / zk_gamepack_register); pass --allow-non-gamepack to adopt a non-GamePack dylib for preview tooling"
+    fi
+  fi
   if [[ "$DRY_RUN" -eq 0 ]]; then
+    if ! desktop_aot_pack_matches_target "$DYLIB" "$TRIPLE"; then
+      if [[ "$ALLOW_NON_GAMEPACK" -eq 1 ]]; then
+        warn "adopted dylib slice ($(desktop_aot_pack_arch "$DYLIB" 2>/dev/null || echo unknown)) does not match the requested target ($TRIPLE); --allow-non-gamepack"
+      else
+        die "adopted dylib is not a $TRIPLE Mach-O (slice: $(desktop_aot_pack_arch "$DYLIB" 2>/dev/null || echo unknown)); pass --target matching the dylib, or --allow-non-gamepack for preview tooling"
+      fi
+    fi
+    if ! desktop_aot_pack_exports_gamepack "$DYLIB"; then
+      if [[ "$ALLOW_NON_GAMEPACK" -eq 1 ]]; then
+        warn "adopted dylib does not export the GamePack ABI; the shell will refuse it (--allow-non-gamepack)"
+      else
+        die "adopted dylib does not export the required GamePack ABI (zk_gamepack_title_id/abi_version/register); pass --allow-non-gamepack to adopt a non-GamePack dylib for preview tooling"
+      fi
+    fi
     defined_adopted="$WORK/adopted-defined.txt"
     nm -gU "$DYLIB" >"$defined_adopted" 2>/dev/null || nm -g "$DYLIB" >"$defined_adopted" 2>/dev/null || true
-    if ! aot_nm_has_symbol "$defined_adopted" _zk_gamepack_register \
-       && ! aot_nm_has_symbol "$defined_adopted" _zk_gamepack_title_id; then
-      warn "adopted dylib exports neither zk_gamepack_title_id nor zk_gamepack_register; the shell will treat it as an ABI-less pack"
+    if ! aot_nm_has_symbol "$defined_adopted" _zk_gamepack_register; then
+      warn "adopted dylib does not export the registration hook zk_gamepack_register"
     fi
   fi
 elif [[ "$FROM_LIBS" -eq 1 || -n "$CODE_DIR_ARG" ]]; then
@@ -536,6 +578,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   if [[ -n "$CODE_DIR_ARG" ]]; then printf 'source=code_dir:%s\n' "$(resolve_path "$CODE_DIR_ARG")"; fi
   if [[ "$FAKE" -eq 1 ]]; then printf 'source=fake_placeholder\n'; fi
   if [[ "$NO_RECORD" -eq 1 ]]; then printf 'record=no\n'; fi
+  if [[ "$INCLUDE_ROM" -eq 1 ]]; then printf 'include_rom=yes\n'; fi
   exit 0
 fi
 
@@ -561,7 +604,7 @@ if [[ "$FAKE" -eq 1 ]]; then
 elif [[ -n "$DYLIB_ARG" ]]; then
   if [[ -n "$PRODUCT_CODE" && -n "$ROM_ARG" ]]; then
     "$PACK_BIN" packages record --title-id "$TITLE_ID" --display-name "$DISPLAY_NAME" \
-      --product-code "$PRODUCT_CODE" --aot-version "$AOT_VERSION_ARG" --rom "$(resolve_path "$ROM_ARG")" \
+      --product-code "$PRODUCT_CODE" --aot-version "$AOT_VERSION_ARG" --rom "$(resolve_path "$ROM_ARG")" ${INCLUDE_ROM_FLAG} \
       --out "$OUT_ROOT" --pack "$(resolve_path "$DYLIB_ARG")"
   elif [[ -n "$PRODUCT_CODE" ]]; then
     "$PACK_BIN" packages record --title-id "$TITLE_ID" --display-name "$DISPLAY_NAME" \
@@ -569,7 +612,7 @@ elif [[ -n "$DYLIB_ARG" ]]; then
       --out "$OUT_ROOT" --pack "$(resolve_path "$DYLIB_ARG")"
   elif [[ -n "$ROM_ARG" ]]; then
     "$PACK_BIN" packages record --title-id "$TITLE_ID" --display-name "$DISPLAY_NAME" \
-      --aot-version "$AOT_VERSION_ARG" --rom "$(resolve_path "$ROM_ARG")" \
+      --aot-version "$AOT_VERSION_ARG" --rom "$(resolve_path "$ROM_ARG")" ${INCLUDE_ROM_FLAG} \
       --out "$OUT_ROOT" --pack "$(resolve_path "$DYLIB_ARG")"
   else
     "$PACK_BIN" packages record --title-id "$TITLE_ID" --display-name "$DISPLAY_NAME" \
@@ -578,7 +621,7 @@ elif [[ -n "$DYLIB_ARG" ]]; then
 else
   if [[ -n "$PRODUCT_CODE" && -n "$ROM_ARG" ]]; then
     "$PACK_BIN" packages record --title-id "$TITLE_ID" --display-name "$DISPLAY_NAME" \
-      --product-code "$PRODUCT_CODE" --aot-version "$AOT_VERSION_ARG" --rom "$(resolve_path "$ROM_ARG")" \
+      --product-code "$PRODUCT_CODE" --aot-version "$AOT_VERSION_ARG" --rom "$(resolve_path "$ROM_ARG")" ${INCLUDE_ROM_FLAG} \
       --out "$OUT_ROOT" --pack "$TMP_DYLIB"
   elif [[ -n "$PRODUCT_CODE" ]]; then
     "$PACK_BIN" packages record --title-id "$TITLE_ID" --display-name "$DISPLAY_NAME" \
@@ -586,7 +629,7 @@ else
       --out "$OUT_ROOT" --pack "$TMP_DYLIB"
   elif [[ -n "$ROM_ARG" ]]; then
     "$PACK_BIN" packages record --title-id "$TITLE_ID" --display-name "$DISPLAY_NAME" \
-      --aot-version "$AOT_VERSION_ARG" --rom "$(resolve_path "$ROM_ARG")" \
+      --aot-version "$AOT_VERSION_ARG" --rom "$(resolve_path "$ROM_ARG")" ${INCLUDE_ROM_FLAG} \
       --out "$OUT_ROOT" --pack "$TMP_DYLIB"
   else
     "$PACK_BIN" packages record --title-id "$TITLE_ID" --display-name "$DISPLAY_NAME" \

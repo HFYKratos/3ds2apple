@@ -36,6 +36,8 @@ struct GameEntry: Identifiable, Hashable {
     let aotVersion: Int?
     /// Bundle-relative AOT package dylib, nil for a statically linked build.
     let packFile: String?
+    /// Bundle-relative game data (the packaged ROM), nil when not bundled.
+    let romFile: String?
     /// GamePack ABI version recorded by the desktop build (informational).
     let packABIVersion: Int?
     /// Optional registration symbol override for the GamePack loader.
@@ -56,6 +58,7 @@ struct GameEntry: Identifiable, Hashable {
         aot = game.aot
         aotVersion = game.aotVersion
         packFile = game.packFile
+        romFile = game.romFile
         packABIVersion = game.packABIVersion
         registrationSymbol = game.registrationSymbol
         coverFile = game.coverFile
@@ -69,6 +72,7 @@ struct GameEntry: Identifiable, Hashable {
          title: String,
          aot: Bool,
          packFile: String? = nil,
+         romFile: String? = nil,
          lastPlayedAt: Date? = nil) {
         self.titleID = titleID.uppercased()
         self.title = title
@@ -76,6 +80,7 @@ struct GameEntry: Identifiable, Hashable {
         self.aot = aot
         aotVersion = aot ? 1 : nil
         self.packFile = packFile
+        self.romFile = romFile
         packABIVersion = packFile == nil ? nil : 1
         registrationSymbol = nil
         coverFile = nil

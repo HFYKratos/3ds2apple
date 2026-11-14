@@ -28,6 +28,11 @@
 //  - "packFile" is a path RELATIVE TO THE APP BUNDLE of the per-game AOT dylib.
 //    When it is absent, the AOT code is statically linked into the app binary
 //    (today's single-game IPA): that is the compatibility fallback.
+//  - "romFile" (optional) is a path RELATIVE TO THE APP BUNDLE of the game data
+//    (the user's decrypted ROM, e.g. "Roms/0004000000055E00.cci"). The shell
+//    hands that file to the runtime, so a package that carries it needs no
+//    on-device import. A package build without it cannot start; the legacy
+//    Documents/roms cartridge is only used by statically linked builds.
 //  - "aot": false lists a game the desktop build did not compile. It is shown
 //    in the library as "No AOT" and cannot be started.
 //  - "schemaVersion": 1 catalogs have no packFile, so every AOT entry is treated
@@ -55,6 +60,9 @@ struct GameCatalogGame: Codable, Hashable, Identifiable {
     /// Bundle-relative path of the per-game AOT dylib, nil when the AOT code is
     /// statically linked into the app binary (today's single-game builds).
     let packFile: String?
+    /// Bundle-relative path of the game data the pack runs, e.g.
+    /// "Roms/0004000000055E00.cci". nil when this build does not bundle the ROM.
+    let romFile: String?
     /// ABI version of the GamePack dylib contract (AOTPackageLoader.hostABIVersion).
     let packABIVersion: Int?
     /// Optional override of the registration symbol the loader looks up.
@@ -73,6 +81,7 @@ struct GameCatalogGame: Codable, Hashable, Identifiable {
         case aot
         case aotVersion
         case packFile
+        case romFile
         case packABIVersion
         case registrationSymbol
         case coverFile
@@ -86,6 +95,7 @@ struct GameCatalogGame: Codable, Hashable, Identifiable {
         aot: Bool,
         aotVersion: Int? = nil,
         packFile: String? = nil,
+        romFile: String? = nil,
         packABIVersion: Int? = nil,
         registrationSymbol: String? = nil,
         coverFile: String? = nil,
@@ -97,6 +107,7 @@ struct GameCatalogGame: Codable, Hashable, Identifiable {
         self.aot = aot
         self.aotVersion = aotVersion
         self.packFile = packFile
+        self.romFile = romFile
         self.packABIVersion = packABIVersion
         self.registrationSymbol = registrationSymbol
         self.coverFile = coverFile
@@ -118,6 +129,7 @@ struct GameCatalogGame: Codable, Hashable, Identifiable {
         aot = try container.decodeIfPresent(Bool.self, forKey: .aot) ?? false
         aotVersion = try container.decodeIfPresent(Int.self, forKey: .aotVersion)
         packFile = try container.decodeIfPresent(String.self, forKey: .packFile)
+        romFile = try container.decodeIfPresent(String.self, forKey: .romFile)
         packABIVersion = try container.decodeIfPresent(Int.self, forKey: .packABIVersion)
         registrationSymbol = try container.decodeIfPresent(String.self, forKey: .registrationSymbol)
         coverFile = try container.decodeIfPresent(String.self, forKey: .coverFile)
@@ -247,6 +259,24 @@ struct GameCatalog: Codable {
                 packFile = nil
             }
 
+            // Same untrusted-path rule as packFile: a romFile that escapes the
+            // bundle is dropped, never opened.
+            var romFile = game.romFile?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let rawROMFile = romFile, !rawROMFile.isEmpty {
+                if AOTPackageLoader.isValidBundleRelativePath(rawROMFile) {
+                    romFile = rawROMFile
+                } else {
+                    AppLog.log(
+                        "[3ds2apple] game catalog: %@ has an invalid romFile '%@' (must be a relative path inside the app bundle); the game data is treated as missing",
+                        game.titleID,
+                        rawROMFile
+                    )
+                    romFile = nil
+                }
+            } else {
+                romFile = nil
+            }
+
             var coverFile = game.coverFile?.trimmingCharacters(in: .whitespacesAndNewlines)
             if let rawCover = coverFile, rawCover.isEmpty || !AOTPackageLoader.isValidBundleRelativePath(rawCover) {
                 coverFile = nil
@@ -259,6 +289,7 @@ struct GameCatalog: Codable {
                 aot: game.aot,
                 aotVersion: game.aotVersion,
                 packFile: packFile,
+                romFile: romFile,
                 packABIVersion: game.packABIVersion,
                 registrationSymbol: game.registrationSymbol,
                 coverFile: coverFile,
