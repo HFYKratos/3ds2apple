@@ -15,6 +15,8 @@
 
 **状态：早期开发。** shell 可以导入你自己的 ROM、维护多游戏库并通过解释器运行；要达到接近 60fps 需要在自己 Mac 上用自有 ROM 构建 per-game AOT 版本。兼容性、稳定性和支持的游戏数量仍在验证中。
 
+> **`main` 上的开发分支：** 纯 AOT 的 0.2.0-beta1 一代（桌面端构建自带 ROM 的游戏包、手机端不再导入）已实现，正在真机验证。下面公开的 shell 版本在验证完成前仍为 v0.1.5-beta3。详见 [docs/aot-first.md](docs/aot-first.md)。
+
 ## 试用 shell 构建
 
 v0.1.5-beta3 GitHub Release 里的 `3ds2apple-shell-0.1.5-beta3.ipa` 是**无游戏数据的通用壳**：

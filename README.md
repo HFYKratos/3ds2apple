@@ -15,6 +15,8 @@ Platform: iPhone / iPad (iOS 16+) · Build: macOS Tahoe 26.2+ with Xcode 26.6 (i
 
 **Status: early development.** The shell imports your own ROMs, keeps a multi-game library and runs them through the interpreter; a per-game AOT build (compiled locally from your own ROM) is what reaches near-60 fps. Compatibility, stability and the number of supported games are still being verified.
 
+> **Development on `main`:** the AOT-only 0.2.0-beta1 generation (desktop-built self-contained game packages, no on-device import) is implemented and under device validation. The public shell release below remains v0.1.5-beta3 until that validation finishes. See [docs/aot-first.md](docs/aot-first.md).
+
 ## Try the shell build
 
 `3ds2apple-shell-0.1.5-beta3.ipa` in the v0.1.5-beta3 GitHub Release is a **universal shell without game data**:
