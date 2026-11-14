@@ -8,16 +8,16 @@
 
 平台：iPhone / iPad（iOS 16+） · 构建：macOS + Xcode · 安装：Sideloadly / SideStore / AltStore 侧载 · 许可：Apache-2.0 · **自带游戏**
 
-> **当前 shell 版本：v0.1.5-beta2（2026-11-14）** — [GitHub Release](https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.5-beta2)
+> **当前 shell 版本：v0.1.5-beta3（2026-11-14）** — [GitHub Release](https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.5-beta3)
 >
-> 界面打磨：免责声明使用任天堂正式名称；设置项提示统一并修正缓冲区大小排布；关于与存档管理改为卡片页面；横屏画面铺满、按键悬浮，隐藏按键不再移动画面。
-> UI polish: the disclaimer uses the formal Nintendo name, Settings hints are unified and the buffer-size row fixed, About and Save Manager are card pages, and landscape now runs edge-to-edge with controls floating over the picture (hiding them no longer moves it).
+> 换了新应用图标；横屏改为“大画面上屏”布局（上屏放大在左、下屏缩小在右下），不再是上下堆叠拉伸；按键悬浮在画面上。
+> New app icon; landscape now uses the large-top arrangement (large upper screen left, small lower screen at its lower right) instead of the stacked/stretched layout, with controls floating over the picture.
 
 **状态：早期开发。** shell 可以导入你自己的 ROM、维护多游戏库并通过解释器运行；要达到接近 60fps 需要在自己 Mac 上用自有 ROM 构建 per-game AOT 版本。兼容性、稳定性和支持的游戏数量仍在验证中。
 
 ## 试用 shell 构建
 
-v0.1.5-beta2 GitHub Release 里的 `3ds2apple-shell-0.1.5-beta2.ipa` 是**无游戏数据的通用壳**：
+v0.1.5-beta3 GitHub Release 里的 `3ds2apple-shell-0.1.5-beta3.ipa` 是**无游戏数据的通用壳**：
 
 - 可以一次导入多个你自己已解密的 `.3ds` / `.cci` / `.cia`，文件复制进 App 并持久保存在游戏库中；
 - 它**不包含**任何 per-game AOT 代码，游戏由 Zakuro 解释器运行，速度会明显低于 AOT 版本；

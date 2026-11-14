@@ -29,6 +29,7 @@ enum ScreenGeometry {
         switch layout {
         case .stacked: upright = CGSize(width: 400, height: 480)
         case .sideBySide: upright = CGSize(width: 720, height: 240)
+        case .largeTop: upright = CGSize(width: 560, height: 240)
         case .upperOnly: upright = CGSize(width: 400, height: 240)
         case .lowerOnly: upright = CGSize(width: 320, height: 240)
         }
@@ -130,6 +131,7 @@ enum ScreenGeometry {
         switch layout {
         case .stacked: arrangement = CGSize(width: max(topWidth, 320), height: 480)
         case .sideBySide: arrangement = CGSize(width: topWidth + 320, height: 240)
+        case .largeTop: arrangement = CGSize(width: topWidth + 160, height: 240)
         case .upperOnly: arrangement = CGSize(width: topWidth, height: 240)
         case .lowerOnly: arrangement = CGSize(width: 320, height: 240)
         }
@@ -154,6 +156,16 @@ enum ScreenGeometry {
             )
         case .sideBySide:
             bottom = CGRect(x: topWidth * scale, y: 0, width: 320 * scale, height: 240 * scale)
+        case .largeTop:
+            // Half the top screen's scale, at its lower right (mirrors the
+            // presenter's LargeTop layout in ios/zakuro-ios).
+            let small = scale * 0.5
+            bottom = CGRect(
+                x: topWidth * scale,
+                y: 240 * scale - 240 * small,
+                width: 320 * small,
+                height: 240 * small
+            )
         case .upperOnly:
             bottom = nil
         case .lowerOnly:

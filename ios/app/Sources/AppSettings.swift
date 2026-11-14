@@ -33,6 +33,9 @@ enum ScreenLayout: String, CaseIterable, Identifiable {
     case stacked
     /// Upper screen left, lower screen right (wide, for landscape).
     case sideBySide
+    /// Large upper screen with the lower one small at its lower right. The
+    /// landscape default, the arrangement Manic-style skins use.
+    case largeTop
     case upperOnly
     case lowerOnly
 
@@ -42,6 +45,7 @@ enum ScreenLayout: String, CaseIterable, Identifiable {
         switch self {
         case .stacked: return L10n.tr("Stacked")
         case .sideBySide: return L10n.tr("Side by side")
+        case .largeTop: return L10n.tr("Large top screen")
         case .upperOnly: return L10n.tr("Upper screen only")
         case .lowerOnly: return L10n.tr("Lower screen only")
         }
@@ -53,6 +57,8 @@ enum ScreenLayout: String, CaseIterable, Identifiable {
             return L10n.tr("Upper screen above the lower one, as on the console. Fits a portrait screen; with 90° rotation it becomes two columns.")
         case .sideBySide:
             return L10n.tr("Both screens in one row: upper on the left, lower on the right. Fits a landscape screen.")
+        case .largeTop:
+            return L10n.tr("Large upper screen with the lower one small at its lower right. The landscape default.")
         case .upperOnly:
             return L10n.tr("Only the upper (3D) screen. The game's touchscreen is not shown.")
         case .lowerOnly:
@@ -65,6 +71,7 @@ enum ScreenLayout: String, CaseIterable, Identifiable {
         switch self {
         case .stacked: return UInt32(ZK_LAYOUT_STACKED)
         case .sideBySide: return UInt32(ZK_LAYOUT_SIDE_BY_SIDE)
+        case .largeTop: return UInt32(ZK_LAYOUT_LARGE_TOP)
         case .upperOnly: return UInt32(ZK_LAYOUT_TOP_ONLY)
         case .lowerOnly: return UInt32(ZK_LAYOUT_BOTTOM_ONLY)
         }

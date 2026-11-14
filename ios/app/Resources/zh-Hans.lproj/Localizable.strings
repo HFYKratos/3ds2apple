@@ -368,3 +368,5 @@
 "“%@” is removed from this device. This cannot be undone." = "“%@”已从本设备删除。此操作无法撤销。";
 "“%@” is too large to import." = "“%@”太大，无法导入。";
 "“%@” is too large to include in a save-data archive." = "“%@”太大，无法放入存档数据压缩包。";
+"Large top screen" = "大画面上屏";
+"Large upper screen with the lower one small at its lower right. The landscape default." = "上屏放大、下屏缩小放在右下角；横屏默认布局。";

@@ -363,3 +363,5 @@
 "“%@” is removed from this device. This cannot be undone." = "“%@” is removed from this device. This cannot be undone.";
 "“%@” is too large to import." = "“%@” is too large to import.";
 "“%@” is too large to include in a save-data archive." = "“%@” is too large to include in a save-data archive.";
+"Large top screen" = "Large top screen";
+"Large upper screen with the lower one small at its lower right. The landscape default." = "Large upper screen with the lower one small at its lower right. The landscape default.";

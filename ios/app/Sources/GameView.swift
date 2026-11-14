@@ -93,6 +93,9 @@ struct GameView: View {
                     )
                 }
             }
+            .onAppear { syncPresentedLayout(isLandscape) }
+            .onChange(of: isLandscape) { newValue in syncPresentedLayout(newValue) }
+            .onChange(of: settings.screenLayout) { _ in syncPresentedLayout(isLandscape) }
         }
         .preferredColorScheme(.dark)
         .sheet(item: $sheet) { sheet in
@@ -130,7 +133,7 @@ struct GameView: View {
             }
 
             if isShowingScreens {
-                screenStage
+                screenStage(layout: settings.screenLayout)
                     .frame(maxHeight: .infinity)
                     .accessibilityIdentifier("screens")
 
@@ -168,9 +171,9 @@ struct GameView: View {
 
     /// The picture area: rounded, subtly bordered black stage that centres the
     /// scaled 3DS screens and carries the warm-up cover.
-    private var screenStage: some View {
+    private func screenStage(layout: ScreenLayout) -> some View {
         GeometryReader { geometry in
-            screenContent(available: geometry.size)
+            screenContent(available: geometry.size, layout: layout)
         }
         .background(Color.black)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -181,6 +184,20 @@ struct GameView: View {
         .shadow(color: .black.opacity(0.55), radius: 18, x: 0, y: 8)
         .overlay { graphicsWarmUpOverlay }
         .accessibilityIdentifier("screens-area")
+    }
+
+    /// Landscape uses the large-top arrangement (large upper screen, small
+    /// lower one at its lower right) by default, like a Manic-style skin. A
+    /// layout the user picked explicitly is honoured in both orientations.
+    private var landscapeLayout: ScreenLayout {
+        settings.screenLayout == .stacked ? .largeTop : settings.screenLayout
+    }
+
+    private func syncPresentedLayout(_ isLandscape: Bool) {
+        let layout = isLandscape ? landscapeLayout : settings.screenLayout
+        if model.screenLayout != layout {
+            model.setScreenLayout(layout)
+        }
     }
 
     private var gameBackground: some View {
@@ -201,7 +218,7 @@ struct GameView: View {
 
     private var landscapeContent: some View {
         ZStack {
-            screenStage
+            screenStage(layout: landscapeLayout)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 4)
                 .accessibilityIdentifier("screens-area")
@@ -318,14 +335,14 @@ struct GameView: View {
     /// available space. The CAMetalLayer draws every layout; the two screen
     /// images are the fallback when no presenter could be made.
     @ViewBuilder
-    private func screenContent(available: CGSize) -> some View {
+    private func screenContent(available: CGSize, layout: ScreenLayout) -> some View {
         if available.width >= 1, available.height >= 1 {
-            let box = contentSize(in: available)
+            let box = contentSize(in: available, layout: layout)
             ZStack {
                 if usesPresentedSurface, let metalView = model.metalScreenView {
                     presentedSurface(view: metalView, size: box)
                 } else {
-                    readbackArrangement(in: available)
+                    readbackArrangement(in: available, layout: layout)
                 }
             }
             .frame(width: available.width, height: available.height)
@@ -352,10 +369,10 @@ struct GameView: View {
     /// used when no presenter can be made. Stretch scales the placed
     /// arrangement to fill the area, which is what CoreAnimation does to the
     /// presented layer.
-    private func readbackArrangement(in area: CGSize) -> some View {
+    private func readbackArrangement(in area: CGSize, layout: ScreenLayout) -> some View {
         let stretch = settings.screenAspect == .stretch
         let arrangementAspect = ScreenGeometry.contentAspect(
-            layout: settings.screenLayout,
+            layout: layout,
             rotation: settings.screenRotation
         )
         // Fit/4:3 and integer scaling: the content box from the settings, which
@@ -363,10 +380,10 @@ struct GameView: View {
         // Stretch places the arrangement first and scales it to the area after.
         let layoutBox = stretch
             ? ScreenGeometry.fittedSize(aspect: arrangementAspect, in: area)
-            : contentSize(in: area)
+            : contentSize(in: area, layout: layout)
         let viewports = ScreenGeometry.layoutViewports(
             available: layoutBox,
-            layout: settings.screenLayout,
+            layout: layout,
             rotation: settings.screenRotation
         )
         let stretchX = layoutBox.width > 0 ? area.width / layoutBox.width : 1
@@ -515,10 +532,10 @@ struct GameView: View {
     }
 
     /// The picture's box inside `available`, from the display settings.
-    private func contentSize(in available: CGSize) -> CGSize {
+    private func contentSize(in available: CGSize, layout: ScreenLayout) -> CGSize {
         ScreenGeometry.contentSize(
             available: available,
-            layout: settings.screenLayout,
+            layout: layout,
             rotation: settings.screenRotation,
             aspect: settings.screenAspect,
             integerScale: settings.integerScale,

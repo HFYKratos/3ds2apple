@@ -8,16 +8,16 @@ Game code is translated from ARM to C at build time by [3dsrecomp](https://githu
 
 Platform: iPhone / iPad (iOS 16+) · Build: macOS + Xcode · Install: Sideloadly / SideStore / AltStore sideload · License: Apache-2.0 · **Bring your own game**
 
-> **Latest shell build: v0.1.5-beta2 (2026-11-14)** — [GitHub Release](https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.5-beta2)
+> **Latest shell build: v0.1.5-beta3 (2026-11-14)** — [GitHub Release](https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.5-beta3)
 >
-> UI polish: the disclaimer uses the formal Nintendo name, Settings hints are unified and the buffer-size row fixed, About and Save Manager are card pages, and landscape now runs edge-to-edge with controls floating over the picture (hiding them no longer moves it).
-> 界面打磨：免责声明使用任天堂正式名称；设置项提示统一并修正缓冲区大小排布；关于与存档管理改为卡片页面；横屏画面铺满、按键悬浮，隐藏按键不再移动画面。
+> New app icon; landscape now uses the large-top arrangement (large upper screen left, small lower screen at its lower right) instead of the stacked/stretched layout, with controls floating over the picture.
+> 换了新应用图标；横屏改为“大画面上屏”布局（上屏放大在左、下屏缩小在右下），不再是上下堆叠拉伸；按键悬浮在画面上。
 
 **Status: early development.** The shell imports your own ROMs, keeps a multi-game library and runs them through the interpreter; a per-game AOT build (compiled locally from your own ROM) is what reaches near-60 fps. Compatibility, stability and the number of supported games are still being verified.
 
 ## Try the shell build
 
-`3ds2apple-shell-0.1.5-beta2.ipa` in the v0.1.5-beta2 GitHub Release is a **universal shell without game data**:
+`3ds2apple-shell-0.1.5-beta3.ipa` in the v0.1.5-beta3 GitHub Release is a **universal shell without game data**:
 
 - import one or more of your own decrypted `.3ds` / `.cci` / `.cia` files; they are copied into the app and kept in a persistent game library;
 - it contains **no** per-game AOT code, so games run through the Zakuro interpreter and are noticeably slower than an AOT build;

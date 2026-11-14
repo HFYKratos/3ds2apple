@@ -1893,6 +1893,28 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     func previewSetLoaded(name: String) {
         lastROM = ImportedROM(name: name, relativePath: "roms/preview.cci")
         setPhase(.loaded(name: name))
+        // Solid stand-ins so headless UI snapshots show where each screen lands.
+        topScreenImage = previewScreenImage(width: 400, height: 240, red: 0.05, green: 0.18, blue: 0.30)
+        bottomScreenImage = previewScreenImage(width: 320, height: 240, red: 0.30, green: 0.12, blue: 0.28)
+    }
+
+    /// UI preview only: one solid CGImage standing in for a console screen.
+    private func previewScreenImage(width: Int, height: Int, red: CGFloat, green: CGFloat, blue: CGFloat) -> CGImage? {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: space,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              ) else { return nil }
+        context.setFillColor(CGColor(red: red, green: green, blue: blue, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.setFillColor(CGColor(red: 0.12, green: 0.42, blue: 0.62, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width / 2, height: height / 2))
+        return context.makeImage()
     }
 
     private func setPhase(_ phase: Phase) {
