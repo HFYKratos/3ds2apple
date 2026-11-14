@@ -42,6 +42,7 @@ enum SelfCheck {
         var checks: [Check] = []
         checks.append(contentsOf: await SelfCheckCore.checks())
         checks.append(contentsOf: await SelfCheckFlow.checks())
+        checks.append(contentsOf: SelfCheckLocalization.checks())
         return checks
     }
 }

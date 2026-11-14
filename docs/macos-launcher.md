@@ -1,11 +1,13 @@
 # macOS launcher (MVP)
 
-> Status: task-18 MVP, corrected architecture (2026-11-14) · owner: launcher-macos ·
-> not committed (Lead review)
+> Status: task-29 two-section UI revision (2026-11-15) · owner: mac-ui ·
+> not committed (Lead review). Backend contracts are unchanged from task-18;
+> this revision is the UI, localization, icon and package work.
 >
-> Code: [launcher/macos](../launcher/macos) · desktop pipeline:
-> [desktop-aot.md](desktop-aot.md) · device bridge: [device-bridge.md](device-bridge.md)
-> · architecture: [launcher-architecture.md](launcher-architecture.md)
+> Code: [launcher/macos](../launcher/macos) · UI spec: [launcher-ui.md](launcher-ui.md)
+> · desktop pipeline: [desktop-aot.md](desktop-aot.md) · device bridge:
+> [device-bridge.md](device-bridge.md) · architecture:
+> [launcher-architecture.md](launcher-architecture.md)
 
 The macOS launcher is the product front-end for the AOT-first model: the player
 imports their own decrypted 3DS ROM, the launcher compiles one native GamePack per
@@ -28,16 +30,18 @@ Build and run on a Mac with Xcode 15+ (tested with Xcode 26.6):
     cd launcher/macos
     PATH=/usr/local/bin:$PATH xcodegen generate --spec project.yml
     xcodebuild -project 3ds2apple-launcher.xcodeproj -scheme 3ds2apple-launcher \
-      -configuration Debug -destination 'platform=macOS' -derivedDataPath build build
-    open build/Build/Products/Debug/3ds2apple-launcher.app
+      -configuration Release -destination 'platform=macOS' -derivedDataPath build build
+    open build/Build/Products/Release/3ds2apple-launcher.app
 
-Headless (CI-like) checks and screenshots on the shared build VM:
+Release builds are universal (arm64 + x86_64). Headless (CI-like) checks and
+screenshots on the shared build VM:
 
-    BIN=build/Build/Products/Debug/3ds2apple-launcher.app/Contents/MacOS/3ds2apple-launcher
+    BIN=build/Build/Products/Release/3ds2apple-launcher.app/Contents/MacOS/3ds2apple-launcher
     "$BIN" --selfcheck
-    "$BIN" --screenshot-dir screenshots --mock
+    "$BIN" --screenshot-dir screenshots --mock --lang all
 
-or one shot: bash scripts/vm-build.sh
+or one shot: bash scripts/vm-build.sh (Release build + self-check + screenshots +
+zip). scripts/make-app-icon.sh regenerates the app icon from the iOS shell icon.
 
 Pure SwiftUI, no third-party dependencies, Apache-2.0. The launcher never
 implements signing, Apple-ID authentication or USB/AFC itself.
@@ -70,6 +74,39 @@ implements signing, Apple-ID authentication or USB/AFC itself.
 5. Play: launch the shell; the library comes from the bundle catalog, the ROM
    from Documents. Adding another game repeats steps 1-4 (rebuild/reinstall IPA,
    push the new game data; existing Documents data is kept).
+
+## 1.1 UI: two sections, Settings and languages (task-29)
+
+The launcher matches the iPhone/iPad shell: minimal, two primary sections plus a
+Settings panel (see [launcher-ui.md](launcher-ui.md)).
+
+| Area | Content |
+|---|---|
+| Library (default) | game cards (placeholder artwork tile, name, Title ID/product code, one phase badge, ROM/GamePack sizes, one primary action: Build AOT / Install library / Push game data / How to play) + info button; grid empty state with one Import CTA; on-device library card with installed titles, library IPA and rebuild warning; inline progress card while a task runs |
+| Import | drag-and-drop drop card (live app only) or file picker; detected NCSD/NCCH header; one primary "Queue this game"; inline import progress + log while a job runs; 4-step explanation |
+| Settings (gear) | language (System / English / 简体中文), Apple ID + Team ID + signing explanation, device state/bundle ID, build mode, sign & install strategy, tool paths, diagnostics (readiness metrics, toolchain, notes), logs (export/clear), About (app icon, version, license) |
+| Game detail dialog | package details + SHA-256, installed-library state, Documents push plan with per-file progress, Prepare/Push/Verify, build/library/push log |
+
+Old top-level Build / Shell+library / Device-push / Activity / Diagnostics screens
+were removed from navigation; their essential actions live on the game card, the
+game detail dialog and the Settings panel.
+
+**Language.** The UI follows the macOS UI language: Simplified Chinese variants
+(zh, zh-Hans*, zh-CN/SG/MY) -> Chinese, everything else -> English. Settings can
+force English or Simplified Chinese and the choice persists in UserDefaults
+(`zl.language`). All UI chrome lives in
+[launcher/macos/Sources/Localization.swift](../launcher/macos/Sources/Localization.swift);
+pipeline output (stage details, task titles, Apple signing messages, CLI/devpush
+logs) is diagnostic text and stays in its original wording by design. The Chinese
+table reuses the iOS shell terms (游戏库, 导入, 设置, 安装, 推送, Apple ID).
+
+**Icon and window.** `launcher/macos/Resources/AppIcon.icns` (+ 1024 px PNG) is
+generated from the iOS shell app icon
+(`ios/app/Assets.xcassets/AppIcon.appiconset/icon-1024.png`); it is embedded in
+the bundle (CFBundleIconFile), installed as the application/Dock icon and shown in
+the About panel. `Resources/en.lproj` and `Resources/zh-Hans.lproj`
+InfoPlist.strings localize the app display name ("3ds2apple Launcher" /
+"3ds2apple 启动器").
 
 ## 2. Architecture
 
@@ -106,8 +143,11 @@ Components (launcher/macos/Sources):
 | DeviceBridge.swift | devpush/1 NDJSON client + unavailable bridge |
 | MockBackends.swift | deterministic fixtures + mock pack CLI/bridge used by mock, self-check and screenshots |
 | SelfCheck*.swift | headless logic checks (exit 0/1) |
-| SnapshotRenderer.swift | offscreen SwiftUI ImageRenderer screenshots of the non-game UI |
-| Views/* | theme, components, shell (sidebar/top bar), seven screens |
+| Localization.swift | LauncherLanguage resolution + complete English / zh-Hans string tables |
+| SnapshotRenderer.swift | offscreen SwiftUI ImageRenderer screenshots (en+zh, dark+light) |
+| Views/* | theme, components, two-section shell (sidebar/top bar), Library, Import, Settings panel, game detail dialog |
+| Resources/ | app icon (.icns/.png, from the iOS icon) + en / zh-Hans InfoPlist.strings |
+| scripts/make-app-icon.sh | regenerates the app icon from the iOS shell icon |
 
 ## 3. Backend contracts
 
@@ -271,12 +311,15 @@ Commands (also launcher/macos/scripts/vm-build.sh):
     cd ~/3ds2apple/launcher/macos
     PATH=/usr/local/bin:$PATH xcodegen generate --spec project.yml
     xcodebuild -project 3ds2apple-launcher.xcodeproj -scheme 3ds2apple-launcher \
-      -configuration Debug -destination 'platform=macOS' -derivedDataPath build build
-    build/Build/Products/Debug/3ds2apple-launcher.app/Contents/MacOS/3ds2apple-launcher --selfcheck
-    build/Build/Products/Debug/3ds2apple-launcher.app/Contents/MacOS/3ds2apple-launcher \
-      --screenshot-dir screenshots --mock --theme dark
+      -configuration Release -destination 'platform=macOS' -derivedDataPath build build
+    APP=build/Build/Products/Release/3ds2apple-launcher.app
+    "$APP/Contents/MacOS/3ds2apple-launcher" --selfcheck
+    "$APP/Contents/MacOS/3ds2apple-launcher" --screenshot-dir screenshots --theme dark  --lang all --mock
+    "$APP/Contents/MacOS/3ds2apple-launcher" --screenshot-dir screenshots --theme light --lang all --mock
 
-Results are in section 9 (build log tail, self-check summary, screenshots).
+scripts/vm-build.sh runs all of the above and assembles
+/tmp/zl-macos-ui/3ds2apple-launcher-<version>-macos-universal.zip.
+Results are in section 9 (build log tail, self-check summary, screenshots, zip).
 
 ## 6. Manual device test (not executable on the shared VM)
 
@@ -340,61 +383,77 @@ C. Cleanup: no ROM/IPA/dylib/GameInfo.json from a test may be committed to git.
 4. Real AOT compilation is orchestration only; the existing scripts are unchanged.
 5. Free Apple IDs: 3 apps/device and 7-day profiles; reinstall to refresh.
 6. Windows launcher (task-19) reuses the same library-IPA + Documents-data split.
+7. Localized chrome only: pipeline output (stage details, task titles, Apple
+   signing messages, raw CLI/devpush logs) is produced by the backends and stays
+   in its original English wording by design. Buttons, labels, empty states,
+   settings, dialogs and the static hints are fully localized in both languages.
+8. The headless language evidence forces the Settings override (the VM has no Aqua
+   session to change the system language live); the system-language path itself is
+   covered by the self-check (preferred-language resolution) instead of a GUI run.
 
-## 9. Build and test evidence
+## 9. Build and test evidence (task-29 UI revision, 2026-11-15)
 
-Environment: macOS 26.7.3 VM (iMac.local, 8 vCPU / 12 GB, QEMU on the CachyOS
-host), Xcode 26.6 (17F113), xcodegen 2.46.0, no Aqua GUI session, no Apple ID
-signing assets, no attached iPhone/iPad. Launcher sources were synced to
-~/3ds2apple on the VM and built over SSH.
+Environment: macOS 26.7.3 VM (8 vCPU / 12 GB, QEMU on the CachyOS host), Xcode
+26.6 (17F113), xcodegen 2.46.0, no Aqua GUI session, no Apple ID signing assets,
+no attached iPhone/iPad. Launcher sources were synced to ~/3ds2apple on the VM and
+built over SSH (Release).
 
 Commands (launcher/macos/scripts/vm-build.sh):
 
     PATH=/usr/local/bin:$PATH xcodegen generate --spec project.yml
     xcodebuild -project 3ds2apple-launcher.xcodeproj -scheme 3ds2apple-launcher \
-      -configuration Debug -destination 'platform=macOS' -derivedDataPath build build
+      -configuration Release -destination 'platform=macOS' -derivedDataPath build build
     <app>/Contents/MacOS/3ds2apple-launcher --selfcheck
-    <app>/Contents/MacOS/3ds2apple-launcher --screenshot-dir screenshots --mock --theme dark
-    <app>/Contents/MacOS/3ds2apple-launcher --screenshot-dir screenshots --mock --theme light
+    <app>/Contents/MacOS/3ds2apple-launcher --screenshot-dir screenshots --theme dark  --lang all --mock
+    <app>/Contents/MacOS/3ds2apple-launcher --screenshot-dir screenshots --theme light --lang all --mock
+    ditto -c -k --sequesterRsrc --keepParent 3ds2apple-launcher-0.2.0-macos-universal <zip>
 
 Results:
 
-- xcodebuild: BUILD SUCCEEDED, 0 errors. Non-blocking warnings only:
-  allowedFileTypes deprecated (macOS 12+ API, kept for minimal compatibility),
-  NSLock-in-async and Sendable capture notes that are Swift 6 language-mode
-  diagnostics (the target deliberately compiles in Swift 5 mode).
-- App: 6,396,864-byte binary; bundle id com.kratos.3ds2apple.launcher;
-  generated project/build trees are gitignored.
-- Self-check: 71/71 checks passed (exit 0). Coverage: launcher CLI modes, checkout
-  detection, desktop CLI JSON parsing (rom inspect / packages list / manifest),
-  ROM-data GameInfo mapping with informational bundle pack path, 2-file Documents
-  push plan with GameInfo.json last and no dylib, library-IPA allocation (mock
-  pack backend), devpush NDJSON events, Apple 9120/9401 error translation, log
-  redaction, full mock import -> build -> library -> push flow, library rebuild
-  detection, and library-install refusal without Apple ID signing assets.
-- Screenshots (non-game UI only, MOCK / DRY RUN badge visible in every shot,
-  2x scale, SwiftUI ImageRenderer drawn offscreen):
+- xcodebuild: BUILD SUCCEEDED, Release, 0 errors. Universal binary
+  (lipo: x86_64 arm64), 7,506,784-byte executable; bundle id
+  com.kratos.3ds2apple.launcher; version 0.2.0 (build 2).
+  Non-blocking warnings only: pre-existing CommandRunner Sendable/NSLock
+  Swift-6-mode notes and the traditional-headermap warning.
+- App icon: Contents/Resources/AppIcon.icns (1,273,753 bytes, 11 PNG sizes,
+  verified with an iconutil round-trip) + AppIcon-1024.png, generated from
+  ios/app/Assets.xcassets/AppIcon.appiconset/icon-1024.png. Localized app name:
+  en.lproj "3ds2apple Launcher", zh-Hans.lproj "3ds2apple 启动器" (read back with
+  PlistBuddy in the build log).
+- Self-check: 108/108 passed (exit 0): the 71 original launcher checks plus 37 new
+  localization checks (system language resolution including zh-Hant -> English
+  fallback, both string tables complete, iOS-shell terminology, localized enum
+  labels/format helpers, persisted override with unknown-value fallback, and the
+  new --lang CLI option).
+- Screenshots: 16 non-game PNGs at 2x, SwiftUI ImageRenderer drawn offscreen,
+  English + Simplified Chinese, dark + light, no game pixels:
 
 | File | Content |
 |---|---|
-| [import-dark](../launcher/macos/screenshots/launcher-import-dark.png) | import screen with detected NCSD header (header-only badge) |
-| [library-dark](../launcher/macos/screenshots/launcher-library-dark.png) | games grid with IN IPA / AOT READY / FAILED states and staged game-data row |
-| [build-dark](../launcher/macos/screenshots/launcher-build-dark.png) | build modes, running AOT task stages and build log |
-| [install-dark](../launcher/macos/screenshots/launcher-install-dark.png) | Shell + library: Apple ID readiness missing, 9120 plain-language failure, games to embed, sign+install log |
-| [device-dark](../launcher/macos/screenshots/launcher-device-dark.png) | Documents push plan with exactly GameRom.cci + GameInfo.json (manifest last) and progress |
-| [activity-dark](../launcher/macos/screenshots/launcher-activity-dark.png) | task history, stage progress, filtered logs, export |
-| [diagnostics-dark](../launcher/macos/screenshots/launcher-diagnostics-dark.png) | toolchain, Apple ID and devpush capabilities, paths incl. library IPA |
-| [import-light](../launcher/macos/screenshots/launcher-import-light.png), [install-light](../launcher/macos/screenshots/launcher-install-light.png) | light appearance of two screens |
+| [library-populated en dark](../launcher/macos/screenshots/launcher-library-dark-en.png) / [zh](../launcher/macos/screenshots/launcher-library-dark-zh.png) | Library grid: AOT-ready + IN LIBRARY with Push action, queued game with Build action, failed game with error, on-device library card |
+| [library-empty dark](../launcher/macos/screenshots/launcher-library-empty-dark-en.png) / [light](../launcher/macos/screenshots/launcher-library-empty-light-en.png) | empty-library state with one Import CTA |
+| [import en dark](../launcher/macos/screenshots/launcher-import-dark-en.png) / [zh dark](../launcher/macos/screenshots/launcher-import-dark-zh.png) | Import drop card, detected NCSD header, one Queue button, next-steps card |
+| [import light en](../launcher/macos/screenshots/launcher-import-light-en.png) / [light zh](../launcher/macos/screenshots/launcher-import-light-zh.png) | light appearance of Import |
+| [build-running dark](../launcher/macos/screenshots/launcher-build-running-dark-en.png) | Library while an AOT build runs (busy bar + progress card) |
+| [game-detail dark](../launcher/macos/screenshots/launcher-game-detail-dark-en.png) | per-game dialog: package details, Documents push plan with progress, logs, actions |
+| [settings en dark](../launcher/macos/screenshots/launcher-settings-dark-en.png) / [zh dark](../launcher/macos/screenshots/launcher-settings-dark-zh.png) / [en light](../launcher/macos/screenshots/launcher-settings-light-en.png) / [zh light](../launcher/macos/screenshots/launcher-settings-light-zh.png) | Settings panel: language, Apple ID/Team ID, device, build mode, sign & install, tools, diagnostics, logs, About (app icon) |
 
+The light-theme Library variants are also in the folder
+([en](../launcher/macos/screenshots/launcher-library-light-en.png) /
+[zh](../launcher/macos/screenshots/launcher-library-light-zh.png)).
+
+- Package (not committed; on the DSH/WSL host):
+  /mnt/f/temp_transfer/dist/macos-ui/3ds2apple-launcher-0.2.0-macos-universal.zip
+  (9,302,168 bytes, sha256 9df2529cda69012c6bd09eed57aba58d33ceccceebb5a9704716b1e391a4f7f7)
+  plus a short README.md and .sha256 sidecar. The zip contains the .app, the 16
+  screenshots, README.md and PACKAGE-README.txt.
+- Package verification: unzip -t OK; a fresh extraction on the VM ran
+  --selfcheck 108/108 and rendered the zh screenshots; lipo reports x86_64 arm64;
+  CFBundleShortVersionString 0.2.0, CFBundleIconFile AppIcon; content listing has
+  no .cci/.3ds/.ipa/.dylib/GameRom/GamePack entries.
 - Device-bridge contract probe (real tools/devpush release binary, mock backend,
-  no device): the launcher's command sequence and JSON field expectations were
-  exercised end to end: capabilities, devices, app-attr (installed, data
-  container, bundle version, file sharing), mkdir, two puts (GameRom.cci then
-  GameInfo.json), stat, ls and an error path. Observed fields match the parser:
-  put progress {file,bytesSent,bytesTotal,percent} and done {remotePath,bytes,
-  sha256}; stat {path,size,isDir}; ls {count,entries}; app-attr; error
-  {code,hint,message} with exit code 7 for path_not_found. A real USB device run
-  remains the first follow-up (no device attached to the VM).
-- Raw VM logs: /tmp/zl-launcher-build.log, /tmp/zl-launcher-selfcheck.log,
-  /tmp/zl-launcher-shots-*.log (artifact bundle /tmp/zl-artifacts.tgz on the DSH
-  host; not committed).
+  no device) from task-18 still applies: capabilities, devices, app-attr, mkdir,
+  two puts (GameRom.cci then GameInfo.json last), stat, ls and an error path match
+  the parser. A real USB device run remains the first follow-up (no device on VM).
+- Raw VM logs kept on the build VM: /tmp/zl-launcher-build.log,
+  /tmp/zl-launcher-selfcheck.log, /tmp/zl-launcher-shots-*.log, /tmp/zl-vm-build.out.

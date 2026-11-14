@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 // MARK: - Screenshot mode
 
@@ -181,13 +182,14 @@ struct Badge: View {
 
 struct ModeBadge: View {
     let isMock: Bool
+    let strings: LauncherStrings
 
     var body: some View {
         HStack(spacing: 5) {
             Circle()
                 .fill(isMock ? LauncherTheme.warning : LauncherTheme.success)
                 .frame(width: 6, height: 6)
-            Text(isMock ? "MOCK / DRY RUN" : "LIVE")
+            Text(isMock ? strings.modeMock : strings.modeLive)
                 .font(.system(size: 9, weight: .bold))
                 .tracking(0.8)
                 .foregroundStyle(isMock ? LauncherTheme.warning : LauncherTheme.success)
@@ -200,19 +202,20 @@ struct ModeBadge: View {
 
 struct GamePhaseBadge: View {
     let phase: GamePhase
+    let strings: LauncherStrings
 
     var body: some View {
         switch phase {
         case .queued:
-            Badge(text: "QUEUED", tone: .neutral, symbol: "clock")
+            Badge(text: strings.phase(.queued).uppercased(), tone: .neutral, symbol: "clock")
         case .building:
-            Badge(text: "BUILDING", tone: .accent, symbol: "hammer.fill")
+            Badge(text: strings.phase(.building).uppercased(), tone: .accent, symbol: "hammer.fill")
         case .built:
-            Badge(text: "AOT READY", tone: .success, symbol: "checkmark.circle.fill")
+            Badge(text: strings.phase(.built).uppercased(), tone: .success, symbol: "checkmark.circle.fill")
         case .pushed:
-            Badge(text: "ON DEVICE", tone: .accent, symbol: "iphone")
+            Badge(text: strings.phase(.pushed).uppercased(), tone: .accent, symbol: "iphone")
         case .failed:
-            Badge(text: "FAILED", tone: .danger, symbol: "exclamationmark.triangle.fill")
+            Badge(text: strings.phase(.failed).uppercased(), tone: .danger, symbol: "exclamationmark.triangle.fill")
         }
     }
 }
@@ -268,17 +271,13 @@ struct StageRow: View {
                 }
             }
             Spacer(minLength: 0)
-            if stage.state == .running {
-                Text("running")
-                    .font(.system(size: 9.5, weight: .semibold))
-                    .foregroundStyle(LauncherTheme.accent)
-            }
         }
     }
 }
 
 struct TaskProgressCard: View {
     let task: TaskRecord
+    let strings: LauncherStrings
     var showsStages: Bool = true
 
     private var badgeTone: BadgeTone {
@@ -300,7 +299,7 @@ struct TaskProgressCard: View {
                 Text(task.title)
                     .font(LauncherTheme.rounded(14, weight: .semibold))
                 Spacer()
-                Badge(text: task.state.title.uppercased(), tone: badgeTone)
+                Badge(text: strings.taskState(task.state).uppercased(), tone: badgeTone)
                 if task.state == .running {
                     Text(String(format: "%.0f%%", task.progress * 100))
                         .font(LauncherTheme.mono(11, weight: .semibold))
@@ -342,6 +341,7 @@ struct LogConsole: View {
     let entries: [LogEntry]
     var maximumLines: Int = 14
     var showsHeader: Bool = true
+    let strings: LauncherStrings
     @Environment(\.launcherScreenshotMode) private var screenshotMode
 
     private var visible: [LogEntry] {
@@ -357,16 +357,16 @@ struct LogConsole: View {
         VStack(alignment: .leading, spacing: 8) {
             if showsHeader {
                 HStack {
-                    SectionLabel(text: "Log")
+                    SectionLabel(text: strings.logsTitle)
                     Spacer()
-                    Text(String(entries.count) + " lines")
+                    Text(String(entries.count))
                         .font(LauncherTheme.mono(10))
                         .foregroundStyle(LauncherTheme.mutedText)
                 }
             }
             VStack(alignment: .leading, spacing: 3) {
                 if visible.isEmpty {
-                    Text("No log lines yet.")
+                    Text(strings.logsNoLines)
                         .font(LauncherTheme.mono(11))
                         .foregroundStyle(LauncherTheme.mutedText)
                 }
@@ -639,5 +639,148 @@ struct ToolStatusRow: View {
             }
             Spacer(minLength: 0)
         }
+    }
+}
+
+// MARK: - Branding
+
+enum LauncherInfo {
+    static var version: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.0"
+    }
+
+    static var build: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "2"
+    }
+
+    static var shortVersion: String { version }
+
+    static var displayName: String {
+        Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String ?? "3ds2apple Launcher"
+    }
+}
+
+enum LauncherAsset {
+    /// The app icon (the same artwork as the iOS shell app) from the bundle.
+    static func appIcon() -> NSImage? {
+        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        if let url = Bundle.main.url(forResource: "AppIcon-1024", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        return NSApplication.shared.applicationIconImage
+    }
+}
+
+struct AppIconBadge: View {
+    var size: CGFloat = 36
+
+    var body: some View {
+        Group {
+            if let image = LauncherAsset.appIcon() {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                        .fill(LauncherTheme.accentDeep)
+                    Image(systemName: "gamecontroller.fill")
+                        .font(.system(size: size * 0.44, weight: .bold))
+                        .foregroundStyle(Color.white)
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                .stroke(LauncherTheme.border, lineWidth: 1)
+        )
+    }
+}
+
+/// Placeholder artwork: initials on the accent gradient. The launcher never ships
+/// cover art or game pixels, so cards stay text/placeholder only.
+struct GameArtwork: View {
+    let game: GameEntry
+    var size: CGFloat = 50
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [LauncherTheme.accentDeep.opacity(0.92), LauncherTheme.accent.opacity(0.68)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Text(initials)
+                .font(LauncherTheme.rounded(size * 0.30, weight: .bold))
+                .foregroundStyle(Color.white.opacity(0.92))
+        }
+        .frame(width: size, height: size)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.white.opacity(0.16), lineWidth: 1)
+        )
+    }
+
+    private var initials: String {
+        let words = game.displayName.split(separator: " ").filter { !$0.isEmpty }
+        if words.count >= 2 {
+            return String(words[0].prefix(1)) + String(words[1].prefix(1))
+        }
+        return String(game.displayName.prefix(2)).uppercased()
+    }
+}
+
+struct IconTile: View {
+    let symbol: String
+    var size: CGFloat = 32
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
+                .fill(LauncherTheme.accent.opacity(0.18))
+            Image(systemName: symbol)
+                .font(.system(size: size * 0.44, weight: .semibold))
+                .foregroundStyle(LauncherTheme.accentDeep)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+struct RadioOptionRow: View {
+    let title: String
+    var detail: String?
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .font(.system(size: 11))
+                    .foregroundStyle(selected ? LauncherTheme.accentDeep : LauncherTheme.mutedText)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 11.5, weight: .medium))
+                    if let detail {
+                        Text(detail)
+                            .font(.system(size: 10))
+                            .foregroundStyle(LauncherTheme.mutedText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

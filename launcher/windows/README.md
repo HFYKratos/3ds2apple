@@ -1,10 +1,12 @@
 # 3ds2apple launcher for Windows (MVP)
 
-Status: **source-complete MVP skeleton, not a shipped installer.** This checkout
-compiles cleanly (0 errors), its **35 unit tests pass**, the host self-test passes
-and the tool contracts were exercised against the real Rust CLIs. The graphical UI,
-the Impactor signing run and the phone flows still need verification on a real
-Windows PC with an iPhone/iPad; the exact steps are in
+Status: **source-complete MVP + single-file Windows package (task-28).** This checkout
+compiles cleanly (0 errors, warnings as errors), its **111 unit tests pass**, the host
+self-test passes and the tool contracts were exercised against the real Rust CLIs.
+The UI is the two-section localized (English / 简体中文) Avalonia design with the
+iOS app icon; the user-facing package is a ZIP with exactly one self-contained exe.
+The graphical UI, the Impactor signing run and the phone flows still need
+verification on a real Windows PC with an iPhone/iPad; the exact steps are in
 [docs/windows-launcher.md](../../docs/windows-launcher.md) (section 11).
 
 Architecture correction (Lead, 2026-11-14): iOS cannot dlopen a loose unsigned
@@ -43,8 +45,9 @@ No ROM, key, IPA, generated C or Apple credential is stored in this repository.
 - .NET 10 + **Avalonia 12.1.5** desktop UI (same stack family S2Arm's Windows
   launcher uses; our code is original — S2Arm is an Apache-2.0 reference only).
 - Projects: ThreeDsTwoApple.Launcher.Core (no UI: tool clients, contracts, IPA
-  composition, signing, push) / ThreeDsTwoApple.Launcher.Desktop (Avalonia shell) /
-  ThreeDsTwoApple.Launcher.Core.Tests (35 xUnit tests).
+  composition, signing, push, localization catalog, embedded single-file payload) /
+  ThreeDsTwoApple.Launcher.Desktop (Avalonia shell) /
+  ThreeDsTwoApple.Launcher.Core.Tests (111 xUnit tests).
 - All external work goes through CLI tools passed as argument arrays (never a
   shell string): 3ds2apple-pack, builder-windows, devpush, the official plumesign.
   The launcher never re-implements ROM parsing, the Build Agent protocol,
@@ -59,6 +62,8 @@ No ROM, key, IPA, generated C or Apple credential is stored in this repository.
       src/ThreeDsTwoApple.Launcher.Core/
         LauncherServices.cs             composition root (tools, workspace, clients)
         SelfTest.cs                     --self-test host check
+        Localization/Localization.cs    English + zh-Hans UI catalogue, OS detection, override
+        Distribution/DistributionLayout.cs  embedded payload inventory + first-run extraction
         Tools/                          ProcessRunner, PackCli (inspect/add/list/catalog/record/verify),
                                         BuilderCli (macOS Build Agent), ToolLocator
         BuildPipeline/IpaComposer.cs            shell template + packs + GameCatalog -> installable IPA
@@ -69,12 +74,16 @@ No ROM, key, IPA, generated C or Apple credential is stored in this repository.
         Device/                         devpush/1 JSON/NDJSON client + read-only usbmuxd ListDevices
         Deploy/                         GameInfo.json writer, ROM+GameInfo push plan + verification
         LauncherState/                      %LOCALAPPDATA%/3ds2apple/launcher state + logs
-      src/Launcher.Desktop/             Avalonia UI (Program, App, MainWindow, view model)
-      tests/ThreeDsTwoApple.Launcher.Core.Tests/   35 xUnit tests
+      src/Launcher.Desktop/             Avalonia UI (Program, App, MainWindow, view model,
+                                        Localization/LocalizedText, Assets/app.ico + placeholder)
+      tests/ThreeDsTwoApple.Launcher.Core.Tests/   111 xUnit tests
       vendor/impactor/             PINS.json + MIT / MPL-2.0 licence texts + source note
       shell/                            shell template IPA placement + manifest example (unchanged):
                                         the template is ROM-free and pinned; packs are injected at install time
-      tools/                            fetch-impactor.ps1/.sh (verified official v2.7.2), prepare-dist.ps1
+      docs/ui/                          rendered UI evidence (English + 简体中文 screenshots)
+      tools/                            fetch-impactor.ps1/.sh (verified official v2.7.2),
+                                        prepare-dist.ps1 (multi-file dev package),
+                                        prepare-dist-singlefile.sh/.ps1 (one-exe ZIP)
       .gitignore                        excludes bin/obj and downloaded third-party binaries
 
 Directory names are chosen so the repository-wide ignore rules cannot hide them:
@@ -112,13 +121,15 @@ the project's Build Agent (builder/README.md). The project never downloads Xcode
     dotnet test tests/ThreeDsTwoApple.Launcher.Core.Tests
     dotnet src/Launcher.Desktop/bin/Debug/net10.0/3ds2apple-launcher.dll --self-test
 
-Evidence from this checkout: solution build succeeded (0 errors; 0 warnings after
-fixing obsolete XAML properties), **57/57 tests passed**, self-test OK. With the
-real Rust tool binaries on DEVPUSH_EXE / THREEDS2APPLE_PACK / THREEDS2APPLE_BUILDER
-the self-test reports PASS for all tools and one WARN (Impactor bundle not
-downloaded in a source checkout). Real devpush was driven through its mock backend
-with the launcher's exact command shapes. The Avalonia window was started under
-Xvfb; real UI interaction is part of the Windows manual test plan.
+Evidence from this checkout: solution build succeeded (0 errors, warnings as
+errors), **111/111 tests passed** (3 consecutive runs), Debug self-test passes (only
+the "developer build" payload warning). The Release single-file exe was published,
+ZIPped (one file) and its `--self-test` was run from a clean folder via WSL interop:
+exit 0, embedded payload extracted to `%LOCALAPPDATA%\3ds2apple\distribution\0.1.0`,
+ROM-free shell template + pinned Impactor + all three Bin tools PASS. The Avalonia
+window was rendered under Xvfb in English and Simplified Chinese
+(`docs/ui/launcher-en.png`, `launcher-zh.png`); real UI interaction is part of the
+Windows manual test plan.
 
 ## Assemble a distribution (release step)
 
@@ -126,10 +137,30 @@ Xvfb; real UI interaction is part of the Windows manual test plan.
     powershell -ExecutionPolicy Bypass -File tools/prepare-dist.ps1 -Version 0.1.0
     # -SkipShell builds a preview package without the shell template IPA
 
-prepare-dist.ps1 publishes the launcher self-contained (users install no .NET),
-builds/copies Bin/3ds2apple-pack.exe, Bin/devpush.exe, Bin/builder-windows.exe, adds
-the verified ThirdParty/Impactor bundle and the pinned Shell/ template IPA +
-manifest, and writes SHA256SUMS.
+prepare-dist.ps1 publishes the launcher self-contained multi-file (developer mode:
+users install no .NET), builds/copies Bin/3ds2apple-pack.exe, Bin/devpush.exe,
+Bin/builder-windows.exe, adds the verified ThirdParty/Impactor bundle and the pinned
+shell template IPA + manifest, and writes SHA256SUMS.
+
+## Single-file one-exe distribution (task-28)
+
+The shipped Windows package is a ZIP containing exactly one file,
+`3ds2apple-launcher.exe` (self-contained .NET single-file). Release builds embed the
+ROM-free shell IPA + manifest, the pinned official Impactor/plumesign + licence texts,
+`Bin/3ds2apple-pack.exe`, `Bin/builder-windows.exe`, `Bin/devpush.exe` and
+LICENSE/NOTICE/THIRD_PARTY as resources; on first run they are extracted to
+`%LOCALAPPDATA%\3ds2apple\distribution\<version>\` and every tool/service resolves from
+there. `THREEDS2APPLE_DIST` and the multi-file layout still work for development.
+
+    # stage shell/manifest.json + shell/3ds2apple-shell.ipa, vendor/impactor (verified),
+    # and Bin/*.exe first (see shell/README.md, tools/fetch-impactor.sh)
+    launcher/windows/tools/prepare-dist-singlefile.sh /mnt/f/temp_transfer/dist/windows-single
+    # Windows twin: powershell -ExecutionPolicy Bypass -File tools/prepare-dist-singlefile.ps1
+    unzip -l dist/3ds2apple-windows-single-<version>.zip   # exactly one entry
+    # clean-folder check: copy only the exe into an empty folder and run --self-test
+
+Staged payload inputs are git-ignored (`Bin/`, `shell/*.ipa`, `shell/manifest.json`,
+`vendor/impactor/*.exe`); the release ZIP is never committed.
 
 The shell template IPA is a macOS build product (ROM-free, empty catalogue) —
 follow [shell/README.md](shell/README.md). It is deliberately absent from git.

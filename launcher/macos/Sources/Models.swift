@@ -45,7 +45,7 @@ struct LogEntry: Identifiable, Equatable {
 
 // MARK: - Library / games
 
-enum GamePhase: String, Codable {
+enum GamePhase: String, Codable, CaseIterable {
     case queued
     case building
     case built
@@ -203,7 +203,7 @@ enum TaskKind: String, Codable {
     }
 }
 
-enum TaskState: String, Codable {
+enum TaskState: String, Codable, CaseIterable {
     case queued
     case running
     case succeeded
@@ -486,50 +486,19 @@ extension Error {
 
 // MARK: - Selection
 
+/// The launcher has exactly two top-level sections (docs/launcher-ui.md):
+/// Library and Import. Settings, install/push and diagnostics are dialogs.
+/// Raw values are kept stable for persisted UI state and logs.
 enum LauncherScreen: String, CaseIterable, Identifiable {
-    case importROM = "import"
     case library = "library"
-    case build = "build"
-    case install = "install"
-    case device = "device"
-    case activity = "activity"
-    case diagnostics = "diagnostics"
+    case importROM = "import"
 
     var id: String { rawValue }
 
-    var title: String {
-        switch self {
-        case .importROM: return "Import ROM"
-        case .library: return "Games"
-        case .build: return "Build AOT"
-        case .install: return "Shell + library"
-        case .device: return "Device push"
-        case .activity: return "Activity"
-        case .diagnostics: return "Diagnostics"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .importROM: return "Add your own decrypted .3ds / .cci files"
-        case .library: return "One shell, many per-game AOT packages"
-        case .build: return "Compile a GamePack on this Mac"
-        case .install: return "Sign and install the shell with the current AOT GamePacks"
-        case .device: return "Copy Documents/Games files over the device bridge"
-        case .activity: return "Task history, progress and logs"
-        case .diagnostics: return "Toolchain, Apple ID and device bridge status"
-        }
-    }
-
     var symbolName: String {
         switch self {
-        case .importROM: return "square.and.arrow.down"
         case .library: return "square.grid.2x2"
-        case .build: return "hammer"
-        case .install: return "iphone.and.arrow.forward"
-        case .device: return "arrow.up.doc.on.clipboard"
-        case .activity: return "list.bullet.rectangle"
-        case .diagnostics: return "stethoscope"
+        case .importROM: return "square.and.arrow.down"
         }
     }
 }

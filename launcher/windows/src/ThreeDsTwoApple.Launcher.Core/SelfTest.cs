@@ -1,6 +1,8 @@
 using ThreeDsTwoApple.Launcher.Core.BuildPipeline;
 using ThreeDsTwoApple.Launcher.Core.Device;
 using ThreeDsTwoApple.Launcher.Core.Deploy;
+using ThreeDsTwoApple.Launcher.Core.Distribution;
+using ThreeDsTwoApple.Launcher.Core.Localization;
 using ThreeDsTwoApple.Launcher.Core.Signing;
 using ThreeDsTwoApple.Launcher.Core.Tools;
 using ThreeDsTwoApple.Launcher.Core.Util;
@@ -37,13 +39,68 @@ public static class SelfTest
         try
         {
             output.WriteLine($"3ds2apple launcher self-test · {LauncherInfo.VersionLine}");
-            output.WriteLine($"distribution root: {AppContext.BaseDirectory}");
+            var distribution = DistributionLayout.Prepare();
+            output.WriteLine($"distribution root: {distribution.Root}");
+            output.WriteLine($"distribution mode: {distribution.Describe()}");
+            if (distribution.Warning is not null)
+            {
+                Line("WARN", "distribution payload", distribution.Warning);
+            }
             output.WriteLine($"temporary workspace: {temporaryRoot}");
             output.WriteLine();
 
             // 1. Version + shared identity constants.
             Line(!string.IsNullOrWhiteSpace(LauncherInfo.Version) && LauncherInfo.Version != "0.0.0" ? "PASS" : "FAIL",
                 "launcher version", LauncherInfo.VersionLine);
+
+            // 1b. Localization: OS detection, en/zh-Hans key parity, placeholders and live switching.
+            var languageCases = new (string? Culture, string Expected)[]
+            {
+                (null, LanguageCatalog.EnglishTag),
+                ("en-US", LanguageCatalog.EnglishTag),
+                ("en-GB", LanguageCatalog.EnglishTag),
+                ("zh-CN", LanguageCatalog.ChineseSimplifiedTag),
+                ("zh-Hans", LanguageCatalog.ChineseSimplifiedTag),
+                ("zh_CN", LanguageCatalog.ChineseSimplifiedTag),
+                ("zh-TW", LanguageCatalog.EnglishTag),
+                ("zh-Hant", LanguageCatalog.EnglishTag),
+                ("de-DE", LanguageCatalog.EnglishTag),
+            };
+            var badDetection = languageCases.Where(item => LanguageCatalog.Detect(item.Culture) != item.Expected).Select(item => item.Culture ?? "<null>").ToList();
+            Line(badDetection.Count == 0 ? "PASS" : "FAIL", "OS language detection",
+                badDetection.Count == 0 ? "Simplified Chinese -> zh-Hans; everything else -> English" : "unexpected: " + string.Join(", ", badDetection));
+
+            var englishKeys = LanguageCatalog.English.Keys.OrderBy(key => key, StringComparer.Ordinal).ToList();
+            var chineseKeys = LanguageCatalog.ChineseSimplified.Keys.OrderBy(key => key, StringComparer.Ordinal).ToList();
+            var parityOk = englishKeys.SequenceEqual(chineseKeys, StringComparer.Ordinal);
+            var blankKeys = LanguageCatalog.Keys.Where(key =>
+                string.IsNullOrWhiteSpace(LanguageCatalog.Text(LanguageCatalog.EnglishTag, key))
+                || string.IsNullOrWhiteSpace(LanguageCatalog.Text(LanguageCatalog.ChineseSimplifiedTag, key))).ToList();
+            var placeholderMismatch = LanguageCatalog.Keys.Where(key =>
+                !LanguageCatalog.Placeholders(LanguageCatalog.English[key]).OrderBy(token => token, StringComparer.Ordinal)
+                    .SequenceEqual(LanguageCatalog.Placeholders(LanguageCatalog.ChineseSimplified[key]).OrderBy(token => token, StringComparer.Ordinal))).ToList();
+            Line(parityOk && blankKeys.Count == 0 && placeholderMismatch.Count == 0 ? "PASS" : "FAIL", "localization catalog (en + zh-Hans)",
+                $"{LanguageCatalog.Keys.Count} keys" + (parityOk ? string.Empty : "; key mismatch")
+                + (blankKeys.Count == 0 ? string.Empty : "; blank: " + string.Join(", ", blankKeys))
+                + (placeholderMismatch.Count == 0 ? string.Empty : "; placeholders differ: " + string.Join(", ", placeholderMismatch)));
+
+            var originalTag = Loc.CurrentTag;
+            try
+            {
+                Loc.ApplyPreference(UiLanguagePreference.SimplifiedChinese);
+                var chinese = Loc.T("nav.library") == "游戏库" && Loc.T("nav.import") == "导入";
+                Loc.ApplyPreference(UiLanguagePreference.English);
+                var english = Loc.T("nav.library") == "Library" && Loc.T("settings.title") == "Settings";
+                Loc.ApplyPreference(UiLanguagePreference.System, "zh-CN");
+                var systemChinese = Loc.CurrentTag == LanguageCatalog.ChineseSimplifiedTag;
+                Loc.ApplyPreference(UiLanguagePreference.System, "en-US");
+                var systemEnglish = Loc.CurrentTag == LanguageCatalog.EnglishTag;
+                Line(chinese && english && systemChinese && systemEnglish ? "PASS" : "FAIL", "language override + system detection", "System/English/简体中文");
+            }
+            finally
+            {
+                Loc.ApplyPreference(UiLanguagePreference.System, originalTag == LanguageCatalog.ChineseSimplifiedTag ? "zh-CN" : "en-US");
+            }
 
             // 2. Pinned Impactor digests must be exactly the official v2.7.2 assets.
             var pinsOk =
@@ -67,7 +124,7 @@ public static class SelfTest
 
             // 4. Tool CLIs are optional on a dev machine, required in a distribution.
             var runner = new ProcessRunner();
-            var locator = new ToolLocator(AppContext.BaseDirectory);
+            var locator = new ToolLocator(distribution.Root);
             var packPath = locator.FindPackCli();
             var packProbe = ToolLocator.ProbeAsync("3ds2apple-pack", packPath, runner, new[] { "--version" }).GetAwaiter().GetResult();
             Line(packProbe.Ready ? "PASS" : "WARN", "3ds2apple-pack", packProbe.Describe());
@@ -147,7 +204,7 @@ public static class SelfTest
             Line(slug == "pokemon-y-00055e00" ? "PASS" : "FAIL", "build slug", slug);
 
             // 9. Optional pinned Impactor bundle (present in a distribution, absent in dev).
-            var bundle = ImpactorBundle.Locate(AppContext.BaseDirectory).Verify();
+            var bundle = ImpactorBundle.Locate(distribution.Root).Verify();
             if (!Directory.Exists(bundle.Directory))
             {
                 Line("WARN", "Impactor bundle", "ThirdParty/Impactor is not present (normal in a source checkout)");
@@ -155,6 +212,51 @@ public static class SelfTest
             else
             {
                 Line(bundle.Ready ? "PASS" : "FAIL", "Impactor bundle", bundle.Summary);
+            }
+
+            // 10. Single-file distribution payload: embedded resources, extraction and the ROM-free shell template.
+            if (!distribution.HasEmbeddedPayload)
+            {
+                Line("WARN", "embedded distribution payload", "not present in this developer build (normal for Debug/source builds)");
+            }
+            else
+            {
+                var relativePaths = distribution.Payload.Select(file => file.RelativePath).ToHashSet(StringComparer.Ordinal);
+                var missingExpected = DistributionLayout.ExpectedRelativePaths.Where(path => !relativePaths.Contains(path)).ToList();
+                Line(missingExpected.Count == 0 ? "PASS" : "FAIL", "embedded payload inventory",
+                    missingExpected.Count == 0
+                        ? $"{distribution.Payload.Count} files (shell IPA+manifest, Impactor/plumesign+licences, Bin tools, LICENSE/NOTICE/THIRD_PARTY)"
+                        : "missing: " + string.Join(", ", missingExpected));
+
+                var missingOnDisk = distribution.Payload
+                    .Where(file => !File.Exists(Path.Combine(distribution.Root, file.RelativePath.Replace('/', Path.DirectorySeparatorChar))))
+                    .Select(file => file.RelativePath)
+                    .ToList();
+                Line(missingOnDisk.Count == 0 ? "PASS" : "FAIL", "extracted distribution files",
+                    missingOnDisk.Count == 0 ? "all payload files present under " + distribution.Root : "missing: " + string.Join(", ", missingOnDisk));
+                Line(distribution.Root == AppContext.BaseDirectory ? "FAIL" : "PASS", "single-file extraction target",
+                    distribution.Root == AppContext.BaseDirectory ? "payload was not extracted to LOCALAPPDATA" : "outside the executable folder (clean-folder launch)");
+
+                var shellDirectory = Path.Combine(distribution.Root, "Shell");
+                var shell = ShellManifest.ReadAsync(shellDirectory).GetAwaiter().GetResult();
+                if (shell is null)
+                {
+                    Line("FAIL", "base shell template", "Shell/manifest.json is missing from the distribution payload");
+                }
+                else
+                {
+                    var shellVerification = shell.Verify(shellDirectory);
+                    var shellRules = ShellTemplateRules.ValidateManifest(shell);
+                    Line(shellVerification.Ok && shellRules.Ok ? "PASS" : "FAIL", "base shell template (ROM-free)",
+                        shellVerification.Ok && shellRules.Ok
+                            ? $"v{shell.Version} {shell.BundleId} ({shell.FileName}), pinned SHA-256/size"
+                            : (shellVerification.Error ?? string.Empty) + " " + (shellRules.Error ?? string.Empty));
+                }
+
+                var licenseTexts = new[] { "licenses/LICENSE", "licenses/NOTICE", "licenses/THIRD_PARTY.md" };
+                var missingLicenseTexts = licenseTexts.Where(path => !relativePaths.Contains(path)).ToList();
+                Line(missingLicenseTexts.Count == 0 ? "PASS" : "FAIL", "licence and notice texts",
+                    missingLicenseTexts.Count == 0 ? "LICENSE, NOTICE and THIRD_PARTY.md are embedded" : "missing: " + string.Join(", ", missingLicenseTexts));
             }
 
             output.WriteLine();

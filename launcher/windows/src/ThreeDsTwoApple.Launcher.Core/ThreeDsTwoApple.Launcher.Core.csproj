@@ -4,5 +4,28 @@
     <RootNamespace>ThreeDsTwoApple.Launcher.Core</RootNamespace>
     <AssemblyName>ThreeDsTwoApple.Launcher.Core</AssemblyName>
     <Description>Non-UI engine of the 3ds2apple Windows launcher: tool CLIs, build-agent flow, Impactor/plumesign signing, device bridge pushes.</Description>
+    <!-- Single-file distribution: embed the ROM-free shell template, the pinned official
+         Impactor/plumesign, the tool CLIs and the licence texts as resources. Release
+         packaging builds include them; Debug/test builds stay small and do not need the
+         (git-ignored) binaries to be present. -->
+    <EmbedDistributionPayload Condition="'$(EmbedDistributionPayload)' == '' and '$(Configuration)' == 'Release'">true</EmbedDistributionPayload>
+    <LauncherWindowsRoot>$(MSBuildProjectDirectory)/../..</LauncherWindowsRoot>
+    <RepoRoot>$(MSBuildProjectDirectory)/../../../..</RepoRoot>
   </PropertyGroup>
+  <ItemGroup Condition="'$(EmbedDistributionPayload)' == 'true'">
+    <EmbeddedResource Include="$(LauncherWindowsRoot)/shell/manifest.json" LogicalName="Payload/Shell/manifest.json" Condition="Exists('$(LauncherWindowsRoot)/shell/manifest.json')" />
+    <EmbeddedResource Include="$(LauncherWindowsRoot)/shell/3ds2apple-shell.ipa" LogicalName="Payload/Shell/3ds2apple-shell.ipa" Condition="Exists('$(LauncherWindowsRoot)/shell/3ds2apple-shell.ipa')" />
+    <EmbeddedResource Include="$(LauncherWindowsRoot)/vendor/impactor/Impactor-windows-x86_64-portable.exe" LogicalName="Payload/ThirdParty/Impactor/Impactor-windows-x86_64-portable.exe" Condition="Exists('$(LauncherWindowsRoot)/vendor/impactor/Impactor-windows-x86_64-portable.exe')" />
+    <EmbeddedResource Include="$(LauncherWindowsRoot)/vendor/impactor/plumesign-windows-x86_64.exe" LogicalName="Payload/ThirdParty/Impactor/plumesign-windows-x86_64.exe" Condition="Exists('$(LauncherWindowsRoot)/vendor/impactor/plumesign-windows-x86_64.exe')" />
+    <EmbeddedResource Include="$(LauncherWindowsRoot)/vendor/impactor/LICENSE-Impactor-MIT.txt" LogicalName="Payload/ThirdParty/Impactor/LICENSE-Impactor-MIT.txt" Condition="Exists('$(LauncherWindowsRoot)/vendor/impactor/LICENSE-Impactor-MIT.txt')" />
+    <EmbeddedResource Include="$(LauncherWindowsRoot)/vendor/impactor/LICENSE-apple-codesign-MPL-2.0.txt" LogicalName="Payload/ThirdParty/Impactor/LICENSE-apple-codesign-MPL-2.0.txt" Condition="Exists('$(LauncherWindowsRoot)/vendor/impactor/LICENSE-apple-codesign-MPL-2.0.txt')" />
+    <EmbeddedResource Include="$(LauncherWindowsRoot)/vendor/impactor/README-source-and-licenses.txt" LogicalName="Payload/ThirdParty/Impactor/README-source-and-licenses.txt" Condition="Exists('$(LauncherWindowsRoot)/vendor/impactor/README-source-and-licenses.txt')" />
+    <EmbeddedResource Include="$(LauncherWindowsRoot)/vendor/impactor/PINS.json" LogicalName="Payload/ThirdParty/Impactor/PINS.json" Condition="Exists('$(LauncherWindowsRoot)/vendor/impactor/PINS.json')" />
+    <EmbeddedResource Include="$(LauncherWindowsRoot)/Bin/3ds2apple-pack.exe" LogicalName="Payload/Bin/3ds2apple-pack.exe" Condition="Exists('$(LauncherWindowsRoot)/Bin/3ds2apple-pack.exe')" />
+    <EmbeddedResource Include="$(LauncherWindowsRoot)/Bin/builder-windows.exe" LogicalName="Payload/Bin/builder-windows.exe" Condition="Exists('$(LauncherWindowsRoot)/Bin/builder-windows.exe')" />
+    <EmbeddedResource Include="$(LauncherWindowsRoot)/Bin/devpush.exe" LogicalName="Payload/Bin/devpush.exe" Condition="Exists('$(LauncherWindowsRoot)/Bin/devpush.exe')" />
+    <EmbeddedResource Include="$(RepoRoot)/LICENSE" LogicalName="Payload/licenses/LICENSE" Condition="Exists('$(RepoRoot)/LICENSE')" />
+    <EmbeddedResource Include="$(RepoRoot)/NOTICE" LogicalName="Payload/licenses/NOTICE" Condition="Exists('$(RepoRoot)/NOTICE')" />
+    <EmbeddedResource Include="$(RepoRoot)/THIRD_PARTY.md" LogicalName="Payload/licenses/THIRD_PARTY.md" Condition="Exists('$(RepoRoot)/THIRD_PARTY.md')" />
+  </ItemGroup>
 </Project>

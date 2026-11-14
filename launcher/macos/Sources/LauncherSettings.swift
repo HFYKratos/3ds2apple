@@ -23,6 +23,8 @@ final class LauncherSettings: ObservableObject {
     @Published var signPacks: Bool
     @Published var signingIdentity: String
     @Published var installStrategy: InstallStrategy
+    /// UI language: follow the macOS system language or override it.
+    @Published var language: LauncherLanguage
     /// Titles currently embedded in the installed library IPA (persisted so the
     /// UI can say "rebuild + reinstall to add this game" after a restart).
     @Published var libraryInstalledTitles: [String]
@@ -52,6 +54,8 @@ final class LauncherSettings: ObservableObject {
         signingIdentity = persist ? defaults.string(forKey: Keys.signingIdentity) ?? "" : ""
         let strategyRaw = persist ? defaults.string(forKey: Keys.installStrategy) ?? "" : ""
         installStrategy = InstallStrategy(rawValue: strategyRaw) ?? .xcodebuild
+        let languageRaw = persist ? defaults.string(forKey: Keys.language) ?? "" : ""
+        language = LauncherLanguage(rawValue: languageRaw) ?? .system
         libraryInstalledTitles = persist ? defaults.stringArray(forKey: Keys.libraryTitles) ?? [] : []
         libraryIPAPath = persist ? defaults.string(forKey: Keys.libraryIPA) ?? "" : ""
         let installedAt = persist ? defaults.double(forKey: Keys.libraryInstalledAt) : 0
@@ -72,6 +76,7 @@ final class LauncherSettings: ObservableObject {
         defaults.set(signPacks, forKey: Keys.signPacks)
         defaults.set(signingIdentity, forKey: Keys.signingIdentity)
         defaults.set(installStrategy.rawValue, forKey: Keys.installStrategy)
+        defaults.set(language.rawValue, forKey: Keys.language)
         defaults.set(libraryInstalledTitles, forKey: Keys.libraryTitles)
         defaults.set(libraryIPAPath, forKey: Keys.libraryIPA)
         defaults.set(libraryInstalledAt?.timeIntervalSince1970 ?? 0, forKey: Keys.libraryInstalledAt)
@@ -99,6 +104,7 @@ final class LauncherSettings: ObservableObject {
         static let signPacks = "zl.signPacks"
         static let signingIdentity = "zl.signingIdentity"
         static let installStrategy = "zl.installStrategy"
+        static let language = "zl.language"
         static let libraryTitles = "zl.libraryTitles"
         static let libraryIPA = "zl.libraryIPA"
         static let libraryInstalledAt = "zl.libraryInstalledAt"

@@ -5,12 +5,23 @@
     <AssemblyName>3ds2apple-launcher</AssemblyName>
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/app.ico</ApplicationIcon>
     <Description>3ds2apple launcher for Windows: import decrypted ROMs, build GamePacks, install the base shell with the official Impactor, push games to the phone.</Description>
+    <!-- Single-file distribution: the payload (shell template, Impactor, Bin tools, licences)
+         is embedded by the Core project in Release builds; see tools/prepare-dist-singlefile.ps1. -->
+    <PublishSingleFile Condition="'$(RuntimeIdentifier)' != '' and '$(PublishSingleFile)' == ''">true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract Condition="'$(RuntimeIdentifier)' != ''">true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile Condition="'$(RuntimeIdentifier)' != ''">true</EnableCompressionInSingleFile>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.5" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.5" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <AvaloniaResource Include="Assets/**" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ThreeDsTwoApple.Launcher.Core\ThreeDsTwoApple.Launcher.Core.csproj" />

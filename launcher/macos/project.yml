@@ -1,11 +1,13 @@
-# XcodeGen spec for the 3ds2apple macOS launcher (MVP).
+# XcodeGen spec for the 3ds2apple macOS launcher.
 #
 # Generate/build on macOS (Xcode 26.6 on the build VM):
-#   cd launcher/macos && PATH=/usr/local/bin:$PATH xcodegen generate
+#   cd launcher/macos && PATH=/usr/local/bin:$PATH xcodegen generate --spec project.yml
 #   xcodebuild -project 3ds2apple-launcher.xcodeproj -scheme 3ds2apple-launcher \
-#     -configuration Debug -destination 'platform=macOS' -derivedDataPath build build
+#     -configuration Release -destination 'platform=macOS' -derivedDataPath build build
 #
-# The generated .xcodeproj and build/ are gitignored build artifacts.
+# The generated .xcodeproj / build/ / Support/Info.plist are build artifacts and
+# are gitignored. Resources/ holds the derived app icon (same artwork as the iOS
+# shell app) and the en / zh-Hans InfoPlist.strings used for the localized app name.
 name: 3ds2apple-launcher
 
 options:
@@ -26,6 +28,12 @@ settings:
     CODE_SIGN_IDENTITY: ""
     ENABLE_HARDENED_RUNTIME: "NO"
     ENABLE_APP_SANDBOX: "NO"
+  configs:
+    Debug:
+      ONLY_ACTIVE_ARCH: "YES"
+    Release:
+      ONLY_ACTIVE_ARCH: "NO"
+      ARCHS: "arm64 x86_64"
 
 targets:
   "3ds2apple-launcher":
@@ -34,18 +42,35 @@ targets:
     deploymentTarget: "13.0"
     sources:
       - path: Sources
+      # XcodeGen infers resource phases from the file types; .icns/.png and the
+      # en.lproj / zh-Hans.lproj InfoPlist.strings are copied into the bundle.
+      - path: Resources
+    info:
+      path: Support/Info.plist
+      properties:
+        CFBundleDisplayName: "3ds2apple Launcher"
+        CFBundleName: "3ds2apple Launcher"
+        CFBundleIconFile: "AppIcon"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundlePackageType: "APPL"
+        CFBundleExecutable: "$(EXECUTABLE_NAME)"
+        CFBundleIdentifier: "$(PRODUCT_BUNDLE_IDENTIFIER)"
+        CFBundleInfoDictionaryVersion: "6.0"
+        CFBundleDevelopmentRegion: "en"
+        CFBundleLocalizations: ["en", "zh-Hans"]
+        LSMinimumSystemVersion: "13.0"
+        LSApplicationCategoryType: "public.app-category.utilities"
+        NSHighResolutionCapable: true
+        NSHumanReadableCopyright: "Copyright 2026 3ds2apple contributors. Apache-2.0."
     settings:
       base:
         PRODUCT_NAME: "3ds2apple-launcher"
         PRODUCT_BUNDLE_IDENTIFIER: "com.kratos.3ds2apple.launcher"
-        GENERATE_INFOPLIST_FILE: "YES"
-        INFOPLIST_KEY_CFBundleDisplayName: "3ds2apple Launcher"
-        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
-        INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright 2026 3ds2apple contributors. Apache-2.0."
-        INFOPLIST_KEY_LSMinimumSystemVersion: "13.0"
-        MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: "1"
-        SWIFT_VERSION: "5.0"
+        MARKETING_VERSION: "0.2.0"
+        CURRENT_PROJECT_VERSION: "2"
+        GENERATE_INFOPLIST_FILE: "NO"
+        INFOPLIST_FILE: "Support/Info.plist"
 
 schemes:
   "3ds2apple-launcher":

@@ -1,6 +1,11 @@
 # Build outputs of the launcher projects (never committed).
 bin/
 obj/
+
+# Payload staged for the single-file release build (build products, never committed).
+Bin/
+shell/*.ipa
+shell/manifest.json
 dist/
 artifacts/
 publish/

@@ -29,7 +29,11 @@ enum MockScenario: String, CaseIterable {
 @MainActor
 final class AppModel: ObservableObject {
     // Navigation and library
-    @Published var screen: LauncherScreen = .importROM
+    @Published var screen: LauncherScreen = .library
+    /// Settings is a modal panel (gear button), never a top-level tab.
+    @Published var settingsPresented = false
+    /// Non-nil while the game-detail dialog is open (per-game install/push actions).
+    @Published var detailGameID: String?
     @Published var games: [GameEntry] = []
     @Published var selectedGameID: String?
     @Published var detectedROM: DetectedROM?
@@ -367,7 +371,7 @@ final class AppModel: ObservableObject {
                 title: "Imported " + game.displayName,
                 message: "Package queued (ROM-free). Next: Build AOT, then build & install the library IPA."
             )
-            screen = .build
+            screen = .library
         } catch {
             let failure = error.launcherFailure()
             setStage(taskID, 1, .failed, failure.message)
@@ -780,7 +784,7 @@ final class AppModel: ObservableObject {
             finishTask(taskID, .succeeded)
             appendLog(.success, "library", "library installed with " + String(titles.count) + " game(s); Documents ROM data persists across reinstalls")
             banner = Banner(kind: .success, title: "Library installed", message: "GamePacks live in the signed app. Next: push GameRom.cci + GameInfo.json for each game.")
-            screen = .device
+            screen = .library
         } catch {
             let failure = error.launcherFailure()
             lastInstallFailure = failure
@@ -1181,13 +1185,13 @@ final class AppModel: ObservableObject {
             settings.libraryIPAPath = "/Users/you/3ds2apple/IPA/3ds2apple-library.ipa"
             settings.libraryInstalledAt = Date().addingTimeInterval(-3_600)
         case .buildRunning:
-            screen = .build
+            screen = .library
             tasks = MockFixtures.tasksForScreenshots().filter { $0.kind == .buildAOT }
             activeTaskID = tasks.first?.id
             games[0].phase = .building
             appendLog(.info, "build", "mock build running for screenshot")
         case .install:
-            screen = .install
+            screen = .library
             tasks = MockFixtures.tasksForScreenshots().filter { $0.kind == .installShell }
             installProgressLines = MockFixtures.installLogLines()
             if let explanation = AppleErrorMapper.explain("error: Apple signing error 9120: the signing session was rejected.") {
@@ -1205,7 +1209,8 @@ final class AppModel: ObservableObject {
             settings.libraryInstalledTitles = [MockFixtures.titlePokemonY]
             settings.libraryIPAPath = "/Users/you/3ds2apple/IPA/3ds2apple-library.ipa"
             settings.libraryInstalledAt = Date().addingTimeInterval(-7_200)
-            screen = .device
+            screen = .library
+            detailGameID = MockFixtures.titlePokemonY
             tasks = []
             buildMockPushPlan(progress: true)
             appendLog(.info, "library", "library installed: 0004000000055E00 (GamePack in the signed app bundle)")
@@ -1214,10 +1219,11 @@ final class AppModel: ObservableObject {
             appendLog(.info, "devpush", "bridge: streaming progress every ~1 s, 90 s stall watchdog armed")
             appendLog(.info, "push", "GameInfo.json is pushed last so the shell never sees a partial game")
         case .activity:
-            screen = .activity
+            screen = .library
             tasks = MockFixtures.tasksForScreenshots()
         case .diagnostics:
-            screen = .diagnostics
+            screen = .library
+            settingsPresented = true
             tasks = []
         }
     }
@@ -1259,6 +1265,8 @@ final class AppModel: ObservableObject {
         devices.removeAll()
         detectedROM = nil
         detectedROMError = nil
+        settingsPresented = false
+        detailGameID = nil
         lastInstallFailure = nil
         installResult = nil
         pushError = nil

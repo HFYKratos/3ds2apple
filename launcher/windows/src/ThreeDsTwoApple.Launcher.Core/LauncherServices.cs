@@ -1,4 +1,5 @@
 using ThreeDsTwoApple.Launcher.Core.BuildPipeline;
+using ThreeDsTwoApple.Launcher.Core.Distribution;
 using ThreeDsTwoApple.Launcher.Core.Device;
 using ThreeDsTwoApple.Launcher.Core.Deploy;
 using ThreeDsTwoApple.Launcher.Core.Models;
@@ -79,7 +80,7 @@ public sealed class LauncherServices
     {
         var workspace = LauncherWorkspace.Open(workspaceRoot);
         var distribution = string.IsNullOrWhiteSpace(distributionRoot)
-            ? Environment.GetEnvironmentVariable("THREEDS2APPLE_DIST") ?? AppContext.BaseDirectory
+            ? DistributionLayout.Resolve()
             : distributionRoot;
         var locator = new ToolLocator(distribution);
         foreach (var (key, path) in workspace.State.ToolOverrides)

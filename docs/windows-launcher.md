@@ -593,3 +593,94 @@ with AOT active and 0.00% interpreted instructions.
   IPA); the ROM is read from the user's library path only.
 * Codegen is upstream LLVM, not Apple clang: runtime correctness was checked in the simulator
   (AOT active, 0.00% interpreted) but a device AOT run is still part of the device acceptance.
+
+## 14. Two-section UI, localization and icon (task-28, 2026-11-15)
+
+The Windows launcher now matches [launcher-ui.md](launcher-ui.md): **Library** and **Import** are
+the only top-level sections, and Settings is a gear button (not a tab). The old Build / App & Device
+/ Push / Settings tabs are gone; their essential actions live on each game card (one primary action
+plus an overflow menu for build / install / push / verify / remove) and inside Settings.
+
+- **Library**: empty state with one Import button; otherwise minimal game cards (placeholder icon,
+  name, localized state badge, one status line, primary action + overflow menu).
+- **Import**: pick a decrypted .3ds/.cci, optional display-name override, inline progress only while
+  an import job runs, plus the "what happens next" steps.
+- **Settings** (gear): Apple ID/signing explanation + Open Impactor / Install app, device state and
+  prerequisites, build mode (preview / macOS Build Agent / experimental local) and build host, tool
+  paths, language override, logs + diagnostics + self-test + workspace, about/licences.
+- **Theme**: Fluent light/dark via ThemeDictionaries (no hard-coded dark window), one accent color,
+  generous spacing; CJK-capable font stack (Segoe UI, Microsoft YaHei UI, Noto Sans CJK SC).
+
+**Localization** (`Core/Localization/Localization.cs`)
+
+- English + Simplified Chinese, 169 keys; en/zh-Hans key and placeholder parity is enforced by unit
+  tests and by `--self-test`.
+- OS language detection: `zh`/`zh-CN`/`zh-Hans`/`zh-SG` -> zh-Hans; Traditional Chinese and
+  everything else -> English (documented fallback). The System / English / 简体中文 override is
+  persisted as `state.json: language` (`system` | `en` | `zh-Hans`).
+- Switching language re-localizes all visible UI live (the view model swaps the `LocalizedText`
+  instance); raw log/diagnostic output stays unmodified.
+- The desktop `--ui-smoke` dev mode rendered English and Simplified Chinese under Xvfb
+  for Library, Import and Settings (`launcher/windows/docs/ui/launcher-en.png`,
+  `launcher-zh.png`, `import-en.png`, `settings-en.png`, `settings-zh.png`; see the README there).
+
+**Icon**: the iOS app icon (`ios/app/Assets.xcassets/AppIcon.appiconset/icon-1024.png`) generated
+`launcher/windows/src/Launcher.Desktop/Assets/app.ico` (16/24/32/48/64/128/256 px) plus a 128 px
+placeholder for cards. `ApplicationIcon` sets the exe icon and the window declares
+`Icon="/Assets/app.ico"`; the published PE was checked to contain `RT_ICON` (3) and
+`RT_GROUP_ICON` (14) resources.
+
+## 15. Single-file one-executable distribution (task-28, 2026-11-15)
+
+The user-facing Windows package is a ZIP that contains **exactly one file**:
+`3ds2apple-launcher.exe` (self-contained .NET 10, no runtime install). Release builds publish
+single-file with `IncludeNativeLibrariesForSelfExtract` + compression.
+
+**Embedded payload (14 files for the 0.1.0 build)**
+
+| Path in extraction | Source |
+|---|---|
+| `Shell/manifest.json`, `Shell/3ds2apple-shell.ipa` | pinned ROM-free base shell template (4,023,719 B) |
+| `ThirdParty/Impactor/Impactor-windows-x86_64-portable.exe` | official v2.7.2, SHA-256 pinned |
+| `ThirdParty/Impactor/plumesign-windows-x86_64.exe` | official v2.7.2, SHA-256 pinned |
+| `ThirdParty/Impactor/LICENSE-Impactor-MIT.txt`, `LICENSE-apple-codesign-MPL-2.0.txt`, `README-source-and-licenses.txt`, `PINS.json` | licence/source notices |
+| `Bin/3ds2apple-pack.exe`, `Bin/builder-windows.exe`, `Bin/devpush.exe` | cross-built Rust CLIs (x86_64-pc-windows-gnu) |
+| `licenses/LICENSE`, `licenses/NOTICE`, `licenses/THIRD_PARTY.md` | project licences/notices |
+
+- The Core project embeds these as `Payload/...` resources when `Configuration=Release` and the
+  staged files exist (Debug/test builds stay small and do not need the git-ignored payload).
+- On first run `DistributionLayout.Prepare()` extracts them to
+  `%LOCALAPPDATA%\3ds2apple\distribution\<version>\` (atomic writes + `payload-manifest.json`
+  marker with size/SHA-256 per file), then every service/tool resolves from that root. A
+  `THREEDS2APPLE_DIST` override and the multi-file developer layout (`Bin/`, `Shell/`,
+  `ThirdParty/` next to the exe) still work.
+- Build: `launcher/windows/tools/prepare-dist-singlefile.sh [output-dir]` (WSL; also
+  `prepare-dist-singlefile.ps1` for Windows release engineers). It verifies the shell SHA-256,
+  requires the verified Impactor bundle + Bin tools, publishes single-file, deletes loose PDBs and
+  ZIPs only the exe.
+
+**Verification evidence (2026-11-15, this checkout)**
+
+- Package: `/mnt/f/temp_transfer/dist/windows-single/3ds2apple-windows-single-0.1.0.zip`
+  - ZIP SHA-256 `7b4fc1f6470da3c5373a30e3f91e7be4a7985e331f4a88c69f490fa23b19967f`
+    (71,802,897 B); `unzip -l` shows a single entry `3ds2apple-launcher.exe`.
+  - exe SHA-256 `aad4f20149d76dcd9f8c7f31d648ed4ad70d77ea32d7bd552ae9887badb3f016`;
+    PE32+ GUI x86-64, icon resources present.
+- Clean-folder run: exe copied alone into `.../windows-single/clean-run/`, the previous
+  `%LOCALAPPDATA%\3ds2apple` removed, then `./3ds2apple-launcher.exe --self-test` via WSL interop:
+  exit 0, `SELF-TEST OK with 1 warning` (the only warning is the "outside a source checkout"
+  PINS.json cross-check). PASS lines include: extraction to
+  `C:\Users\...\AppData\Local\3ds2apple\distribution\0.1.0`, 14-file embedded payload,
+  extracted files present, single-file extraction target outside the exe folder, ROM-free shell
+  template v0.2.0-beta1, Impactor bundle ready, Bin tools probe 0.1.0, 169-key en/zh catalogue.
+- Regression: `dotnet test` **111/111 passed** (63 pre-existing + 48 new localization/payload
+  tests), 3 consecutive runs.
+
+**Known gaps**
+
+- The exe is not code-signed (SmartScreen may warn on first launch).
+- First run extracts ~46 MB into `%LOCALAPPDATA%`; later runs only size-check the marker.
+- The GUI was rendered under Xvfb and the XAML/bindings/theme load; real Windows interaction,
+  Impactor sign-in and device flows still need the manual test plan (section 11).
+- `prepare-dist-singlefile.ps1` mirrors the exercised `.sh` script but was not run in this
+  checkout (no Windows host).

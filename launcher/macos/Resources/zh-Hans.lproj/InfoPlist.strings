@@ -1,0 +1,3 @@
+/* 本地化后的 macOS 启动器名称（简体中文）。 */
+"CFBundleDisplayName" = "3ds2apple 启动器";
+"CFBundleName" = "3ds2apple 启动器";

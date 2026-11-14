@@ -6,8 +6,8 @@
 //                    Impactor bundle, optional tool CLIs and the device-bridge
 //                    contract parser, prints a report and exits non-zero on a
 //                    real failure. This is what CI / WSL can run.
+//   --ui-smoke       developer/Xvfb smoke run: load the XAML window, render, exit.
 using System;
-using System.Threading.Tasks;
 using Avalonia;
 using ThreeDsTwoApple.Launcher.Core;
 
@@ -26,6 +26,11 @@ internal static class Program
         {
             Console.WriteLine(LauncherInfo.VersionLine);
             return 0;
+        }
+        if (Array.Exists(args, a => a == "--ui-smoke"))
+        {
+            // Surface Avalonia binding/theme warnings on the console during the smoke run.
+            System.Diagnostics.Trace.Listeners.Add(new System.Diagnostics.ConsoleTraceListener());
         }
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         return 0;

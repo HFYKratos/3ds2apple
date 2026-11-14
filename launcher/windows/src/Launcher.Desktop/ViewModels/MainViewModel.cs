@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using ThreeDsTwoApple.Launcher.Core;
 using ThreeDsTwoApple.Launcher.Core.BuildPipeline;
 using ThreeDsTwoApple.Launcher.Core.Deploy;
@@ -7,17 +8,26 @@ using ThreeDsTwoApple.Launcher.Core.Signing;
 using ThreeDsTwoApple.Launcher.Core.Tools;
 using ThreeDsTwoApple.Launcher.Core.Util;
 using ThreeDsTwoApple.Launcher.Core.LauncherState;
+using ThreeDsTwoApple.Launcher.Core.Localization;
 
 namespace ThreeDsTwoApple.Launcher.App.ViewModels;
 
-/// <summary>One row of the launcher game library.</summary>
+/// <summary>One row of the launcher game library (card in the Library section).</summary>
 public sealed class GameRow : ObservableObject
 {
+    private readonly MainViewModel _owner;
     private string _state = "imported";
 
-    public GameRow(LibraryEntry entry)
+    public GameRow(MainViewModel owner, LibraryEntry entry)
     {
+        _owner = owner;
         Entry = entry;
+        BuildCommand = new AsyncRelayCommand(() => _owner.RunBuildForAsync(this), () => !_owner.IsBusy);
+        PushCommand = new AsyncRelayCommand(() => _owner.RunPushForAsync(this), () => !_owner.IsBusy);
+        VerifyCommand = new AsyncRelayCommand(() => _owner.RunVerifyForAsync(this), () => !_owner.IsBusy);
+        InstallCommand = new AsyncRelayCommand(() => _owner.RunInstallForAsync(this), () => !_owner.IsBusy);
+        RemoveCommand = new AsyncRelayCommand(() => _owner.RunRemoveForAsync(this), () => !_owner.IsBusy);
+        PrimaryCommand = new AsyncRelayCommand(() => _owner.RunPrimaryAsync(this), () => !_owner.IsBusy);
     }
 
     public LibraryEntry Entry { get; }
@@ -33,19 +43,83 @@ public sealed class GameRow : ObservableObject
         private set => SetProperty(ref _state, value);
     }
 
-    public string PackDescription => Entry.Pack is null
-        ? "no pack"
+    /// <summary>Localized state label for the card badge.</summary>
+    public string StateLabel => State switch
+    {
+        "imported" => Loc.T("library.card.state.imported"),
+        "queued" => Loc.T("library.card.state.queued"),
+        "built" => Loc.T("library.card.state.built"),
+        "preview" => Loc.T("library.card.state.preview"),
+        "build_failed" => Loc.T("library.card.state.build_failed"),
+        "pushed" => Loc.T("library.card.state.pushed"),
+        _ => State,
+    };
+
+    public string TitleIdLine => Loc.T("library.card.titleid", TitleID);
+
+    public string RomLine => Loc.T("library.card.rom", RomPath);
+
+    public bool HasRealPack => Entry.Pack is { IsPlaceholder: false };
+
+    public bool IsPushed => Entry.PushedAt is not null;
+
+    /// <summary>One status line under the game name.</summary>
+    public string PackLine => Entry.Pack is null
+        ? Loc.T("library.card.pack.none")
         : Entry.Pack.IsPlaceholder
-            ? $"preview placeholder ({FormatBytes(Entry.Pack.Bytes)}) — not installable"
-            : $"{FormatBytes(Entry.Pack.Bytes)} · {Entry.Pack.Sha256[..12]}…";
+            ? Loc.T("library.card.pack.placeholder", FormatBytes(Entry.Pack.Bytes))
+            : Loc.T("library.card.pack.built", FormatBytes(Entry.Pack.Bytes), Entry.Pack.Sha256[..12]);
+
+    /// <summary>The single primary action for this card (build / install / push / verify).</summary>
+    public string PrimaryLabel => _owner.PrimaryAction(this) switch
+    {
+        CardAction.Build => Loc.T("library.card.primary.build"),
+        CardAction.Install => Loc.T("library.card.primary.install"),
+        CardAction.Push => Loc.T("library.card.primary.push"),
+        _ => Loc.T("library.card.primary.verify"),
+    };
+
+    public string MoreLabel => Loc.T("library.card.more");
+    public string BuildLabel => Loc.T("library.card.primary.build");
+    public string PushLabel => Loc.T("library.card.push");
+    public string VerifyLabel => Loc.T("library.card.verify");
+    public string InstallLabel => Loc.T("library.card.install");
+    public string RemoveLabel => Loc.T("library.card.remove");
+
+    public AsyncRelayCommand PrimaryCommand { get; }
+    public AsyncRelayCommand BuildCommand { get; }
+    public AsyncRelayCommand PushCommand { get; }
+    public AsyncRelayCommand VerifyCommand { get; }
+    public AsyncRelayCommand InstallCommand { get; }
+    public AsyncRelayCommand RemoveCommand { get; }
 
     public void Refresh()
     {
         State = Entry.Pack is null
             ? Entry.State
             : Entry.Pack.IsPlaceholder ? "preview" : "built";
-        OnPropertyChanged(nameof(PackDescription));
+        OnPropertyChanged(nameof(StateLabel));
+        OnPropertyChanged(nameof(PackLine));
+        OnPropertyChanged(nameof(PrimaryLabel));
         OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(HasRealPack));
+        OnPropertyChanged(nameof(IsPushed));
+        OnPropertyChanged(nameof(MoreLabel));
+        OnPropertyChanged(nameof(BuildLabel));
+        OnPropertyChanged(nameof(PushLabel));
+        OnPropertyChanged(nameof(VerifyLabel));
+        OnPropertyChanged(nameof(InstallLabel));
+        OnPropertyChanged(nameof(RemoveLabel));
+    }
+
+    public void RaiseCommandStates()
+    {
+        PrimaryCommand.RaiseCanExecuteChanged();
+        BuildCommand.RaiseCanExecuteChanged();
+        PushCommand.RaiseCanExecuteChanged();
+        VerifyCommand.RaiseCanExecuteChanged();
+        InstallCommand.RaiseCanExecuteChanged();
+        RemoveCommand.RaiseCanExecuteChanged();
     }
 
     private static string FormatBytes(long bytes) => bytes switch
@@ -60,6 +134,29 @@ public sealed class GameRow : ObservableObject
 public sealed record ToolRow(string Name, string State, string Message)
 {
     public bool Ready => State == "ready";
+
+    public string StateLabel => State switch
+    {
+        "ready" => Loc.T("tool.state.ready"),
+        "missing" => Loc.T("tool.state.missing"),
+        "failed" => Loc.T("tool.state.failed"),
+        _ => State,
+    };
+}
+
+/// <summary>A selectable build mode with its localized label.</summary>
+public sealed record BuildModeOption(PackBuildMode Mode, string Label);
+
+/// <summary>A selectable UI language with its localized label.</summary>
+public sealed record LanguageChoice(UiLanguagePreference Preference, string Label);
+
+/// <summary>The one primary action shown on a library card.</summary>
+public enum CardAction
+{
+    Build,
+    Install,
+    Push,
+    Verify,
 }
 
 /// <summary>Main window view model: implements the S2Arm-style flow
@@ -71,15 +168,22 @@ public sealed class MainViewModel : ObservableObject
     private DeviceInfo? _selectedDevice;
     private ShellManifest? _shell;
     private bool _isBusy;
-    private string _statusText = "Ready.";
+    private LocalizedText _localized = new();
+    private LanguageChoice? _selectedLanguage;
+    private BuildModeOption? _selectedBuildMode;
+    private UiLanguagePreference _languagePreference = UiLanguagePreference.System;
+    private string _section = "library";
+    private bool _showSettings;
+    private bool _showDiagnostics;
+    private bool _importRunning;
+    private string _statusText = string.Empty;
     private string _header = string.Empty;
     private double _progressValue;
-    private string _deviceStatus = "Devices not refreshed yet.";
-    private string _shellStatus = "Base shell not checked yet.";
-    private string _pushStatus = "Select a game and push its ROM data to the phone.";
+    private string _deviceStatus = string.Empty;
+    private string _shellStatus = string.Empty;
+    private string _pushStatus = string.Empty;
     private string _importPath = string.Empty;
     private string _displayNameOverride = string.Empty;
-    private string _buildModeText = "Preview (fake placeholder, not installable)";
     private string _buildHost = string.Empty;
     private string _packPathSetting = string.Empty;
     private string _devPushPathSetting = string.Empty;
@@ -97,7 +201,13 @@ public sealed class MainViewModel : ObservableObject
     public MainViewModel(LauncherServices services)
     {
         _services = services;
+        _languagePreference = LanguageCatalog.ParsePreference(_services.Workspace.State.Language);
+        Loc.ApplyPreference(_languagePreference, CultureInfo.CurrentUICulture.Name);
         Header = $"3ds2apple Launcher (Windows) · {LauncherInfo.Version}";
+        StatusText = Loc.T("status.ready");
+        DeviceStatus = Loc.T("device.none");
+        ShellStatus = Loc.T("shell.missing");
+        PushStatus = Loc.T("push.noPack");
         ImportCommand = new AsyncRelayCommand(() => ImportFromBoxAsync(), () => !IsBusy);
         BrowseRomCommand = new RelayCommand(RequestBrowseRom);
         RemoveGameCommand = new AsyncRelayCommand(() => RemoveSelectedAsync(), () => SelectedGame is not null && !IsBusy);
@@ -111,6 +221,11 @@ public sealed class MainViewModel : ObservableObject
         SaveSettingsCommand = new AsyncRelayCommand(() => SaveSettingsAsync(), () => !IsBusy);
         RunSelfTestCommand = new RelayCommand(() => RunSelfTest(), () => !IsBusy);
         OpenWorkspaceCommand = new RelayCommand(OpenWorkspace);
+        ShowLibraryCommand = new RelayCommand(ShowLibrary);
+        ShowImportCommand = new RelayCommand(ShowImport);
+        ShowSettingsCommand = new RelayCommand(OpenSettings);
+        CloseSettingsCommand = new RelayCommand(CloseSettings);
+        ToggleDiagnosticsCommand = new RelayCommand(ToggleDiagnostics);
         BuildHost = _services.Workspace.State.BuildHost ?? string.Empty;
         BundleIdOverride = _services.Workspace.State.ShellBundleIdOverride ?? string.Empty;
         MockDirectory = _services.Workspace.State.DevPushMockDirectory ?? string.Empty;
@@ -120,13 +235,8 @@ public sealed class MainViewModel : ObservableObject
         PackPathSetting = _services.Locator.OverrideFor(ToolLocator.PackCliTool) ?? string.Empty;
         DevPushPathSetting = _services.Locator.OverrideFor(ToolLocator.DevPushTool) ?? string.Empty;
         BuilderPathSetting = _services.Locator.OverrideFor(ToolLocator.BuilderTool) ?? string.Empty;
-        BuildModeText = _services.Workspace.State.Mode switch
-        {
-            PackBuildMode.MacAgentIpa => "macOS Build Agent (existing per-game IPA)",
-            PackBuildMode.LocalWinbuild => LocalModeText,
-            _ => "Preview (fake placeholder, not installable)",
-        };
         ResetBuildModes();
+        RebuildLanguageOptions();
         Log($"workspace: {_services.Workspace.Root}");
         Log($"distribution: {_services.Locator.DistributionRoot}");
         Log("3ds2apple launcher started. Import your own decrypted .3ds/.cci ROM to begin.");
@@ -135,34 +245,50 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<GameRow> Games { get; } = new();
 
     /// <summary>Choices shown in the Build tab; the experimental local build is feature-flagged.</summary>
-    public ObservableCollection<string> BuildModes { get; } = new();
+    /// <summary>Localized build-mode choices; the experimental local build stays behind the feature flag.</summary>
+    public ObservableCollection<BuildModeOption> BuildModes { get; } = new();
 
-    private const string LocalModeText = "Local build (3dsrecomp + open-source LLVM/LLD on this PC — experimental)";
+    /// <summary>Localized language choices (System / English / 简体中文).</summary>
+    public ObservableCollection<LanguageChoice> LanguageOptions { get; } = new();
 
     private void ResetBuildModes()
     {
-        var wanted = new List<string>
+        var wanted = new List<BuildModeOption>
         {
-            "Preview (fake placeholder, not installable)",
-            "macOS Build Agent (existing per-game IPA)",
+            new(PackBuildMode.Preview, L.BuildModePreview),
+            new(PackBuildMode.MacAgentIpa, L.BuildModeMacAgent),
         };
         if (LocalBuildEnabled)
         {
-            wanted.Add(LocalModeText);
+            wanted.Add(new(PackBuildMode.LocalWinbuild, L.BuildModeLocal));
         }
-        if (BuildModes.SequenceEqual(wanted))
+        var current = _selectedBuildMode?.Mode ?? _services.Workspace.State.Mode;
+        if (BuildModes.Count != wanted.Count || BuildModes.Where((option, index) => option != wanted[index]).Any())
         {
-            return;
+            BuildModes.Clear();
+            foreach (var option in wanted)
+            {
+                BuildModes.Add(option);
+            }
         }
-        BuildModes.Clear();
-        foreach (var mode in wanted)
+        var match = BuildModes.FirstOrDefault(option => option.Mode == current) ?? BuildModes.FirstOrDefault();
+        if (match is not null)
         {
-            BuildModes.Add(mode);
+            _selectedBuildMode = match;
+            OnPropertyChanged(nameof(SelectedBuildMode));
+            OnPropertyChanged(nameof(CurrentBuildModeLabel));
         }
-        if (!BuildModes.Contains(BuildModeText))
+    }
+
+    private void RebuildLanguageOptions()
+    {
+        LanguageOptions.Clear();
+        foreach (var preference in LanguageCatalog.AllPreferences)
         {
-            BuildModeText = wanted[0];
+            LanguageOptions.Add(new LanguageChoice(preference, LanguageCatalog.DisplayName(preference, Loc.CurrentTag)));
         }
+        _selectedLanguage = LanguageOptions.FirstOrDefault(option => option.Preference == _languagePreference) ?? LanguageOptions.FirstOrDefault();
+        OnPropertyChanged(nameof(SelectedLanguage));
     }
     public ObservableCollection<ToolRow> Tools { get; } = new();
     public ObservableCollection<DeviceInfo> Devices { get; } = new();
@@ -183,8 +309,42 @@ public sealed class MainViewModel : ObservableObject
     public AsyncRelayCommand SaveSettingsCommand { get; }
     public RelayCommand RunSelfTestCommand { get; }
     public RelayCommand OpenWorkspaceCommand { get; }
+    public RelayCommand ShowLibraryCommand { get; }
+    public RelayCommand ShowImportCommand { get; }
+    public RelayCommand ShowSettingsCommand { get; }
+    public RelayCommand CloseSettingsCommand { get; }
+    public RelayCommand ToggleDiagnosticsCommand { get; }
+
+    /// <summary>Localized UI strings; replaced whenever the language changes.</summary>
+    public LocalizedText L { get => _localized; private set => SetProperty(ref _localized, value); }
+
+    public string WindowTitle => L.AppTitle + " · " + LauncherInfo.Version;
 
     public string Header { get => _header; private set => SetProperty(ref _header, value); }
+
+    public bool IsLibrarySection => !_showSettings && _section == "library";
+
+    public bool IsImportSection => !_showSettings && _section == "import";
+
+    public bool ShowSettings => _showSettings;
+
+    public bool ShowDiagnostics => _showDiagnostics;
+
+    public string DiagnosticsToggleLabel => _showDiagnostics ? L.SettingsLogsHide : L.SettingsLogsShow;
+
+    public bool HasGames => Games.Count > 0;
+
+    public bool IsLibraryEmpty => Games.Count == 0;
+
+    public string GameCountText => Loc.T("library.count", Games.Count);
+
+    public bool IsImportRunning { get => _importRunning; private set => SetProperty(ref _importRunning, value); }
+
+    public bool HasRealPacks => Games.Any(row => row.HasRealPack);
+
+    public string DistributionRoot => _services.Locator.DistributionRoot;
+
+    public string ShellBundleIdLine => Loc.T("app.bundleId", ShellBundleId);
 
     public bool IsBusy
     {
@@ -205,7 +365,13 @@ public sealed class MainViewModel : ObservableObject
 
     public double ProgressValue { get => _progressValue; private set => SetProperty(ref _progressValue, value); }
 
-    public string ReadinessSummary { get; private set; } = "Status not checked yet.";
+    public string ReadinessText => Tools.Count == 0
+        ? Loc.T("readiness.unchecked")
+        : Tools.All(tool => tool.Ready)
+            ? Loc.T("readiness.all")
+            : Loc.T("readiness.blocked", string.Join(", ", Tools.Where(tool => !tool.Ready).Select(tool => tool.Name)));
+
+    public string ReadinessSummary => ReadinessText;
 
     public string ShellStatus { get => _shellStatus; private set => SetProperty(ref _shellStatus, value); }
 
@@ -229,7 +395,19 @@ public sealed class MainViewModel : ObservableObject
 
     public string BuildHost { get => _buildHost; set => SetProperty(ref _buildHost, value); }
 
-    public string BuildModeText { get => _buildModeText; set => SetProperty(ref _buildModeText, value); }
+    public BuildModeOption? SelectedBuildMode
+    {
+        get => _selectedBuildMode;
+        set
+        {
+            if (SetProperty(ref _selectedBuildMode, value))
+            {
+                OnPropertyChanged(nameof(CurrentBuildModeLabel));
+            }
+        }
+    }
+
+    public string CurrentBuildModeLabel => _selectedBuildMode?.Label ?? L.BuildModePreview;
 
     /// <summary>Feature flag: enable the experimental local build (3dsrecomp + LLVM/LLD on this PC).</summary>
     public bool LocalBuildEnabled
@@ -260,7 +438,7 @@ public sealed class MainViewModel : ObservableObject
 
     public string WorkspaceRoot => _services.Workspace.Root;
 
-    public string ShellBundleId => _shell?.BundleId ?? (string.IsNullOrWhiteSpace(BundleIdOverride) ? "(base shell not bundled)" : BundleIdOverride);
+    public string ShellBundleId => _shell?.BundleId ?? (string.IsNullOrWhiteSpace(BundleIdOverride) ? Loc.T("common.none") : BundleIdOverride);
 
     public GameRow? SelectedGame
     {
@@ -276,8 +454,8 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public string SelectedSummary => _selectedGame is null
-        ? "No game selected."
-        : $"{_selectedGame.DisplayName} ({_selectedGame.TitleID}) · ROM: {_selectedGame.RomPath} · pack: {_selectedGame.PackDescription}";
+        ? Loc.T("library.selectedNone")
+        : Loc.T("library.selectedSummary", _selectedGame.DisplayName, _selectedGame.TitleID) + " · " + Loc.T("library.card.rom", _selectedGame.RomPath) + " · " + _selectedGame.PackLine;
 
     public DeviceInfo? SelectedDevice
     {
@@ -312,6 +490,162 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    // --- navigation / language --------------------------------------------
+
+    public void ShowLibrary()
+    {
+        _section = "library";
+        _showSettings = false;
+        RaiseViewState();
+    }
+
+    public void ShowImport()
+    {
+        _section = "import";
+        _showSettings = false;
+        RaiseViewState();
+    }
+
+    public void OpenSettings()
+    {
+        _showSettings = true;
+        RaiseViewState();
+    }
+
+    public void CloseSettings()
+    {
+        _showSettings = false;
+        RaiseViewState();
+    }
+
+    public void ToggleDiagnostics()
+    {
+        _showDiagnostics = !_showDiagnostics;
+        OnPropertyChanged(nameof(ShowDiagnostics));
+        OnPropertyChanged(nameof(DiagnosticsToggleLabel));
+    }
+
+    private void RaiseViewState()
+    {
+        OnPropertyChanged(nameof(IsLibrarySection));
+        OnPropertyChanged(nameof(IsImportSection));
+        OnPropertyChanged(nameof(ShowSettings));
+    }
+
+    public LanguageChoice? SelectedLanguage
+    {
+        get => _selectedLanguage;
+        set
+        {
+            if (value is null || value.Preference == _languagePreference)
+            {
+                return;
+            }
+            ApplyLanguagePreference(value.Preference, persist: true);
+        }
+    }
+
+    /// <summary>Apply a language preference immediately, localize everything and persist it.</summary>
+    public void ApplyLanguagePreference(UiLanguagePreference preference, bool persist)
+    {
+        _languagePreference = preference;
+        Loc.ApplyPreference(preference, CultureInfo.CurrentUICulture.Name);
+        if (persist)
+        {
+            _services.Workspace.State.Language = LanguageCatalog.PreferenceKey(preference);
+            _services.Workspace.SaveState();
+        }
+        L = new LocalizedText();
+        RebuildLanguageOptions();
+        ResetBuildModes();
+        OnPropertyChanged(nameof(WindowTitle));
+        OnPropertyChanged(nameof(GameCountText));
+        OnPropertyChanged(nameof(ReadinessText));
+        OnPropertyChanged(nameof(ReadinessSummary));
+        OnPropertyChanged(nameof(SelectedSummary));
+        OnPropertyChanged(nameof(ShellBundleIdLine));
+        OnPropertyChanged(nameof(DiagnosticsToggleLabel));
+        foreach (var row in Games)
+        {
+            row.Refresh();
+        }
+        UpdateShellStatus();
+        StatusText = Loc.T("status.languageChanged");
+        _ = RefreshStatusAsync();
+    }
+
+    // --- library card actions ---------------------------------------------
+
+    /// <summary>Which primary action a library card offers right now.</summary>
+    public CardAction PrimaryAction(GameRow row)
+    {
+        if (!row.HasRealPack)
+        {
+            return CardAction.Build;
+        }
+        var installedAt = _services.Workspace.State.InstalledAt;
+        if (installedAt is null || (row.Entry.BuiltAt is not null && row.Entry.BuiltAt > installedAt))
+        {
+            return CardAction.Install;
+        }
+        return row.IsPushed ? CardAction.Verify : CardAction.Push;
+    }
+
+    public async Task RunPrimaryAsync(GameRow row)
+    {
+        SelectedGame = row;
+        switch (PrimaryAction(row))
+        {
+            case CardAction.Build:
+                await BuildSelectedAsync().ConfigureAwait(true);
+                break;
+            case CardAction.Install:
+                await InstallShellAsync().ConfigureAwait(true);
+                await RefreshLibraryAsync().ConfigureAwait(true);
+                break;
+            case CardAction.Push:
+                await PushSelectedAsync().ConfigureAwait(true);
+                await RefreshLibraryAsync().ConfigureAwait(true);
+                break;
+            default:
+                await VerifyPushAsync().ConfigureAwait(true);
+                await RefreshLibraryAsync().ConfigureAwait(true);
+                break;
+        }
+    }
+
+    public async Task RunBuildForAsync(GameRow row)
+    {
+        SelectedGame = row;
+        await BuildSelectedAsync().ConfigureAwait(true);
+    }
+
+    public async Task RunPushForAsync(GameRow row)
+    {
+        SelectedGame = row;
+        await PushSelectedAsync().ConfigureAwait(true);
+        await RefreshLibraryAsync().ConfigureAwait(true);
+    }
+
+    public async Task RunVerifyForAsync(GameRow row)
+    {
+        SelectedGame = row;
+        await VerifyPushAsync().ConfigureAwait(true);
+    }
+
+    public async Task RunInstallForAsync(GameRow row)
+    {
+        SelectedGame = row;
+        await InstallShellAsync().ConfigureAwait(true);
+        await RefreshLibraryAsync().ConfigureAwait(true);
+    }
+
+    public async Task RunRemoveForAsync(GameRow row)
+    {
+        SelectedGame = row;
+        await RemoveSelectedAsync().ConfigureAwait(true);
+    }
+
     // --- library / import --------------------------------------------------
 
     public void RequestBrowseRom() => BrowseRomRequested?.Invoke();
@@ -338,7 +672,8 @@ public sealed class MainViewModel : ObservableObject
         {
             return;
         }
-        SetBusy(true, "Importing ROM headers…");
+        IsImportRunning = true;
+        SetBusy(true, Loc.T("status.importing"));
         try
         {
             foreach (var path in paths)
@@ -377,16 +712,21 @@ public sealed class MainViewModel : ObservableObject
             }
             await RefreshLibraryAsync().ConfigureAwait(true);
             await RefreshStatusAsync().ConfigureAwait(true);
-            StatusText = "Import finished.";
+            StatusText = Loc.T("status.importFinished");
+            if (Games.Count > 0)
+            {
+                ShowLibrary();
+            }
         }
         catch (Exception exception)
         {
             Log("import failed: " + exception.Message);
-            StatusText = "Import failed.";
+            StatusText = Loc.T("status.importFailed");
         }
         finally
         {
-            SetBusy(false, "Ready.");
+            IsImportRunning = false;
+            SetBusy(false, Loc.T("status.ready"));
         }
     }
 
@@ -415,11 +755,15 @@ public sealed class MainViewModel : ObservableObject
         Games.Clear();
         foreach (var entry in _services.Workspace.State.Games.OrderBy(game => game.TitleID, StringComparer.Ordinal))
         {
-            Games.Add(new GameRow(entry));
+            Games.Add(new GameRow(this, entry));
         }
         _services.Workspace.SaveState();
         SelectedGame = Games.FirstOrDefault();
         OnPropertyChanged(nameof(SelectedSummary));
+        OnPropertyChanged(nameof(HasGames));
+        OnPropertyChanged(nameof(IsLibraryEmpty));
+        OnPropertyChanged(nameof(GameCountText));
+        OnPropertyChanged(nameof(HasRealPacks));
     }
 
     private async Task RemoveSelectedAsync()
@@ -468,7 +812,7 @@ public sealed class MainViewModel : ObservableObject
             Log("Set the macOS build host name in Settings first (same host profile builder-windows/zkb uses).");
             return;
         }
-        SetBusy(true, "Building GamePack…");
+        SetBusy(true, Loc.T("status.building"));
         try
         {
             var entry = SelectedGame.Entry;
@@ -494,7 +838,7 @@ public sealed class MainViewModel : ObservableObject
                 entry.State = "build_failed";
                 _services.Workspace.SaveState();
                 Log($"build failed ({outcome.ErrorCode}): {outcome.ErrorMessage}");
-                StatusText = "Build failed.";
+                StatusText = Loc.T("status.buildFailed");
                 return;
             }
             entry.Pack = outcome.Pack;
@@ -508,12 +852,12 @@ public sealed class MainViewModel : ObservableObject
             Log(outcome.Installable
                 ? $"build ok: real GamePack for {entry.TitleID} ({outcome.Pack?.Sha256[..16]}…)."
                 : "preview build ok: placeholder pack written. It is NOT installable; use the macOS Build Agent for a real GamePack.");
-            StatusText = "Build finished.";
+            StatusText = Loc.T("status.buildFinished");
         }
         catch (Exception exception)
         {
             Log("build failed: " + exception.Message);
-            StatusText = "Build failed.";
+            StatusText = Loc.T("status.buildFailed");
         }
         finally
         {
@@ -521,24 +865,13 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    private PackBuildMode ModeFromUi()
-    {
-        if (BuildModeText.StartsWith("macOS", StringComparison.OrdinalIgnoreCase))
-        {
-            return PackBuildMode.MacAgentIpa;
-        }
-        if (BuildModeText.StartsWith("Local build", StringComparison.OrdinalIgnoreCase))
-        {
-            return PackBuildMode.LocalWinbuild;
-        }
-        return PackBuildMode.Preview;
-    }
+    private PackBuildMode ModeFromUi() => _selectedBuildMode?.Mode ?? PackBuildMode.Preview;
 
     // --- device / shell ----------------------------------------------------
 
     private async Task RefreshDevicesAsync()
     {
-        SetBusy(true, "Refreshing devices…");
+        SetBusy(true, Loc.T("status.devices"));
         try
         {
             Devices.Clear();
@@ -550,8 +883,8 @@ public sealed class MainViewModel : ObservableObject
                     Devices.Add(device);
                 }
                 DeviceStatus = devices.Count == 0
-                    ? "No iPhone/iPad found: connect by USB, unlock, tap Trust."
-                    : $"{devices.Count} device(s): " + string.Join(", ", devices.Select(d => Privacy.RedactUdid(d.Udid)));
+                    ? Loc.T("device.none")
+                    : Loc.T("device.count", devices.Count, string.Join(", ", devices.Select(d => Privacy.RedactUdid(d.Udid))));
             }
             else
             {
@@ -570,12 +903,12 @@ public sealed class MainViewModel : ObservableObject
         }
         catch (LauncherToolException error)
         {
-            DeviceStatus = $"{error.Code}: {error.Message}" + (error.Hint is null ? string.Empty : " — " + error.Hint);
+            DeviceStatus = Loc.T("status.deviceRefreshFailed", $"{error.Code}: {error.Message}" + (error.Hint is null ? string.Empty : " — " + error.Hint));
             Log(DeviceStatus);
         }
         catch (Exception exception)
         {
-            DeviceStatus = "device refresh failed: " + exception.Message;
+            DeviceStatus = Loc.T("status.deviceRefreshFailed", exception.Message);
             Log(DeviceStatus);
         }
         finally
@@ -585,8 +918,8 @@ public sealed class MainViewModel : ObservableObject
     }
 
     private string devPushFallbackNote(int count) => count == 0
-        ? "No device found via the Apple device service. (devpush is not bundled, so this is a read-only fallback list.)"
-        : $"{count} device(s) via the Apple device service. Note: devpush is not bundled, so pushing is disabled.";
+        ? Loc.T("device.none") + " (" + Loc.T("device.fallback") + ")"
+        : Loc.T("device.count", count, Loc.T("device.fallback"));
 
     private async Task InstallShellAsync()
     {
@@ -612,7 +945,7 @@ public sealed class MainViewModel : ObservableObject
         var composer = _services.CreateComposer();
         string installIpa;
         var gameCount = 0;
-        SetBusy(true, "Composing the app IPA (template + game packs)…");
+        SetBusy(true, Loc.T("status.composing"));
         try
         {
             if (composer is not null && realPacks.Count > 0)
@@ -628,7 +961,7 @@ public sealed class MainViewModel : ObservableObject
                 Log("No real GamePacks are built yet; installing the bare shell template. Games will not launch until packs are built and the app is reinstalled.");
                 installIpa = templateIpa;
             }
-            SetBusy(true, "Signing and installing the whole app IPA…");
+            SetBusy(true, Loc.T("status.signing"));
             var outcome = await installer.InstallAsync(
                 _shell,
                 _services.ShellDirectory,
@@ -642,18 +975,16 @@ public sealed class MainViewModel : ObservableObject
                 _services.Workspace.State.InstalledAt = DateTimeOffset.UtcNow;
                 _services.Workspace.State.InstalledGameCount = gameCount;
                 _services.Workspace.SaveState();
-                ShellStatus = $"App installed: {outcome.BundleId} ({gameCount} game pack(s))";
+                ShellStatus = Loc.T("shell.installedCount", outcome.BundleId, gameCount);
                 Log($"app installed: {outcome.BundleId}" + (outcome.SignedIpaPath is null ? string.Empty : $" (signed IPA: {outcome.SignedIpaPath})")
                     + (gameCount == 0 ? " — no game packs yet; build packs and reinstall to add games." : string.Empty));
-                PushStatus = gameCount == 0
-                    ? "App installed without game packs. Build packs, reinstall the app, then push ROM data."
-                    : "App installed. Push the selected game's ROM data to Documents next.";
-                StatusText = "App installed.";
+                PushStatus = gameCount == 0 ? Loc.T("shell.installedNoPacks") : Loc.T("shell.installedReady");
+                StatusText = Loc.T("status.appInstalled");
             }
             else
             {
                 var error = outcome.Error;
-                ShellStatus = error is null ? "Base shell install failed." : $"{error.Title} — {error.Fix}";
+                ShellStatus = error is null ? Loc.T("shell.installFailed") : Loc.T("shell.installError", error.Title, error.Fix);
                 Log("base shell install failed: " + (error?.Title ?? "unknown") + (error?.Detail is null ? string.Empty : " — " + error.Detail));
                 if (error is not null)
                 {
@@ -663,12 +994,12 @@ public sealed class MainViewModel : ObservableObject
         }
         catch (LauncherToolException error)
         {
-            ShellStatus = $"{error.Code}: {error.Message}";
+            ShellStatus = Loc.T("shell.installError", error.Code, error.Message);
             Log(ShellStatus + (error.Hint is null ? string.Empty : " — " + error.Hint));
         }
         catch (Exception exception)
         {
-            ShellStatus = "install failed: " + exception.Message;
+            ShellStatus = Loc.T("shell.installError", Loc.T("shell.installFailed"), exception.Message);
             Log(ShellStatus);
         }
         finally
@@ -688,7 +1019,7 @@ public sealed class MainViewModel : ObservableObject
         {
             _services.Impactor.StartImpactor();
             Log("Impactor started. Sign in with your own Apple ID there; the launcher never sees the password. Come back and install the base shell.");
-            ShellStatus = "Waiting for Apple ID sign-in in Impactor…";
+            ShellStatus = Loc.T("shell.waiting");
         }
         catch (Exception exception)
         {
@@ -700,25 +1031,25 @@ public sealed class MainViewModel : ObservableObject
     {
         if (_shell is null)
         {
-            ShellStatus = "Shell template not bundled (Shell/manifest.json missing).";
+            ShellStatus = Loc.T("shell.missing");
             return;
         }
         var verification = _shell.Verify(_services.ShellDirectory);
         if (!verification.Ok)
         {
-            ShellStatus = verification.Error ?? "Shell template invalid.";
+            ShellStatus = Loc.T("shell.invalid", verification.Error ?? string.Empty);
             return;
         }
         var compatibility = ShellTemplateRules.ValidateManifest(_shell);
         if (!compatibility.Ok)
         {
-            ShellStatus = "Template rejected: " + compatibility.Error + " " + compatibility.Fix;
+            ShellStatus = Loc.T("shell.rejected", compatibility.Error ?? string.Empty, compatibility.Fix ?? string.Empty);
             return;
         }
         var installed = _services.Workspace.State.InstalledAt;
         ShellStatus = installed is null
-            ? $"Shell template v{_shell.Version} ready ({_shell.BundleId}); app not installed yet."
-            : $"App {_services.Workspace.State.InstalledBundleId} installed {installed:yyyy-MM-dd HH:mm} with {_services.Workspace.State.InstalledGameCount} pack(s).";
+            ? Loc.T("shell.pending", _shell.Version, _shell.BundleId)
+            : Loc.T("shell.installed", _services.Workspace.State.InstalledBundleId, installed.Value.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture), _services.Workspace.State.InstalledGameCount);
     }
 
     // --- push --------------------------------------------------------------
@@ -733,12 +1064,14 @@ public sealed class MainViewModel : ObservableObject
         if (entry.Pack is null || entry.Pack.IsPlaceholder)
         {
             Log("This game has no real GamePack yet. Build it with the macOS Build Agent before pushing (preview placeholders cannot run on the phone).");
+            PushStatus = Loc.T("push.noPack");
             return;
         }
         var pushService = _services.CreatePushService();
         if (pushService is null)
         {
             Log("devpush was not found (Bin/devpush.exe). The device bridge is required to push files.");
+            PushStatus = Loc.T("push.devpushMissing");
             return;
         }
         var shell = _shell ?? await _services.LoadShellAsync().ConfigureAwait(true);
@@ -746,14 +1079,16 @@ public sealed class MainViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(bundleId))
         {
             Log("No bundle id: bundle the base shell manifest or set the shell bundle id in Settings.");
+            PushStatus = Loc.T("push.noBundle");
             return;
         }
         if (!File.Exists(entry.RomPath))
         {
             Log("The imported ROM is gone from " + entry.RomPath + ". Re-import it first.");
+            PushStatus = Loc.T("push.romMissing", entry.RomPath);
             return;
         }
-        SetBusy(true, "Preparing push plan…");
+        SetBusy(true, Loc.T("status.pushPreparing"));
         try
         {
             var plan = await GamePushPlan.CreateAsync(
@@ -765,7 +1100,7 @@ public sealed class MainViewModel : ObservableObject
                 entry.PackPath,
                 entry.RomPath,
                 Log).ConfigureAwait(true);
-            PushStatus = $"Pushing ROM data ({FormatBytes(plan.TotalBytes)}) to {plan.RemoteDirectory}…";
+            PushStatus = Loc.T("push.preparing", FormatBytes(plan.TotalBytes), plan.RemoteDirectory);
             var progress = new Progress<PushProgress>(item =>
             {
                 ProgressValue = item.OverallPercent;
@@ -778,25 +1113,25 @@ public sealed class MainViewModel : ObservableObject
                 entry.PushedFiles = plan.Files.Select(file => file.RemoteName).ToList();
                 entry.LastError = null;
                 _services.Workspace.SaveState();
-                PushStatus = $"Pushed and verified to {outcome.RemoteDirectory} (device " + (SelectedDevice is null ? "auto" : Privacy.RedactUdid(SelectedDevice.Udid)) + ").";
+                PushStatus = Loc.T("push.done", outcome.RemoteDirectory, SelectedDevice is null ? Loc.T("common.auto") : Privacy.RedactUdid(SelectedDevice.Udid));
                 Log(PushStatus);
-                StatusText = "Push finished.";
+                StatusText = Loc.T("status.pushFinished");
             }
             else
             {
-                PushStatus = $"Push failed ({outcome.ErrorCode}): {outcome.ErrorMessage}";
+                PushStatus = Loc.T("push.failed", outcome.ErrorCode, outcome.ErrorMessage);
                 Log(PushStatus);
-                StatusText = "Push failed.";
+                StatusText = Loc.T("status.pushFailed");
             }
         }
         catch (LauncherToolException error)
         {
-            PushStatus = $"{error.Code}: {error.Message}";
+            PushStatus = Loc.T("push.failed", error.Code, error.Message);
             Log(PushStatus + (error.Hint is null ? string.Empty : " — " + error.Hint));
         }
         catch (Exception exception)
         {
-            PushStatus = "push failed: " + exception.Message;
+            PushStatus = Loc.T("push.failed", "exception", exception.Message);
             Log(PushStatus);
         }
         finally
@@ -831,12 +1166,13 @@ public sealed class MainViewModel : ObservableObject
                 entry.RomPath,
                 Log).ConfigureAwait(true);
             var problems = await pushService.VerifyAsync(plan, bundleId, SelectedDevice?.Udid).ConfigureAwait(true);
-            PushStatus = problems.Count == 0 ? "Remote files match the local pack/ROM/GameInfo." : string.Join("; ", problems);
+            PushStatus = problems.Count == 0 ? Loc.T("push.verifyOk") : string.Join("; ", problems);
             Log(PushStatus);
         }
         catch (Exception exception)
         {
             Log("verify failed: " + exception.Message);
+            PushStatus = Loc.T("status.verifyFailed", exception.Message);
         }
     }
 
@@ -852,7 +1188,7 @@ public sealed class MainViewModel : ObservableObject
             {
                 Tools.Add(new ToolRow(tool.Name, tool.State, tool.Message));
             }
-            ReadinessSummary = readiness.Summary;
+            OnPropertyChanged(nameof(ReadinessText));
             OnPropertyChanged(nameof(ReadinessSummary));
             Log("status: " + readiness.Summary);
         }
@@ -876,6 +1212,7 @@ public sealed class MainViewModel : ObservableObject
             _services.Workspace.State.BuildMode = ModeFromUi().ToString();
             _services.Workspace.State.ShellBundleIdOverride = string.IsNullOrWhiteSpace(BundleIdOverride) ? null : BundleIdOverride.Trim();
             _services.Workspace.State.DevPushMockDirectory = string.IsNullOrWhiteSpace(MockDirectory) ? null : MockDirectory.Trim();
+            _services.Workspace.State.Language = LanguageCatalog.PreferenceKey(_languagePreference);
             _services.Workspace.SaveState();
             _services.Reload();
             ResetBuildModes();
@@ -883,10 +1220,12 @@ public sealed class MainViewModel : ObservableObject
             UpdateShellStatus();
             await RefreshStatusAsync().ConfigureAwait(true);
             Log("settings saved and tools reloaded.");
+            StatusText = Loc.T("status.settingsSaved");
         }
         catch (Exception exception)
         {
             Log("saving settings failed: " + exception.Message);
+            StatusText = Loc.T("status.settingsSaveFailed", exception.Message);
         }
     }
 
@@ -899,6 +1238,7 @@ public sealed class MainViewModel : ObservableObject
             Log(line);
         }
         Log(code == 0 ? "self-test passed (see lines above)." : "self-test FAILED — copy the launcher log when reporting.");
+        StatusText = code == 0 ? Loc.T("status.selftestPassed") : Loc.T("status.selftestFailed");
     }
 
     private void OpenWorkspace()
@@ -935,10 +1275,10 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    private void SetBusy(bool busy, string status)
+    private void SetBusy(bool busy, string? status)
     {
         IsBusy = busy;
-        StatusText = status;
+        StatusText = busy && !string.IsNullOrWhiteSpace(status) ? status! : Loc.T("status.ready");
         if (!busy)
         {
             ProgressValue = 0;
@@ -947,6 +1287,10 @@ public sealed class MainViewModel : ObservableObject
 
     private void RaiseCommandStates()
     {
+        foreach (var row in Games)
+        {
+            row.RaiseCommandStates();
+        }
         foreach (var command in new System.Windows.Input.ICommand[]
                  {
                      ImportCommand, RemoveGameCommand, BuildSelectedCommand, RefreshStatusCommand, RefreshDevicesCommand,

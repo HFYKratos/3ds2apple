@@ -51,7 +51,7 @@ public partial class MainWindow : Window
         }
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Pick a decrypted 3DS ROM",
+            Title = viewModel.L.ImportTitle,
             AllowMultiple = false,
             FileTypeFilter = new[]
             {
@@ -84,7 +84,7 @@ public partial class MainWindow : Window
         }
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Pick " + title,
+            Title = title,
             AllowMultiple = false,
             FileTypeFilter = new[] { new FilePickerFileType("Executable") { Patterns = new[] { "*.exe" } }, FilePickerFileTypes.All },
         });
@@ -93,5 +93,4 @@ public partial class MainWindow : Window
             apply(path);
         }
     }
-
 }

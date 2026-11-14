@@ -15,6 +15,9 @@ public sealed class LauncherStateDocument
     /// <summary>Selected build mode (stored as a string so the file stays readable).</summary>
     public string BuildMode { get; set; } = nameof(PackBuildMode.Preview);
 
+    /// <summary>UI language preference: "system" (default), "en" or "zh-Hans".</summary>
+    public string Language { get; set; } = "system";
+
     /// <summary>
     /// Feature flag for the experimental local build (3dsrecomp + LLVM/LLD on
     /// this PC, no macOS host). Off by default: the macOS Build Agent is the

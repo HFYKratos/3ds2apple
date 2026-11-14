@@ -1,0 +1,3 @@
+/* Localized display name for the macOS launcher (English). */
+"CFBundleDisplayName" = "3ds2apple Launcher";
+"CFBundleName" = "3ds2apple Launcher";

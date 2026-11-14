@@ -1,13 +1,14 @@
 //
 //  LauncherMain.swift
-//  3ds2apple macOS launcher (MVP)
+//  3ds2apple macOS launcher
 //
 //  Entry point for three modes:
 //
-//    (no arguments)                      normal SwiftUI app
-//    --selfcheck                         headless logic self-checks, exit 0/1
-//    --screenshot-dir DIR [--mock]       render every non-game screen to PNG
-//                                        offscreen (no GUI session needed) and exit
+//    (no arguments)                              normal SwiftUI app
+//    --selfcheck                                 headless logic self-checks, exit 0/1
+//    --screenshot-dir DIR [--theme dark|light] [--lang all|en|zh] [--mock]
+//                                                render the non-game UI to PNGs
+//                                                offscreen (no GUI session needed)
 //
 //  The screenshot and self-check modes exist because the macOS build VM boots to
 //  the login window: there is no Aqua session to show a window in, but an
@@ -16,11 +17,12 @@
 
 import Foundation
 import SwiftUI
+import AppKit
 
 enum LauncherMode {
     case app
     case selfCheck
-    case screenshots(directory: String, theme: String)
+    case screenshots(directory: String, theme: String, language: String)
 }
 
 enum LauncherCLI {
@@ -30,6 +32,7 @@ enum LauncherCLI {
         }
         var screenshotDir = environment["ZL_SCREENSHOT_DIR"] ?? ""
         var theme = environment["ZL_SCREENSHOT_THEME"] ?? "dark"
+        var language = environment["ZL_SCREENSHOT_LANG"] ?? "all"
         var index = 1
         while index < arguments.count {
             let argument = arguments[index]
@@ -46,6 +49,11 @@ enum LauncherCLI {
                     theme = arguments[index + 1]
                     index += 1
                 }
+            case "--lang":
+                if index + 1 < arguments.count {
+                    language = arguments[index + 1]
+                    index += 1
+                }
             case "--mock":
                 // Screenshot rendering is always seeded from the mock backends;
                 // the flag is accepted for symmetry with the app.
@@ -56,7 +64,7 @@ enum LauncherCLI {
             index += 1
         }
         if !screenshotDir.isEmpty {
-            return .screenshots(directory: screenshotDir, theme: theme)
+            return .screenshots(directory: screenshotDir, theme: theme, language: language)
         }
         return .app
     }
@@ -74,11 +82,12 @@ struct LauncherMain {
             MainActor.assumeIsolated {
                 SelfCheck.runHeadless()
             }
-        case .screenshots(let directory, let theme):
+        case .screenshots(let directory, let theme, let language):
             MainActor.assumeIsolated {
                 let written = SnapshotRenderer.renderAll(
                     to: URL(fileURLWithPath: directory, isDirectory: true),
-                    theme: SnapshotRenderer.Theme(rawValue: theme) ?? .dark
+                    theme: SnapshotRenderer.Theme(rawValue: theme) ?? .dark,
+                    language: language
                 )
                 FileHandle.standardOutput.write(
                     "[screenshot] wrote \(written.count) image(s) to \(directory)\n".data(using: .utf8)!
@@ -98,14 +107,20 @@ struct LauncherApp: App {
     @StateObject private var model: AppModel
 
     init() {
+        Self.installApplicationIcon()
         let settings = LauncherSettings(persist: true)
         _model = StateObject(wrappedValue: AppModel(settings: settings, kind: .live))
     }
 
+    private static func installApplicationIcon() {
+        guard let icon = LauncherAsset.appIcon() else { return }
+        NSApplication.shared.applicationIconImage = icon
+    }
+
     var body: some Scene {
-        WindowGroup("3ds2apple Launcher") {
+        WindowGroup(LauncherInfo.displayName) {
             LauncherShellView(model: model)
-                .frame(minWidth: 1_100, minHeight: 720)
+                .frame(minWidth: 1_020, minHeight: 680)
                 .preferredColorScheme(nil)
         }
         .defaultSize(width: 1_180, height: 800)

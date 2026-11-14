@@ -28,13 +28,21 @@ enum SelfCheckCore {
         } else {
             expect("launcher args: --selfcheck", false)
         }
-        if case .screenshots(let directory, let theme) = LauncherCLI.parse(
+        if case .screenshots(let directory, let theme, let language) = LauncherCLI.parse(
             arguments: ["launcher", "--screenshot-dir", "/tmp/shots", "--theme", "light"],
             environment: [:]
         ) {
-            expect("launcher args: --screenshot-dir and theme", directory == "/tmp/shots" && theme == "light")
+            expect("launcher args: --screenshot-dir and theme", directory == "/tmp/shots" && theme == "light" && language == "all")
         } else {
             expect("launcher args: --screenshot-dir and theme", false)
+        }
+        if case .screenshots(let directory, _, let language) = LauncherCLI.parse(
+            arguments: ["launcher", "--screenshot-dir", "/tmp/shots", "--lang", "zh"],
+            environment: [:]
+        ) {
+            expect("launcher args: --lang override", directory == "/tmp/shots" && language == "zh")
+        } else {
+            expect("launcher args: --lang override", false)
         }
 
         // 2. Repository detection
