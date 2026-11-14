@@ -61,28 +61,25 @@ struct SaveManagerView: View {
     }
 
     var body: some View {
-        List {
-            summarySection
-            batterySaveSection
-            saveStateSection
-            archiveMessagesSection
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                summaryCard
+                batterySaveCard
+                saveStateCard
+                messagesCard
+            }
+            .padding(16)
         }
-        .listStyle(.insetGrouped)
+        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
         .navigationTitle("Save Manager")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("Done") {
-                    dismiss()
-                }
+                Button("Done") { dismiss() }
             }
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    refresh()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .accessibilityIdentifier("save-manager-refresh")
+                Button { refresh() } label: { Image(systemName: "arrow.clockwise") }
+                    .accessibilityIdentifier("save-manager-refresh")
             }
         }
         .onAppear {
@@ -104,48 +101,33 @@ struct SaveManagerView: View {
         }
         .alert(deleteConfirmationTitle, isPresented: $isDeleteConfirmationPresented) {
             Button("Delete", role: .destructive) {
-                if let deletion = pendingDeletion {
-                    performDeletion(deletion)
-                }
+                if let deletion = pendingDeletion { performDeletion(deletion) }
             }
-            Button("Cancel", role: .cancel) {
-                pendingDeletion = nil
-            }
+            Button("Cancel", role: .cancel) { pendingDeletion = nil }
         } message: {
             Text(deleteConfirmationMessage)
         }
     }
 
-    // MARK: - Summary
+    // MARK: - Cards
 
-    private var summarySection: some View {
-        Section {
-            infoRow("Game", model.lastROM?.name ?? L10n.tr("No game imported"))
-            infoRow(
-                "Battery saves",
-                L10n.format(
-                    "%@ · %@",
-                    L10n.fileCount(files.count),
-                    StorageFormat.size(batterySaveBytes)
-                )
-            )
-            infoRow(
-                "Save states",
-                L10n.format(
-                    "%@ · %@",
-                    L10n.slotCount(savedSlotCount, of: SaveStateSupport.slotCount),
-                    StorageFormat.size(saveStates.totalBytes)
-                )
-            )
-            infoRow("App storage", snapshot.totalText)
-        } header: {
-            Text("Summary")
-        } footer: {
-            Text("Battery saves are written by the game; instant slots are snapshots of the whole console. Everything stays on this device.")
+    private func card<Content: View>(title: LocalizedStringKey,
+                                     systemImage: String,
+                                     @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(title, systemImage: systemImage)
+                .font(.headline)
+            content()
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+        )
     }
 
-    private func infoRow(_ title: LocalizedStringKey, _ value: String) -> some View {
+    private func statRow(_ title: LocalizedStringKey, _ value: String) -> some View {
         HStack {
             Text(title)
             Spacer(minLength: 12)
@@ -154,170 +136,137 @@ struct SaveManagerView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
+        .font(.subheadline)
     }
 
-    // MARK: - Battery saves
+    private func emptyHint(_ text: LocalizedStringKey) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
 
-    private var batterySaveSection: some View {
-        Section {
+    private var summaryCard: some View {
+        card(title: "Summary", systemImage: "externaldrive.fill") {
+            Text(gameName ?? L10n.tr("No game imported"))
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            if gameName != nil {
+                statRow("Battery saves", L10n.format("%@ · %@", L10n.fileCount(files.count), StorageFormat.size(batterySaveBytes)))
+                statRow("Save states", L10n.format("%@ · %@", L10n.slotCount(savedSlotCount, of: SaveStateSupport.slotCount), StorageFormat.size(saveStates.totalBytes)))
+                statRow("App storage", snapshot.totalText)
+            }
+        }
+    }
+
+    private var batterySaveCard: some View {
+        card(title: "Battery saves", systemImage: "sdcard.fill") {
             if gameName == nil {
                 emptyHint("Import a game first: battery saves are listed per game.")
             } else if files.isEmpty {
                 emptyHint("No battery save data yet. Save from the game's own menu and the files appear here.")
             } else {
-                ForEach(files) { file in
-                    batterySaveRow(file)
+                VStack(spacing: 10) {
+                    ForEach(files) { file in
+                        HStack(spacing: 10) {
+                            Image(systemName: "doc.fill")
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(file.name)
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Text([file.folder, StorageFormat.size(file.bytes), StorageFormat.date(file.modified)]
+                                        .filter { !$0.isEmpty }
+                                        .joined(separator: " · "))
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 8)
+                            Menu {
+                                Button { share(file) } label: { Label("Export", systemImage: "square.and.arrow.up") }
+                                if canChangeBatterySaves {
+                                    Button(role: .destructive) { requestDeletion(.batterySave(file)) } label: { Label("Delete", systemImage: "trash") }
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis.circle")
+                                    .font(.body)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        if file.id != files.last?.id { Divider() }
+                    }
                 }
             }
-            batterySaveActions
-        } header: {
-            Text("Battery saves")
-        } footer: {
-            Text("A backup is a ZIP archive of the files above; importing one merges its files back.")
-        }
-    }
 
-    private func emptyHint(_ text: LocalizedStringKey) -> some View {
-        Text(text)
-            .font(.footnote)
-            .foregroundColor(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.vertical, 2)
-    }
-
-    private func batterySaveRow(_ file: BatterySaveFile) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(file.name)
-                .font(.subheadline)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            HStack(spacing: 8) {
-                if !file.folder.isEmpty {
-                    Text(file.folder)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+            HStack(spacing: 10) {
+                Button { exportArchive() } label: {
+                    Label("Export ZIP", systemImage: "square.and.arrow.up")
                 }
-                Text(StorageFormat.size(file.bytes))
-                Text(StorageFormat.date(file.modified))
-            }
-            .font(.caption2)
-            .foregroundColor(.secondary)
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if canChangeBatterySaves {
-                Button(role: .destructive) {
-                    requestDeletion(.batterySave(file))
-                } label: {
-                    Label("Delete", systemImage: "trash")
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(files.isEmpty || isBusy)
+                .accessibilityIdentifier("save-data-export")
+
+                Button { sheet = .importPicker } label: {
+                    Label("Import", systemImage: "square.and.arrow.down")
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(gameName == nil || !canChangeBatterySaves)
+                .accessibilityIdentifier("save-data-import")
             }
-            Button {
-                share(file)
-            } label: {
-                Label("Export", systemImage: "square.and.arrow.up")
-            }
-        }
-    }
 
-    private var batterySaveActions: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Button {
-                exportArchive()
-            } label: {
-                Label("Export battery saves as a ZIP…", systemImage: "square.and.arrow.up")
-            }
-            .disabled(files.isEmpty || isBusy)
-            .accessibilityIdentifier("save-data-export")
-
-            Button {
-                sheet = .importPicker
-            } label: {
-                Label("Import battery saves from a ZIP or file…", systemImage: "square.and.arrow.down")
-            }
-            .disabled(gameName == nil || !canChangeBatterySaves)
-            .accessibilityIdentifier("save-data-import")
-
+            emptyHint("A backup is a ZIP archive of the files above; importing one merges its files back.")
             if model.isRuntimeActive {
-                Text("Exit to the home page before importing or deleting save data: the running game may hold these files open.")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                emptyHint("Exit to the home page before importing or deleting save data: the running game may hold these files open.")
             }
         }
-        .padding(.vertical, 4)
     }
 
-    // MARK: - Save states
-
-    private var saveStateSection: some View {
-        Section {
+    private var saveStateCard: some View {
+        card(title: "Save states", systemImage: "camera.on.rectangle") {
             ForEach(saveStates.slots) { slot in
-                saveStateRow(slot)
-            }
-            saveStateStatus
-        } header: {
-            HStack {
-                Text("Save states")
-                Spacer()
-                Text(StorageFormat.size(saveStates.totalBytes))
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-        } footer: {
-            Text("Loading a state restores that point and continues the same game session.")
-        }
-    }
-
-    private func saveStateRow(_ slot: SaveStateSlot) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(slot.title)
-                    .font(.subheadline.weight(.medium))
-                Spacer(minLength: 8)
-                Text(slot.detail)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            HStack(spacing: 8) {
-                stateButton(
-                    "Save",
-                    systemImage: "camera.on.rectangle",
-                    enabled: saveStates.canSave
-                ) {
-                    saveStates.save(slot: slot.number)
-                }
-                stateButton(
-                    "Load",
-                    systemImage: "arrow.uturn.backward",
-                    enabled: saveStates.canLoad(slot: slot.number)
-                ) {
-                    saveStates.load(slot: slot.number) { result in
-                        if case .success = result {
-                            onLoadStateCompleted?()
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(slot.title)
+                            .font(.subheadline.weight(.medium))
+                        Spacer(minLength: 8)
+                        Text(slot.detail)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    HStack(spacing: 8) {
+                        stateButton("Save", systemImage: "camera.on.rectangle", enabled: saveStates.canSave) {
+                            saveStates.save(slot: slot.number)
+                        }
+                        stateButton("Load", systemImage: "arrow.uturn.backward", enabled: saveStates.canLoad(slot: slot.number)) {
+                            saveStates.load(slot: slot.number) { result in
+                                if case .success = result { onLoadStateCompleted?() }
+                            }
+                        }
+                        stateButton("Delete", systemImage: "trash", enabled: slot.exists && !saveStates.busy) {
+                            requestDeletion(.state(slot.number))
                         }
                     }
                 }
-                stateButton(
-                    "Delete",
-                    systemImage: "trash",
-                    enabled: slot.exists && !saveStates.busy
-                ) {
-                    requestDeletion(.state(slot.number))
-                }
+                .accessibilityIdentifier("save-state-slot-\(slot.number)")
+                if slot.id != saveStates.slots.last?.id { Divider() }
             }
+            saveStateStatus
+            emptyHint("Loading a state restores that point and continues the same game session.")
         }
-        .padding(.vertical, 2)
-        .accessibilityIdentifier("save-state-slot-\(slot.number)")
     }
 
-    private func stateButton(
-        _ title: LocalizedStringKey,
-        systemImage: String,
-        enabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
+    private func stateButton(_ title: LocalizedStringKey,
+                             systemImage: String,
+                             enabled: Bool,
+                             action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
                 .font(.caption.weight(.medium))
@@ -347,25 +296,16 @@ struct SaveManagerView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("save-state-error")
         } else if !saveStates.isRuntimeLoaded {
-            Text("Load a game to save or restore a state. Slots already on disk can be deleted here.")
-                .font(.footnote)
-                .foregroundColor(.secondary)
+            emptyHint("Load a game to save or restore a state. Slots already on disk can be deleted here.")
         }
     }
 
-    // MARK: - Messages
-
     @ViewBuilder
-    private var archiveMessagesSection: some View {
+    private var messagesCard: some View {
         if busyMessage != nil || statusMessage != nil || errorMessage != nil {
-            Section {
+            card(title: "Messages", systemImage: "text.bubble") {
                 if let busyMessage {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text(busyMessage)
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                    }
+                    HStack(spacing: 8) { ProgressView(); Text(busyMessage).font(.footnote).foregroundColor(.secondary) }
                 }
                 if let statusMessage {
                     Label(statusMessage, systemImage: "checkmark.circle.fill")

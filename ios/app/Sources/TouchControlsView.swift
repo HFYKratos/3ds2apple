@@ -348,3 +348,58 @@ private struct FaceButtonCluster: View {
         }
     }
 }
+// MARK: - Edge-to-edge landscape overlay
+
+/// Landscape controls drawn directly over the picture, like a handheld skin.
+/// The overlay never reserves layout, so hiding the on-screen controls does not
+/// move or resize the game picture.
+struct LandscapeOverlayControls: View {
+    private let backgroundOpacity: Double
+    private let haptics: Bool
+    private let onButton: (UInt32, Bool) -> Void
+
+    init(backgroundOpacity: Double = 0.55,
+         haptics: Bool = false,
+         onButton: @escaping (UInt32, Bool) -> Void) {
+        self.backgroundOpacity = min(max(backgroundOpacity, 0.0), 1.0)
+        self.haptics = haptics
+        self.onButton = onButton
+    }
+
+    var body: some View {
+        ZStack {
+            VStack(spacing: 0) {
+                HStack(alignment: .top) {
+                    TouchButton(label: "L", width: 66, height: 34, bit: ZKButton.l,
+                                haptics: haptics, onButton: onButton)
+                    Spacer(minLength: 12)
+                    HStack(spacing: 10) {
+                        TouchButton(label: "Select", width: 64, height: 30, bit: ZKButton.select,
+                                    haptics: haptics, onButton: onButton)
+                        TouchButton(label: "Start", width: 64, height: 30, bit: ZKButton.start,
+                                    haptics: haptics, onButton: onButton)
+                    }
+                    Spacer(minLength: 12)
+                    TouchButton(label: "R", width: 66, height: 34, bit: ZKButton.r,
+                                haptics: haptics, onButton: onButton)
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 10)
+                Spacer(minLength: 0)
+            }
+
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                HStack(alignment: .bottom) {
+                    DpadCluster(buttonSize: 58, haptics: haptics, onButton: onButton)
+                    Spacer(minLength: 24)
+                    FaceButtonCluster(buttonSize: 58, haptics: haptics, onButton: onButton)
+                }
+                .padding(.horizontal, 26)
+                .padding(.bottom, 14)
+            }
+        }
+        .opacity(0.30 + backgroundOpacity * 0.70)
+        .accessibilityIdentifier("touch-controls-overlay")
+    }
+}

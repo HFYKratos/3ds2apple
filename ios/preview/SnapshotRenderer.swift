@@ -18,7 +18,15 @@ import UIKit
 
 @MainActor
 enum SnapshotRenderer {
-    static let size = CGSize(width: 402, height: 780)
+    /// Default portrait content size; ZKPREVIEW_SIZE=844x390 renders landscape.
+    static let size: CGSize = {
+        let raw = ProcessInfo.processInfo.environment["ZKPREVIEW_SIZE"] ?? ""
+        let parts = raw.lowercased().split(separator: "x")
+        if parts.count == 2, let w = Double(parts[0]), let h = Double(parts[1]), w > 1, h > 1 {
+            return CGSize(width: w, height: h)
+        }
+        return CGSize(width: 402, height: 780)
+    }()
 
     /// Renders every shell screen into `directory`; returns the written files.
     @discardableResult
@@ -32,6 +40,9 @@ enum SnapshotRenderer {
         }
 
         let settings = AppSettings.shared
+        if ProcessInfo.processInfo.environment["ZKPREVIEW_HIDE_CONTROLS"] == "1" {
+            settings.showTouchControls = false
+        }
         let model = ROMSession()
         let saveStates = SaveStateSupport(runtime: model)
         let library = GameLibrary.shared

@@ -93,7 +93,7 @@ struct HomeView: View {
                 Text("3ds2apple")
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                     .accessibilityIdentifier("app-title")
-                Text("Nintendo 3DS, natively.")
+                Text("Nintendo 3DS, natively")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -390,7 +390,7 @@ struct HomeView: View {
     // MARK: - Footer
 
     private var footer: some View {
-        Text("Not affiliated with Nintendo. Use only your own game dumps.")
+        Text("Not affiliated with Nintendo Co., Ltd. Use only your own game dumps.")
             .font(.caption2)
             .foregroundStyle(Color.secondary.opacity(0.7))
             .multilineTextAlignment(.center)

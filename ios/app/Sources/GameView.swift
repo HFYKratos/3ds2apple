@@ -125,7 +125,7 @@ struct GameView: View {
 
     private var portraitContent: some View {
         VStack(spacing: 10) {
-            if isLoaded && !isMenuPresented {
+            if isLoaded {
                 portraitTopBar
             }
 
@@ -134,15 +134,17 @@ struct GameView: View {
                     .frame(maxHeight: .infinity)
                     .accessibilityIdentifier("screens")
 
-                if showsTouchControls {
-                    TouchControlsView(
-                        backgroundOpacity: settings.controlsBackgroundOpacity,
-                        haptics: settings.haptics
-                    ) { bit, pressed in
-                        model.setOverlayButton(bit, pressed: pressed)
-                    }
-                    .padding(.horizontal, 2)
+                // Keep the controls in the layout even when hidden, so the
+                // picture keeps its position and size.
+                TouchControlsView(
+                    backgroundOpacity: settings.controlsBackgroundOpacity,
+                    haptics: settings.haptics
+                ) { bit, pressed in
+                    model.setOverlayButton(bit, pressed: pressed)
                 }
+                .padding(.horizontal, 2)
+                .opacity(showsTouchControls ? 1 : 0)
+                .allowsHitTesting(showsTouchControls)
             }
         }
         .padding(.horizontal, 12)
@@ -198,56 +200,35 @@ struct GameView: View {
     // MARK: - Landscape layout
 
     private var landscapeContent: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                if showsTouchControls {
-                    LandscapeControlsTopBar(
-                        backgroundOpacity: settings.controlsBackgroundOpacity,
-                        haptics: settings.haptics
-                    ) { bit, pressed in
-                        model.setOverlayButton(bit, pressed: pressed)
-                    }
-                } else {
-                    Spacer(minLength: 0)
+        ZStack {
+            screenStage
+                .padding(.horizontal, 4)
+                .padding(.vertical, 4)
+                .accessibilityIdentifier("screens-area")
+
+            // Edge-to-edge controls float over the picture (handheld-skin style)
+            // and take no layout space: hiding them never moves the image.
+            if isLoaded {
+                LandscapeOverlayControls(
+                    backgroundOpacity: settings.controlsBackgroundOpacity,
+                    haptics: settings.haptics
+                ) { bit, pressed in
+                    model.setOverlayButton(bit, pressed: pressed)
                 }
-                if isLoaded && !isMenuPresented {
-                    pauseButton(size: 34)
-                }
+                .opacity(showsTouchControls ? 1 : 0)
+                .allowsHitTesting(showsTouchControls)
             }
-            .frame(height: LandscapeControlsLayout.topBarHeight)
 
-            HStack(alignment: .center, spacing: 10) {
-                if showsTouchControls {
-                    LandscapeControlsLeftRail(
-                        backgroundOpacity: settings.controlsBackgroundOpacity,
-                        haptics: settings.haptics
-                    ) { bit, pressed in
-                        model.setOverlayButton(bit, pressed: pressed)
-                    }
-                    .frame(width: LandscapeControlsLayout.railWidth)
-                }
-
-                screenStage
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .accessibilityIdentifier("screens-area")
-
-                if showsTouchControls {
-                    LandscapeControlsRightRail(
-                        backgroundOpacity: settings.controlsBackgroundOpacity,
-                        haptics: settings.haptics
-                    ) { bit, pressed in
-                        model.setOverlayButton(bit, pressed: pressed)
-                    }
-                    .frame(width: LandscapeControlsLayout.railWidth)
-                }
+            if isLoaded && !isMenuPresented {
+                pauseButton(size: 36)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.top, 12)
+                    .padding(.trailing, 16)
             }
-            .frame(maxHeight: .infinity)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .ignoresSafeArea(edges: [.horizontal])
         .accessibilityIdentifier("screens")
     }
-
     // MARK: - Menu
 
     /// Glass pause button; opens the in-game menu and pauses the runtime.

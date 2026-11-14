@@ -95,8 +95,8 @@ struct SettingsView: View {
                 hintText(L10n.tr("Whole-pixel scaling: every 3DS pixel becomes a whole block of screen pixels, so the picture stays sharp."))
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text("3D resolution")
-                Picker("3D resolution", selection: persistedBinding(settings, \.renderScale)) {
+                Text("Resolution")
+                Picker("Resolution", selection: persistedBinding(settings, \.renderScale)) {
                     Text("1x").tag(1)
                     Text("2x").tag(2)
                     Text("3x").tag(3)
@@ -104,7 +104,7 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                hintText(L10n.tr("1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads."))
+                hintText(L10n.tr("1x is the 3DS's native 400×240."))
             }
             Picker("Orientation", selection: persistedBinding(settings, \.orientation)) {
                 ForEach(OrientationLock.allCases) { lock in
@@ -128,15 +128,19 @@ struct SettingsView: View {
                     .monospacedDigit()
             }
             Toggle("Mute", isOn: persistedBinding(settings, \.audioMuted))
-            settingRow("Buffer size") {
-                Picker("Buffer size", selection: persistedBinding(settings, \.audioBuffer)) {
-                    ForEach(AudioBufferSize.allCases) { size in
-                        Text(size.title).tag(size)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Buffer size")
+                    Spacer(minLength: 12)
+                    Picker("Buffer size", selection: persistedBinding(settings, \.audioBuffer)) {
+                        ForEach(AudioBufferSize.allCases) { size in
+                            Text(size.title).tag(size)
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
                 }
-                .labelsHidden()
-            } hint: {
-                Text("A different buffer size restarts audio once while a game is running.")
+                hintText(L10n.tr("A different buffer size restarts audio once while a game is running."))
             }
         } header: {
             Text("Audio")
@@ -231,7 +235,7 @@ struct SettingsView: View {
             Button {
                 exportDiagnostics()
             } label: {
-                Label("Export diagnostics", systemImage: "square.and.arrow.up")
+                Label("Export logs", systemImage: "square.and.arrow.up")
             }
             NavigationLink {
                 AboutView(model: model)
@@ -395,9 +399,9 @@ struct QuickDisplaySettingsView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("3D resolution")
+                        Text("Resolution")
                         Picker(
-                            "3D resolution",
+                            "Resolution",
                             selection: persistedBinding(settings, \.renderScale)
                         ) {
                             Text("1x").tag(1)
@@ -407,7 +411,7 @@ struct QuickDisplaySettingsView: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        Text("1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads.")
+                        Text("1x is the 3DS's native 400×240.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)

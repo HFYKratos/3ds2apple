@@ -13,6 +13,7 @@
 "1 file" = "1 file";
 "10 ms. The default." = "10 ms. The default.";
 "1x" = "1x";
+"1x is the 3DS's native 400×240." = "1x is the 3DS's native 400×240.";
 "1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads." = "1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads.";
 "20 ms. Fewer dropouts, slightly more delay." = "20 ms. Fewer dropouts, slightly more delay.";
 "2x" = "2x";
@@ -125,7 +126,8 @@
 "Export" = "Export";
 "Export a report and the session log" = "Export a report and the session log";
 "Export battery saves as a ZIP…" = "Export battery saves as a ZIP…";
-"Export diagnostics" = "Export diagnostics";
+"Export logs" = "Export logs";
+"Export ZIP" = "Export ZIP";
 "Fast-forward" = "Fast-forward";
 "Fast-forward applies when the game resumes." = "Fast-forward applies when the game resumes.";
 "Fast-forward runs extra console frames per presented frame." = "Fast-forward runs extra console frames per presented frame.";
@@ -180,8 +182,8 @@
 "Never played" = "Never played";
 "Nintendo 3DS games as native ARM64 apps on iPhone and iPad." = "Nintendo 3DS games as native ARM64 apps on iPhone and iPad.";
 "Nintendo 3DS is a trademark of Nintendo Co., Ltd. This app is not affiliated with or endorsed by Nintendo." = "Nintendo 3DS is a trademark of Nintendo Co., Ltd. This app is not affiliated with or endorsed by Nintendo.";
+"Nintendo 3DS, natively" = "Nintendo 3DS, natively";
 "Nintendo 3DS, natively on iPhone and iPad" = "Nintendo 3DS, natively on iPhone and iPad";
-"Nintendo 3DS, natively." = "Nintendo 3DS, natively.";
 "No games in your library yet. Import a ROM first." = "No games in your library yet. Import a ROM first.";
 "No games yet" = "No games yet";
 "No ROM has been imported yet. Tap “Import ROM…” first." = "No ROM has been imported yet. Tap “Import ROM…” first.";
@@ -190,7 +192,7 @@
 "No game imported" = "No game imported";
 "No game imported yet." = "No game imported yet.";
 "No game is selected." = "No game is selected.";
-"Not affiliated with Nintendo. Use only your own game dumps." = "Not affiliated with Nintendo. Use only your own game dumps.";
+"Not affiliated with Nintendo Co., Ltd. Use only your own game dumps." = "Not affiliated with Nintendo Co., Ltd. Use only your own game dumps.";
 "Not available in this build" = "Not available in this build";
 "Not connected" = "Not connected";
 "Off by default: the game appears as soon as it loads, and the pipeline cache is still written while you play." = "Off by default: the game appears as soon as it loads, and the pipeline cache is still written while you play.";
@@ -220,6 +222,7 @@
 "Reset" = "Reset";
 "Reset game" = "Reset game";
 "Reset the game?" = "Reset the game?";
+"Resolution" = "Resolution";
 "Restart the app to apply. If it still does not appear, check System Settings." = "Restart the app to apply. If it still does not appear, check System Settings.";
 "Restoring the console…" = "Restoring the console…";
 "Resume game" = "Resume game";

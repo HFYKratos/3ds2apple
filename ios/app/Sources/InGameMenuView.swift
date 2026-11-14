@@ -232,7 +232,7 @@ struct InGameMenuView: View {
             )
             rowDivider
             actionRow(
-                "Export diagnostics",
+                "Export logs",
                 systemImage: "square.and.arrow.up",
                 identifier: "menu-diagnostics",
                 action: onDiagnostics

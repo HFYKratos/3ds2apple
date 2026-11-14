@@ -13,10 +13,11 @@
 "1 file" = "1 个文件";
 "10 ms. The default." = "10 毫秒。默认值。";
 "1x" = "1x";
-"1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads." = "1x 为 3DS 原生 400×240；倍数越高越清晰、越耗性能，重新载入游戏后生效。";
+"1x is the 3DS's native 400×240." = "1x 为 3DS 原生 400×240。";
+"1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads." = "1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads.";
 "20 ms. Fewer dropouts, slightly more delay." = "20 毫秒。掉音更少，延迟略高。";
 "2x" = "2x";
-"3D resolution" = "3D 分辨率";
+"3D resolution" = "3D resolution";
 "3ds2apple" = "3ds2apple";
 "3ds2apple is not affiliated with Nintendo. Use only game dumps you made from your own console." = "3ds2apple 与 Nintendo 无关联。请只使用你从自己主机上导出的游戏数据。";
 "3dsrecomp (MIT): ahead-of-time ARM/Thumb/VFP to C recompiler." = "3dsrecomp（MIT）：提前把 ARM/Thumb/VFP 重新编译为 C。";
@@ -127,7 +128,8 @@
 "Export" = "导出";
 "Export a report and the session log" = "导出报告与会话日志";
 "Export battery saves as a ZIP…" = "导出电池存档为 ZIP…";
-"Export diagnostics" = "导出诊断";
+"Export logs" = "导出日志";
+"Export ZIP" = "导出 ZIP";
 "Fast-forward" = "快进";
 "Fast-forward applies when the game resumes." = "快进在恢复游戏后生效。";
 "Fast-forward runs extra console frames per presented frame." = "快进会在每个显示帧中额外运行若干主机帧。";
@@ -184,8 +186,8 @@
 "Never played" = "未游玩";
 "Nintendo 3DS games as native ARM64 apps on iPhone and iPad." = "在 iPhone 与 iPad 上以原生 ARM64 应用的形式运行 Nintendo 3DS 游戏。";
 "Nintendo 3DS is a trademark of Nintendo Co., Ltd. This app is not affiliated with or endorsed by Nintendo." = "Nintendo 3DS 是 Nintendo Co., Ltd. 的商标。本应用与 Nintendo 无关联，也未获其认可。";
+"Nintendo 3DS, natively" = "Nintendo 3DS，原生运行";
 "Nintendo 3DS, natively on iPhone and iPad" = "Nintendo 3DS，原生运行于 iPhone 与 iPad";
-"Nintendo 3DS, natively." = "Nintendo 3DS，原生运行。";
 "No games in your library yet. Import a ROM first." = "游戏库还是空的，请先导入 ROM。";
 "No games yet" = "还没有游戏";
 "No ROM has been imported yet. Tap “Import ROM…” first." = "尚未导入 ROM。请先点“导入 ROM…”。";
@@ -194,7 +196,7 @@
 "No game imported" = "未导入游戏";
 "No game imported yet." = "尚未导入游戏。";
 "No game is selected." = "未选择游戏。";
-"Not affiliated with Nintendo. Use only your own game dumps." = "与任天堂无关。请仅使用你自有的游戏转储。";
+"Not affiliated with Nintendo Co., Ltd. Use only your own game dumps." = "与任天堂株式会社（Nintendo Co., Ltd.）无关。请仅使用你自有的游戏转储。";
 "Not available in this build" = "此版本不可用";
 "Not connected" = "未连接";
 "Off by default: the game appears as soon as it loads, and the pipeline cache is still written while you play." = "默认关闭：游戏载入后立即显示，游玩时仍会写入管线缓存。";
@@ -224,6 +226,7 @@
 "Reset" = "重置";
 "Reset game" = "重置游戏";
 "Reset the game?" = "重置游戏？";
+"Resolution" = "分辨率";
 "Restart the app to apply. If it still does not appear, check System Settings." = "重启 App 生效；如不生效，请检查系统设置。";
 "Restoring the console…" = "正在恢复主机状态…";
 "Resume game" = "继续游戏";
