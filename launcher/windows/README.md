@@ -12,16 +12,19 @@ cover and keeps an existing built GamePack (a user-supplied cover is never overw
 The legacy Build Agent path (`builder/{agent,cli,linux,windows}`, `MacAgent*` providers)
 is deleted; the local 3dsrecomp + LLVM/LLD build is the only path and the single-file
 exe no longer embeds `builder-windows.exe` (~1.24 MB smaller).
-This checkout compiles cleanly (0 errors, warnings as errors) and its **147
+This checkout compiles cleanly (0 errors, warnings as errors) and its **150
 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
 `--self-test` on Linux/WSL with the embedded payload (32 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a minimal Settings gear; it is
 localized (English / 简体中文) and uses the iOS app icon. The user-facing package is a ZIP
-with exactly one self-contained exe (pre-reset 0.2.5 package: 148,817,314 B,
-SHA-256 `b9b2a0b0…52f0d7`; the 0.1.0 package is rebuilt by the packaging task).
-Synthetic (non-game) UI captures are in `docs/ui/v4-*.png`; a real Windows 11 run of this
-exact pre-reset 0.2.5 build and the Impactor signing/phone flows were the remaining acceptance step
-(device acceptance steps: see the root [README.md](../../README.md) usage section).
+with exactly one self-contained exe (the 0.1.1 package: 148,965,268 B, SHA-256
+`189c8215…51d03b`; the earlier pre-reset 0.2.5 package was 148,817,314 B, SHA-256
+`b9b2a0b0…52f0d7`).
+Synthetic (non-game) UI captures are in `docs/ui/v4-*.png` (the Windows UI is unchanged in
+0.1.1). The Windows 11 device path (import, local compile, Impactor signing, devpush and
+launch) was verified by the maintainers on the 0.1.0 build; the 0.1.1 metadata additions
+still need a device pass (device acceptance steps: see the root [README.md](../../README.md)
+usage section).
 
 Architecture correction (Lead, 2026-11-14): iOS cannot dlopen a loose unsigned
 dylib from Documents. The **GamePack.dylib lives inside the signed app IPA**
