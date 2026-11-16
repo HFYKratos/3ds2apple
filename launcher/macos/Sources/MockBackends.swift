@@ -56,14 +56,35 @@ enum MockFixtures {
         FileManager.default.temporaryDirectory.appendingPathComponent("3ds2apple-launcher-mock", isDirectory: true)
     }
 
-    static var outRoot: URL { root.appendingPathComponent("out", isDirectory: true) }
-    static var stagingRoot: URL { root.appendingPathComponent("staging", isDirectory: true) }
+    /// Mock portable data root layout (<mock>/workspace, /logs, /ipa, ...) so the
+    /// screenshots and self-checks exercise the same paths as the live app.
+    static var outRoot: URL { root.appendingPathComponent(PortableData.workspaceDirectoryName, isDirectory: true) }
+    static var stagingRoot: URL { root.appendingPathComponent(PortableData.stagingDirectoryName, isDirectory: true) }
+    static var logsRoot: URL { root.appendingPathComponent(PortableData.logsDirectoryName, isDirectory: true) }
+    static var ipaRoot: URL { root.appendingPathComponent(PortableData.ipaDirectoryName, isDirectory: true) }
+
+    /// Deterministic mock compile hardware (the VM is 8 vCPU / 12 GB).
+    static let hardware = HardwareProfile(logicalCores: 8, physicalCores: 8, totalMemoryBytes: 12 * 1_073_741_824)
+
+    /// Synthetic gradient PNG tiles used as mock SMDH covers on the cards. They
+    /// are generated placeholder art (never game pixels) so the screenshots and
+    /// self-checks exercise the real cover.png image path.
+    static let mockCoverPokemonBase64 = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAACQklEQVR42g3LoY6AIBgA4HuSq1Szs/0Rk8FAYUaaM7EZTMxGhOAMBAmMZDGRLCYLiUQh3VOcX/9+fhuFmq1qTN1YaHzbnH1z0Saw5p6aZ25e0UTZJN1k0xTX/P38gkKwVWBqsAC+hbOHi0JgcE/wzPAKiBKShmygOPgCVghvFTY1toB9i88eXxQHhu8JPzN+BY4SJ42zwcXhL3QKdVvVmbqz0Pm2O/vuol1g3T11z9y9oouyS7rLpiuu+wJRiGwVMTWxQHxLzp5clARG7ok8M3kFiZIkTbIhxZEvDAoNWzWYerAw+HY4++GiQ2DDPQ3PPLxiiHJIeshmKG74AlOIbRUzNbPAfMvOnl2UBcbuiT0zewWLkiXNsmHFsS+MCo1bNZp6tDD6djz78aJjYOM9jc88vmKMckx6zGYsbvwCV4hvFTc1t8B9y8+eX5QHxu+JPzN/BY+SJ82z4cXxLywKLVu1mHqxsPh2Ofvloktgyz0tz7y8YolySXrJZilu+cKq0LpVq6lXC6tv17NfL7oGtt7T+szrK9Yo16TXbNbi1i9IheRWSVNLC9K38uzlRWVg8p7kM8tXyChl0jIbWZz8glJIbZUytbKgfKvOXl1UBabuST2zeoWKUiWtslHFqS/sCu1btZt6t7D7dj/7/aJ7YPs97c+8v2KPck96z2Yvbv/CodCxVYepDwuHb4+zPy56BHbc0/HMxyuOKI+kj2yO4o4veIX8VnlTewvet/7s/UV9YP6e/DP7V/gofdI+G1+c//sHwIOXsAG9zgUAAAAASUVORK5CYII="
+    static let mockCoverAnimalBase64 = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAACbElEQVR42gXBIQqAMAAAQJ8jGBYWBMOCQTAsGASDwScMZCCDMRBBhCGIsGJaWTJZTCaLacVksphMPsE751Puq9xHubdyL+WeyrXKPZS7K3dT7qrcRbmzco1ytXIn5Trf6L2j94zePXrX6J2jZ0fvGL199LbRW0dvGb159Mzo6dGbRs/5BvAO4BnAPYBrAOcA7ACOAewD2AawDmAZwDwAMwA9gGkAztfDt4dPD+8eXj08e2h7ePRw7+HWw7WHSw/nHpoe6h5OPXQ+6b/Sf6R/S/+S/il9K/1D+rv0N+mv0l+kP0vfSF9Lf5K+83XB2wVPF9xdcHXB2QW2C44u2Ltg64K1C5YumLvAdIHugqkLnK9Fb4ueFt0tulp0tsi26GjR3qKtRWuLlhbNLTIt0i2aWuR8Tfg24dOEdxNeTXg2oW3Cown3JtyacG3CpQnnJjRNqJtwakLnq6O3jp46uuvoqqOzjmwdHXW019FWR2sdLXU015GpI11HUx05n4hfET8ivkV8ifgUsRXxIeJdxJuIVxEvIp5FbESsRTyJ2Pk4fjl+OL45vjg+ObYcHxzvHG8crxwvHM8cG441xxPHzseSlyUPS26WXCw5WWJZcrBkZ8nGkpUlC0tmlhiWaJZMLHG+Kn2r9KnSu0qvKj2r1FbpUaV7lW5VulbpUqVzlZoq1VU6Vanz0eyl2UOzm2YXzU6aWZodNNtpttFspdlCs5lmhmaaZhPNnK/M3zJ/yvwu86vMzzK3ZX6U+V7mW5mvZb6U+Vzmpsx1mU9l7nykeEnxkOImxUWKkxSWFAcpdlJspFhJsZBiJoUhhSbFRIoflBWMMITYaoIAAAAASUVORK5CYII="
+    static let mockCoverMarioBase64 = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAACOElEQVR42gXBwQbAIAAA0H3TjBmJjIxERqLLLrvs0qVLIpHImJGRmNGn7r2ub6D/QP+CvoK+gP4BfQb9DfoL9CfoE+gj6APoPegd6C3ohoaGDw0vGioaChoeNGQ03Gi40HCiIaEhoiGgwaPBocGibmx4/PD44rHiseDxwWPG443HC48nHhMeIx4DHj0eHR4t7qZGpo9ML5kqmQqZHjJlMt1kush0kimRKZIpkMmTyZHJkg40Bj4GXgYqA4WBh4HMwM3AxcDJQGIgMhAY8Aw4BizrYOPw4/DlsHJYOHw4zBzeHF4cnhwmDiOHgUPPoePQ8g41iT6JXomqREWiR6Is0S3RJdEpUZIoShQk8hI5iazs5rbN3za/21y3uWzzs815m+9tvrb53Oa0zXGbwzb7bXbbbLcOtx1/O353XHdcdvzsOO/43vG143PHacdxx2HHfsdux3bvlnYs37G8x1KPpRzLcyz5WO5juY7lPJZ0LPFYwrH4Y3HHYo+ONEU+RV5FqiJFkUeRrMityKXIqUhSJCoSFPGKOEWs6mjT9NP01bRqWjR9NM2a3ppemp6aJk2jpkFTr6nT1OqONcM+w17DqmHFsMewbNht2GXYaVgyLBoWDPOGOcOs6dbm1s+tr1urW4tbH7dmt95uvdx6ujW5Nbo1uNW71bnVuo63wL/A38Br4CXwJ/Ac+B34FfgZeAo8Bh4C94G7wG3oREviS+JNoiZRkniSyEncSVxJnEmkJGISIQmfhEvCph88WDMQpEXUOgAAAABJRU5ErkJggg=="
+
+    static func coverPath(titleID: String) -> String {
+        outRoot.appendingPathComponent("packages/\(titleID)/cover.png").path
+    }
 
     static func games() -> [GameEntry] {
         [
             GameEntry(
                 titleID: titlePokemonY,
                 displayName: "Pokemon Y",
+                displayNames: ["en": "Pokemon Y", "zh-Hans": "宝可梦 Y", "ja": "ポケットモンスター Y"],
+                publisher: "Nintendo",
+                coverPath: coverPath(titleID: titlePokemonY),
                 productCode: "CTR-P-EK2A",
                 romPath: "/Users/you/ROM/Pokemon Y.cci",
                 romBytes: 1_807_118_336,
@@ -84,6 +105,9 @@ enum MockFixtures {
             GameEntry(
                 titleID: titleAnimalCrossing,
                 displayName: "Animal Crossing: New Leaf",
+                displayNames: ["en": "Animal Crossing: New Leaf", "zh-Hans": "动物森友会", "ja": "とびだせ どうぶつの森"],
+                publisher: "Nintendo",
+                coverPath: coverPath(titleID: titleAnimalCrossing),
                 productCode: "CTR-P-ECJE",
                 romPath: "/Users/you/ROM/Animal Crossing New Leaf.cci",
                 romBytes: 2_147_483_648,
@@ -104,6 +128,9 @@ enum MockFixtures {
             GameEntry(
                 titleID: titleMario3DLand,
                 displayName: "Super Mario 3D Land",
+                displayNames: ["en": "Super Mario 3D Land", "zh-Hans": "超级马力欧 3D 乐园"],
+                publisher: "Nintendo",
+                coverPath: coverPath(titleID: titleMario3DLand),
                 productCode: "CTR-P-AREJ",
                 romPath: "/Users/you/ROM/Super Mario 3D Land.3ds",
                 romBytes: 536_870_912,
@@ -139,7 +166,11 @@ enum MockFixtures {
             packFormat: "macho",
             romFile: "GameRom.cci",
             romSha256: game?.romSha256,
-            romBytes: game?.romBytes
+            romBytes: game?.romBytes,
+            displayNames: game?.displayNames ?? [:],
+            publisher: game?.publisher ?? "",
+            coverPath: game?.coverPath == nil ? nil : "cover.png",
+            romPath: game?.romPath
         )
     }
 
@@ -157,7 +188,11 @@ enum MockFixtures {
             packFormat: "queued",
             romFile: nil,
             romSha256: nil,
-            romBytes: nil
+            romBytes: nil,
+            displayNames: games().first(where: { $0.titleID == titleID })?.displayNames ?? [:],
+            publisher: games().first(where: { $0.titleID == titleID })?.publisher ?? "",
+            coverPath: "cover.png",
+            romPath: games().first(where: { $0.titleID == titleID })?.romPath
         )
     }
 
@@ -174,6 +209,8 @@ enum MockFixtures {
             path: "/Users/you/ROM/Pokemon Y.cci",
             titleID: titlePokemonY,
             displayName: "Pokemon Y",
+            displayNames: ["en": "Pokemon Y", "zh-Hans": "宝可梦 Y", "ja": "ポケットモンスター Y"],
+            publisher: "Nintendo",
             productCode: "CTR-P-EK2A",
             container: "ncsd",
             bytes: 1_807_118_336,
@@ -190,13 +227,24 @@ enum MockFixtures {
         try? fileManager.createDirectory(at: outRoot.appendingPathComponent("packages"), withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: outRoot.appendingPathComponent("launcher-roms"), withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
-        for titleID in [titlePokemonY, titleAnimalCrossing] {
+        for titleID in [titlePokemonY, titleAnimalCrossing, titleMario3DLand] {
             try? fileManager.createDirectory(at: outRoot.appendingPathComponent("packages/\(titleID)"), withIntermediateDirectories: true)
         }
         writePlaceholder(at: outRoot.appendingPathComponent("packages/\(titlePokemonY)/GamePack.dylib"), bytes: 8 * 1024 * 1024)
         writePlaceholder(at: outRoot.appendingPathComponent("launcher-roms/\(titlePokemonY).cci"), bytes: 8 * 1024 * 1024)
         writePlaceholder(at: outRoot.appendingPathComponent("launcher-roms/\(titleAnimalCrossing).cci"), bytes: 4 * 1024 * 1024)
-        writePlaceholder(at: outRoot.appendingPathComponent("packages/\(titlePokemonY)/cover.png"), bytes: 512)
+        writeCoverPNG(titleID: titlePokemonY, base64: mockCoverPokemonBase64)
+        writeCoverPNG(titleID: titleAnimalCrossing, base64: mockCoverAnimalBase64)
+        writeCoverPNG(titleID: titleMario3DLand, base64: mockCoverMarioBase64)
+        try? fileManager.createDirectory(at: ipaRoot, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: logsRoot, withIntermediateDirectories: true)
+    }
+
+    private static func writeCoverPNG(titleID: String, base64: String) {
+        let url = URL(fileURLWithPath: coverPath(titleID: titleID))
+        guard !FileManager.default.fileExists(atPath: url.path),
+              let data = Data(base64Encoded: base64) else { return }
+        try? data.write(to: url)
     }
 
     private static func writePlaceholder(at url: URL, bytes: Int64) {
@@ -222,7 +270,8 @@ enum MockFixtures {
         return EnvironmentReport(
             generatedAt: Date(),
             repoRoot: "/Users/you/3ds2apple",
-            outDir: "/Users/you/3ds2apple/out (mock sandbox)",
+            outDir: outRoot.path + " (mock workspace)",
+            dataRoot: root.path + " (mock portable data root)",
             tools: [
                 ToolStatus(name: "Xcode", state: .ok, detail: "Xcode 26.6", hint: ""),
                 ToolStatus(name: "devicectl", state: .ok, detail: "available", hint: ""),
@@ -285,10 +334,10 @@ enum MockFixtures {
             LogEntry(date: Date().addingTimeInterval(-300), level: .info, category: "launcher", message: "3ds2apple launcher started (mock mode)"),
             LogEntry(date: Date().addingTimeInterval(-295), level: .info, category: "deploy", message: "selected 2 game(s): 0004000000055E00, 0004000000086400"),
             LogEntry(date: Date().addingTimeInterval(-280), level: .info, category: "deploy", message: "device: Kratos iPhone (iPhone 17 Pro, iOS 26.5)"),
-            LogEntry(date: Date().addingTimeInterval(-240), level: .command, category: "pack", message: "3ds2apple-pack --out out build --queued --execute --json"),
+            LogEntry(date: Date().addingTimeInterval(-240), level: .command, category: "pack", message: "3ds2apple-pack --out <data>/workspace build --queued --execute --json"),
             LogEntry(date: Date().addingTimeInterval(-200), level: .success, category: "deploy", message: "GamePack built: Frameworks/GamePack-0004000000055E00.dylib (218 MB, macho)"),
             LogEntry(date: Date().addingTimeInterval(-160), level: .command, category: "library", message: "xcodebuild -project ios/app/3ds2apple.xcodeproj -scheme 3ds2apple ... build"),
-            LogEntry(date: Date().addingTimeInterval(-140), level: .command, category: "library", message: "3ds2apple-pack pack --title-id ... --execute --base-app ... --ipa-out IPA --ipa-name 3ds2apple-library"),
+            LogEntry(date: Date().addingTimeInterval(-140), level: .command, category: "library", message: "3ds2apple-pack pack --title-id ... --execute --base-app ... --ipa-out <data>/ipa --ipa-name 3ds2apple-library"),
             LogEntry(date: Date().addingTimeInterval(-130), level: .success, category: "library", message: "embedded Frameworks/GamePack-*.dylib + GameCatalog.json (ROM-free IPA)"),
             LogEntry(date: Date().addingTimeInterval(-110), level: .success, category: "library", message: "IPA verified: 2 packs, schema-2 catalogue, no Roms/ entry"),
             LogEntry(date: Date().addingTimeInterval(-90), level: .command, category: "install", message: "xcrun devicectl device install app --device <device> <staged app>"),
@@ -318,11 +367,19 @@ enum MockFixtures {
 // MARK: - Mock pack backend
 
 final class MockPackBackend: PackBackend {
+    struct ImportCall: Equatable {
+        var path: String
+        var force: Bool
+    }
+
     let mode: LauncherRunMode = .mock
     let outRoot: URL = MockFixtures.outRoot
     let repoRoot = URL(fileURLWithPath: "/Users/you/3ds2apple", isDirectory: true)
     var builtTitles: Set<String> = [MockFixtures.titlePokemonY]
     var failingTitles: Set<String> = []
+    /// Captured "packages add" requests so the self-check can prove that a
+    /// re-import passes --force while a first import does not.
+    private(set) var importCalls: [ImportCall] = []
 
     func inspectROM(_ path: String) async throws -> DetectedROM {
         try? await Task.sleep(nanoseconds: 60_000_000)
@@ -331,20 +388,30 @@ final class MockPackBackend: PackBackend {
         if path.lowercased().contains("animal") {
             rom.titleID = MockFixtures.titleAnimalCrossing
             rom.displayName = "Animal Crossing: New Leaf"
+            rom.displayNames = ["en": "Animal Crossing: New Leaf", "zh-Hans": "动物森友会", "ja": "とびだせ どうぶつの森"]
+            rom.publisher = "Nintendo"
             rom.productCode = "CTR-P-ECJE"
         }
         return rom
     }
 
-    func importROM(_ path: String, displayName: String?, includeROM: Bool) async throws -> DetectedPackage {
+    func importROM(_ path: String, displayName: String?, includeROM: Bool, force: Bool) async throws -> DetectedPackage {
         try? await Task.sleep(nanoseconds: 60_000_000)
+        importCalls.append(ImportCall(path: path, force: force))
         let isAnimal = path.lowercased().contains("animal")
         let titleID = isAnimal ? MockFixtures.titleAnimalCrossing : MockFixtures.titlePokemonY
         MockFixtures.ensurePackageTree()
+        let fixture = MockFixtures.games().first(where: { $0.titleID == titleID })
+        let names = fixture?.displayNames ?? (isAnimal
+            ? ["en": "Animal Crossing: New Leaf", "zh-Hans": "动物森友会"]
+            : ["en": "Pokemon Y", "zh-Hans": "宝可梦 Y"])
         return DetectedPackage(
             titleID: titleID,
             displayName: displayName ?? (isAnimal ? "Animal Crossing: New Leaf" : "Pokemon Y"),
             productCode: isAnimal ? "CTR-P-ECJE" : "CTR-P-EK2A",
+            displayNames: names,
+            publisher: "Nintendo",
+            coverPath: MockFixtures.coverPath(titleID: titleID),
             aotVersion: 1,
             state: "queued",
             pack: nil,
@@ -360,6 +427,9 @@ final class MockPackBackend: PackBackend {
                 titleID: game.titleID,
                 displayName: game.displayName,
                 productCode: game.productCode,
+                displayNames: game.displayNames,
+                publisher: game.publisher,
+                coverPath: game.coverPath,
                 aotVersion: game.aotVersion,
                 state: built ? "built" : (game.phase == .failed ? "broken" : "queued"),
                 pack: built ? PackFileInfo(
@@ -394,7 +464,7 @@ final class MockPackBackend: PackBackend {
                 "[build-recomp-ios] ROM -> generated C (mock)",
                 "[build-game-pack] target: arm64-apple-ios16.0 (mock)",
                 "[build-game-pack] linking Frameworks/GamePack-" + titleID + ".dylib",
-                "[3ds2apple-pack] recorded out/packages/" + titleID + "/GameInfo.json",
+                "[3ds2apple-pack] recorded workspace/packages/" + titleID + "/GameInfo.json",
             ]
             for line in lines {
                 try? await Task.sleep(nanoseconds: 50_000_000)
@@ -487,7 +557,7 @@ final class MissingPackBackend: PackBackend {
     }
 
     func inspectROM(_ path: String) async throws -> DetectedROM { throw missing() }
-    func importROM(_ path: String, displayName: String?, includeROM: Bool) async throws -> DetectedPackage { throw missing() }
+    func importROM(_ path: String, displayName: String?, includeROM: Bool, force: Bool) async throws -> DetectedPackage { throw missing() }
     func listPackages() async throws -> [DetectedPackage] { throw missing() }
     func build(titleIDs: [String], mode: BuildMode, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage] { throw missing() }
     func verify() async throws -> [String] { throw missing() }

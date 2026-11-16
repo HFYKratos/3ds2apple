@@ -302,6 +302,176 @@ enum SelfCheckCore {
             }
         }
 
+        // 8c. ROM SMDH metadata contract (Windows launcher 0.2.4 parity): the
+        // pack CLI reports displayNames + publisher on rom inspect and
+        // displayNames + publisher + coverPath on packages add/list.
+        let smdhROMJSON = """
+        {"roms":[{"path":"/Users/you/ROM/Pokemon Y.cci","container":"ncsd","titleID":"0004000000055E00","productCode":"CTR-P-EK2A","displayName":"Pokemon Y","displayNames":{"en":"Pokemon Y","zh-Hans":"宝可梦 Y","ja":"ポケットモンスター Y"},"publisher":"Nintendo","bytes":1807118336,"contentBytes":1446201088,"titleVersion":0}],"errors":[]}
+        """
+        let smdhROMs = PackJSON.parseROMs(Data(smdhROMJSON.utf8))
+        expect("pack JSON: rom inspect parses SMDH displayNames",
+               smdhROMs.roms.first?.displayNames["zh-Hans"] == "宝可梦 Y" && smdhROMs.roms.first?.displayNames.count == 3)
+        expect("pack JSON: rom inspect parses SMDH publisher", smdhROMs.roms.first?.publisher == "Nintendo")
+
+        let smdhPackagesJSON = """
+        {"packages":[{"titleID":"0004000000055E00","displayName":"Pokemon Y","productCode":"CTR-P-EK2A","aotVersion":1,"state":"built","displayNames":{"en":"Pokemon Y","zh-Hans":"宝可梦 Y"},"publisher":"Nintendo","coverPath":"/data/workspace/packages/0004000000055E00/cover.png","pack":{"sha256":"92bab7aa","bytes":218103808,"format":"macho"},"issues":[]}],"errors":[]}
+        """
+        let smdhPackages = PackJSON.parsePackages(Data(smdhPackagesJSON.utf8))
+        expect("pack JSON: packages list parses displayNames/publisher/coverPath",
+               smdhPackages.packages.first?.displayNames["zh-Hans"] == "宝可梦 Y"
+               && smdhPackages.packages.first?.publisher == "Nintendo"
+               && (smdhPackages.packages.first?.coverPath ?? "").hasSuffix("cover.png"))
+        let legacyPackages = PackJSON.parsePackages(Data(packagesJSON.utf8))
+        expect("pack JSON: older CLI JSON without SMDH metadata still parses",
+               legacyPackages.packages.first?.displayNames.isEmpty == true
+               && legacyPackages.packages.first?.publisher == ""
+               && legacyPackages.packages.first?.coverPath == nil)
+
+        let smdhManifestJSON = """
+        {"schemaVersion":1,"titleID":"0004000000055E00","displayName":"Pokemon Y","productCode":"CTR-P-EK2A","aotVersion":1,"saveNamespace":"0004000000055E00","packFile":"GamePack.dylib","displayNames":{"en":"Pokemon Y","zh-Hans":"宝可梦 Y"},"publisher":"Nintendo","coverPath":"cover.png","rom":{"path":"/Users/you/ROM/Pokemon Y.cci","bytes":2000},"pack":{"sha256":"aa","bytes":1000,"format":"macho"}}
+        """
+        let smdhManifest = PackJSON.parseManifest(Data(smdhManifestJSON.utf8), fallbackTitleID: "fallback")
+        expect("pack JSON: GameInfo.json SMDH metadata parses",
+               smdhManifest?.displayNames["zh-Hans"] == "宝可梦 Y"
+               && smdhManifest?.publisher == "Nintendo"
+               && smdhManifest?.coverPath == "cover.png")
+        expect("pack JSON: GameInfo.json records the source ROM path", smdhManifest?.romPath == "/Users/you/ROM/Pokemon Y.cci")
+
+        // 8d. Name selection follows the app language (no editable name input).
+        let smdhNames: [String: String] = ["en": "Pokemon Y", "zh-Hans": "宝可梦 Y", "ja": "ポケットモンスター Y"]
+        expect("names: zh-Hans UI picks the Chinese SMDH title", GameNames.resolve(displayNames: smdhNames, displayName: "Pokemon Y", uiLanguageTag: "zh-Hans") == "宝可梦 Y")
+        expect("names: zh-CN resolves through zh-Hans", GameNames.resolve(displayNames: smdhNames, displayName: "Pokemon Y", uiLanguageTag: "zh-CN") == "宝可梦 Y")
+        expect("names: English UI picks the English title", GameNames.resolve(displayNames: smdhNames, displayName: "Pokemon Y", uiLanguageTag: "en") == "Pokemon Y")
+        expect("names: other languages fall back to English", GameNames.resolve(displayNames: smdhNames, displayName: "Pokemon Y", uiLanguageTag: "de-DE") == "Pokemon Y")
+        expect("names: zh-Hant falls back to English", GameNames.resolve(displayNames: smdhNames, displayName: "Pokemon Y", uiLanguageTag: "zh-Hant-TW") == "Pokemon Y")
+        expect("names: no SMDH map uses displayName", GameNames.resolve(displayNames: [:], displayName: "Default Name", uiLanguageTag: "zh-Hans") == "Default Name")
+        expect("names: only Japanese still resolves", GameNames.resolve(displayNames: ["ja": "テスト"], displayName: "Default", uiLanguageTag: "en") == "Default")
+        expect("names: publisher is trimmed", GameNames.resolvePublisher("  Nintendo  ") == "Nintendo" && GameNames.resolvePublisher(nil) == "")
+        let coversScratch = NSTemporaryDirectory() + "zl-covers-" + UUID().uuidString
+        try? FileManager.default.createDirectory(atPath: coversScratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: coversScratch) }
+        let coverPath = coversScratch + "/cover.png"
+        try? Data([0x89, 0x50, 0x4E, 0x47]).write(to: URL(fileURLWithPath: coverPath))
+        expect("covers: conventional cover.png resolves", GameNames.resolveCoverPath(packageDirectory: coversScratch, coverPath: nil) == coverPath)
+        expect("covers: relative coverPath resolves against the package", GameNames.resolveCoverPath(packageDirectory: coversScratch, coverPath: "cover.png") == coverPath)
+        expect("covers: missing cover returns nil", GameNames.resolveCoverPath(packageDirectory: coversScratch, coverPath: "missing.png") == nil)
+        expect("covers: no package/cover returns nil", GameNames.resolveCoverPath(packageDirectory: nil, coverPath: nil) == nil)
+
+        // 8e. Portable data root policy (Windows launcher 0.2.4 parity):
+        // beside the .app when writable, Application Support fallback, explicit
+        // override, temp last resort, and a one-time workspace migration.
+        let dataScratch = NSTemporaryDirectory() + "zl-data-root-" + UUID().uuidString
+        try? FileManager.default.createDirectory(atPath: dataScratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dataScratch) }
+        let bundleDir = dataScratch + "/Applications"
+        let supportDir = dataScratch + "/Application Support"
+        let portable = PortableData.resolve(
+            bundleDirectory: bundleDir,
+            applicationSupportRoot: supportDir,
+            dataRootOverride: "",
+            forceFallback: false,
+            translocated: false,
+            isWritable: { directory in directory == bundleDir + "/3ds2apple-data" }
+        )
+        expect("data root: portable folder beside the .app wins", portable.kind == .portable && portable.dataRoot == bundleDir + "/3ds2apple-data")
+        expect("data root: workspace/logs/build/ipa derive from the root",
+               portable.workspaceRoot == portable.dataRoot + "/workspace"
+               && portable.logsRoot == portable.dataRoot + "/logs"
+               && portable.ipaRoot == portable.dataRoot + "/ipa"
+               && portable.romsRoot == portable.workspaceRoot + "/launcher-roms")
+        let fallback = PortableData.resolve(
+            bundleDirectory: bundleDir,
+            applicationSupportRoot: supportDir,
+            dataRootOverride: "",
+            forceFallback: false,
+            translocated: false,
+            isWritable: { directory in directory == supportDir + "/3ds2apple" }
+        )
+        expect("data root: read-only app folder falls back to Application Support",
+               fallback.kind == .applicationSupport && fallback.dataRoot == supportDir + "/3ds2apple")
+        let forced = PortableData.resolve(
+            bundleDirectory: bundleDir,
+            applicationSupportRoot: supportDir,
+            dataRootOverride: "",
+            forceFallback: true,
+            translocated: false,
+            isWritable: { _ in true }
+        )
+        expect("data root: forced fallback skips the portable candidate", forced.kind == .applicationSupport)
+        let translocated = PortableData.resolve(
+            bundleDirectory: bundleDir,
+            applicationSupportRoot: supportDir,
+            dataRootOverride: "",
+            forceFallback: false,
+            translocated: true,
+            isWritable: { directory in directory == supportDir + "/3ds2apple" }
+        )
+        expect("data root: AppTranslocation is not treated as portable", translocated.kind == .applicationSupport)
+        let explicit = PortableData.resolve(
+            bundleDirectory: bundleDir,
+            applicationSupportRoot: supportDir,
+            dataRootOverride: dataScratch + "/explicit-data",
+            forceFallback: false,
+            translocated: false,
+            isWritable: { _ in true }
+        )
+        expect("data root: explicit override wins", explicit.kind == .explicit && explicit.dataRoot == dataScratch + "/explicit-data")
+        let temporary = PortableData.resolve(
+            bundleDirectory: bundleDir,
+            applicationSupportRoot: supportDir,
+            dataRootOverride: "",
+            forceFallback: false,
+            translocated: false,
+            isWritable: { _ in false }
+        )
+        expect("data root: temporary last resort when everything is read-only", temporary.kind == .tempFallback)
+        expect("data root: writable probe creates a directory", PortableData.probeWritable(dataScratch + "/probe"))
+
+        // One-time migration adopts the old <checkout>/out workspace, never
+        // touches the legacy tree and skips regenerable build scratch.
+        let legacyRoot = dataScratch + "/checkout/out"
+        let newWorkspace = dataScratch + "/portable/workspace"
+        try? FileManager.default.createDirectory(atPath: legacyRoot + "/packages/0004000000055E00", withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(atPath: legacyRoot + "/launcher-roms", withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(atPath: legacyRoot + "/work/scratch", withIntermediateDirectories: true)
+        try? Data("{\"titleID\":\"0004000000055E00\"}".utf8).write(to: URL(fileURLWithPath: legacyRoot + "/packages/0004000000055E00/GameInfo.json"))
+        try? Data([0x89, 0x50, 0x4E, 0x47]).write(to: URL(fileURLWithPath: legacyRoot + "/packages/0004000000055E00/cover.png"))
+        try? Data("rom copy".utf8).write(to: URL(fileURLWithPath: legacyRoot + "/launcher-roms/0004000000055E00.cci"))
+        try? Data("scratch".utf8).write(to: URL(fileURLWithPath: legacyRoot + "/work/scratch/generated.c"))
+        let migration = PortableData.migrateWorkspaceIfNeeded(workspaceRoot: newWorkspace, legacyWorkspaceRoot: legacyRoot)
+        expect("migration: adopts the previous workspace files", migration.migrated && migration.filesCopied == 3, String(migration.filesCopied) + " file(s)")
+        expect("migration: build scratch is not adopted", !FileManager.default.fileExists(atPath: newWorkspace + "/work/scratch/generated.c"))
+        expect("migration: package metadata and SMDH cover are adopted",
+               FileManager.default.fileExists(atPath: newWorkspace + "/packages/0004000000055E00/GameInfo.json")
+               && FileManager.default.fileExists(atPath: newWorkspace + "/packages/0004000000055E00/cover.png"))
+        expect("migration: legacy tree is left untouched", FileManager.default.fileExists(atPath: legacyRoot + "/packages/0004000000055E00/GameInfo.json"))
+        expect("migration: marker records what was adopted",
+               FileManager.default.fileExists(atPath: newWorkspace + "/migration.json")
+               && migration.markerPath == newWorkspace + "/migration.json")
+        let secondMigration = PortableData.migrateWorkspaceIfNeeded(workspaceRoot: newWorkspace, legacyWorkspaceRoot: legacyRoot)
+        expect("migration: runs once (an adopted workspace is not overwritten)", !secondMigration.migrated)
+        let legacyLog = dataScratch + "/Application Support/3ds2apple-launcher"
+        try? FileManager.default.createDirectory(atPath: legacyLog, withIntermediateDirectories: true)
+        try? Data("old log line\n".utf8).write(to: URL(fileURLWithPath: legacyLog + "/launcher.log"))
+        let adoptedLogs = PortableData.migrateLegacyLogs(logsRoot: dataScratch + "/portable/logs", legacyLogDirectories: [legacyLog])
+        expect("migration: the previous launcher log is adopted once",
+               adoptedLogs == 1
+               && FileManager.default.fileExists(atPath: dataScratch + "/portable/logs/launcher.log")
+               && PortableData.migrateLegacyLogs(logsRoot: dataScratch + "/portable/logs", legacyLogDirectories: [legacyLog]) == 0)
+
+        // 8f. Hardware line (Windows launcher 0.2.4 parity): 3dsrecomp derives
+        // its worker count from the logical CPUs, so the launcher reports it.
+        let hardware = HardwareProfile.detect()
+        expect("hardware: detects logical/physical cores and RAM",
+               hardware.logicalCores >= 1 && hardware.physicalCores >= 1
+               && hardware.physicalCores <= hardware.logicalCores
+               && hardware.totalMemoryBytes > 0)
+        expect("hardware: 3dsrecomp auto-parallelizes one job per logical core", hardware.compileJobs == hardware.logicalCores)
+        expect("hardware: describe mentions cores, RAM and jobs",
+               hardware.describe.contains("logical") && hardware.describe.contains("GB RAM") && hardware.describe.contains("jobs"))
+        let mockedHardware = HardwareProfile(logicalCores: 8, physicalCores: 8, totalMemoryBytes: 12 * 1_073_741_824)
+        expect("hardware: 12 GB formats as one-decimal GiB", mockedHardware.totalMemoryGBText == "12" && mockedHardware.compileJobs == 8)
+
         // 9. Team ID detection from Xcode's local state (never typed by the user)
         let profilePlist = """
         <key>TeamIdentifier</key>

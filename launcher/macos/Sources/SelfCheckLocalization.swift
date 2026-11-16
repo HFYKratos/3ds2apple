@@ -47,6 +47,23 @@ enum SelfCheckLocalization {
         expect("i18n: Chinese table is translated (not copied)", translated >= 100, "identical fields: " + String(englishFields.count - translated))
         let formatSpecifiers = englishFields.filter { $0.1.contains("%") }.count
         expect("i18n: format strings keep their placeholders", formatSpecifiers >= 8, String(formatSpecifiers))
+        expect("i18n: publisher line keeps the publisher",
+               english.publisher("Nintendo").contains("Nintendo") && chinese.publisher("Nintendo").contains("Nintendo"))
+        let mockedHardware = HardwareProfile(logicalCores: 8, physicalCores: 8, totalMemoryBytes: 12 * 1_073_741_824)
+        expect("i18n: hardware line keeps cores, RAM and jobs",
+               english.hardwareLine(mockedHardware).contains("8")
+               && english.hardwareLine(mockedHardware).contains("12")
+               && chinese.hardwareLine(mockedHardware).contains("8"))
+        expect("i18n: compile hardware wording is localized",
+               english.deployCompileHardware(mockedHardware) != chinese.deployCompileHardware(mockedHardware))
+        let dataKinds: [DataRootKind] = [.portable, .applicationSupport, .explicit, .tempFallback]
+        expect("i18n: every data-root kind is localized",
+               dataKinds.allSatisfy {
+                   !english.dataRootKind($0).isEmpty && !chinese.dataRootKind($0).isEmpty
+                       && english.dataRootKind($0) != chinese.dataRootKind($0)
+               })
+        expect("i18n: migration summary keeps the file count",
+               english.dataRootMigration(3).contains("3") && chinese.dataRootMigration(3).contains("3"))
 
         // 20. The v2 two-section terminology is reused.
         expect("i18n: zh uses 游戏库 for Library", chinese.navLibrary == "游戏库")

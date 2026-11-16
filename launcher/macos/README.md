@@ -1,8 +1,11 @@
 # 3ds2apple macOS launcher
 
-A SwiftUI macOS app for the AOT-first product flow (v2: Library -> Deploy):
+A SwiftUI macOS app for the AOT-first product flow (v2: Library -> Deploy),
+aligned with the Windows launcher 0.2.4:
 
-    Library: import your own decrypted .3ds/.cci, list/rename/remove games
+    Library: import your own decrypted .3ds/.cci; cards show the ROM's own SMDH
+             cover.png icon, the localized title for the app language and the
+             publisher (read-only, no name input), and games can be removed
       -> Deploy: select one or several games, press one button:
          batch compile one GamePack.dylib per game (local AOT)
       -> compose ONE ROM-free library IPA: shell + Frameworks/GamePack-<TITLEID>.dylib
@@ -33,13 +36,19 @@ after the automatic startup probe passes, red **未完成准备 / Not ready** wh
 local tool or the Apple ID/Xcode signing is missing (raw details live in the
 tooltip and the log — there is no manual "check" button).
 
-- **Library** - game cards with placeholder artwork, title/Title ID, phase badge,
-  ROM/GamePack sizes and one staged-data line; rename/remove only. Import is a
-  single **导入 / Import** button that opens the file picker and imports the
+- **Library** - game cards with the ROM's own SMDH icon (packages/<TITLEID>/
+  cover.png), the localized SMDH title for the app language, publisher,
+  title/Title ID, phase badge, ROM/GamePack sizes and one staged-data line;
+  remove only (no editable name input, no build/install/push buttons). Import is
+  a single **导入 / Import** button that opens the file picker and imports the
   chosen decrypted .3ds/.cci in one action (no path field, name override or
-  explanatory card).
+  explanatory card). A game whose ROM has no SMDH icon keeps the initials
+  placeholder. Importing a ROM that is already in the library re-imports its
+  package with ``--force`` (SMDH cover/metadata self-heal, built GamePack kept).
 - **Deploy** - device status, the checkbox selection list (one or several games),
-  the single **一键部署 / Deploy selected** button, then the ordered step report
+  the single **一键部署 / Deploy selected** button, the detected compile-hardware
+  line (logical cores · RAM · 3dsrecomp's automatic full-core parallelism), then
+  the ordered step report
   (check device & Apple ID -> compile -> compose IPA -> verify IPA -> sign &
   install -> push game data -> Done) with inline logs; failures leave a Retry
   button; success shows an explicit Done state.
@@ -68,7 +77,7 @@ About panel. Regenerate it with `bash scripts/make-app-icon.sh`.
 Release builds are universal (arm64 + x86_64). Headless modes used on the build VM:
 
     BIN=build/Build/Products/Release/3ds2apple-launcher.app/Contents/MacOS/3ds2apple-launcher
-    "$BIN" --selfcheck                                    # 151 logic/flow/i18n/shell-runtime checks, exit 0/1
+    "$BIN" --selfcheck                                    # 207 logic/flow/i18n/shell-runtime checks, exit 0/1
     "$BIN" --screenshot-dir screenshots --mock --lang all  # offscreen non-game UI PNGs
 
 `scripts/vm-build.sh` does the whole Release build, the self-checks, the
@@ -77,18 +86,35 @@ Mac; it needs no ROM, phone, Apple ID or network. The ZIP is written to
 **out/launchers/3ds2apple-launcher-<version>-macos-app.zip** (gitignored) and
 contains only the .app. Regenerate the icon with `bash scripts/make-app-icon.sh`.
 
-## Repository detection
+## Portable data folder (0.2.4)
 
-The app finds the checkout in this order:
+Every writable path comes from one portable data root, the same policy as the
+Windows launcher 0.2.4:
 
-1. `THREEDS2APPLE_ROOT` environment variable,
-2. walking up from the executable (covers a build inside the repo),
-3. `~/3ds2apple`, `~/Projects/3ds2apple`, `~/repos/3ds2apple`.
+1. `<folder containing the .app>/3ds2apple-data/` when that folder is writable
+   (portable, preferred; a launcher copied to a USB stick keeps its data next to
+   it),
+2. `~/Library/Application Support/3ds2apple/` when the app folder is read-only,
+   or when macOS runs the app from a read-only AppTranslocation path,
+3. a temporary folder only when both are unusable.
+   `THREEDS2APPLE_DATA_DIR` overrides the root for QA (the self-check uses it).
 
-The output tree defaults to `<checkout>/out` (gitignored). Tool binaries
-(3ds2apple-pack, devpush, xcodegen) are auto-detected in the app bundle, the
-checkout and PATH. Settings persist in `UserDefaults`; nothing is written outside
-`out/`, `build/` and the system temporary/log directories.
+Layout under the root: `workspace/` (pack CLI output tree + `launcher-roms/`
+game-data copies for the device push), `logs/` (launcher.log + exported logs),
+`build/` (signed shell DerivedData + IPA inspection scratch), `staging/`
+(GameInfo staging) and `ipa/` (composed library IPAs). On the first launch with
+the new root the previous `<checkout>/out` workspace and the old launcher log are
+adopted once (hardlink first, then a size-limited copy, then a `migration.json`
+marker; the legacy tree is left untouched). Imported games are restored from the
+workspace on every launch, so a restart no longer empties the library.
+
+The checkout is still auto-detected for the read-only tool inputs in this order:
+`THREEDS2APPLE_ROOT`, walking up from the executable, then `~/3ds2apple`,
+`~/Projects/3ds2apple`, `~/repos/3ds2apple`. Tool binaries (3ds2apple-pack,
+devpush, xcodegen) are auto-detected in the app bundle, the checkout and PATH.
+Settings persist in `UserDefaults`; the launcher writes only inside the portable
+data root (and regenerable build products in the checkout when a developer runs
+it from a source tree).
 
 ## Layout
 
@@ -96,10 +122,12 @@ checkout and PATH. Settings persist in `UserDefaults`; nothing is written outsid
       LauncherMain.swift       entry point (app / --selfcheck / --screenshot-dir)
       AppModel.swift           state machine: library + one-click Deploy chain
       Models.swift             value types (game, deploy report, IPA inspection, push plan, ...)
-      LauncherSettings.swift   small persisted state (language, installed library + bundle ID)
+      PortableData.swift       portable data root policy + one-time <checkout>/out migration
+      Hardware.swift           logical/physical cores + RAM probe for the compile line
+      LauncherSettings.swift   small persisted state (language, portable root, installed library + bundle ID)
       CommandRunner.swift      async Process wrapper + mock runner
       Toolchain.swift          auto-detected tools + readiness probe + Team ID detection
-      PackBackend.swift        typed 3ds2apple-pack CLI wrapper + JSON parsing
+      PackBackend.swift        typed 3ds2apple-pack CLI wrapper + JSON parsing (incl. SMDH displayNames/publisher/coverPath)
       GameInfoWriter.swift     launcher -> shell GameInfo.json (push layout)
       PushPlanner.swift        Documents/Games/TITLEID plan, GameInfo.json last
       InstallBackend.swift     signed shell build, IPA inspection, codesign + devicectl, Apple error mapper
@@ -117,33 +145,44 @@ checkout and PATH. Settings persist in `UserDefaults`; nothing is written outsid
 
 ## Evidence / QA
 
-The task-35 MoltenVK revision on the macOS VM (Xcode 26.6, headless) produced:
+The Windows-0.2.4-sync revision (launcher 0.2.4, **build 7** with the
+task-8 forced re-import self-heal) on the macOS VM (Xcode 26.6, headless),
+2026-11-16:
 
 - xcodebuild: BUILD SUCCEEDED (Release), 0 errors; universal binary
-  (x86_64 + arm64, 6,720,464-byte executable), version 0.2.3 build 5.
-- self-check: 151/151 checks passed (exit 0): the task-34 142 checks plus 9
-  shell-runtime checks (verified MoltenVK source resolves and is the pinned
-  arm64 MoltenVK 1.4.2 dylib, the pinned template carries it, copy into the
-  shell app passes verification, and a shell without the framework /
-  MetalHudEnabled / file sharing is refused; the composed-IPA inspection also
-  refuses a shell without the runtime). A real xcodebuild-built unsigned shell
-  .app got the framework copied in and verified, proving the pre-signing step.
+  (x86_64 + arm64, 7,120,032-byte executable), bundle
+  com.kratos.3ds2apple.launcher, version 0.2.4 build 7.
+- self-check: **207/207 checks passed** (exit 0), including the new checks for
+  portable data root resolution/fallback/migration, SMDH displayNames/publisher/
+  coverPath parsing, localized name selection, the hardware line and the
+  re-import `--force` path (first import never forces; re-importing an existing
+  game forces the pack CLI so an old SMDH cover is re-extracted in place and the
+  built GamePack is kept). The packaged app, freshly extracted from the ZIP, also
+  passed 207/207.
 - screenshots: 18 non-game PNGs, English + Simplified Chinese, dark + light:
-  Library (populated, empty, red not-ready), Deploy selection/running/Done/failed,
-  minimal Settings. Import is a single button, so there is no import-sheet shot.
-- app icon: valid multi-size AppIcon.icns; en/zh-Hans InfoPlist.strings carry the
-  localized app name.
-- artifact: out/launchers/3ds2apple-launcher-0.2.3-macos-app.zip
-  (5,350,734 bytes, sha256
-  6ffcf9c655342370f1237885115befc00666072af0617c0d6f228f32d5211c3a), one
-  .app only (16 entries, 13,540,061 bytes uncompressed) including
-  Contents/Resources/MoltenVK.framework (4,822,128 bytes, sha256 6cd58884…);
-  a fresh extraction ran the 151 checks and reported x86_64 + arm64,
-  version 0.2.3 build 5 on the VM. The packaged launcher is self-contained for
-  device deploys (the user's Mac needs no shell template).
-- embedded framework source: pinned out/shell/3ds2apple-shell.ipa 0.2.2 build
-  10 (5,477,984 bytes, sha256 d05af5a7…); scripts/vm-build.sh refuses to package
-  if the template or its MoltenVK binary is missing or not the pinned bytes.
+  Library (SMDH icons, localized names, publisher; populated/empty/red light),
+  Deploy selection (hardware line) / running / Done / failed, minimal Settings
+  (Version 0.2.4 (6), data folder, compile hardware).
+- portable data root: the headless run logs
+  `data root: /tmp/zl-launcher-data-vm [explicit]`; the live app resolves
+  `<app folder>/3ds2apple-data` first and falls back to Application Support.
+  The migration self-check adopts a synthetic old `<checkout>/out` tree without
+  touching it (packages + cover.png adopted, `work/` scratch skipped, marker
+  written once).
+- shell template pin updated to the current ROM-free shell
+  `out/shell/3ds2apple-shell.ipa` 0.2.3 build 11 (5,487,675 bytes, sha256
+  831357db…); the embedded Frameworks/MoltenVK.framework is still the pinned
+  4,822,128-byte MoltenVK 1.4.2 (sha256 6cd58884…).
+- artifact: out/launchers/3ds2apple-launcher-0.2.4-macos-app.zip
+  (5,495,796 bytes, sha256
+  8c34398f7a25709598626769adc56d146ea89ff9f3718313c7c0d796f719d28b), one
+  .app only (16 entries, 13,939,629 bytes uncompressed) including
+  Contents/Resources/MoltenVK.framework. The packaged launcher is self-contained
+  for device deploys (the user's Mac needs no shell template).
+- real iPhone acceptance is NOT done: the shared VM has no attached iPhone and no
+  Apple ID signing assets. Signing/install/push need the player's own Xcode
+  account and a USB device; the manual checklist is in
+  [docs/macos-launcher.md](../../docs/macos-launcher.md) section 7.
 
 Full architecture, contracts, build commands and the manual device-test
 checklist are in [docs/macos-launcher.md](../../docs/macos-launcher.md).

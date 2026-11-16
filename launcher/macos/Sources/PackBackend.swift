@@ -26,7 +26,10 @@ protocol PackBackend: AnyObject {
     var repoRoot: URL { get }
 
     func inspectROM(_ path: String) async throws -> DetectedROM
-    func importROM(_ path: String, displayName: String?, includeROM: Bool) async throws -> DetectedPackage
+    /// Import one ROM. "force" re-imports an already existing package: the CLI
+    /// refreshes the ROM/SMDH metadata (and re-extracts cover.png) while keeping
+    /// an already built GamePack. First imports must not force.
+    func importROM(_ path: String, displayName: String?, includeROM: Bool, force: Bool) async throws -> DetectedPackage
     func listPackages() async throws -> [DetectedPackage]
     func build(titleIDs: [String], mode: BuildMode, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage]
     func verify() async throws -> [String]
@@ -59,6 +62,8 @@ enum PackJSON {
                 path: item["path"] as? String ?? "",
                 titleID: item["titleID"] as? String ?? "",
                 displayName: item["displayName"] as? String ?? "",
+                displayNames: stringMap(item["displayNames"]),
+                publisher: item["publisher"] as? String ?? "",
                 productCode: item["productCode"] as? String ?? "",
                 container: item["container"] as? String ?? "unknown",
                 bytes: int64(item["bytes"]),
@@ -86,6 +91,9 @@ enum PackJSON {
                 titleID: item["titleID"] as? String ?? "",
                 displayName: item["displayName"] as? String ?? "",
                 productCode: item["productCode"] as? String ?? "",
+                displayNames: stringMap(item["displayNames"]),
+                publisher: item["publisher"] as? String ?? "",
+                coverPath: item["coverPath"] as? String,
                 aotVersion: item["aotVersion"] as? Int ?? 1,
                 state: item["state"] as? String ?? "queued",
                 pack: pack,
@@ -114,6 +122,7 @@ enum PackJSON {
         }
         if let bytes = root["romBytes"] { romBytes = int64(bytes) }
         if let sha = root["romSha256"] as? String { romSha = sha }
+        let romPath = (root["rom"] as? [String: Any])?["path"] as? String
         return PackageManifest(
             schemaVersion: root["schemaVersion"] as? Int ?? 1,
             titleID: root["titleID"] as? String ?? fallbackTitleID,
@@ -127,8 +136,24 @@ enum PackJSON {
             packFormat: packFormat,
             romFile: root["romFile"] as? String,
             romSha256: romSha,
-            romBytes: romBytes
+            romBytes: romBytes,
+            displayNames: stringMap(root["displayNames"]),
+            publisher: root["publisher"] as? String ?? "",
+            coverPath: root["coverPath"] as? String,
+            romPath: romPath
         )
+    }
+
+    /// "displayNames" object -> [language: name]; missing/empty maps to [:].
+    static func stringMap(_ value: Any?) -> [String: String] {
+        guard let object = value as? [String: Any] else { return [:] }
+        var result: [String: String] = [:]
+        for (key, raw) in object {
+            if let text = raw as? String, !text.isEmpty {
+                result[key] = text
+            }
+        }
+        return result
     }
 
     static func int64(_ value: Any?) -> Int64 {
@@ -169,12 +194,13 @@ final class PackCLI: PackBackend {
         )
     }
 
-    func importROM(_ path: String, displayName: String?, includeROM: Bool) async throws -> DetectedPackage {
+    func importROM(_ path: String, displayName: String?, includeROM: Bool, force: Bool) async throws -> DetectedPackage {
         var arguments = ["packages", "add", "--roms", path, "--json"]
         if let displayName, !displayName.isEmpty {
             arguments.append(contentsOf: ["--display-name", displayName])
         }
         if includeROM { arguments.append("--include-rom") }
+        if force { arguments.append("--force") }
         let result = try await run(arguments)
         let parsed = PackJSON.parsePackages(Data(result.stdout.utf8))
         guard let package = parsed.packages.first else {

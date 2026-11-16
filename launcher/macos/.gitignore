@@ -5,6 +5,9 @@ Support/Info.plist
 DerivedData/
 .probe/
 screenshots-local/
-# Local runtime state: mock device containers and exported logs never go to git.
+# Local runtime state: mock device containers, exported logs and the portable
+# data folder (created beside the .app when it runs from the checkout) never go
+# to git.
 mock-device/
+3ds2apple-data/
 *.log

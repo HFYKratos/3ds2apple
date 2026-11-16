@@ -262,11 +262,16 @@ final class XcodeInstallBackend: InstallBackend {
     let repoRoot: URL
     let paths: ToolchainPaths
     let mode: LauncherRunMode = .live
+    /// Launcher-owned build scratch (<portable data root>/build): the signed
+    /// shell DerivedData and the IPA inspection unzip live here, not in the
+    /// checkout (Windows 0.2.4 portable-data parity).
+    let workRoot: URL
 
-    init(runner: CommandRunning, repoRoot: URL, paths: ToolchainPaths) {
+    init(runner: CommandRunning, repoRoot: URL, paths: ToolchainPaths, buildRoot: URL? = nil) {
         self.runner = runner
         self.repoRoot = repoRoot
         self.paths = paths
+        self.workRoot = buildRoot ?? repoRoot.appendingPathComponent("build", isDirectory: true)
     }
 
     var displayName: String { "Xcode + devicectl" }
@@ -379,7 +384,7 @@ final class XcodeInstallBackend: InstallBackend {
             throw LauncherFailure(code: "xcodegen_failed", message: "Could not generate the shell Xcode project.", hint: "Check ios/app/project.yml and the xcodegen install.", detail: generate.combined, exitCode: generate.exitCode)
         }
 
-        let derived = repoRoot.appendingPathComponent("build/launcher-shell")
+        let derived = workRoot.appendingPathComponent("launcher-shell")
         let stageName = "Building signed shell app"
         onProgress(InstallProgress(stage: stageName, fraction: 0.12, line: "xcodebuild build (this can take a few minutes)"))
         var arguments = [
@@ -668,8 +673,7 @@ final class XcodeInstallBackend: InstallBackend {
     }
 
     private func unpackIPA(_ ipaPath: String) async throws -> String {
-        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("zl-library-" + UUID().uuidString)
+        let directory = workRoot.appendingPathComponent("ipa-inspect-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let result = try await runner.run(CommandSpec(
             executable: "/usr/bin/unzip",

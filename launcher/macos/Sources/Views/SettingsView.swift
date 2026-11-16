@@ -261,6 +261,19 @@ struct SettingsSheetView: View {
                     Text(strings.aboutVersion(LauncherInfo.version, LauncherInfo.build))
                         .font(LauncherTheme.mono(10.5))
                         .foregroundStyle(LauncherTheme.mutedText)
+                    KeyValueRow(
+                        key: strings.dataRootLabel,
+                        value: model.settings.dataRootPath + " (" + strings.dataRootKind(model.settings.dataRoot.kind) + ")",
+                        mono: true
+                    )
+                    if let migration = model.settings.migrationSummary {
+                        Text(migration)
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(LauncherTheme.mutedText)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    KeyValueRow(key: strings.hardwareLabel, value: strings.hardwareLine(model.hardware), mono: true)
                     Text(strings.aboutBody(LauncherInfo.version))
                         .font(.system(size: 10.5))
                         .foregroundStyle(LauncherTheme.mutedText)

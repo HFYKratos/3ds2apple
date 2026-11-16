@@ -270,6 +270,7 @@ struct ToolchainProbe {
             generatedAt: Date(),
             repoRoot: paths.repoRoot,
             outDir: settings.outRootURL.path,
+            dataRoot: settings.dataRootPath,
             tools: tools,
             apple: apple,
             devpushCapabilities: capabilities,

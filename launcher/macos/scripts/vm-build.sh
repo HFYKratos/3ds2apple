@@ -16,14 +16,18 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 # Point the headless self-check at this build tree (checkout detection) so the
 # MoltenVK/template assertions inspect the right out/shell template.
 export THREEDS2APPLE_ROOT="$ROOT"
+# Deterministic portable data root for the headless modes on the VM; the live
+# app resolves its own root beside the .app (see Sources/PortableData.swift).
+DATA_ROOT="${THREEDS2APPLE_DATA_DIR:-/tmp/zl-launcher-data-vm}"
+export THREEDS2APPLE_DATA_DIR="$DATA_ROOT"
 
 export PATH=/usr/local/bin:$PATH
 CONFIG="${CONFIG:-Release}"
 LOG=/tmp/zl-launcher-build.log
 VERSION="$(sed -n 's/^        MARKETING_VERSION: "\(.*\)"/\1/p' project.yml | head -1)"
-[ -n "$VERSION" ] || VERSION="0.2.3"
+[ -n "$VERSION" ] || VERSION="0.2.4"
 BUILD_NUMBER="$(sed -n 's/^        CURRENT_PROJECT_VERSION: "\(.*\)"/\1/p' project.yml | head -1)"
-[ -n "$BUILD_NUMBER" ] || BUILD_NUMBER="5"
+[ -n "$BUILD_NUMBER" ] || BUILD_NUMBER="7"
 OUT_DIR="$ROOT/out/launchers"
 PACKAGE_NAME="3ds2apple-launcher-${VERSION}-macos-app"
 STATUS=0
@@ -57,7 +61,14 @@ echo "app: $APP"
 echo "binary: $(ls -l "$BIN" | awk '{print $5}') bytes"
 echo "archs: $(lipo -archs "$BIN" 2>/dev/null || file "$BIN")"
 echo "bundle id: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist" 2>/dev/null || echo unknown)"
-echo "version: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist" 2>/dev/null) build $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist" 2>/dev/null)"
+BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist" 2>/dev/null)"
+BUNDLE_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist" 2>/dev/null)"
+echo "version: $BUNDLE_VERSION build $BUNDLE_BUILD"
+if [ "$BUNDLE_VERSION" != "$VERSION" ] || [ "$BUNDLE_BUILD" != "$BUILD_NUMBER" ]; then
+  echo "VERSION MISMATCH: bundle $BUNDLE_VERSION/$BUNDLE_BUILD vs project.yml $VERSION/$BUILD_NUMBER"
+  STATUS=1
+fi
+echo "headless data root: $DATA_ROOT"
 
 echo "== embed MoltenVK.framework (hardware renderer + system Metal HUD) =="
 TEMPLATE="$ROOT/out/shell/3ds2apple-shell.ipa"
@@ -183,6 +194,8 @@ if [ -d "$VERIFY_APP" ]; then
   echo "packaged app: $(stat -f%z "$OUT_DIR/$PACKAGE_NAME.zip") bytes zip, archs $VERIFY_ARCHS, version $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$VERIFY_APP/Contents/Info.plist" 2>/dev/null) build $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$VERIFY_APP/Contents/Info.plist" 2>/dev/null)"
 fi
 
+echo "data root (headless): $DATA_ROOT"
+echo "version: $VERSION build $BUILD_NUMBER"
 echo "== vm-build done (status $STATUS) =="
 echo "zip: $OUT_DIR/$PACKAGE_NAME.zip"
 echo "selfcheck: $SELFCHECK_RESULT"

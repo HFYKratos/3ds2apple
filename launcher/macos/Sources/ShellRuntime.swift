@@ -20,13 +20,14 @@
 //    2. <checkout>/build/third_party/MoltenVK.framework (the task-32 build
 //       input; also the xcframework path from docs/build.md);
 //    3. <checkout>/out/shell/3ds2apple-shell.ipa - the pinned ROM-free shell
-//       template; Payload/*.app/Frameworks/MoltenVK.framework is extracted
-//       read-only to a system temporary directory.
+//       template (0.2.3 build 11); Payload/*.app/Frameworks/MoltenVK.framework is
+//       extracted read-only to a system temporary directory.
 //
 //  The binary is pinned to MoltenVK 1.4.2 ios-arm64 (the one shipped in
-//  out/shell/3ds2apple-shell.ipa 0.2.2 build 10): 4,822,128 bytes, SHA-256
-//  6cd58884... and a Mach-O arm64 dynamic library. Anything else is refused, so
-//  a deploy can never silently end up on the software renderer.
+//  out/shell/3ds2apple-shell.ipa 0.2.3 build 11): 4,822,128 bytes, SHA-256
+//  6cd58884... and a Mach-O arm64 dynamic library. The shell template itself is
+//  pinned by size+SHA-256 too. Anything else is refused, so a deploy can never
+//  silently end up on the software renderer.
 //
 
 import Foundation
@@ -45,10 +46,11 @@ enum ShellRuntime {
     static let expectedBytes: Int64 = 4_822_128
     static let expectedSHA256 = "6cd5888490d08b36356d04c50c05e2eda5b9bcb3d0338ece693a28987de96aff"
 
-    /// Pinned ROM-free shell template that carries the verified framework.
+    /// Pinned ROM-free shell template that carries the verified framework
+    /// (shell 0.2.3 build 11, Metal HUD + Documents file sharing enabled).
     static let pinnedTemplateRelativePath = "out/shell/3ds2apple-shell.ipa"
-    static let pinnedTemplateBytes: Int64 = 5_477_984
-    static let pinnedTemplateSHA256 = "d05af5a74570f24f5235378f3b2e46a3ecbbdff5a0dce6f8c504d08d8506a5aa"
+    static let pinnedTemplateBytes: Int64 = 5_487_675
+    static let pinnedTemplateSHA256 = "831357dbfeffa81f92fbde0eab8c2962d36e99c924d08f535aa5b60557cfba21"
 
     /// Info.plist keys the shell must keep: the Metal HUD build flag and the
     /// Documents/Games file sharing the launcher pushes game data into.

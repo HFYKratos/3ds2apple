@@ -703,39 +703,68 @@ struct AppIconBadge: View {
     }
 }
 
-/// Placeholder artwork: initials on the accent gradient. The launcher never ships
-/// cover art or game pixels, so cards stay text/placeholder only.
+/// Game artwork: the ROM's own SMDH icon extracted by the pack CLI as
+/// packages/<TITLEID>/cover.png (Windows launcher 0.2.4 parity). A game whose ROM
+/// has no SMDH icon falls back to initials on the accent gradient. The launcher
+/// itself never ships cover art; the image is the user's own ROM metadata and
+/// stays in the local workspace (never in git, never in the signed IPA).
 struct GameArtwork: View {
     let game: GameEntry
+    /// UI language used for the initials fallback (and to keep the artwork in
+    /// sync with the card title).
+    var language: ResolvedLanguage = .english
     var size: CGFloat = 50
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(
+        Group {
+            if let image = coverImage {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                ZStack {
                     LinearGradient(
                         colors: [LauncherTheme.accentDeep.opacity(0.92), LauncherTheme.accent.opacity(0.68)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
-                )
-            Text(initials)
-                .font(LauncherTheme.rounded(size * 0.30, weight: .bold))
-                .foregroundStyle(Color.white.opacity(0.92))
+                    Text(initials)
+                        .font(LauncherTheme.rounded(size * 0.30, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                }
+            }
         }
         .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.white.opacity(0.16), lineWidth: 1)
         )
     }
 
+    /// Loaded lazily from the package's SMDH cover.png; nil keeps the placeholder.
+    private var coverImage: NSImage? {
+        guard let path = game.coverPath, !path.isEmpty,
+              FileManager.default.fileExists(atPath: path) else { return nil }
+        guard let image = NSImage(contentsOfFile: path), image.size.width > 0 else { return nil }
+        return image
+    }
+
+    private var displayName: String {
+        GameNames.resolve(
+            displayNames: game.displayNames,
+            displayName: game.displayName,
+            uiLanguageTag: language.localeIdentifier
+        )
+    }
+
     private var initials: String {
-        let words = game.displayName.split(separator: " ").filter { !$0.isEmpty }
+        let words = displayName.split(separator: " ").filter { !$0.isEmpty }
         if words.count >= 2 {
             return String(words[0].prefix(1)) + String(words[1].prefix(1))
         }
-        return String(game.displayName.prefix(2)).uppercased()
+        return String(displayName.prefix(2)).uppercased()
     }
 }
 

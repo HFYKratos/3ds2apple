@@ -4,7 +4,8 @@
 //
 //  The two top-level sections from docs/launcher-flow-v2.md:
 //
-//    Library  import/add/list/remove/rename only; no build/install/push buttons.
+//    Library  import/add/list/remove only; SMDH name/publisher/cover are
+//             read-only (no name input); no build/install/push buttons.
 //    Deploy   select one or several library games -> one-click batch deploy:
 //             compile -> compose one ROM-free IPA -> verify -> install -> push
 //             -> verify -> Done. Per-step state and logs live on this page.
@@ -103,25 +104,39 @@ private struct GameCard: View {
     @ObservedObject var settings: LauncherSettings
     let strings: LauncherStrings
 
-    @State private var showingRename = false
-    @State private var renameText = ""
     @State private var showingRemove = false
 
     private var isInLibrary: Bool {
         model.isInInstalledLibrary(game.titleID)
     }
 
+    /// The ROM's own SMDH name for the current UI language. There is no editable
+    /// name input any more: the pack CLI is the only source of game names.
+    private var localizedName: String {
+        GameNames.resolve(
+            displayNames: game.displayNames,
+            displayName: game.displayName,
+            uiLanguageTag: strings.language.localeIdentifier
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
-                GameArtwork(game: game, size: 50)
+                GameArtwork(game: game, language: strings.language, size: 50)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(game.displayName)
+                    Text(localizedName)
                         .font(LauncherTheme.rounded(14, weight: .semibold))
                         .lineLimit(1)
                     Text(game.productCode.isEmpty ? game.titleID : game.productCode)
                         .font(LauncherTheme.mono(10.5, weight: .medium))
                         .foregroundStyle(LauncherTheme.accentDeep)
+                    if !game.publisher.isEmpty {
+                        Text(strings.publisher(game.publisher))
+                            .font(.system(size: 10))
+                            .foregroundStyle(LauncherTheme.mutedText)
+                            .lineLimit(1)
+                    }
                     HStack(spacing: 6) {
                         GamePhaseBadge(phase: game.phase, strings: strings)
                         if isInLibrary {
@@ -160,14 +175,6 @@ private struct GameCard: View {
                 .disabled(model.isBusy)
                 Spacer(minLength: 0)
                 Button {
-                    renameText = game.displayName
-                    showingRename = true
-                } label: {
-                    Text(strings.rename)
-                }
-                .buttonStyle(SecondaryButtonStyle())
-                .disabled(model.isBusy)
-                Button {
                     showingRemove = true
                 } label: {
                     Text(strings.remove)
@@ -177,15 +184,6 @@ private struct GameCard: View {
             }
         }
         .launcherCard()
-        .alert(strings.renameTitle, isPresented: $showingRename) {
-            TextField(strings.fieldDisplayName, text: $renameText)
-            Button(strings.cancel, role: .cancel) {}
-            Button(strings.renameSave) {
-                model.renameGame(titleID: game.titleID, newName: renameText)
-            }
-        } message: {
-            Text(game.titleID)
-        }
         .alert(strings.removeConfirmTitle, isPresented: $showingRemove) {
             Button(strings.cancel, role: .cancel) {}
             Button(strings.removeConfirmAction, role: .destructive) {
@@ -327,6 +325,17 @@ struct DeployScreen: View {
                 .disabled(model.isBusy || model.selectedForDeploy.isEmpty)
             }
             .padding(.top, 4)
+            HStack(spacing: 6) {
+                Image(systemName: "cpu")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(LauncherTheme.mutedText)
+                Text(strings.hardwareLine(model.hardware))
+                    .font(LauncherTheme.mono(9.5, weight: .medium))
+                    .foregroundStyle(LauncherTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .help(model.hardware.describe)
             Text(strings.deployNoteROMFree)
                 .font(.system(size: 10.5))
                 .foregroundStyle(LauncherTheme.mutedText)
@@ -361,10 +370,14 @@ private struct DeployGameRow: View {
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(selected ? LauncherTheme.accentDeep : LauncherTheme.mutedText)
-                GameArtwork(game: game, size: 38)
+                GameArtwork(game: game, language: strings.language, size: 38)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(game.displayName)
+                        Text(GameNames.resolve(
+                            displayNames: game.displayNames,
+                            displayName: game.displayName,
+                            uiLanguageTag: strings.language.localeIdentifier
+                        ))
                             .font(.system(size: 12, weight: .semibold))
                             .lineLimit(1)
                         GamePhaseBadge(phase: game.phase, strings: strings)

@@ -43,14 +43,35 @@ enum SelfCheckFlow {
         expect("import: stages the ROM data for the Documents push", importModel.game(id: MockFixtures.titlePokemonY)?.romDataPath != nil)
         expect("import: closes the import sheet and lands in the library", importModel.importPresented == false && importModel.screen == .library)
 
-        // 11b. Library management: rename + remove only (no build/install buttons)
+        // 11b. Library management: read-only SMDH metadata (Windows 0.2.4
+        // parity: no editable name input) + remove only; no build/install/push
+        // buttons on this page.
         let libraryModel = AppModel.mock(scenario: .library)
         libraryModel.resetForSelfCheck()
         libraryModel.games = MockFixtures.games()
-        libraryModel.renameGame(titleID: MockFixtures.titlePokemonY, newName: "Pokemon Y (mine)")
-        expect("library: rename updates the launcher label", libraryModel.game(id: MockFixtures.titlePokemonY)?.displayName == "Pokemon Y (mine)")
+        let smdhGame = libraryModel.game(id: MockFixtures.titlePokemonY)
+        expect("library: SMDH display names are shown read-only",
+               smdhGame?.displayNames["zh-Hans"] == "宝可梦 Y" && smdhGame?.displayNames["en"] == "Pokemon Y")
+        expect("library: SMDH publisher is shown", smdhGame?.publisher == "Nintendo")
+        expect("library: the SMDH cover.png path resolves", smdhGame?.coverPath.map { FileProbe.exists($0) } == true)
         libraryModel.removeGame(titleID: MockFixtures.titleAnimalCrossing)
         expect("library: remove drops the game", libraryModel.games.count == 2 && libraryModel.game(id: MockFixtures.titleAnimalCrossing) == nil)
+
+        // 11c. Restore from the portable workspace on launch (games, SMDH
+        // metadata, built packs and the staged ROM copy survive a restart).
+        let restoreModel = AppModel.mock(scenario: .library)
+        restoreModel.resetForSelfCheck()
+        await restoreModel.restoreLibrary()
+        expect("library: restore rebuilds games from the workspace", restoreModel.games.count == 3, String(restoreModel.games.count))
+        expect("library: restored game keeps its SMDH metadata",
+               restoreModel.game(id: MockFixtures.titlePokemonY)?.publisher == "Nintendo"
+               && restoreModel.game(id: MockFixtures.titlePokemonY)?.displayNames["zh-Hans"] == "宝可梦 Y")
+        expect("library: restored built pack keeps its AOT state", restoreModel.game(id: MockFixtures.titlePokemonY)?.phase == .built)
+        expect("library: restored game resolves the staged ROM for the push",
+               restoreModel.game(id: MockFixtures.titlePokemonY)?.romDataPath != nil)
+        expect("data root: the model uses the mock portable root",
+               restoreModel.settings.dataRootPath == MockFixtures.root.path
+               && restoreModel.settings.outRootURL.path == MockFixtures.outRoot.path)
 
         // 12. One-click Deploy success: batch compile -> compose -> verify IPA ->
         // install -> push each ROM with the ACTUAL installed bundle id -> Done.
@@ -74,6 +95,11 @@ enum SelfCheckFlow {
         expect("deploy: installed library titles persisted", Set(model.settings.libraryInstalledTitles) == Set([MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing]))
         expect("deploy: games marked on device", model.game(id: MockFixtures.titlePokemonY)?.phase == .pushed && model.game(id: MockFixtures.titleAnimalCrossing)?.phase == .pushed)
         expect("deploy: task recorded as succeeded", model.tasks.first(where: { $0.kind == .deploy })?.state == .succeeded)
+        expect("deploy: compile step reports the detected hardware",
+               model.logs.contains { $0.category == "build" && $0.message.contains("compile hardware") })
+        expect("deploy: hardware line reports every logical core as a compile job",
+               model.hardware.compileJobs == model.hardware.logicalCores && model.hardware.logicalCores >= 1
+               && model.hardware.totalMemoryBytes > 0)
 
         // 13. No selection: nothing runs, an actionable warning is shown.
         let emptySelection = AppModel.mock(scenario: .library)
@@ -189,6 +215,25 @@ enum SelfCheckFlow {
         expect("import: one action imports the chosen ROM", oneAction.games.count == 1 && oneAction.games.first?.titleID == MockFixtures.titlePokemonY, String(oneAction.games.count))
         expect("import: one action stages the ROM data", oneAction.games.first?.romDataPath != nil)
         expect("import: one action lands in the library", oneAction.importPresented == false && oneAction.screen == .library)
+        expect("import: SMDH names/publisher come from the pack CLI",
+               oneAction.games.first?.displayNames["zh-Hans"] == "宝可梦 Y" && oneAction.games.first?.publisher == "Nintendo")
+        expect("import: the SMDH cover.png is available for the card", oneAction.games.first?.coverPath.map { FileProbe.exists($0) } == true)
+
+        // 19b. Re-importing a game that is already in the library passes
+        // "--force" so the pack CLI refreshes the SMDH metadata and re-extracts
+        // an old (scrambled) cover.png while keeping an already built GamePack;
+        // a first import must not force.
+        let mockPackBackend = oneAction.pack as? MockPackBackend
+        expect("import: a first import does not force the pack CLI",
+               mockPackBackend?.importCalls.count == 1 && mockPackBackend?.importCalls.first?.force == false,
+               String(describing: mockPackBackend?.importCalls))
+        await oneAction.importROM(at: "/tmp/Pokemon Y.cci")
+        expect("import: re-import of an existing game passes --force (SMDH cover self-heal)",
+               mockPackBackend?.importCalls.count == 2 && mockPackBackend?.importCalls.last?.force == true,
+               String(describing: mockPackBackend?.importCalls))
+        expect("import: the forced re-import updates the game in place and logs --force",
+               oneAction.games.count == 1
+               && oneAction.logs.contains { $0.message.contains("packages add") && $0.message.contains("--force") })
 
         return checks
     }

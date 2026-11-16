@@ -41,15 +41,15 @@ enum SnapshotRenderer {
     /// The non-game UI evidence set for the v2 Library -> Deploy flow. Heights
     /// are chosen so the offscreen layout fits without a ScrollView.
     static let shots: [Shot] = [
-        Shot(name: "library-empty", surface: .shell(.library), themes: [.dark, .light], languages: [.english], height: 620,
+        Shot(name: "library-empty", surface: .shell(.library), themes: [.dark, .light], languages: [.english], height: 660,
              prepare: { model in
                  model.games = []
                  model.settings.libraryInstalledTitles = []
                  model.settings.installedBundleID = ""
                  model.settings.libraryIPAPath = ""
              }),
-        Shot(name: "library", surface: .shell(.library), themes: [.dark, .light], languages: [.english, .chinese], height: 860),
-        Shot(name: "library-not-ready", surface: .shell(.library), themes: [.dark], languages: [.english, .chinese], height: 860,
+        Shot(name: "library", surface: .shell(.library), themes: [.dark, .light], languages: [.english, .chinese], height: 900),
+        Shot(name: "library-not-ready", surface: .shell(.library), themes: [.dark], languages: [.english, .chinese], height: 900,
              prepare: { model in
                  var report = MockFixtures.readyEnvironment()
                  report.tools[0].state = .missing
@@ -61,11 +61,11 @@ enum SnapshotRenderer {
                  model.appleReadiness = report.apple
                  model.readiness = report.readinessStatus
              }),
-        Shot(name: "deploy-selected", surface: .shell(.deploySelection), themes: [.dark], languages: [.english, .chinese], height: 1_120),
-        Shot(name: "deploy-running", surface: .shell(.deployRunning), themes: [.dark], languages: [.english], height: 1_520),
-        Shot(name: "deploy-done", surface: .shell(.deployDone), themes: [.dark], languages: [.english, .chinese], height: 1_580),
-        Shot(name: "deploy-failed", surface: .shell(.deployFailed), themes: [.dark], languages: [.english], height: 1_420),
-        Shot(name: "settings", surface: .settings, themes: [.dark, .light], languages: [.english, .chinese], height: 980),
+        Shot(name: "deploy-selected", surface: .shell(.deploySelection), themes: [.dark], languages: [.english, .chinese], height: 1_200),
+        Shot(name: "deploy-running", surface: .shell(.deployRunning), themes: [.dark], languages: [.english], height: 1_620),
+        Shot(name: "deploy-done", surface: .shell(.deployDone), themes: [.dark], languages: [.english, .chinese], height: 1_680),
+        Shot(name: "deploy-failed", surface: .shell(.deployFailed), themes: [.dark], languages: [.english], height: 1_520),
+        Shot(name: "settings", surface: .settings, themes: [.dark, .light], languages: [.english, .chinese], height: 1_060),
     ]
 
     /// Render the selected theme/language set into the directory; returns files.

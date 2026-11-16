@@ -57,6 +57,15 @@ struct GameEntry: Identifiable, Equatable {
     var id: String { titleID }
     var titleID: String
     var displayName: String
+    /// Localized short titles from the ROM SMDH (en, ja, zh-Hans, ...). The
+    /// Library shows the one matching the current UI language; the user never
+    /// types a game name (Windows launcher 0.2.4 parity).
+    var displayNames: [String: String] = [:]
+    /// Publisher from the ROM SMDH (empty when the ROM has no SMDH metadata).
+    var publisher: String = ""
+    /// Absolute path of the pack CLI's extracted SMDH icon (packages/<TITLEID>/
+    /// cover.png). The card falls back to a generated placeholder when nil.
+    var coverPath: String? = nil
     var productCode: String
     var romPath: String
     var romBytes: Int64
@@ -86,6 +95,10 @@ struct DetectedROM: Equatable {
     var path: String
     var titleID: String
     var displayName: String
+    /// Localized SMDH titles reported by "rom inspect --json".
+    var displayNames: [String: String] = [:]
+    /// Publisher reported by "rom inspect --json" (empty when unknown).
+    var publisher: String = ""
     var productCode: String
     var container: String
     var bytes: Int64
@@ -103,6 +116,12 @@ struct DetectedPackage: Equatable {
     var titleID: String
     var displayName: String
     var productCode: String
+    /// Localized SMDH titles (packages add/list --json "displayNames").
+    var displayNames: [String: String] = [:]
+    /// Publisher (packages add/list --json "publisher"; empty when unknown).
+    var publisher: String = ""
+    /// Absolute path of the package's SMDH cover.png ("coverPath"), nil when absent.
+    var coverPath: String? = nil
     var aotVersion: Int
     var state: String
     var pack: PackFileInfo?
@@ -126,6 +145,15 @@ struct PackageManifest: Equatable {
     var romFile: String?
     var romSha256: String?
     var romBytes: Int64?
+    // MARK: ROM SMDH metadata (additive; packs from older CLIs omit it)
+    var displayNames: [String: String] = [:]
+    var publisher: String = ""
+    /// Package-relative "cover.png" recorded in GameInfo.json (resolved against
+    /// out/<workspace>/packages/<TITLEID>/ before use).
+    var coverPath: String? = nil
+    /// Original ROM path recorded by the pack CLI ("rom.path"); used to restore
+    /// the library from the portable workspace after a restart.
+    var romPath: String? = nil
 }
 
 // MARK: - Tasks
@@ -276,6 +304,8 @@ struct EnvironmentReport: Equatable {
     var generatedAt: Date
     var repoRoot: String?
     var outDir: String?
+    /// Portable data root resolved for this launch (logs/workspace/build/ipa).
+    var dataRoot: String? = nil
     var tools: [ToolStatus]
     var apple: AppleReadiness
     var devpushCapabilities: BridgeCapabilities?
@@ -593,4 +623,83 @@ enum LauncherRunMode: String {
     case mock
 
     var isMock: Bool { self == .mock }
+}
+
+// MARK: - SMDH display metadata (Windows launcher 0.2.4 parity)
+
+/// Picks the display name, publisher and cover image supplied by the pack CLI
+/// from the ROM's SMDH: the Library follows the app language instead of asking
+/// the user to type a name. Semantics mirror the Windows launcher (GameNames.cs):
+/// exact UI language, then English, then the default displayName, then any
+/// non-empty entry; zh-Hant falls back to English because only en/zh-Hans ship.
+enum GameNames {
+    /// BCP-47 spellings the CLI/SMDH may use for Simplified Chinese.
+    static let chineseKeys = ["zh-Hans", "zh-CN", "zh-SG", "zh"]
+    /// BCP-47 spellings the CLI/SMDH may use for English.
+    static let englishKeys = ["en", "en-US", "en-GB"]
+
+    /// Normalize a UI language tag to the two languages the launcher ships.
+    static func normalizeTag(_ uiLanguageTag: String?) -> String {
+        guard let raw = uiLanguageTag?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return "en"
+        }
+        let tag = raw.replacingOccurrences(of: "_", with: "-").lowercased()
+        if tag.hasPrefix("zh") {
+            if tag.contains("hant") || tag.contains("-tw") || tag.contains("-hk") || tag.contains("-mo") {
+                return "en"
+            }
+            return "zh-Hans"
+        }
+        return "en"
+    }
+
+    /// Pick the best available name for the current UI language.
+    static func resolve(displayNames: [String: String]?, displayName: String, uiLanguageTag: String?) -> String {
+        let fallback = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let names = displayNames, !names.isEmpty else { return fallback }
+        let preferred = normalizeTag(uiLanguageTag) == "zh-Hans" ? chineseKeys : englishKeys
+        for key in preferred {
+            if let value = lookup(names, key), !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return value.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        if !fallback.isEmpty { return fallback }
+        for key in names.keys.sorted(by: { $0.lowercased() < $1.lowercased() }) {
+            if let value = names[key], !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return value.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return fallback
+    }
+
+    /// Trim a publisher string; empty when unknown.
+    static func resolvePublisher(_ publisher: String?) -> String {
+        guard let publisher else { return "" }
+        return publisher.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Resolve the package's cover.png: an absolute CLI value is used as-is, a
+    /// relative value is package-relative, nil falls back to <package>/cover.png.
+    static func resolveCoverPath(packageDirectory: String?, coverPath: String?) -> String? {
+        guard let packageDirectory, !packageDirectory.isEmpty else {
+            guard let coverPath, !coverPath.isEmpty, (coverPath as NSString).isAbsolutePath else { return nil }
+            return FileProbe.exists(coverPath) ? coverPath : nil
+        }
+        if let coverPath, !coverPath.isEmpty {
+            let candidate = (coverPath as NSString).isAbsolutePath
+                ? coverPath
+                : (packageDirectory as NSString).appendingPathComponent(coverPath)
+            return FileProbe.exists(candidate) ? candidate : nil
+        }
+        let conventional = (packageDirectory as NSString).appendingPathComponent("cover.png")
+        return FileProbe.exists(conventional) ? conventional : nil
+    }
+
+    private static func lookup(_ names: [String: String], _ wanted: String) -> String? {
+        if let direct = names[wanted] { return direct }
+        for pair in names where pair.key.lowercased() == wanted.lowercased() {
+            return pair.value
+        }
+        return nil
+    }
 }

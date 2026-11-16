@@ -5,7 +5,8 @@
 //  The single state machine behind the two-section UI
 //  (docs/launcher-flow-v2.md):
 //
-//    Library: import a decrypted ROM -> list/remove/rename games
+//    Library: import a decrypted ROM -> list/remove games; the pack CLI's SMDH
+//             metadata (localized name, publisher, cover.png) is shown read-only
 //    Deploy:  select one or several games -> one-click batch deploy:
 //             batch compile -> compose ONE ROM-free IPA with the selected real
 //             packs + schema-2 GameCatalog -> verify the IPA -> sign/install ->
@@ -76,6 +77,10 @@ final class AppModel: ObservableObject {
     let installer: InstallBackend
     let logStore: LogStore
     let stagingRoot: URL
+    /// Detected compile hardware (logical/physical cores + RAM). 3dsrecomp
+    /// derives its own worker count from the logical CPUs and a memory budget,
+    /// so the launcher only reports the numbers (Windows launcher 0.2.4 parity).
+    let hardware: HardwareProfile
 
     private var lastInstallLine: String?
     private var hasRunStartupReadiness = false
@@ -86,20 +91,15 @@ final class AppModel: ObservableObject {
     init(settings: LauncherSettings, kind: LauncherRunMode) {
         self.settings = settings
         self.kind = kind
-        let logURL: URL
-        if kind == .live {
-            let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-                ?? FileManager.default.temporaryDirectory
-            logURL = support
-                .appendingPathComponent("3ds2apple-launcher", isDirectory: true)
-                .appendingPathComponent("launcher.log")
-        } else {
-            logURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("3ds2apple-launcher-mock", isDirectory: true)
-                .appendingPathComponent("launcher.log")
+        // Everthing writable lives under the portable data root (0.2.4): logs,
+        // pack workspace, compile staging, ROM copies and composed IPAs.
+        let logURL = settings.logsRootURL.appendingPathComponent("launcher.log")
+        if kind == .mock {
+            try? FileManager.default.createDirectory(at: settings.logsRootURL, withIntermediateDirectories: true)
         }
         self.logStore = LogStore(logFileURL: logURL)
         let paths = ToolchainPaths.resolve(settings: settings)
+        self.hardware = kind == .mock ? MockFixtures.hardware : HardwareProfile.detect()
 
         if kind == .mock {
             self.runner = MockCommandRunner()
@@ -118,7 +118,7 @@ final class AppModel: ObservableObject {
                     binary: packBinary,
                     repoRoot: repoURL,
                     outRoot: settings.outRootURL,
-                    outArgument: settings.outDir
+                    outArgument: settings.outRootURL.path
                 )
             } else {
                 self.pack = MissingPackBackend(
@@ -132,13 +132,23 @@ final class AppModel: ObservableObject {
             } else {
                 self.bridge = UnavailableDeviceBridge()
             }
-            self.installer = XcodeInstallBackend(runner: runner, repoRoot: repoURL, paths: paths)
-            self.stagingRoot = FileManager.default.temporaryDirectory
-                .appendingPathComponent("3ds2apple-launcher", isDirectory: true)
-                .appendingPathComponent("staging", isDirectory: true)
+            self.installer = XcodeInstallBackend(
+                runner: runner,
+                repoRoot: repoURL,
+                paths: paths,
+                buildRoot: settings.buildRootURL
+            )
+            self.stagingRoot = settings.stagingRootURL
         }
+        // Create the portable folders and adopt the old <checkout>/out workspace
+        // exactly once, then log the decision + hardware line.
+        let bootLines = settings.prepareDataRoot()
         appendLog(.info, "launcher", "3ds2apple launcher " + LauncherInfo.version + " started (" + (kind == .mock ? "mock mode" : "live mode") + ")")
         appendLog(.info, "launcher", "checkout: " + settings.repoRoot)
+        appendLog(.info, "hardware", hardware.describe)
+        for line in bootLines {
+            appendLog(.info, "data", line)
+        }
     }
 
     // MARK: convenience
@@ -201,7 +211,8 @@ final class AppModel: ObservableObject {
 
     func exportLog() {
         let text = logStore.exportText()
-        let url = FileManager.default.temporaryDirectory
+        // Exports live with the other logs under the portable data root.
+        let url = settings.logsRootURL
             .appendingPathComponent("3ds2apple-launcher-log-" + timestampForFile() + ".txt")
         do {
             try text.write(to: url, atomically: true, encoding: .utf8)
@@ -350,6 +361,9 @@ final class AppModel: ObservableObject {
         // Refresh the device list quietly so Deploy is usable without extra clicks;
         // a missing cable/phone is not a readiness failure.
         await detectDevicesWithoutBusy(quiet: true)
+        // Rebuild the library from the portable workspace (imported games + SMDH
+        // metadata survive a restart and the one-time migration).
+        await restoreLibrary()
     }
 
     // MARK: ROM detection and import
@@ -396,13 +410,27 @@ final class AppModel: ObservableObject {
             titleID: rom.titleID,
             stages: [
                 PipelineStage(title: strings.step1Title, detail: rom.container.uppercased(), state: .succeeded),
-                PipelineStage(title: strings.dropTitle, detail: "out/packages/" + rom.titleID, state: .running),
-                PipelineStage(title: strings.step4Title, detail: "out/launcher-roms", state: .pending),
+                PipelineStage(title: strings.dropTitle, detail: "workspace/packages/" + rom.titleID, state: .running),
+                PipelineStage(title: strings.step4Title, detail: "workspace/launcher-roms", state: .pending),
             ]
         )
-        appendLog(.command, "pack", "packages add --roms \"" + rom.path + "\" --json  (no --include-rom: the IPA stays ROM-free)")
+        // No --display-name: the pack CLI picks the ROM's own SMDH title. The
+        // launcher never asks the user to type/rename a game (0.2.4 parity).
+        // Re-importing an existing game passes --force so the pack CLI refreshes
+        // the ROM/SMDH metadata and re-extracts an old scrambled cover.png
+        // (self-heal) while keeping the already built GamePack; a first import
+        // must not force.
+        let existingPackage = pack.outRoot
+            .appendingPathComponent("packages/" + rom.titleID + "/GameInfo.json").path
+        let reimporting = game(id: rom.titleID) != nil || FileProbe.exists(existingPackage)
+        if reimporting {
+            appendLog(.info, "import", "re-import of " + rom.titleID
+                + ": passing --force so the pack CLI refreshes the SMDH cover/metadata (the built GamePack is kept)")
+        }
+        appendLog(.command, "pack", "packages add --roms \"" + rom.path + "\" --json"
+            + (reimporting ? " --force" : "") + "  (no --include-rom: the IPA stays ROM-free)")
         do {
-            let package = try await pack.importROM(rom.path, displayName: rom.displayName, includeROM: false)
+            let package = try await pack.importROM(rom.path, displayName: nil, includeROM: false, force: reimporting)
             var game = makeGame(from: rom, package: package)
             setStage(taskID, 1, .succeeded, "queued " + game.titleID + " (ROM not bundled)")
             setStage(taskID, 2, .running, "keeping a gitignored game-data copy for the device push")
@@ -415,7 +443,9 @@ final class AppModel: ObservableObject {
             detectedROM = nil
             detectedROMError = nil
             importPresented = false
-            appendLog(.success, "import", "queued " + game.displayName + " (" + game.titleID + "): AOT code goes into the signed app, game data into out/launcher-roms")
+            appendLog(.success, "import", "queued " + game.displayName + " (" + game.titleID + ", " + String(game.displayNames.count)
+                + " SMDH name(s), publisher " + (game.publisher.isEmpty ? "-" : game.publisher)
+                + "): AOT code goes into the signed app, game data into workspace/launcher-roms")
             banner = Banner(kind: .success, title: strings.importTitle, message: game.displayName)
             screen = .library
         } catch {
@@ -440,15 +470,24 @@ final class AppModel: ObservableObject {
 
     private func makeGame(from rom: DetectedROM, package: DetectedPackage) -> GameEntry {
         let existing = game(id: package.titleID)
+        // The pack CLI reports the SMDH displayNames/publisher/coverPath for the
+        // package (fall back to the rom inspect values when the CLI is older).
+        let names = package.displayNames.isEmpty ? rom.displayNames : package.displayNames
+        let publisher = GameNames.resolvePublisher(package.publisher.isEmpty ? rom.publisher : package.publisher)
+        let packageDirectory = pack.outRoot.appendingPathComponent("packages/" + package.titleID).path
+        let cover = GameNames.resolveCoverPath(packageDirectory: packageDirectory, coverPath: package.coverPath)
         return GameEntry(
             titleID: package.titleID,
             displayName: package.displayName.isEmpty ? rom.displayName : package.displayName,
+            displayNames: names,
+            publisher: publisher,
+            coverPath: cover,
             productCode: package.productCode.isEmpty ? rom.productCode : package.productCode,
             romPath: rom.path,
             romBytes: rom.bytes,
             container: rom.container,
             aotVersion: package.aotVersion,
-            buildSlug: slug(displayName: rom.displayName, titleID: package.titleID),
+            buildSlug: slug(displayName: package.displayName.isEmpty ? rom.displayName : package.displayName, titleID: package.titleID),
             phase: existing?.phase == .built || existing?.phase == .pushed ? existing?.phase ?? .built : .queued,
             packPath: existing?.packPath,
             packBytes: existing?.packBytes,
@@ -507,13 +546,6 @@ final class AppModel: ObservableObject {
         banner = Banner(kind: .info, title: strings.remove, message: game.displayName)
     }
 
-    func renameGame(titleID: String, newName: String) {
-        let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, let game = game(id: titleID) else { return }
-        updateGame(titleID) { $0.displayName = name }
-        appendLog(.info, "library", "renamed " + game.titleID + " to " + name + " (launcher label only)")
-    }
-
     func refreshLibrary() async {
         await refreshPackages()
         for game in games where game.romDataPath == nil {
@@ -533,6 +565,15 @@ final class AppModel: ObservableObject {
             for package in packages {
                 guard let index = games.firstIndex(where: { $0.titleID == package.titleID }) else { continue }
                 games[index].aotVersion = package.aotVersion
+                if !package.displayNames.isEmpty {
+                    games[index].displayNames = package.displayNames
+                }
+                let publisher = GameNames.resolvePublisher(package.publisher)
+                if !publisher.isEmpty { games[index].publisher = publisher }
+                let packageDirectory = pack.outRoot.appendingPathComponent("packages/\(package.titleID)").path
+                if let cover = GameNames.resolveCoverPath(packageDirectory: packageDirectory, coverPath: package.coverPath) {
+                    games[index].coverPath = cover
+                }
                 if let packFile = package.pack {
                     games[index].packPath = pack.outRoot.appendingPathComponent("packages/\(package.titleID)/GamePack.dylib").path
                     games[index].packBytes = packFile.bytes
@@ -547,6 +588,89 @@ final class AppModel: ObservableObject {
         } catch {
             appendLog(.warn, "packages", "could not list packages: " + error.localizedDescription)
         }
+    }
+
+    /// Rebuild the visible library from the portable workspace on launch. The
+    /// workspace (packages + GameInfo.json) is the single source of truth, so
+    /// imported games and their SMDH name/icon/publisher and built AOT packs
+    /// survive a restart, a read-only fallback and the one-time migration from
+    /// the old <checkout>/out layout.
+    func restoreLibrary() async {
+        do {
+            let packages = try await pack.listPackages()
+            var restored = 0
+            for package in packages where game(id: package.titleID) == nil {
+                let manifest = try? await pack.readManifest(titleID: package.titleID)
+                games.append(makeRestoredGame(package: package, manifest: manifest))
+                restored += 1
+            }
+            games.sort { $0.titleID < $1.titleID }
+            if restored > 0 {
+                appendLog(.success, "library", "restored " + String(restored) + " game(s) from the portable workspace")
+            }
+        } catch {
+            appendLog(.warn, "library", "could not restore the library from the workspace: " + error.localizedDescription)
+        }
+        await refreshLibrary()
+    }
+
+    private func makeRestoredGame(package: DetectedPackage, manifest: PackageManifest?) -> GameEntry {
+        let packageDirectory = pack.outRoot.appendingPathComponent("packages/" + package.titleID).path
+        let names = package.displayNames.isEmpty ? (manifest?.displayNames ?? [:]) : package.displayNames
+        let publisher = GameNames.resolvePublisher(
+            package.publisher.isEmpty ? (manifest?.publisher ?? "") : package.publisher
+        )
+        let cover = GameNames.resolveCoverPath(
+            packageDirectory: packageDirectory,
+            coverPath: package.coverPath ?? manifest?.coverPath
+        )
+        let romPath = manifest?.romPath ?? ""
+        let extensionName = (romPath as NSString).pathExtension.lowercased()
+        let container: String
+        switch extensionName {
+        case "3ds", "cci": container = "ncsd"
+        case "cxi", "ncch", "app": container = "ncch"
+        default: container = "ncsd"
+        }
+        // The pack CLI's staged ROM copy (workspace/launcher-roms) is the push
+        // source; a restored library does not need the original ROM path for it.
+        let romsRoot = pack.outRoot.appendingPathComponent("launcher-roms")
+        var stagedPath: String?
+        for ext in PushPlanner.romExtensions {
+            let candidate = romsRoot.appendingPathComponent(package.titleID + "." + ext)
+            if FileProbe.exists(candidate.path), (FileProbe.size(candidate.path) ?? 0) > 0 {
+                stagedPath = candidate.path
+                break
+            }
+        }
+        let defaultName = GameNames.resolve(
+            displayNames: names,
+            displayName: package.displayName.isEmpty ? (manifest?.displayName ?? package.titleID) : package.displayName,
+            uiLanguageTag: "en"
+        )
+        return GameEntry(
+            titleID: package.titleID,
+            displayName: defaultName,
+            displayNames: names,
+            publisher: publisher,
+            coverPath: cover,
+            productCode: package.productCode,
+            romPath: romPath,
+            romBytes: manifest?.romBytes ?? 0,
+            container: container,
+            aotVersion: package.aotVersion,
+            buildSlug: slug(displayName: defaultName, titleID: package.titleID),
+            phase: package.isBuilt ? .built : .queued,
+            packPath: package.isBuilt ? packageDirectory + "/GamePack.dylib" : nil,
+            packBytes: package.pack?.bytes,
+            packSha256: package.pack?.sha256,
+            packFormat: package.pack?.format,
+            saveNamespace: package.titleID,
+            pushedAt: nil,
+            lastError: nil,
+            romDataPath: stagedPath,
+            romSha256: nil
+        )
     }
 
     // MARK: devices
@@ -618,10 +742,10 @@ final class AppModel: ObservableObject {
         if !FileProbe.exists(target.path) {
             do {
                 try fileManager.linkItem(atPath: rom.path, toPath: target.path)
-                appendLog(.info, "rom", "hardlinked game data into out/launcher-roms (no extra copy): " + target.lastPathComponent)
+                appendLog(.info, "rom", "hardlinked game data into workspace/launcher-roms (no extra copy): " + target.lastPathComponent)
             } catch {
                 try fileManager.copyItem(atPath: rom.path, toPath: target.path)
-                appendLog(.info, "rom", "copied game data into out/launcher-roms: " + target.lastPathComponent)
+                appendLog(.info, "rom", "copied game data into workspace/launcher-roms: " + target.lastPathComponent)
             }
         }
         guard let sha = FileProbe.sha256(ofFile: target.path) else {
@@ -763,8 +887,11 @@ final class AppModel: ObservableObject {
             setDeployStep(0, .succeeded, device.name + " · " + readiness.teamID)
             appendLog(.success, "deploy", "preflight ok: " + device.name + ", Team " + readiness.teamID)
 
-            // 1. batch compile (local, real AOT in live mode)
-            setDeployStep(1, .running, strings.deployCompileProgress(0, titles.count))
+            // 1. batch compile (local, real AOT in live mode). The compile line
+            // reports the detected cores/RAM: 3dsrecomp spawns one worker per
+            // logical CPU under a memory budget (same as the Windows launcher).
+            appendLog(.info, "build", "compile hardware: " + hardware.describe)
+            setDeployStep(1, .running, strings.deployCompileHardware(hardware))
             _ = try await pack.build(titleIDs: titles, mode: kind == .mock ? .fake : .real) { [weak self] level, line in
                 Task { @MainActor in self?.appendLog(level, "build", line) }
             }
@@ -804,7 +931,7 @@ final class AppModel: ObservableObject {
             let shellApp = try await installer.buildShellApp(options: options) { [weak self] progress in
                 Task { @MainActor in self?.setDeployStep(2, .running, progress.line) }
             }
-            let ipaOutDir = settings.repoRootURL.appendingPathComponent("IPA").path
+            let ipaOutDir = settings.ipaRootURL.path
             let ipaName = "3ds2apple-library-" + String(titles.count) + "-games"
             let result = try await pack.buildLibraryIPA(
                 titleIDs: titles,
@@ -1025,7 +1152,7 @@ final class AppModel: ObservableObject {
     // MARK: - Mock seeding for screenshots and self-checks
 
     static func mock(scenario: MockScenario) -> AppModel {
-        let settings = LauncherSettings(persist: false)
+        let settings = LauncherSettings(persist: false, dataRootOverride: MockFixtures.root.path)
         settings.repoRoot = "/Users/you/3ds2apple"
         let model = AppModel(settings: settings, kind: .mock)
         model.seed(scenario: scenario)
@@ -1066,7 +1193,7 @@ final class AppModel: ObservableObject {
         case .library:
             settings.libraryInstalledTitles = [MockFixtures.titlePokemonY]
             settings.installedBundleID = MockFixtures.installedShellBundleID
-            settings.libraryIPAPath = "/Users/you/3ds2apple/IPA/3ds2apple-library-1-games.ipa"
+            settings.libraryIPAPath = MockFixtures.ipaRoot.appendingPathComponent("3ds2apple-library-1-games.ipa").path
             settings.libraryInstalledAt = Date().addingTimeInterval(-3_600)
             (bridge as? MockDeviceBridge)?.markInstalled(MockFixtures.installedShellBundleID)
         case .deploySelection:
@@ -1105,7 +1232,7 @@ final class AppModel: ObservableObject {
             selectedForDeploy = [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing]
             settings.libraryInstalledTitles = [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing]
             settings.installedBundleID = MockFixtures.installedShellBundleID
-            settings.libraryIPAPath = "/Users/you/3ds2apple/IPA/3ds2apple-library-2-games.ipa"
+            settings.libraryIPAPath = MockFixtures.ipaRoot.appendingPathComponent("3ds2apple-library-2-games.ipa").path
             settings.libraryInstalledAt = Date().addingTimeInterval(-600)
             (bridge as? MockDeviceBridge)?.markInstalled(MockFixtures.installedShellBundleID)
             for title in [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing] {
@@ -1175,7 +1302,7 @@ final class AppModel: ObservableObject {
 
     private func mockInspection(titles: [String], ipaPath: String?) -> IPAInspection {
         IPAInspection(
-            ipaPath: ipaPath ?? "/Users/you/3ds2apple/IPA/3ds2apple-library.ipa",
+            ipaPath: ipaPath ?? MockFixtures.ipaRoot.appendingPathComponent("3ds2apple-library.ipa").path,
             appPath: "/mock/library-ipa/Payload/3ds2apple.app",
             bundleID: MockFixtures.installedShellBundleID,
             packFiles: titles.sorted().map { "Frameworks/GamePack-" + $0.uppercased() + ".dylib" },

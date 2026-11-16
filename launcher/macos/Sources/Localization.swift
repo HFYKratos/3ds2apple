@@ -93,6 +93,20 @@ struct LauncherStrings {
     var statusNeedsAttention: String
     var statusLabel: String
 
+    // ROM SMDH metadata (read-only, supplied by the pack CLI)
+    var publisherFormat: String
+    var smdhMetadataBadge: String
+
+    // Compile hardware line + portable data folder (launcher 0.2.4)
+    var hardwareLabel: String
+    var hardwareLineFormat: String
+    var dataRootLabel: String
+    var dataRootPortable: String
+    var dataRootFallback: String
+    var dataRootExplicit: String
+    var dataRootTemporary: String
+    var dataRootMigrationFormat: String
+
     // Library
     var librarySubtitle: String
     var libraryCountFormat: String
@@ -104,9 +118,6 @@ struct LauncherStrings {
     var openLibrary: String
     var addFirstGame: String
     var remove: String
-    var rename: String
-    var renameTitle: String
-    var renameSave: String
     var removeConfirmTitle: String
     var removeConfirmMessage: String
     var removeConfirmAction: String
@@ -139,7 +150,6 @@ struct LauncherStrings {
     var detectedTitle: String
     var detectedBadge: String
     var fieldTitleID: String
-    var fieldDisplayName: String
     var fieldProductCode: String
     var fieldContainer: String
     var fieldROMSize: String
@@ -275,6 +285,19 @@ struct LauncherStrings {
         statusReady = t("Ready", "就绪")
         statusNeedsAttention = t("Needs attention", "需要处理")
         statusLabel = t("Status", "状态")
+        publisherFormat = t("Publisher: %@", "发行商：%@")
+        smdhMetadataBadge = t("SMDH", "SMDH")
+        hardwareLabel = t("Compile hardware", "编译硬件")
+        hardwareLineFormat = t(
+            "%d logical cores · %@ GB RAM · 3dsrecomp auto-parallelizes (%d jobs, memory-budgeted)",
+            "%d 个逻辑核心 · %@ GB 内存 · 3dsrecomp 自动全核并行（%d 个任务，受内存预算约束）"
+        )
+        dataRootLabel = t("Data folder", "数据目录")
+        dataRootPortable = t("portable, beside the app", "便携模式，位于 App 旁")
+        dataRootFallback = t("Application Support fallback", "回退到 Application Support")
+        dataRootExplicit = t("custom location", "自定义位置")
+        dataRootTemporary = t("temporary fallback", "临时目录回退")
+        dataRootMigrationFormat = t("Adopted %d file(s) from the previous location", "已从旧位置迁移 %d 个文件")
 
         librarySubtitle = t("Your own games, one shell", "你自己的游戏，一个外壳")
         libraryCountFormat = t("%d game(s) in the library", "游戏库中有 %d 个游戏")
@@ -289,9 +312,6 @@ struct LauncherStrings {
         openLibrary = t("Go to Library", "去游戏库导入")
         addFirstGame = t("Import your first game", "导入第一个游戏")
         remove = t("Remove", "移除")
-        rename = t("Rename", "重命名")
-        renameTitle = t("Rename game", "重命名游戏")
-        renameSave = t("Save", "保存")
         removeConfirmTitle = t("Remove this game?", "移除这个游戏？")
         removeConfirmMessage = t(
             "The game is removed from the library. Files in out/ are local build data and can be rebuilt; nothing on the phone is deleted until you deploy again.",
@@ -329,7 +349,6 @@ struct LauncherStrings {
         detectedTitle = t("Detected game", "检测到的游戏")
         detectedBadge = t("HEADER ONLY", "仅文件头")
         fieldTitleID = t("Title ID", "Title ID")
-        fieldDisplayName = t("Display name", "显示名称")
         fieldProductCode = t("Product code", "产品代码")
         fieldContainer = t("Container", "容器")
         fieldROMSize = t("ROM size", "ROM 大小")
@@ -507,6 +526,35 @@ struct LauncherStrings {
 
     func diagnosticsChecks(_ ok: Int, _ total: Int) -> String {
         String(format: diagnosticsChecksFormat, ok, total)
+    }
+
+    /// "Publisher: Nintendo" line on a Library card.
+    func publisher(_ value: String) -> String {
+        String(format: publisherFormat, value)
+    }
+
+    /// Compile hardware line: cores + RAM + 3dsrecomp's automatic parallelism.
+    func hardwareLine(_ profile: HardwareProfile) -> String {
+        String(format: hardwareLineFormat, profile.logicalCores, profile.totalMemoryGBText, profile.compileJobs)
+    }
+
+    /// Detail shown on the compile step while the batch build runs.
+    func deployCompileHardware(_ profile: HardwareProfile) -> String {
+        hardwareLine(profile)
+    }
+
+    /// Localized description of the resolved portable data-root kind.
+    func dataRootKind(_ kind: DataRootKind) -> String {
+        switch kind {
+        case .portable: return dataRootPortable
+        case .applicationSupport: return dataRootFallback
+        case .explicit: return dataRootExplicit
+        case .tempFallback: return dataRootTemporary
+        }
+    }
+
+    func dataRootMigration(_ files: Int) -> String {
+        String(format: dataRootMigrationFormat, files)
     }
 
     // MARK: - Enum labels
