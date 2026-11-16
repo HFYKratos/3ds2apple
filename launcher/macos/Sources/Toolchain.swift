@@ -5,7 +5,7 @@
 //  Locate the checkout and every external tool the pipeline drives, then report
 //  a readiness snapshot for Settings and the Deploy preflight. The v2 flow has
 //  no tool-path controls: the launcher looks inside its own bundle first, then
-//  the checkout, then PATH (docs/macos-launcher.md). Nothing here writes file
+//  the checkout, then PATH (launcher/macos/README.md). Nothing here writes file
 //  content or contacts the network.
 //
 

@@ -6,7 +6,7 @@
 #   <name>.ipa  (zip archive, no signature)
 #
 # When the app carries GameCatalog.json (the build-time AOT manifest installed by
-# scripts/build-ios-app.sh / scripts/build-game-ipa.sh), it is validated before
+# scripts/build-ios-app.sh), it is validated before
 # zipping and the report prints how many games are listed and which have AOT
 # code linked in. A shell build has an empty catalog (0 games).
 #

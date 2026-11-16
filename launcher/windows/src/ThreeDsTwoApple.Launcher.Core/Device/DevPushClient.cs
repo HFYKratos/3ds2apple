@@ -29,8 +29,8 @@ public sealed record TransferResult(string? Path, long Bytes, string? Sha256);
 
 /// <summary>
 /// Typed client for the device bridge CLI (task-16 <c>tools/devpush</c>, contract
-/// <c>devpush/1</c>, documented in docs/device-bridge.md and
-/// docs/windows-launcher.md).
+/// <c>devpush/1</c>, documented in tools/devpush/README.md and
+/// launcher/windows/README.md).
 /// </summary>
 /// <remarks>
 /// The launcher does not talk to usbmuxd/AFC itself: every device operation goes

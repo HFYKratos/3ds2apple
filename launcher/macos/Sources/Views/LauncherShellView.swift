@@ -2,7 +2,7 @@
 //  LauncherShellView.swift
 //  3ds2apple macOS launcher
 //
-//  The whole window for the two-section launcher UI (docs/macos-launcher.md):
+//  The whole window for the two-section launcher UI (launcher/macos/README.md):
 //
 //      [3ds2apple]        游戏库  部署 (centered)        (ready) (gear)
 //

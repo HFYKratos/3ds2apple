@@ -765,7 +765,7 @@ cd -
 ZAKURO_IOS_HARDWARE=1 scripts/build-linked-ios-lib.sh <name> --title-id <16-hex-title-id>
 
 # 3) Embed MoltenVK in the app and package the IPA.
-scripts/build-game-ipa.sh <name> --display-name "Game name"
+scripts/build-ios-app.sh && scripts/package-ipa.sh ios/app/build/Release-iphoneos/3ds2apple.app <name>
 ```
 
 For step 3 the app must contain
@@ -785,7 +785,7 @@ targets:
         embed: true
 ```
 
-`scripts/build-game-ipa.sh` runs `xcodegen generate` and `xcodebuild` itself, so
+`scripts/build-ios-app.sh` runs `xcodegen generate` and `xcodebuild` itself, so
 no other change is needed. Revert the edit afterwards (or keep it on the build
 machine only).
 
@@ -809,7 +809,7 @@ already embedded.
 Before installing, check the build:
 
 ```bash
-APP=$(ls -d ios/app/build/Release-iphoneos/*.app | head -n 1)   # or the path build-game-ipa.sh printed
+APP=$(ls -d ios/app/build/Release-iphoneos/*.app | head -n 1)   # or the path scripts/build-ios-app.sh printed
 nm -g "$APP/3ds2apple" | grep zk_hardware          # the new symbols are present
 ls "$APP/Frameworks/MoltenVK.framework"            # dynamic Option A only
 ```
@@ -1211,6 +1211,6 @@ path, the system Metal HUD, resize/rotation and the fallback runs).
   <https://github.com/ammaarreshi/Generals-Mac-iOS-iPad/blob/master/Patches/dxvk-ios.patch>
 - Pocket Native (PICA→GLES semantics reference for Plan B, MIT):
   <https://github.com/whovian64/pocket-native>
-- Project docs: [README.md](README.md), [docs/README.md](../../docs/README.md),
-  [scripts/AOT_BUILD.md](../../scripts/AOT_BUILD.md), [ios/app/README.md](../app/README.md),
+- Project docs: [README.md](README.md), [scripts/README.md](../../scripts/README.md),
+  [ios/app/README.md](../app/README.md),
   [THIRD_PARTY.md](../../THIRD_PARTY.md)

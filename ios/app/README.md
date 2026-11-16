@@ -394,7 +394,7 @@ localized.
 ## Build
 
 Requires macOS, Xcode, Rust with `aarch64-apple-ios`, and `xcodegen`.
-See [scripts/AOT_BUILD.md](../../scripts/AOT_BUILD.md).
+See [scripts/README.md](../../scripts/README.md).
 
 ```bash
 scripts/build-zakuro-ios.sh      # libzakuro_ios.a

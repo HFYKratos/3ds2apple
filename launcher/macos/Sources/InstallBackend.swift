@@ -2,7 +2,7 @@
 //  InstallBackend.swift
 //  3ds2apple macOS launcher
 //
-//  Install half of the one-click Deploy flow (docs/macos-launcher.md):
+//  Install half of the one-click Deploy flow (launcher/macos/README.md):
 //
 //    1. xcodebuild builds the shell .app with the user's own Apple ID signing
 //       (automatic signing; the Team ID is detected from the local Xcode

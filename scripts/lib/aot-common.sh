@@ -4,7 +4,7 @@
 # Sourced by:
 #   scripts/build-recomp-ios.sh
 #   scripts/build-linked-ios-lib.sh
-#   scripts/build-game-ipa.sh
+#   scripts/build-game-pack.sh
 # and unit-tested on Linux by scripts/tests/aot-selfcheck.sh.
 #
 # It only defines functions/constants: sourcing never exits, builds, requires
@@ -26,7 +26,7 @@
 #     `_recomp_abi` (the old prefix bug).
 #
 # The seven generated tables the linked library references and libgame.a must
-# export (scripts/AOT_BUILD.md §2.1/§8.2). Keep in sync with ios/zakuro-ios + recomp ABI.
+# export (scripts/README.md §2.1/§8.2). Keep in sync with ios/zakuro-ios + recomp ABI.
 AOT_EXPECTED_RECOMP_SYMBOLS="recomp_abi recomp_generation recomp_entry_count recomp_entries recomp_module_count recomp_modules recomp_origins"
 
 # ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ aot_trim() {
 }
 
 # True for exactly 16 upper-case hex digits (no 0x prefix). The build scripts
-# and manifest.txt use the upper-case form from scripts/AOT_BUILD.md ("0004000000055E00").
+# and manifest.txt use the upper-case form from scripts/README.md ("0004000000055E00").
 aot_validate_title_id() {
   local value="$1"
   [[ "${#value}" -eq 16 ]] || return 1
@@ -400,7 +400,7 @@ NM
 }
 
 # ---------------------------------------------------------------------------
-# AOT codegen flags (performance experiments; docs/performance.md §5.1)
+# AOT codegen flags (performance experiments; scripts/README.md §5.1)
 # ---------------------------------------------------------------------------
 # Default is the documented baseline: -O2 with strict IEEE float behaviour
 # (-ffp-contract=off -fno-math-errno). Recompiled guest float code must round
@@ -413,7 +413,7 @@ NM
 #   THREEDS2APPLE_AOT_FAST_MATH=1      add -ffast-math (CHANGES guest float
 #                                      results: measurement builds only)
 # Try a level on one game, measure, and keep the default unless the device A/B
-# in docs/performance.md §6 says otherwise.
+# in scripts/README.md §6 says otherwise.
 AOT_DEFAULT_OPT_LEVEL="O2"
 
 aot_codegen_flags() {

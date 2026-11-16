@@ -38,7 +38,7 @@ enum LauncherLanguage: String, CaseIterable, Codable, Identifiable {
 
     /// Map the macOS preferred-language list to one of the two UI languages.
     /// Simplified Chinese variants win; every other language falls back to
-    /// English, matching docs/macos-launcher.md.
+    /// English, matching launcher/macos/README.md.
     static func resolveSystem(preferred: [String]) -> ResolvedLanguage {
         guard let first = preferred.first(where: { !$0.isEmpty }) else { return .english }
         let normalized = first.replacingOccurrences(of: "_", with: "-").lowercased()

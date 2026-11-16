@@ -134,4 +134,4 @@ $hashes = Get-ChildItem -LiteralPath $outputPath -Recurse -File | ForEach-Object
 }
 $hashes | Set-Content -Encoding ASCII (Join-Path $outputPath 'SHA256SUMS')
 Write-Host "[dist] done: $outputPath ($($hashes.Count) files hashed)"
-Write-Host '[dist] test on Windows: run 3ds2apple-launcher.exe --self-test, then the manual plan in docs/windows-launcher.md'
+Write-Host '[dist] test on Windows: run 3ds2apple-launcher.exe --self-test, then the manual plan in launcher/windows/README.md'

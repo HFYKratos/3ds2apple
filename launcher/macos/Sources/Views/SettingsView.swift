@@ -2,7 +2,7 @@
 //  SettingsView.swift
 //  3ds2apple macOS launcher
 //
-//  The minimal Settings panel (gear icon, docs/macos-launcher.md): language,
+//  The minimal Settings panel (gear icon, launcher/macos/README.md): language,
 //  Apple ID / Xcode signing status, device status, logs and About. Build modes,
 //  install strategies, tool paths, Team ID input, device UDID and bundle-ID
 //  overrides are deliberately GONE: tools are auto-detected, the Team ID is read

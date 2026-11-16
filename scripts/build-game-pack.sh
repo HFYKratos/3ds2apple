@@ -433,7 +433,7 @@ compile_game_code() { # dir -> prints archive path
   # path (2026-11-14: did exactly that and clang tried to link a log line).
   printf '[build-game-pack] compiling %s generated C files for %s with %s jobs\n' \
     "$FILE_COUNT" "$TRIPLE" "$JOB_COUNT" >&2
-  # codegen flags: default -O2; env overrides documented in docs/performance.md
+  # codegen flags: default -O2; env overrides documented in scripts/README.md
   printf '[build-game-pack] codegen flags: %s\n' "$(aot_codegen_flags)" >&2
   wrapper="$WORK/compile-one.sh"
   cat > "$wrapper" <<'SH'

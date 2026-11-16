@@ -4,7 +4,7 @@
 //! house_arrest (VendContainer / VendDocuments) and writes/reads files over AFC,
 //! and installs/uninstalls/queries apps with installation_proxy.
 //!
-//! Contract v1 (docs/device-bridge.md): with --json every result is NDJSON on
+//! Contract v1 (tools/devpush/README.md): with --json every result is NDJSON on
 //! stdout with schema devpush/1 and type begin|progress|warn|done|error; exit
 //! codes and error codes are stable for launchers.
 

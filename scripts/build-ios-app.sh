@@ -20,8 +20,8 @@
 # GameCatalog.json (the build-time AOT manifest): a plain shell build writes an
 # EMPTY schema-2 catalog ({"schemaVersion":2,"games":[]}); the desktop launcher
 # injects per-game GamePack dylibs + a populated catalog into this ROM-free shell
-# template before signing. scripts/build-game-ipa.sh installs its one-game catalog
-# itself; the optional --game-catalog PATH lets an advanced build ship a
+# template before signing. The per-game pack pipeline installs its catalog separately;
+# the optional --game-catalog PATH lets an advanced build ship a
 # pre-generated multi-game catalog. The catalog is copied into <app-dir>/Resources/ for the
 # build only and removed (or restored) afterwards, so `git status` stays clean
 # (.gitignore covers it as a safeguard).
@@ -419,8 +419,8 @@ fi
 
 # --- GameCatalog.json bundle check ------------------------------------------
 # The catalog must ship inside the .app. The Swift side falls back to "no AOT
-# games" when it is missing, so this is a warning here; the per-game build
-# (scripts/build-game-ipa.sh) treats a missing catalog as fatal for its title.
+# games" when it is missing, so this is a warning here; the per-game pipeline
+# treats a missing catalog as fatal for its title.
 CATALOG_IN_APP="$(game_catalog_find_in_app "$APP_PATH" || true)"
 if [[ -n "$CATALOG_IN_APP" ]]; then
   if game_catalog_validate "$CATALOG_IN_APP"; then

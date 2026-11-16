@@ -12,7 +12,7 @@
 //
 //  The screenshot and self-check modes exist because the macOS build VM boots to
 //  the login window: there is no Aqua session to show a window in, but an
-//  offscreen SwiftUI ImageRenderer works. See docs/macos-launcher.md.
+//  offscreen SwiftUI ImageRenderer works. See launcher/macos/README.md.
 //
 
 import Foundation

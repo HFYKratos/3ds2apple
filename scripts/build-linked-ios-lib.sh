@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # build-linked-ios-lib.sh — build (or adopt) the per-game `linked` libs.
 #
-# Per-game AOT pipeline (authoritative design: ios/zakuro-ios/scripts/AOT_BUILD.md §3.3/§9):
+# Per-game AOT pipeline (authoritative design: scripts/README.md §3.3/§9):
 #
 #   scripts/build-zakuro-ios.sh              # once: Zakuro checkout + baseline lib
 #   scripts/build-recomp-ios.sh <rom> <name> # 3dsrecomp port -> librecomp.a
 #   scripts/build-linked-ios-lib.sh <name>   # this script -> build/ios/<name>/
-#   scripts/build-game-ipa.sh <name>         # IPA/<name>-AOT.ipa
+#   scripts/build-game-pack.sh <name> --title-id <id> --out out   # 3ds2apple package
 #
 # This script copies ios/zakuro-ios into the Zakuro checkout (refreshing the
 # crate), builds the `linked` variant with the ROM's title ID baked in at build
@@ -97,7 +97,7 @@ Options:
                      env: ZAKURO_DIR)
   --lib-dir DIR      Output dir (default: build/ios/<name>)
   --isolated-target  Use build/cargo-target/<name> as CARGO_TARGET_DIR instead
-                     of the shared Zakuro target dir (scripts/AOT_BUILD.md §3.3 suggests
+                     of the shared Zakuro target dir (scripts/README.md §3.3 suggests
                      isolation for back-to-back multi-game builds; it costs a
                      full dependency rebuild, so the shared cache is default)
   --verbose          Stream cargo output to the terminal as well
@@ -317,7 +317,7 @@ log "lib dir:    $LIB_DIR"
 log "mode:       $([[ "$REUSE" -eq 1 ]] && echo reuse || echo cargo-build)"
 log "build log:  $LOG_FILE"
 
-# --- validation (scripts/AOT_BUILD.md §2.1/§8.2) ----------------------------------------
+# --- validation (scripts/README.md §2.1/§8.2) ----------------------------------------
 validate_linked_lib() {
   local file="$1" undefined count missing symbol lines
   [[ -s "$file" ]] || die "linked library is missing or empty: $file"
@@ -326,7 +326,7 @@ validate_linked_lib() {
 
   NM_DUMP="$(mktemp "${TMPDIR:-/tmp}/3ds2apple-nm.XXXXXX")"
   aot_nm_dump "$file" "$NM_DUMP" -u \
-    || die "nm -u failed on $file (scripts/AOT_BUILD.md §8.2)"
+    || die "nm -u failed on $file (scripts/README.md §8.2)"
   undefined="$(aot_nm_symbols_with_prefix "$NM_DUMP" '_recomp_')"
   rm -f -- "$NM_DUMP"
   NM_DUMP=""
@@ -345,7 +345,7 @@ validate_linked_lib() {
     esac
   done
   [[ -z "$missing" ]] || die "linked library is missing expected undefined symbols:$missing
-       (scripts/AOT_BUILD.md §8.2 expects exactly 7: $EXPECTED_RECOMP_SYMBOLS)"
+       (scripts/README.md §8.2 expects exactly 7: $EXPECTED_RECOMP_SYMBOLS)"
   [[ "$count" -eq 7 ]] || die "linked library has ${count} undefined _recomp_* symbols; expected exactly 7.
        Found: $(printf '%s\n' "$undefined" | tr '\n' ' ')"
 }
@@ -435,7 +435,7 @@ if [[ "$REUSE" -eq 1 ]]; then
   log "  libzakuro_ios.a: $LIB_ZAKURO"
   log "  libgame.a:       $LIB_GAME"
   log "  build info:      $BUILD_INFO"
-  log "next: scripts/build-game-ipa.sh ${NAME}"
+  log "next: scripts/build-game-pack.sh ${NAME} --title-id <TITLE_ID> --out out"
   printf '%s\n' "$LIB_DIR"
   exit 0
 fi
@@ -482,14 +482,14 @@ else
 fi
 
 # Refresh the crate copy: the checkout must build the current ios/zakuro-ios
-# (scripts/AOT_BUILD.md §3.3 step 1 does the first copy; re-copying is idempotent).
+# (scripts/README.md §3.3 step 1 does the first copy; re-copying is idempotent).
 CRATE_DST="${ZAKURO_DIR}/crates/zakuro-ios"
 mkdir -p "$(dirname "$CRATE_DST")"
 log "refreshing crate: $CRATE_DST"
 rm -rf -- "$CRATE_DST"
 cp -R "${ROOT}/ios/zakuro-ios" "$CRATE_DST"
 
-# --- choose the cargo target dir (scripts/AOT_BUILD.md §3.3) ----------------------------
+# --- choose the cargo target dir (scripts/README.md §3.3) ----------------------------
 if [[ "$ISOLATED_TARGET" -eq 1 ]]; then
   CARGO_TARGET_DIR_ABS="${ROOT}/build/cargo-target/${NAME}"
   mkdir -p "$CARGO_TARGET_DIR_ABS"
@@ -522,7 +522,7 @@ run_stage() {
 }
 
 # Force the crate (and its build.rs env check) to rebuild for this title even
-# when a previous game was built in the same target dir (scripts/AOT_BUILD.md §3.3).
+# when a previous game was built in the same target dir (scripts/README.md §3.3).
 log "cargo clean -p zakuro-ios (force per-game relink; dependency cache is kept)"
 ( cd "$ZAKURO_DIR" && cargo clean -p zakuro-ios ) >>"$LOG_FILE" 2>&1 \
   || warn "cargo clean -p zakuro-ios returned non-zero (continuing; see $LOG_FILE)"
@@ -533,7 +533,7 @@ do_linked_build() {
       cargo build -p zakuro-ios --release --features linked --target "$IOS_TARGET" )
 }
 
-log "building linked libzakuro_ios.a for ${TITLE_ID} (scripts/AOT_BUILD.md §3.3 step 2)"
+log "building linked libzakuro_ios.a for ${TITLE_ID} (scripts/README.md §3.3 step 2)"
 run_stage "cargo build (zakuro-ios --features linked)" do_linked_build
 
 [[ -f "$LIB_BUILT" ]] || die "linked library was not produced: $LIB_BUILT"
@@ -561,6 +561,6 @@ log "per-game linked libs ready"
 log "  libzakuro_ios.a: $LIB_ZAKURO"
 log "  libgame.a:       $LIB_GAME"
 log "  build info:      $BUILD_INFO"
-log "next: scripts/build-game-ipa.sh ${NAME}"
+log "next: scripts/build-game-pack.sh ${NAME} --title-id <TITLE_ID> --out out"
 log "  (the app must link -L build/ios/${NAME} -lzakuro_ios -lgame, in that order)"
 printf '%s\n' "$LIB_DIR"

@@ -83,17 +83,19 @@ tools/winbuild/build-gamepack.sh --selfcheck
 
 # 3. build one game from 3dsrecomp-generated C (same inputs as
 #    scripts/build-game-pack.sh --code-dir on macOS):
-scripts/build-game-pack-llvm.sh pokemon-y --title-id 0004000000055E00 --jobs 16
+tools/winbuild/build-gamepack.sh pokemon-y --code-dir build/game/pokemon-y \
+  --title-id 0004000000055E00 --jobs 16
 # -> build/winbuild/packages/0004000000055E00/GamePack-0004000000055E00.dylib
 
 # other targets:
-scripts/build-game-pack-llvm.sh pokemon-y --title-id 0004000000055E00 --target sim
+tools/winbuild/build-gamepack.sh pokemon-y --code-dir build/game/pokemon-y \
+  --title-id 0004000000055E00 --target sim
 ```
 
-`scripts/build-game-pack-llvm.sh` is the repo-facing wrapper: it defaults
-`--code-dir` to `build/game/<name>` and `--out` to `build/winbuild` (gitignored);
-everything else (title id, jobs, target, `--llvm-dir`, `--pack-bin`, `--dry-run`,
-`--force`, `--no-record`) is passed to `tools/winbuild/build-gamepack.sh`.
+`tools/winbuild/build-gamepack.sh` is the cross-build driver: pass
+`--code-dir build/game/<name>` (3dsrecomp output) plus the title ID; see `--help`
+for `--out`, `--jobs`, `--target`, `--llvm-dir`, `--pack-bin`, `--dry-run`,
+`--force` and `--no-record`.
 
 ### Windows 10/11
 
@@ -108,7 +110,8 @@ everything else (title id, jobs, target, `--llvm-dir`, `--pack-bin`, `--dry-run`
    ```sh
    export WINBUILD_LLVM_DIR="$(cygpath -u 'C:\Program Files\LLVM\bin')"
    tools/winbuild/build-gamepack.sh --selfcheck
-   scripts/build-game-pack-llvm.sh pokemon-y --title-id 0004000000055E00 --jobs 8
+   tools/winbuild/build-gamepack.sh pokemon-y --code-dir build/game/pokemon-y \
+     --title-id 0004000000055E00 --jobs 8
    ```
 
    The launcher can instead run the same tools directly (no POSIX shell), see
@@ -179,7 +182,7 @@ plus a unit-tested command construction, not a claimed Windows run.
   (270,093,816 B, sha256 `61a1d89bafb7c92cb7fa59033821d0ca5e51d2ba5cc42217ca665d22617ae943`; the
   task-22 sim pack differs only in ld64.lld's 8-byte `LC_UUID`). That fresh pack ran in the real
   iOS Simulator shell and harness with **AOT active and 0.00% interpreted of 19,294,073
-  instructions (0 fallbacks)** — see [docs/windows-launcher.md](../../docs/windows-launcher.md) section 13.
+  instructions (0 fallbacks)** — see [launcher/windows/README.md](../../launcher/windows/README.md).
 
 ## Native Windows command lines (for the C#/.NET launcher)
 
@@ -227,36 +230,6 @@ the 10 required GamePack ABI exports, `zk_register_gamepack` still undefined,
 no Zakuro runtime symbol defined in the pack, and a JSON report that also lists
 every other undefined import. The build script runs it automatically (or falls
 back to llvm-nm/llvm-objdump checks). A failing check fails the build.
-
-## Simulator proof (reference VM only)
-
-`tools/winbuild/sim-probe/` is a tiny loader app that `dlopen()`s a
-cross-built simulator GamePack inside the iOS Simulator, `dlsym()`s the GamePack
-ABI, calls `zk_gamepack_register(1)` and asserts the host registration callback
-receives the real recomp tables. It is the end-to-end proof that the Mach-O is
-loadable on iOS's dyld and that `-undefined dynamic_lookup` resolves from the
-host process.
-
-**Result (2026-11-14, iPhone 17 Pro / iOS 26.5 simulator on the Intel build VM):**
-PASS for the **full 270 MB Pokemon Y simulator pack built by this Linux toolchain**
-- `dlopen` ok, `zk_gamepack_title_id` = `0004000000055e00`, `zk_gamepack_abi_version` = 1,
-  `zk_gamepack_register(1)` = 0, host callback saw title ID, recomp ABI 5,
-  generation 5, **entry_count=173131, module_count=133** and non-null entries/origins tables
-  (the real Pokemon Y tables); a mismatched host ABI is rejected; `result: summary
-  failures=0`, probe exit status 0. The same probe also passed on a 13 KB stand-in pack
-  first (machinery check). The 270 MB sim dylib reached the VM as a 58 MB xz (sha256
-  verified after decompression) because the dev-host -> build-host link is ~0.4 MB/s.
-
-Run it on the macOS build VM (the probe host app is built with Xcode; the
-GamePack under test is not):
-
-```sh
-# on the host that built the pack:
-tools/winbuild/build-gamepack.sh pokemon-y --code-dir build/game/pokemon-y \
-  --title-id 0004000000055E00 --target sim --out build/winbuild
-# copy the sim dylib to the VM, then on the VM:
-tools/winbuild/sim-probe/run-sim-probe.sh /path/to/GamePack-0004000000055E00.dylib
-```
 
 ## Limits / open questions
 
@@ -312,8 +285,6 @@ tools/winbuild/sim-probe/run-sim-probe.sh /path/to/GamePack-0004000000055E00.dyl
 | `darwin-cc.sh` | `$CC` wrapper that turns a host tool's C compile into an arm64-apple-ios compile with the darwin stubs (no Apple SDK) |
 | `recomp-port.sh` | ROM -> generated C -> arm64 objects on Linux/WSL/macOS via 3dsrecomp + `darwin-cc.sh` (the host half of the local build) |
 | `llvm-manifest.json` | pinned LLVM 21.1.8 release URLs + SHA-256 + licence facts + tool requirements |
-| `sim-probe/` | iOS Simulator dlopen probe (host app built with Xcode on the reference VM) |
-| `../../scripts/build-game-pack-llvm.sh` | repo-facing wrapper with the desktop AOT conventions |
 
 ## Launcher integration (task-26, feature-flagged)
 
@@ -334,7 +305,7 @@ default off) and shown as a readiness row; the macOS Build Agent stays the
 supported path. Tests: command construction/environment, missing-tool errors,
 recompile/link failures, invalid Mach-O rejection, and the feature flag gating
 creation (`LocalWinbuildPackProviderTests`, 6 tests; full launcher suite 63/63).
-See [docs/windows-launcher.md](../../docs/windows-launcher.md) section 13.
+See [launcher/windows/README.md](../../launcher/windows/README.md).
 
 ## Next steps (for the Windows launcher, task-19/task-21)
 

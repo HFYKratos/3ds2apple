@@ -21,7 +21,7 @@ with exactly one self-contained exe (pre-reset 0.2.5 package: 148,817,314 B,
 SHA-256 `b9b2a0b0…52f0d7`; the 0.1.0 package is rebuilt by the packaging task).
 Synthetic (non-game) UI captures are in `docs/ui/v4-*.png`; a real Windows 11 run of this
 exact pre-reset 0.2.5 build and the Impactor signing/phone flows were the remaining acceptance step
-(see [docs/windows-launcher.md](../../docs/windows-launcher.md) section 17.5).
+(device acceptance steps: see the root [README.md](../../README.md) usage section).
 
 Architecture correction (Lead, 2026-11-14): iOS cannot dlopen a loose unsigned
 dylib from Documents. The **GamePack.dylib lives inside the signed app IPA**
@@ -203,20 +203,19 @@ follow [shell/README.md](shell/README.md). It is deliberately absent from git.
 
 ## Manual verification
 
-Run the Windows test plan in [docs/windows-launcher.md](../../docs/windows-launcher.md)
-(section 11). It covers --self-test, missing-tool messages, ROM import/detection,
-the local build path, app IPA composition (including a template-with-ROM
-rejection), Impactor sign-in, signing error mapping (9120 / 9401 / 1100 / anisette /
-2FA), install/update of the app with one and then two games, ROM persistence across
-reinstall, ROM-only push, resume/stall handling and verify-after-push.
+Check the packaged exe with its clean-folder `--self-test` (payload, shell
+template, bundled Impactor/LLVM, tool probes) and Settings → self-test. The
+end-to-end device flow (ROM import → local build → IPA composition → Impactor
+sign-in → install/update → ROM-only push → verify-after-push) is the root
+[README.md](../../README.md) usage section; signing error mapping stays in the
+launcher error catalog (9120 / 9401 / 1100 / anisette / 2FA).
 
 ## Dependencies on other tasks
 
 - **task-16/20 device bridge**: devpush/1 contract v1 is implemented by
   Core/Device/DevPushClient.cs and checked against the real binary + mock backend;
-  docs/device-bridge.md is authoritative. task-20 changed push-game to ROM+GameInfo
-  only; our launcher already pushes exactly those two files directly via devpush.
-  The Python wrapper (device-install/1) remains an optional consolidation point.
+  [tools/devpush/README.md](../../tools/devpush/README.md) is authoritative. The
+  launcher pushes exactly GameRom.cci + GameInfo.json directly via devpush.
 - **task-17 shell**: the shell loads the pack from the bundle GameCatalog and the
   ROM from Documents; the GameInfo.json split was agreed (pack metadata is
   informational/bundle-relative, ROM is verified when present). The ROM-free shell

@@ -18,7 +18,7 @@
 //       packaging time by scripts/vm-build.sh from the pinned template, so the
 //       user-facing launcher is self-contained;
 //    2. <checkout>/build/third_party/MoltenVK.framework (the task-32 build
-//       input; also the xcframework path from scripts/AOT_BUILD.md);
+//       input; also the xcframework path from scripts/README.md);
 //    3. <checkout>/out/shell/3ds2apple-shell.ipa - the pinned ROM-free shell
 //       template (0.1.0 build 1); Payload/*.app/Frameworks/MoltenVK.framework is
 //       extracted read-only to a system temporary directory.

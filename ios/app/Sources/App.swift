@@ -23,7 +23,7 @@ struct ThreeDS2AppleApp: App {
         // variables read when its first Vulkan instance/device is created.
         // Apply the developer A/B overrides before anything can create one; a
         // normal launch sets no THREEDS2APPLE_MVK_CONFIG and keeps the
-        // framework defaults (see MoltenVKTuning.swift and docs/performance.md
+        // framework defaults (see MoltenVKTuning.swift and scripts/README.md
         // §5.3).
         MoltenVKTuning.applyFromEnvironment()
         // Metal Performance HUD: the Metal device reads MTL_HUD_ENABLED once,

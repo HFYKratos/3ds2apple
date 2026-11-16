@@ -1,6 +1,6 @@
 //! Stable error codes, exit codes and idevice error mapping for devpush.
 //!
-//! Contract: docs/device-bridge.md. Every failure is printed as one JSON object
+//! Contract: tools/devpush/README.md. Every failure is printed as one JSON object
 //! (--json) or one human line, and the process exit code is stable per code.
 
 use serde_json::{json, Value};

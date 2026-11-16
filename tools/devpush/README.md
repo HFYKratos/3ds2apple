@@ -11,7 +11,8 @@ A small CLI that talks to an iPhone/iPad through Apple usbmuxd (USB or Wi-Fi):
 
 It is the device side of the launcher-first architecture; the Windows and macOS
 launchers sign/install with official Impactor/plumesign or Xcode and call this
-binary for container pushes. Full launcher contract: `docs/device-bridge.md`.
+binary for container pushes. The launcher flow is documented in the root README;
+this file is the devpush contract/quickstart.
 
 ## Data-only policy (3ds2apple flow)
 

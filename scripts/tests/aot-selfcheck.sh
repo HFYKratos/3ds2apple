@@ -11,7 +11,7 @@
 #          helpers with the single AOT_EXPECTED_RECOMP_SYMBOLS list;
 #        - title IDs written to build-info.txt/manifest.txt must go through the
 #          validated/normalised value, and the manifest title must round-trip;
-#      plus `--help` smoke tests for the three AOT scripts (they cannot run on
+#      plus `--help` smoke tests for the two AOT scripts (they cannot run on
 #      Linux, but argument parsing must not crash);
 #   4. repo hygiene: build/ROM/IPA/archives must be gitignored and untracked.
 #
@@ -42,7 +42,7 @@ fail() {
   printf '  FAIL %s\n' "$1" >&2
 }
 
-AOT_SCRIPTS=(build-recomp-ios.sh build-linked-ios-lib.sh build-game-ipa.sh)
+AOT_SCRIPTS=(build-recomp-ios.sh build-linked-ios-lib.sh)
 
 # ---------------------------------------------------------------------------
 # 1. syntax
@@ -125,12 +125,6 @@ if grep -q 'refusing to write build-info.txt' "${SCRIPTS_DIR}/build-linked-ios-l
 else
   fail "build-linked-ios-lib.sh refuses to write an invalid title ID"
 fi
-if grep -q 'manifest title_id round-trip failed' "${SCRIPTS_DIR}/build-game-ipa.sh"; then
-  pass "build-game-ipa.sh self-checks the manifest title ID"
-else
-  fail "build-game-ipa.sh self-checks the manifest title ID"
-fi
-
 for name in "${AOT_SCRIPTS[@]}"; do
   if out="$(bash "${SCRIPTS_DIR}/${name}" --help 2>&1)" && [[ "$out" == *Usage:* ]]; then
     pass "${name} --help"

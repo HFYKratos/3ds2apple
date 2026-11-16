@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # perf-selfcheck.sh - static/behaviour checks for the performance work
-# (task-36: docs/performance.md, badge/diagnostics, AOT flags, MoltenVK hook).
+# (task-36: the scripts/README.md performance contract, badge/diagnostics, AOT
+# flags, MoltenVK hook).
 #
 # Runs on a plain Linux host: no Xcode, no clang, no ROM. It checks the
 # contracts this change introduced and the shell artifact it builds on.
@@ -84,13 +85,13 @@ fi
 check "normal launch keeps framework defaults (no unconditional setenv)" \
   grep -Fq -- 'applied.isEmpty' ios/app/Sources/MoltenVKTuning.swift
 
-section 'Performance document contract'
-check "docs/performance.md exists" test -f docs/performance.md
+section 'Performance contract (scripts/README.md)'
+check "scripts/README.md exists" test -f scripts/README.md
 for needle in 'GPL-2.0' 'reference only' 'any3ds' 'needs device' 'zk_perf' 'MVK_CONFIG_' 'AOT%' 'THREEDS2APPLE_AOT_OPT'; do
-  check "docs/performance.md mentions ${needle}" grep -Fq -- "${needle}" docs/performance.md
+  check "scripts/README.md mentions ${needle}" grep -Fq -- "${needle}" scripts/README.md
 done
-check "scripts/AOT_BUILD.md documents the experiment flags" \
-  grep -Fq -- 'THREEDS2APPLE_AOT_OPT' scripts/AOT_BUILD.md
+check "scripts/README.md documents the experiment flags" \
+  grep -Fq -- 'THREEDS2APPLE_AOT_OPT' scripts/README.md
 
 section 'Licence boundary'
 if grep -rlE 'any3ds' ios scripts tools --include='*.swift' --include='*.sh' --include='*.c' --include='*.rs' \
@@ -99,10 +100,10 @@ if grep -rlE 'any3ds' ios scripts tools --include='*.swift' --include='*.sh' --i
 else
   pass "no code under ios/ scripts/ tools/ references any3ds"
 fi
-if grep -Fq -- 'any3ds' docs/performance.md; then
-  pass "any3ds is cited only in the performance document"
+if grep -Fq -- 'any3ds' scripts/README.md; then
+  pass "any3ds is cited only in the performance notes"
 else
-  fail "docs/performance.md does not cite any3ds"
+  fail "scripts/README.md does not cite any3ds"
 fi
 
 section 'Shell artifact (0.1.0+ carries MoltenVK and the HUD gate)'

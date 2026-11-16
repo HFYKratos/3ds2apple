@@ -167,12 +167,13 @@ The rebuilt 0.1.0 build 1 package on the macOS VM (Xcode 26.6, headless):
   (5,498,294 bytes, sha256
   d44416dd7120f2492a2016577eece1ef60c823593a1543154edd6677a88439f7), one
   .app only (16 entries, 13,973,837 bytes uncompressed) including
-  Contents/Resources/MoltenVK.framework. The packaged launcher is self-contained
-  for device deploys (the user's Mac needs no shell template).
+  Contents/Resources/MoltenVK.framework. The launcher embeds the MoltenVK
+  framework, but the macOS package is not self-contained yet (a checkout + Xcode +
+  the built tools are required).
 - real iPhone acceptance is NOT done: the shared VM has no attached iPhone and no
   Apple ID signing assets. Signing/install/push need the player's own Xcode
-  account and a USB device; the manual checklist is in
-  [docs/macos-launcher.md](../../docs/macos-launcher.md) section 7.
+  account and a USB device; the manual checklist is section **Real-device
+  acceptance** below.
 - raw VM logs: /tmp/zl-010-build.log, /tmp/zl-launcher-selfcheck.log,
   /tmp/zl-launcher-selfcheck-packaged.log; copied to
   out/launchers/build-logs-macos-0.1.0/ in the WSL tree.
@@ -211,11 +212,38 @@ forced re-import self-heal) on the macOS VM (Xcode 26.6, headless), 2026-11-16:
   (5,495,796 bytes, sha256
   8c34398f7a25709598626769adc56d146ea89ff9f3718313c7c0d796f719d28b), one
   .app only (16 entries, 13,939,629 bytes uncompressed) including
-  Contents/Resources/MoltenVK.framework. The packaged launcher is self-contained
-  for device deploys (the user's Mac needs no shell template).
+  Contents/Resources/MoltenVK.framework. The shell template still came from the
+  checkout (the macOS package is not self-contained).
 
-Full architecture, contracts, build commands and the manual device-test
-checklist are in [docs/macos-launcher.md](../../docs/macos-launcher.md).
+## Real-device acceptance
+
+Run this once on a Mac with a real iPhone/iPad; the shared build VM cannot do it
+(no device, no Apple ID signing assets). Prerequisites: a Mac with Xcode signed
+in to your own Apple ID; iPhone/iPad on iOS 16+ with Developer Mode enabled; USB
+cable; the checkout with `build/ios/libzakuro_ios.a` built; decrypted ROMs you
+own.
+
+1. Library -> Import a ROM: the card appears with the ROM's SMDH cover icon, the
+   localized title for the app language and the publisher (remove is optional;
+   there is no rename).
+2. Deploy -> select one or two games -> press 一键部署 / Deploy selected.
+3. Expected: the Deploy page shows the detected hardware line (cores · RAM ·
+   3dsrecomp auto-parallelism); preflight shows the detected Team ID and device;
+   step 2 builds the GamePacks; step 3 composes one IPA under
+   `<portable-data>/ipa`; step 4 reports "N pack(s), schema-2 catalogue, no ROM";
+   step 5 installs and shows the actual installed bundle ID; step 6 pushes
+   GameRom + GameInfo per game; step 7 says 可以打开手机 App 游玩 / Ready to play.
+   Settings > About shows the resolved data folder and the compile hardware.
+4. Device triage: 9120 -> re-sign-in Xcode Accounts; 9401 -> trust/Developer
+   Mode/free-account limit; "no signing assets" -> add Apple ID in Xcode; device
+   not found -> cable/Trust/unlock; push stall -> reconnect and retry (the push
+   is idempotent, GameInfo goes last).
+5. Re-deploying with a different selection re-composes the IPA; pushed Documents
+   data is kept. After a clean app reinstall, re-deploy to push the data again.
+6. Cleanup: no ROM/IPA/dylib/GameInfo.json from a test may be committed to git.
+
+Build commands for the launcher are above; the end-user flow is documented in
+the root [README.md](../../README.md).
 
 ## Licensing / attribution
 

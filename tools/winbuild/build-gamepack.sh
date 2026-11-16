@@ -36,7 +36,7 @@
 #                       DIR/packages/<TITLE_ID>/GamePack-<TITLE_ID>.dylib
 #   --jobs N            Parallel compiles (default: CPU count, capped at 16)
 #   --opt-level LEVEL   Codegen level O1|O2|O3|Oz (default O2). Performance
-#                       experiment; see docs/performance.md §5.1 and measure
+#                       experiment; see scripts/README.md §5.1 and measure
 #                       before changing a release build.
 #   --lto               Add -flto to the compile and the link (A/B experiment;
 #                       default off). Needs a matching final app link.
@@ -231,7 +231,7 @@ case "${JOBS}" in ''|*[!0-9]*) die "--jobs must be a positive integer" ;; esac
 # --- compile/link flags ------------------------------------------------------
 # Same codegen flags as scripts/build-game-pack.sh, minus -isysroot: no Apple SDK.
 # Default -O2 with strict IEEE float behaviour; the opt-level/LTO/fast-math
-# flags are opt-in experiments (docs/performance.md §5.1), so a default build
+# flags are opt-in experiments (scripts/README.md §5.1), so a default build
 # command is unchanged.
 case "${OPT_LEVEL_ARG:-O2}" in
   O1|O2|O3|Oz) OPT_LEVEL="${OPT_LEVEL_ARG:-O2}" ;;

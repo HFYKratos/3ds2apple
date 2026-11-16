@@ -2,7 +2,7 @@
 //  Screens.swift
 //  3ds2apple macOS launcher
 //
-//  The two top-level sections from docs/macos-launcher.md:
+//  The two top-level sections from launcher/macos/README.md:
 //
 //    Library  import/add/list/remove only; SMDH name/publisher/cover are
 //             read-only (no name input); no build/install/push buttons.

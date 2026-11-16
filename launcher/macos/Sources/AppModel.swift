@@ -3,7 +3,7 @@
 //  3ds2apple macOS launcher
 //
 //  The single state machine behind the two-section UI
-//  (docs/macos-launcher.md):
+//  (launcher/macos/README.md):
 //
 //    Library: import a decrypted ROM -> list/remove games; the pack CLI's SMDH
 //             metadata (localized name, publisher, cover.png) is shown read-only

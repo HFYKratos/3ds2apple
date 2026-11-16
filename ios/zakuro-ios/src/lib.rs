@@ -20,7 +20,7 @@
 //! tables, which the app links in as a static archive beside this library, and
 //! [`zk_create`] hands them to Zakuro so the game runs as AOT C instead of in
 //! the interpreter. The default build is the interpreter-only shell and links
-//! nothing extra. `scripts/AOT_BUILD.md` in this directory has the build and
+//! nothing extra. The repository's `scripts/README.md` has the build and
 //! version-matching rules; [`zk_linked_code`], [`zk_linked_program_id`] and
 //! [`zk_recompiled`] report what a build and a loaded system ended up using,
 //! and [`zk_recompiled_status`] explains a fallback.
@@ -177,7 +177,7 @@ fn clear_last_error() {
 }
 
 /// One title's code, recompiled by 3dsrecomp at build time and linked into the
-/// app instead of loaded from a library at run time. See `scripts/AOT_BUILD.md`.
+/// app instead of loaded from a library at run time. See `scripts/README.md`.
 #[cfg(feature = "linked")]
 mod linked {
     use std::ffi::c_void;
@@ -689,7 +689,7 @@ pub extern "C" fn zk_last_error() -> *const c_char {
 
 /// 1 when AOT code is available for the next [`zk_create`]: either one game's
 /// recompiled tables linked in at build time (`--features linked`, see
-/// `scripts/AOT_BUILD.md`) or a GamePack dylib registered at run time
+/// `scripts/README.md`) or a GamePack dylib registered at run time
 /// ([gamepack]), 0 for a shell with neither.
 #[no_mangle]
 pub extern "C" fn zk_linked_code() -> i32 {
@@ -793,7 +793,7 @@ pub(crate) fn create_system(
     // loaded system's renderer, and the software renderer stays at 1x.
     config.resolution = render_scale();
 
-    // One game's AOT code can be linked into the app instead (`scripts/AOT_BUILD.md`). The
+    // One game's AOT code can be linked into the app instead (`scripts/README.md`). The
     // loader checks its title ID and interface version, and interprets instead
     // when they do not match.
     #[cfg(feature = "linked")]

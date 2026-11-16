@@ -59,7 +59,6 @@ cleanup() { rm -rf -- "$WORK"; }
 trap cleanup EXIT
 
 CATALOG_SH="${SCRIPTS_DIR}/build-ios-app.sh"
-GAME_IPA_SH="${SCRIPTS_DIR}/build-game-ipa.sh"
 PACKAGE_SH="${SCRIPTS_DIR}/package-ipa.sh"
 HELPER=${SCRIPTS_DIR}/lib/game-catalog.sh
 
@@ -67,7 +66,7 @@ HELPER=${SCRIPTS_DIR}/lib/game-catalog.sh
 # 1. syntax
 # ---------------------------------------------------------------------------
 printf '[1/5] syntax (bash -n)\n'
-for script in "$CATALOG_SH" "$GAME_IPA_SH" "$PACKAGE_SH" "$HELPER"; do
+for script in "$CATALOG_SH" "$PACKAGE_SH" "$HELPER"; do
   if [[ -f "$script" ]] && bash -n "$script" 2>/dev/null; then
     pass "bash -n ${script#"$ROOT"/}"
   else
@@ -331,19 +330,7 @@ wire_check "build-ios-app.sh keeps the Metal HUD injection" "$CATALOG_SH" 'Metal
 wire_check "build-ios-app.sh checks the catalog inside the app" "$CATALOG_SH" 'game_catalog_find_in_app'
 wire_check "build-ios-app.sh never compiles on device / stays ROM-free" "$CATALOG_SH" 'no ROM'
 
-wire_check "build-game-ipa.sh sources the catalog helper" "$GAME_IPA_SH" 'source "${SCRIPT_DIR}/lib/game-catalog.sh"'
-wire_check "build-game-ipa.sh has --title-id" "$GAME_IPA_SH" '--title-id)'
-wire_check "build-game-ipa.sh has --display-name" "$GAME_IPA_SH" '--display-name)'
-wire_check "build-game-ipa.sh has --product-code" "$GAME_IPA_SH" '--product-code)'
-wire_check "build-game-ipa.sh has --aot-version" "$GAME_IPA_SH" '--aot-version)'
-wire_check "build-game-ipa.sh has --ipa-version" "$GAME_IPA_SH" '--ipa-version)'
-wire_check "build-game-ipa.sh generates the one-game catalog" "$GAME_IPA_SH" 'game_catalog_write_game'
-wire_check "build-game-ipa.sh installs the catalog before the build" "$GAME_IPA_SH" 'game_catalog_install'
-wire_check "build-game-ipa.sh verifies the catalog in the app" "$GAME_IPA_SH" 'CATALOG_IN_APP='
-wire_check "build-game-ipa.sh removes the catalog on exit" "$GAME_IPA_SH" 'game_catalog_cleanup'
-wire_check "build-game-ipa.sh defaults to 3ds2apple-<game>-<version>.ipa" "$GAME_IPA_SH" '3ds2apple-${NAME}-${IPA_VERSION}'
-wire_check "build-game-ipa.sh keeps the manifest title ID self-check" "$GAME_IPA_SH" 'manifest title_id round-trip failed'
-wire_check "build-game-ipa.sh still delegates packaging" "$GAME_IPA_SH" 'scripts/package-ipa.sh" "$APP_PATH" --name "$IPA_NAME"'
+
 
 wire_check "package-ipa.sh sources the catalog helper" "$PACKAGE_SH" 'source "${SCRIPT_DIR}/lib/game-catalog.sh"'
 wire_check "package-ipa.sh validates the bundle catalog" "$PACKAGE_SH" 'game_catalog_validate'
@@ -371,15 +358,15 @@ if grep -Fq -- '- path: Resources' "${ROOT}/ios/app/project.yml" \
 else
   fail "project.yml bundles Resources/ (catalog ships in the .app)"
 fi
-if [[ -s "${ROOT}/docs/windows-launcher.md" ]] && grep -Fq 'GameCatalog.json' "${ROOT}/docs/windows-launcher.md"; then
-  pass "docs/windows-launcher.md documents GameCatalog.json"
+if [[ -s "${ROOT}/builder/README.md" ]] && grep -Fq 'GameCatalog.json' "${ROOT}/builder/README.md"; then
+  pass "builder/README.md documents GameCatalog.json"
 else
-  fail "docs/windows-launcher.md documents GameCatalog.json"
+  fail "builder/README.md documents GameCatalog.json"
 fi
-if [[ -s "${ROOT}/scripts/AOT_BUILD.md" ]] && grep -Fq 'GameCatalog.json' "${ROOT}/scripts/AOT_BUILD.md"; then
-  pass "scripts/AOT_BUILD.md documents the catalog asset step"
+if [[ -s "${ROOT}/scripts/README.md" ]] && grep -Fq 'GameCatalog.json' "${ROOT}/scripts/README.md"; then
+  pass "scripts/README.md documents the catalog asset step"
 else
-  fail "scripts/AOT_BUILD.md documents the catalog asset step"
+  fail "scripts/README.md documents the catalog asset step"
 fi
 
 # ---------------------------------------------------------------------------
@@ -390,11 +377,6 @@ if out="$(bash "$CATALOG_SH" --help 2>&1)" && [[ "$out" == *"--game-catalog"* ]]
   pass "build-ios-app.sh --help mentions --game-catalog"
 else
   fail "build-ios-app.sh --help mentions --game-catalog"
-fi
-if out="$(bash "$GAME_IPA_SH" --help 2>&1)" && [[ "$out" == *"--product-code"* ]] && [[ "$out" == *"3ds2apple-<name>-<version>"* ]]; then
-  pass "build-game-ipa.sh --help mentions --product-code and the IPA name"
-else
-  fail "build-game-ipa.sh --help mentions --product-code and the IPA name"
 fi
 if out="$(bash "$PACKAGE_SH" --help 2>&1)" && [[ "$out" == *"GameCatalog.json"* ]]; then
   pass "package-ipa.sh --help mentions GameCatalog.json"

@@ -4,7 +4,7 @@
 //
 //  In-memory activity log with an optional on-disk export. Log lines never
 //  include Apple ID passwords, device UDIDs chosen outside mock mode, or key
-//  material: see redact(_:) and docs/macos-launcher.md (privacy).
+//  material: see redact(_:) and launcher/macos/README.md (privacy).
 //
 
 import Foundation

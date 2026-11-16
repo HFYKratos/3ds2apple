@@ -2,7 +2,7 @@
 # vm-build.sh - build the macOS launcher (Release, universal), run its
 # self-checks, render the localized non-game UI screenshots and assemble the
 # user-facing app-only ZIP under the project's own out/launchers/ directory
-# (gitignored), per docs/macos-launcher.md.
+# (gitignored), per launcher/macos/README.md.
 #
 #   cd ~/3ds2apple/launcher/macos && bash scripts/vm-build.sh
 #

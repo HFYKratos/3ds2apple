@@ -51,7 +51,7 @@
 //  its title/ABI, registers the tables, and then ROMSession.start() calls
 //  zk_create() with the game data resolved from Documents/Games (or from the
 //  bundle for an app updated from the previous self-contained build). See
-//  builder/README.md (package layout) and scripts/AOT_BUILD.md for the
+//  builder/README.md (package layout) and scripts/README.md for the
 //  verified contract.
 //
 

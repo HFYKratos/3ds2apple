@@ -8,7 +8,7 @@
  * (see ios/app/project.yml), so Swift code calls `zk_*` directly.
  *
  * Threading: a zk_system_t handle is not thread-safe. Every call that takes a
- * handle must run on the same serial queue (docs/integration.md).
+ * handle must run on the same serial queue (ios/zakuro-ios/README.md).
  * Null handles are tolerated and turn calls into no-ops.
  *
  * Presentation: zk_presenter_create() takes a UIView whose layer is a
@@ -79,7 +79,7 @@ enum {
     ZK_FRAME_BAD_HANDLE = -2  /**< NULL/invalid zk_system_t. */
 };
 
-/** 3DS HID button bits (PadState bit layout, see docs/integration.md). */
+/** 3DS HID button bits (PadState bit layout, see ios/zakuro-ios/README.md). */
 enum {
     ZK_BUTTON_A = 1 << 0,
     ZK_BUTTON_B = 1 << 1,

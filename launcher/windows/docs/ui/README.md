@@ -73,4 +73,4 @@ portable workspace supplies the fake library):
       xvfb-run -a src/Launcher.Desktop/bin/Release/net10.0/3ds2apple-launcher --ui-smoke
 
 These are development renders; the real Windows 11 run of the 0.2.4 exe and device
-acceptance still need a Windows PC + iPhone/iPad (see `docs/windows-launcher.md`).
+acceptance still need a Windows PC + iPhone/iPad (see `launcher/windows/README.md`).

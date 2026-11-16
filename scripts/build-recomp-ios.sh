@@ -2,7 +2,7 @@
 # build-recomp-ios.sh — recompile one user ROM (or adopt existing generated C /
 # archive) into arm64 iOS AOT code + build/game/<name>/code/librecomp.a.
 #
-# Per-game AOT pipeline (authoritative design: ios/zakuro-ios/scripts/AOT_BUILD.md §3/§9):
+# Per-game AOT pipeline (authoritative design: scripts/README.md §3/§9):
 #
 #   # once per Zakuro checkout (clone + patch + baseline lib):
 #   scripts/build-zakuro-ios.sh
@@ -14,13 +14,13 @@
 #   scripts/build-linked-ios-lib.sh <name>
 #
 #   # per game (AOT IPA):      IPA/<name>-AOT.ipa
-#   scripts/build-game-ipa.sh <name>
+#   scripts/build-game-pack.sh <name> --title-id <id> --out out
 #
 # Must run on macOS with Xcode (iOS SDK clang) and Rust/cargo. The user's ROM
 # is read from ROM/ (gitignored) and is never copied into the repository;
 # generated C, objects and archives stay under build/ (gitignored).
 #
-# Version freezing (scripts/AOT_BUILD.md §5): the 3dsrecomp CLI is checked out at the
+# Version freezing (scripts/README.md §5): the 3dsrecomp CLI is checked out at the
 # revision that Zakuro's Cargo.lock pins for the `recomp-abi` crate, so the
 # generated C uses the exact ABI the linked Zakuro accepts. If the Zakuro
 # checkout is missing, a built-in fallback revision is used and a warning is
@@ -43,7 +43,7 @@
 #       # everything).
 #
 # 8 GB macOS VM: 3dsrecomp compiles the generated C in parallel by CPU count
-# with no memory cap (scripts/AOT_BUILD.md §3.2). If `port` is killed by the OOM killer,
+# with no memory cap (scripts/README.md §3.2). If `port` is killed by the OOM killer,
 # re-run with --auto-serial (or --serial-compile) to finish compiling the
 # already-generated C serially with the documented flags.
 set -euo pipefail
@@ -56,7 +56,7 @@ AOT_LOG_PREFIX="build-recomp-ios"
 source "${SCRIPT_DIR}/lib/aot-common.sh"
 
 # Built-in fallback: recomp-abi rev pinned by Zakuro's Cargo.lock at the time
-# scripts/AOT_BUILD.md was written (§8.4: ABI 5 / generation 5). Prefer the Cargo.lock pin.
+# scripts/README.md was written (§8.4: ABI 5 / generation 5). Prefer the Cargo.lock pin.
 DEFAULT_RECOMP_REV="df82e6e3"
 
 RECOMP_REPO_URL="https://github.com/fearkov/3dsrecomp"
@@ -107,7 +107,7 @@ Arguments:
 Options:
   --name NAME        Same as the [name] argument
   --title-id ID      16 hex digit title ID; normally extracted from the
-                     generated src/main.rs (scripts/AOT_BUILD.md §3.2). Explicit value wins
+                     generated src/main.rs (scripts/README.md §3.2). Explicit value wins
                      and is validated/normalised (lower case and 0x are OK).
   --reuse            Do not generate anything: validate the existing
                      build/game/<name>/code/librecomp.a, refresh
@@ -128,7 +128,7 @@ Options:
   --recomp-bin PATH  Reuse an already-built 3dsrecomp binary; skips
                      clone/build (env: THREEDS_RECOMP_BIN)
   --auto-serial      If `port` fails, retry compiling the generated C serially
-                     (use on the 8 GB macOS VM; scripts/AOT_BUILD.md §3.2)
+                     (use on the 8 GB macOS VM; scripts/README.md §3.2)
   --serial-compile   Skip `port` and only compile the existing generated C in
                      build/game/<name>/code/ serially (recovery path)
   --keep-existing    Do not delete an existing build/game/<name>/ first
@@ -136,7 +136,7 @@ Options:
   -h, --help         Show this help and exit
 
 Performance experiments (environment; the default build is unchanged, see
-docs/performance.md §5.1):
+scripts/README.md §5.1):
   THREEDS2APPLE_AOT_OPT=O1|O2|O3|Oz  codegen level for --serial-compile
                                       (default O2)
   THREEDS2APPLE_AOT_LTO=1            add -flto (if the final link uses it too)
@@ -298,7 +298,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
        Detected $(uname -s); run it on the macOS VM.
        (On Linux only scripts/tests/aot-selfcheck.sh and the other host-side
        self-checks can run; they use fake toolchains in a temp directory, see
-       AOT_BUILD.md.)"
+       scripts/README.md.)"
 fi
 
 need_tool xcrun "Install Xcode and run: sudo xcode-select -s \"\$HOME/Applications/Xcode-16.4.0.app\""
@@ -334,7 +334,7 @@ if [[ -n "$ROM_ARG" ]]; then
   case "$ROM_ABS" in
     *.cia)
       warn "input ends in .cia: 3dsrecomp rejects update CIAs and iOS FFI does not
-       load update/DLC yet (scripts/AOT_BUILD.md §6). Use the base-game .3ds/.cci ROM."
+       load update/DLC yet (scripts/README.md §6). Use the base-game .3ds/.cci ROM."
       ;;
   esac
   if [[ -z "$NAME_ARG" ]]; then
@@ -429,7 +429,7 @@ resolve_title_id_for_adoption() {
   return 1
 }
 
-# --- archive validation (scripts/AOT_BUILD.md §3.2/§8.2) --------------------------------
+# --- archive validation (scripts/README.md §3.2/§8.2) --------------------------------
 validate_archive() {
   local archive="$1" missing="" symbol
   [[ -f "$archive" ]] || die "generated archive is missing: $archive"
@@ -452,7 +452,7 @@ validate_archive() {
   rm -f -- "$NM_DUMP"
   NM_DUMP=""
   [[ -z "$missing" ]] || die "archive is missing 3dsrecomp table symbols:$missing
-       The C was probably not compiled by 3dsrecomp's port step. See scripts/AOT_BUILD.md §3.2."
+       The C was probably not compiled by 3dsrecomp's port step. See scripts/README.md §3.2."
 }
 
 COMPILE_MODE="port"
@@ -463,7 +463,7 @@ write_recomp_info() {
   local sha bytes
   aot_validate_title_id "$TITLE_ID" \
     || die "refusing to write recomp-info.txt: title ID '$TITLE_ID' is not 16 hex digits.
-       Pass --title-id explicitly (see AOT_BUILD.md §2)."
+       Pass --title-id explicitly (see scripts/README.md §2)."
   sha="$(aot_sha256 "$ARCHIVE")"
   bytes="$(wc -c < "$ARCHIVE" | tr -d '[:space:]')"
   {
@@ -554,7 +554,7 @@ if [[ "$REUSE" -eq 1 ]]; then
   exit 0
 fi
 
-# --- serial compile fallback (scripts/AOT_BUILD.md §3.2, incremental) ------------------
+# --- serial compile fallback (scripts/README.md §3.2, incremental) ------------------
 serial_compile() {
   local c_files c_file obj base index=0 total compiled=0 skipped=0
   local -a obj_names
@@ -686,7 +686,7 @@ run_stage() {
   fi
 }
 
-# --- resolve the 3dsrecomp revision (scripts/AOT_BUILD.md §5) ---------------------------
+# --- resolve the 3dsrecomp revision (scripts/README.md §5) ---------------------------
 resolve_recomp_rev() {
   if [[ -n "$RECOMP_REV_ARG" ]]; then
     printf '%s\n' "$RECOMP_REV_ARG"
@@ -709,7 +709,7 @@ resolve_recomp_rev() {
 
   warn "Zakuro Cargo.lock pin not found (${lock}); using built-in fallback
        revision ${DEFAULT_RECOMP_REV}. Run scripts/build-zakuro-ios.sh first
-       so the recomp-abi pin is authoritative (scripts/AOT_BUILD.md §5)."
+       so the recomp-abi pin is authoritative (scripts/README.md §5)."
   printf '%s\n' "$DEFAULT_RECOMP_REV"
 }
 
@@ -773,7 +773,7 @@ else
   fi
 fi
 
-# --- run port with the iOS clang (scripts/AOT_BUILD.md §3.2) ----------------------------
+# --- run port with the iOS clang (scripts/README.md §3.2) ----------------------------
 CC_STRING="${CC_BIN} -target ${IOS_TARGET} -isysroot ${SDK_PATH}"
 log "CC: ${CC_STRING}"
 log "AR: ar"
@@ -798,7 +798,7 @@ else
   if [[ "$port_status" -ne 0 ]]; then
     if [[ "$AUTO_SERIAL" -eq 1 ]] && compgen -G "${CODE_DIR}/*.c" >/dev/null; then
       warn "3dsrecomp port failed (status ${port_status}); --auto-serial: compiling the
-       generated C serially instead (8 GB VM memory fallback, scripts/AOT_BUILD.md §3.2)."
+       generated C serially instead (8 GB VM memory fallback, scripts/README.md §3.2)."
       serial_compile
     else
       printf '\n--- 3dsrecomp port failed: last 100 lines of %s ---\n' "$LOG_FILE" >&2
@@ -818,7 +818,7 @@ if ! resolve_title_id_for_adoption; then
   TITLE_ID=""
   die "could not determine a valid 16 hex digit title ID
        (recomp-info.txt/src/main.rs gave nothing). The generated src/main.rs
-       should contain a 0x<16 hex> literal (scripts/AOT_BUILD.md §3.2); if it is missing,
+       should contain a 0x<16 hex> literal (scripts/README.md §3.2); if it is missing,
        pass --title-id explicitly."
 fi
 

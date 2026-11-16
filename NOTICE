@@ -31,7 +31,7 @@ The iOS shell template and the macOS launcher bundle the unmodified MoltenVK 1.4
 framework (Apache-2.0, https://github.com/KhronosGroup/MoltenVK) for the
 Vulkan-to-Metal renderer path. The framework is a build/packaging input and is not
 committed to this repository; its upstream licence is listed in THIRD_PARTY.md, and
-every public release also attaches this NOTICE and THIRD_PARTY.md.
+the licence texts live in this repository; public releases publish only the two platform launcher zips (see CONTRIBUTING.md#release-policy).
 
 The Windows single-file launcher is a self-contained .NET 10 application (MIT) using
 the Avalonia 12.1.5 UI framework (MIT), built only from the sources in this
@@ -56,8 +56,9 @@ only run as a build tool (cloned at a pinned revision at build time) and is neve
 vendored or redistributed by this project.
 
 Public binaries are distributed only through the project's GitHub Releases
-(https://github.com/HFYKratos/3ds2apple/releases); every release also attaches
-LICENSE, NOTICE, THIRD_PARTY.md and SHA256SUMS.txt. No Nintendo ROMs, decryption keys,
+(https://github.com/HFYKratos/3ds2apple/releases): each release publishes only the
+Windows and macOS launcher zips; the licence texts live in this repository and the
+ROM-free shell template is embedded in the launchers. No Nintendo ROMs, decryption keys,
 BIOS or firmware, generated C, per-game GamePack dylibs or composed game IPAs are
 published, and the release policy/checks are documented in
-docs/release.md.
+CONTRIBUTING.md#release-policy.

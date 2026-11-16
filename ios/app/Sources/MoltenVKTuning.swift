@@ -11,7 +11,7 @@
 //  still have to be applied before that first device. A launch environment
 //  variable keeps the production behaviour unchanged (nothing is set unless the
 //  tester opts in) while making a device/simulator A/B run possible without a
-//  rebuild. See docs/performance.md §5.3 for the candidate matrix and the
+//  rebuild. See scripts/README.md §5.3 for the candidate matrix and the
 //  measurement procedure.
 //
 //  Only names the pinned framework actually understands are accepted: the list

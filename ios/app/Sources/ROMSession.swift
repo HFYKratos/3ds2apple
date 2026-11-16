@@ -18,7 +18,7 @@
 //          layer/presenter cannot be made the session falls back to the
 //          `zk_read_screen` + CGImage path unchanged.
 //
-//  Threading contract (docs/integration.md, ios/zakuro-ios/README.md):
+//  Threading contract (ios/zakuro-ios/README.md, ios/zakuro-ios/README.md):
 //  - every zk_* call that takes a handle runs on `runtimeQueue`, a single
 //    serial queue;
 //  - zk_create() runs off the main thread (it may take seconds);

@@ -3,7 +3,7 @@
 # to read/write an installed app's container, and installation_proxy to install,
 # uninstall and query app attributes. Modelled on S2Arm's s2a-devpush (Apache-2.0);
 # the idevice dependency is pinned to the same upstream commit that official
-# Impactor v2.7.2 uses. See docs/device-bridge.md and THIRD_PARTY.md.
+# Impactor v2.7.2 uses. See tools/devpush/README.md and THIRD_PARTY.md.
 [package]
 name = "devpush"
 version = "0.1.0"

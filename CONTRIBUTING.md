@@ -10,6 +10,17 @@ Nintendo 3DS games; the most useful contributions are:
 - performance work on the software renderer or a Metal/Vulkan backend;
 - documentation that makes the build path easier to reproduce.
 
+## Documentation rules
+
+- **`README.md` / `README.zh-CN.md` are the only user-facing usage guides.**
+  Installation, signing, import, deploy and push instructions live there and
+  must stay in sync in both languages.
+- Developer notes live in the component READMEs (`launcher/windows`,
+  `launcher/macos`, `ios/app`, `builder`, `tools/devpush`, `tools/winbuild`)
+  and in `scripts/README.md`. There is no separate product documentation
+  directory.
+- Release notes never repeat the usage guide; they link to the README.
+
 ## Ground rules
 
 1. **No ROMs, keys, system files or game assets.** Do not attach them to issues,
@@ -44,5 +55,101 @@ Do not upload the ROM, generated C code or a signed IPA.
 ## Pull requests
 
 By contributing, you agree that your contribution is licensed under
-Apache-2.0. Keep changes focused and update the relevant public documentation
-in `README.md`, `docs/` or `ios/*/README.md`.
+Apache-2.0. Keep changes focused and update the relevant public documentation:
+the root README for user-facing behavior and the component README for developer
+details.
+
+## Release policy
+
+Public releases are GitHub Releases on
+<https://github.com/HFYKratos/3ds2apple/releases>. The policy is intentionally
+minimal: users download one package, and GitHub provides the asset digests.
+
+### Repository page branding
+
+- The repository README shows the app icon from `assets/icon.png`.
+- GitHub does **not** expose an API for a repository's social preview (and a
+  user-owned repository's avatar is the account avatar). Upload
+  `assets/social-preview.png` (1280x640) once in **Settings -> Social preview**
+  so link previews show the app icon.
+
+### Assets (exactly two)
+
+Attach only the two platform packages produced by the release build:
+
+| Asset | Content |
+|---|---|
+| `3ds2apple-<version>-windows-x64.zip` | Windows 10/11 launcher; one self-contained executable |
+| `3ds2apple-<version>-macos-universal.zip` | macOS 13+ launcher (`.app`, Intel + Apple silicon) |
+
+**Never attach:** `LICENSE`, `NOTICE`, `THIRD_PARTY.md`, a `SHA256SUMS.txt`,
+the ROM-free shell IPA template, per-game IPAs, GamePacks/dylibs, generated C,
+ROMs, keys/BIOS, credentials or certificates, or screenshots containing game
+art. The shell template is embedded in the launchers; license texts live in the
+repository (and inside the Windows launcher payload); each asset's SHA-256
+digest is visible on the GitHub Release assets page (and can be computed
+locally).
+
+### Release body: bilingual update highlights
+
+Release notes contain the version plus short bilingual highlights; the usage
+guide is only in the README (link to it, do not paste install steps). Use this
+shape:
+
+```markdown
+### 新功能 / New features
+- 中文一句话说明新功能
+  *One-line English description of the new feature*
+
+### 修复 / Fixes
+- 中文一句话说明修复
+  *One-line English description of the fix*
+
+### 变化 / Changes
+- 中文一句话说明行为或兼容性变化
+  *One-line English description of the change*
+```
+
+- Write Chinese first, then the English line in italics.
+- Keep each item to one line; omit an empty section.
+- **The first public release only contains a short initial description**
+  (what the product is, what the two packages contain, pointer to the README) —
+  no changelog sections.
+- Note unverified platforms honestly (for example "macOS device install not yet
+  verified by the maintainers").
+
+### Process
+
+1. Build the two packages and run the project test gates (`cargo test`,
+   `dotnet test`, `scripts/tests/*-selfcheck.sh`); the Windows package must pass
+   its clean-folder `--self-test`.
+2. Assemble the release directory (this also renames the build artifacts to the
+   canonical asset names and runs the verifier):
+
+   ```bash
+   bash scripts/release/assemble-release.sh --version v<version> \
+     --windows-zip out/launchers/3ds2apple-windows-single-<version>.zip \
+     --macos-zip out/launchers/3ds2apple-launcher-<version>-macos-app.zip
+   bash scripts/release/verify-release.sh --release-dir out/release/v<version>
+   ```
+
+3. Create the annotated tag and the GitHub Release; the **release title is only
+   the version number** (`<version>`, e.g. `0.1.0`):
+
+   ```bash
+   git tag -a v<version> -m "3ds2apple <version>"
+   gh release create v<version> --title "<version>" --notes-file <notes.md> \
+     out/release/v<version>/*
+   ```
+
+4. Optionally mark a pre-release when a platform is explicitly unverified; do
+   not claim verified states you do not have.
+5. Download the published assets once into a clean directory and check them
+   against the digests shown on the Release page.
+
+### Immutability
+
+Released tags and assets are immutable: never move, delete or force-push a
+published tag, and never silently replace an uploaded asset. Fixes ship as a
+new version (for example `0.1.1`); the old release stays available and is
+marked superseded in its notes.

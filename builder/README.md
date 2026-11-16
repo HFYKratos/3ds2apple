@@ -106,13 +106,14 @@ desktop library/CLI: it never signs, installs or contacts a project server.
 
 ## Related documentation
 
-- [../docs/windows-launcher.md](../docs/windows-launcher.md) — end-to-end Windows
-  launcher flow, errors and the device acceptance plan.
-- [../docs/macos-launcher.md](../docs/macos-launcher.md) — macOS launcher flow.
-- [../docs/device-bridge.md](../docs/device-bridge.md) — devpush contract and the
-  Documents data layout.
+- [../README.md](../README.md) — product usage and the launcher workflow.
 - [../launcher/windows/README.md](../launcher/windows/README.md) — Windows launcher
   developer guide.
+- [../launcher/macos/README.md](../launcher/macos/README.md) — macOS launcher
+  developer guide.
+- [../tools/devpush/README.md](../tools/devpush/README.md) — device bridge
+  (devpush/1) quickstart and contract.
 - [../tools/winbuild/README.md](../tools/winbuild/README.md) — Apple-SDK-free
   LLVM/LLD GamePack build.
-- [STACK.md](STACK.md) — workspace stack and test gates.
+- [../scripts/README.md](../scripts/README.md) — build scripts, AOT flags and
+  self-checks.
