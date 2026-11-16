@@ -27,9 +27,9 @@ public partial class App : Application
                 {
                     viewModel.OpenSettings();
                 }
-                else if (string.Equals(view, "import", StringComparison.OrdinalIgnoreCase))
+                else if (string.Equals(view, "deploy", StringComparison.OrdinalIgnoreCase))
                 {
-                    viewModel.ShowImport();
+                    viewModel.ShowDeploy();
                 }
                 // Headless smoke run (CI/Xvfb): build the whole visual tree, render a few
                 // frames, report and exit. Never used by the shipped launcher.

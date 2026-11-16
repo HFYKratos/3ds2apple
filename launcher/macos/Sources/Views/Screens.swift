@@ -2,15 +2,15 @@
 //  Screens.swift
 //  3ds2apple macOS launcher
 //
-//  The two top-level sections from docs/launcher-ui.md:
+//  The two top-level sections from docs/launcher-flow-v2.md:
 //
-//    Library  game cards, one status line, one primary action per game, plus the
-//             on-device library status and the essential install/push actions.
-//    Import   drag-and-drop or file picker, detected header, one primary button.
+//    Library  import/add/list/remove/rename only; no build/install/push buttons.
+//    Deploy   select one or several library games -> one-click batch deploy:
+//             compile -> compose one ROM-free IPA -> verify -> install -> push
+//             -> verify -> Done. Per-step state and logs live on this page.
 //
-//  Everything else (signing setup, build mode, tools, logs, diagnostics, about)
-//  lives in the Settings panel; the per-game secondary actions live in the game
-//  detail dialog. Pure SwiftUI so the offscreen snapshot renderer can draw it.
+//  Import is a sheet launched from the Library. Everything is pure SwiftUI so
+//  the offscreen snapshot renderer can draw it on the headless build VM.
 //
 
 import SwiftUI
@@ -29,7 +29,7 @@ func shortHash(_ hash: String?) -> String {
     return String(hash.prefix(12)) + "..."
 }
 
-private func stepRow(_ number: Int, _ title: String, _ detail: String) -> some View {
+func stepRow(_ number: Int, _ title: String, _ detail: String) -> some View {
     HStack(alignment: .top, spacing: 10) {
         Text(String(number))
             .font(LauncherTheme.mono(10, weight: .bold))
@@ -63,12 +63,6 @@ struct LibraryScreen: View {
                 BannerView(banner: banner) { model.banner = nil }
             }
             header
-            if let task = busyTask {
-                TaskProgressCard(task: task, strings: strings)
-            }
-            if model.libraryNeedsRebuild {
-                rebuildWarning
-            }
             if model.games.isEmpty {
                 emptyLibrary
             } else {
@@ -82,11 +76,6 @@ struct LibraryScreen: View {
         }
     }
 
-    private var busyTask: TaskRecord? {
-        guard model.isBusy else { return nil }
-        return model.activeTask
-    }
-
     private var header: some View {
         HStack(spacing: 10) {
             Text(strings.gamesCount(model.games.count))
@@ -95,12 +84,12 @@ struct LibraryScreen: View {
             Spacer()
             deviceChip
             Button {
-                Task { await model.verifyPackages() }
+                model.importPresented = true
             } label: {
-                Label(strings.verifyPackages, systemImage: "checkmark.shield")
+                Label(strings.importGame, systemImage: "plus")
             }
             .buttonStyle(SecondaryButtonStyle())
-            .disabled(model.isBusy || model.isMock || model.games.isEmpty)
+            .disabled(model.isBusy)
         }
     }
 
@@ -111,17 +100,8 @@ struct LibraryScreen: View {
                 Image(systemName: "iphone")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(LauncherTheme.accentDeep)
-                Text(strings.deviceSelected(device.name))
+                Text(device.name)
                     .font(.system(size: 11, weight: .medium))
-                Button {
-                    Task { await model.detectDevices() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 9.5, weight: .semibold))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(LauncherTheme.mutedText)
-                .disabled(model.isBusy)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -130,30 +110,11 @@ struct LibraryScreen: View {
             Button {
                 Task { await model.detectDevices() }
             } label: {
-                Label(strings.noDevice, systemImage: "iphone.slash")
+                Label(strings.deployDeviceNone, systemImage: "iphone.slash")
             }
             .buttonStyle(SecondaryButtonStyle())
             .disabled(model.isBusy)
         }
-    }
-
-    private var rebuildWarning: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(LauncherTheme.warning)
-            Text(strings.libraryNeedsRebuild)
-                .font(.system(size: 11))
-                .foregroundStyle(LauncherTheme.mutedText)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            Button(strings.rebuildInstallLibrary) {
-                Task { await model.buildAndInstallLibrary() }
-            }
-            .buttonStyle(SecondaryButtonStyle())
-            .disabled(model.isBusy || model.builtGames.isEmpty)
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10).fill(LauncherTheme.warning.opacity(0.1)))
     }
 
     private var emptyLibrary: some View {
@@ -163,61 +124,39 @@ struct LibraryScreen: View {
                 title: strings.emptyLibraryTitle,
                 message: strings.emptyLibraryMessage
             )
-            Button(strings.importFirstGame) {
-                model.screen = .importROM
+            Button(strings.addFirstGame) {
+                model.importPresented = true
             }
             .buttonStyle(PrimaryButtonStyle())
         }
     }
 
     private var libraryStatusCard: some View {
-        Card(title: strings.libraryStatusTitle) {
-            if settings.libraryInstalledTitles.isEmpty {
-                HStack(alignment: .center, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(strings.libraryNotInstalled)
-                            .font(.system(size: 12, weight: .semibold))
-                        Text(strings.romDataNote)
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(LauncherTheme.mutedText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 8)
-                    Button(strings.buildInstallLibrary) {
-                        Task { await model.buildAndInstallLibrary() }
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(model.isBusy || model.games.isEmpty)
-                }
-            } else {
-                VStack(spacing: 6) {
-                    KeyValueRow(key: strings.toolsInstalledTitles, value: strings.installedGames(settings.libraryInstalledTitles.count))
-                    KeyValueRow(key: strings.libraryIPALabel, value: settings.libraryIPAPath.isEmpty ? "-" : settings.libraryIPAPath, mono: true)
-                }
-                if model.libraryNeedsRebuild {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(LauncherTheme.warning)
-                        Text(strings.libraryNeedsRebuild)
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(LauncherTheme.mutedText)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Spacer(minLength: 0)
-                    }
+        Card(title: strings.deployInstalledBundle) {
+            VStack(alignment: .leading, spacing: 6) {
+                if settings.libraryInstalledTitles.isEmpty {
+                    Text(strings.deployNotInstalledBundle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(LauncherTheme.mutedText)
                 } else {
-                    HStack(spacing: 8) {
-                        Image(systemName: "checkmark.seal.fill")
-                            .foregroundStyle(LauncherTheme.success)
-                        Text(strings.libraryUpToDate)
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(LauncherTheme.mutedText)
-                        Spacer(minLength: 0)
+                    KeyValueRow(key: strings.statusLabel, value: strings.deployPushed(settings.libraryInstalledTitles.count))
+                    KeyValueRow(key: strings.deployInstalledBundle, value: settings.installedBundleID.isEmpty ? strings.deviceBundleIDNone : settings.installedBundleID, mono: true)
+                    KeyValueRow(key: strings.libraryIPALabel, value: settings.libraryIPAPath.isEmpty ? "-" : settings.libraryIPAPath, mono: true)
+                    if model.libraryNeedsRebuild {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(LauncherTheme.warning)
+                            Text(strings.deployNeedsBuild)
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(LauncherTheme.mutedText)
+                            Spacer(minLength: 0)
+                        }
                     }
                 }
-                Text(strings.romDataNote)
+                Text(strings.deployNoteROMFree)
                     .font(.system(size: 10.5))
                     .foregroundStyle(LauncherTheme.mutedText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -229,11 +168,13 @@ private struct GameCard: View {
     @ObservedObject var settings: LauncherSettings
     let strings: LauncherStrings
 
-    private var isInLibrary: Bool {
-        settings.libraryInstalledTitles.contains(game.titleID)
-    }
+    @State private var showingRename = false
+    @State private var renameText = ""
+    @State private var showingRemove = false
 
-    private var isBusy: Bool { model.isBusy }
+    private var isInLibrary: Bool {
+        model.isInInstalledLibrary(game.titleID)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -256,65 +197,67 @@ private struct GameCard: View {
                 Spacer(minLength: 0)
             }
             HStack(spacing: 16) {
-                metric(strings.fieldROMSize, humanBytes(game.romBytes))
-                metric(strings.fieldPackSize, humanBytes(game.packBytes))
+                metric(strings.romSizeLabel, humanBytes(game.romBytes))
+                metric(strings.packSizeLabel, humanBytes(game.packBytes))
+                metric(strings.statusLabel, game.romDataPath == nil ? strings.noDataStaged : strings.dataStaged)
             }
             if let error = game.lastError {
-                Text(strings.lastError + ": " + error)
+                Text(strings.lastErrorLabel + ": " + error)
                     .font(.system(size: 10.5))
                     .foregroundStyle(LauncherTheme.danger)
                     .lineLimit(2)
             }
+            if game.isOnDevice {
+                Text(strings.howToPlayStep4)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(LauncherTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack(spacing: 8) {
-                primaryAction
-                Spacer(minLength: 0)
                 Button {
-                    model.detailGameID = game.titleID
+                    Task {
+                        await model.refreshLibrary()
+                    }
                 } label: {
-                    Image(systemName: "info.circle")
+                    Label(strings.refresh, systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(SecondaryButtonStyle())
-                .help(strings.secondaryDetails)
+                .disabled(model.isBusy)
+                Spacer(minLength: 0)
+                Button {
+                    renameText = game.displayName
+                    showingRename = true
+                } label: {
+                    Text(strings.rename)
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(model.isBusy)
+                Button {
+                    showingRemove = true
+                } label: {
+                    Text(strings.remove)
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(model.isBusy)
             }
         }
         .launcherCard()
-    }
-
-    @ViewBuilder
-    private var primaryAction: some View {
-        switch game.phase {
-        case .queued, .failed:
-            Button(strings.primaryBuild) {
-                Task { await model.build(gameID: game.titleID) }
+        .alert(strings.renameTitle, isPresented: $showingRename) {
+            TextField(strings.fieldDisplayName, text: $renameText)
+            Button(strings.cancel, role: .cancel) {}
+            Button(strings.renameSave) {
+                model.renameGame(titleID: game.titleID, newName: renameText)
             }
-            .buttonStyle(PrimaryButtonStyle())
-            .disabled(isBusy)
-        case .building:
-            Button(strings.primaryBuilding) {}
-                .buttonStyle(SecondaryButtonStyle())
-                .disabled(true)
-        case .built:
-            if !isInLibrary {
-                Button(strings.primaryInstall) {
-                    Task { await model.buildAndInstallLibrary() }
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(isBusy || model.builtGames.isEmpty)
-            } else {
-                Button(strings.primaryPush) {
-                    Task {
-                        _ = await model.preparePush(gameID: game.titleID)
-                        await model.pushGame(gameID: game.titleID)
-                    }
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(isBusy)
+        } message: {
+            Text(game.titleID)
+        }
+        .alert(strings.removeConfirmTitle, isPresented: $showingRemove) {
+            Button(strings.cancel, role: .cancel) {}
+            Button(strings.removeConfirmAction, role: .destructive) {
+                model.removeGame(titleID: game.titleID)
             }
-        case .pushed:
-            Button(strings.primaryHowToPlay) {
-                model.detailGameID = game.titleID
-            }
-            .buttonStyle(PrimaryButtonStyle())
+        } message: {
+            Text(strings.removeConfirmMessage)
         }
     }
 
@@ -329,9 +272,300 @@ private struct GameCard: View {
     }
 }
 
+// MARK: - Deploy
+
+struct DeployScreen: View {
+    @ObservedObject var model: AppModel
+    @ObservedObject var settings: LauncherSettings
+    let strings: LauncherStrings
+
+    var body: some View {
+        ScreenContainer {
+            if let banner = model.banner {
+                BannerView(banner: banner) { model.banner = nil }
+            }
+            if model.games.isEmpty {
+                emptyState
+            } else {
+                deviceCard
+                selectionCard
+                if let report = model.deployReport {
+                    DeployReportCard(report: report, model: model, strings: strings)
+                }
+                logCard
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        Card {
+            EmptyStateView(
+                symbol: "iphone.and.arrow.forward",
+                title: strings.deployNoGames,
+                message: strings.emptyLibraryMessage
+            )
+            Button(strings.addFirstGame) {
+                model.importPresented = true
+            }
+            .buttonStyle(PrimaryButtonStyle())
+        }
+    }
+
+    private var deviceCard: some View {
+        Card(title: strings.deployDeviceTitle) {
+            HStack(spacing: 12) {
+                if let device = model.selectedDevice {
+                    Image(systemName: "iphone")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(LauncherTheme.accentDeep)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(device.name)
+                            .font(.system(size: 12.5, weight: .semibold))
+                        Text(device.model + " · iOS " + device.iosVersion + " · " + device.connectionLabel)
+                            .font(LauncherTheme.mono(10.5))
+                            .foregroundStyle(LauncherTheme.mutedText)
+                    }
+                } else {
+                    Image(systemName: "iphone.slash")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(LauncherTheme.warning)
+                    Text(strings.deployDeviceNone)
+                        .font(.system(size: 11))
+                        .foregroundStyle(LauncherTheme.mutedText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Button {
+                    Task { await model.detectDevices() }
+                } label: {
+                    Label(strings.deployDetectDevice, systemImage: "cable.connector")
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(model.isBusy)
+            }
+            HStack(spacing: 12) {
+                KeyValueRow(
+                    key: strings.deployInstalledBundle,
+                    value: settings.installedBundleID.isEmpty ? strings.deployNotInstalledBundle : settings.installedBundleID,
+                    mono: true
+                )
+            }
+        }
+    }
+
+    private var selectionCard: some View {
+        Card(
+            title: strings.deploySelectionTitle,
+            subtitle: strings.deploySelected(model.selectedForDeploy.count),
+            trailing: AnyView(
+                HStack(spacing: 8) {
+                    Button(strings.deploySelectAll) { model.selectAllDeploy() }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .disabled(model.isBusy)
+                    Button(strings.deployClearSelection) { model.clearDeploySelection() }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .disabled(model.isBusy)
+                }
+            )
+        ) {
+            VStack(spacing: 8) {
+                ForEach(model.games) { game in
+                    DeployGameRow(
+                        game: game,
+                        model: model,
+                        strings: strings,
+                        selected: model.selectedForDeploy.contains(game.titleID)
+                    )
+                }
+            }
+            HStack(spacing: 12) {
+                Text(strings.deploySelected(model.selectedForDeploy.count))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(LauncherTheme.mutedText)
+                Spacer()
+                Button {
+                    Task { await model.deploySelected() }
+                } label: {
+                    Label(strings.deployButton(model.selectedForDeploy.count), systemImage: "bolt.fill")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(model.isBusy || model.selectedForDeploy.isEmpty)
+            }
+            .padding(.top, 4)
+            Text(strings.deployNoteROMFree)
+                .font(.system(size: 10.5))
+                .foregroundStyle(LauncherTheme.mutedText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var logCard: some View {
+        Card(title: strings.deployLogTitle) {
+            LogConsole(
+                entries: model.logs.filter { ["deploy", "build", "library", "install", "push", "devpush"].contains($0.category) },
+                maximumLines: 12,
+                strings: strings
+            )
+        }
+    }
+}
+
+private struct DeployGameRow: View {
+    let game: GameEntry
+    @ObservedObject var model: AppModel
+    let strings: LauncherStrings
+    let selected: Bool
+
+    private var plan: PushPlan? { model.pushPlans[game.titleID] }
+
+    var body: some View {
+        Button {
+            model.toggleDeploySelection(game.titleID)
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(selected ? LauncherTheme.accentDeep : LauncherTheme.mutedText)
+                GameArtwork(game: game, size: 38)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(game.displayName)
+                            .font(.system(size: 12, weight: .semibold))
+                            .lineLimit(1)
+                        GamePhaseBadge(phase: game.phase, strings: strings)
+                        if model.isInInstalledLibrary(game.titleID) {
+                            Badge(text: strings.inLibraryBadge, tone: .success, symbol: "checkmark.seal.fill")
+                        } else if plan?.verified == true {
+                            Badge(text: strings.deployPushed(1), tone: .accent, symbol: "arrow.up.circle.fill")
+                        }
+                    }
+                    Text(game.productCode.isEmpty ? game.titleID : game.productCode)
+                        .font(LauncherTheme.mono(10))
+                        .foregroundStyle(LauncherTheme.accentDeep)
+                    Text(game.isAOTReady ? strings.deployEligible : strings.deployNeedsBuild)
+                        .font(.system(size: 10))
+                        .foregroundStyle(LauncherTheme.mutedText)
+                }
+                Spacer(minLength: 8)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(humanBytes(game.romBytes))
+                        .font(LauncherTheme.mono(10.5, weight: .medium))
+                    Text(humanBytes(game.packBytes))
+                        .font(LauncherTheme.mono(9.5))
+                        .foregroundStyle(LauncherTheme.mutedText)
+                }
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(selected ? LauncherTheme.accent.opacity(0.10) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(model.isBusy)
+    }
+}
+
+struct DeployReportCard: View {
+    let report: DeployReport
+    @ObservedObject var model: AppModel
+    let strings: LauncherStrings
+
+    private var title: String {
+        switch report.state {
+        case .succeeded: return strings.deployDoneTitle
+        case .failed, .cancelled: return strings.deployFailedTitle
+        default: return strings.deployStepsTitle
+        }
+    }
+
+    private var tone: BadgeTone {
+        switch report.state {
+        case .succeeded: return .success
+        case .failed: return .danger
+        case .cancelled: return .warning
+        default: return .accent
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: report.state == .succeeded ? "checkmark.seal.fill" : "iphone.and.arrow.forward")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(tone.foreground)
+                Text(title)
+                    .font(LauncherTheme.rounded(14, weight: .semibold))
+                Spacer()
+                Badge(text: strings.taskState(report.state), tone: tone)
+                if let bundleID = report.installedBundleID, !bundleID.isEmpty {
+                    Text(bundleID)
+                        .font(LauncherTheme.mono(10))
+                        .foregroundStyle(LauncherTheme.mutedText)
+                }
+            }
+            ProgressBar(value: report.progress, tint: report.state == .failed ? LauncherTheme.danger : LauncherTheme.accent)
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(report.steps) { stage in
+                    StageRow(stage: stage)
+                }
+            }
+            if report.state == .succeeded {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(LauncherTheme.success)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(strings.deployDoneMessage)
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(strings.deployPushed(report.pushedTitles.count) + " · " + (report.inspection.map { strings.deployIPAVerified($0.packCount) } ?? ""))
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(LauncherTheme.mutedText)
+                        Text(strings.howToPlayStep4)
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(LauncherTheme.mutedText)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 8).fill(LauncherTheme.success.opacity(0.10)))
+            }
+            if report.state == .failed || report.state == .cancelled {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(report.failureMessage ?? strings.deployFailedTitle)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(LauncherTheme.danger)
+                    if let hint = report.failureHint, !hint.isEmpty {
+                        Text(hint)
+                            .font(.system(size: 11))
+                            .foregroundStyle(LauncherTheme.mutedText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 8).fill(LauncherTheme.danger.opacity(0.08)))
+                HStack {
+                    Spacer()
+                    Button(strings.deployRetry) {
+                        Task { await model.deploySelected() }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(model.isBusy)
+                }
+            }
+        }
+        .launcherCard()
+    }
+}
+
+// MARK: - Import sheet
+
 /// File drop is a live-app feature only; the offscreen snapshot renderer draws the
 /// same tree without the AppKit drag-destination registration.
-private struct FileDropModifier: ViewModifier {
+private struct SheetFileDropModifier: ViewModifier {
     let enabled: Bool
     @Binding var isTargeted: Bool
     let onDrop: ([NSItemProvider]) -> Bool
@@ -346,39 +580,67 @@ private struct FileDropModifier: ViewModifier {
     }
 }
 
-// MARK: - Import
-
-struct ImportScreen: View {
+struct ImportSheetView: View {
     @ObservedObject var model: AppModel
-    let strings: LauncherStrings
     @Environment(\.launcherScreenshotMode) private var screenshotMode
     @State private var isDropTarget = false
     @State private var rejection: String?
 
+    private var strings: LauncherStrings { model.strings }
+
     var body: some View {
-        ScreenContainer {
-            if let banner = model.banner {
-                BannerView(banner: banner) { model.banner = nil }
-            }
-            dropCard
-            if let rom = model.detectedROM {
-                detectedCard(rom)
-            } else if let error = model.detectedROMError {
-                errorCard(error)
-            }
-            if model.isBusy, let task = model.activeTask,
-               task.kind == .importROM || task.kind == .detect {
-                TaskProgressCard(task: task, strings: strings)
-                Card(title: strings.importLogsTitle) {
-                    LogConsole(
-                        entries: model.logs.filter { ["rom", "pack", "import"].contains($0.category) },
-                        maximumLines: 8,
-                        strings: strings
-                    )
+        VStack(spacing: 0) {
+            header
+            Rectangle()
+                .fill(LauncherTheme.border)
+                .frame(height: 1)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    dropCard
+                    if let rom = model.detectedROM {
+                        detectedCard(rom)
+                    } else if let error = model.detectedROMError {
+                        errorCard(error)
+                    }
+                    stepsCard
+                    if model.isBusy {
+                        Card(title: strings.importLogsTitle) {
+                            LogConsole(
+                                entries: model.logs.filter { ["rom", "pack", "import"].contains($0.category) },
+                                maximumLines: 8,
+                                strings: strings
+                            )
+                        }
+                    }
                 }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            stepsCard
         }
+        .frame(minWidth: 760, idealWidth: 860, minHeight: 620, idealHeight: 700)
+        .background(LauncherTheme.background)
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 12) {
+            IconTile(symbol: "square.and.arrow.down.on.square", size: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(strings.importTitle)
+                    .font(LauncherTheme.rounded(19, weight: .bold))
+                Text(strings.importSubtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(LauncherTheme.mutedText)
+            }
+            Spacer()
+            ModeBadge(isMock: model.isMock, strings: strings)
+            Button(strings.close) {
+                model.importPresented = false
+            }
+            .buttonStyle(SecondaryButtonStyle())
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(LauncherTheme.background)
     }
 
     private var dropCard: some View {
@@ -437,7 +699,7 @@ struct ImportScreen: View {
                         style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
                     )
             )
-            .modifier(FileDropModifier(enabled: !screenshotMode, isTargeted: $isDropTarget, onDrop: handleDrop))
+            .modifier(SheetFileDropModifier(enabled: !screenshotMode, isTargeted: $isDropTarget, onDrop: handleDrop))
         }
     }
 
@@ -456,9 +718,9 @@ struct ImportScreen: View {
             }
             HStack(spacing: 10) {
                 Button {
-                    Task { await model.importDetected(includeROM: false) }
+                    Task { await model.importDetected() }
                 } label: {
-                    Label(strings.queueGame, systemImage: "plus.circle.fill")
+                    Label(strings.addGame, systemImage: "plus.circle.fill")
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(model.isBusy)
@@ -493,7 +755,7 @@ struct ImportScreen: View {
     }
 
     private var stepsCard: some View {
-        Card(title: strings.stepsTitle) {
+        Card(title: strings.importStepsTitle) {
             VStack(alignment: .leading, spacing: 9) {
                 stepRow(1, strings.step1Title, strings.step1Detail)
                 stepRow(2, strings.step2Title, strings.step2Detail)

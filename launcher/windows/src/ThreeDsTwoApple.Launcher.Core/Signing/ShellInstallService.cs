@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using ThreeDsTwoApple.Launcher.Core.Deploy;
 using ThreeDsTwoApple.Launcher.Core.Device;
 using ThreeDsTwoApple.Launcher.Core.Models;
 using ThreeDsTwoApple.Launcher.Core.Tools;
@@ -108,7 +109,7 @@ public sealed record ShellInstallOutcome(
 /// credentials. A stale "device already registered" reply falls back to sign-only
 /// + device install, the retry S2Arm documents.
 /// </remarks>
-public sealed class ShellInstallService
+public sealed class ShellInstallService : IAppIpaInstaller
 {
     private readonly ImpactorBundle _bundle;
     private readonly UsbMuxClient _mux;

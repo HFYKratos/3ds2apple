@@ -79,9 +79,29 @@ public static class DistributionLayout
         "Bin/3ds2apple-pack.exe",
         "Bin/builder-windows.exe",
         "Bin/devpush.exe",
+        // v2 local build: 3dsrecomp + the hand-written Darwin stubs/shim/header are
+        // always bundled so the packaged launcher can compile on the user's PC.
+        "Bin/3dsrecomp.exe",
+        "tools/winbuild/zk_gamepack_shim.c",
+        "tools/winbuild/darwin-stubs/include/stdio.h",
+        "tools/winbuild/include/zakuro_gamepack.h",
         "licenses/LICENSE",
         "licenses/NOTICE",
         "licenses/THIRD_PARTY.md",
+        "licenses/3dsrecomp-NOTE.txt",
+    };
+
+    /// <summary>
+    /// Optional payload paths: the official LLVM 21.1.8 toolchain. It is staged under
+    /// Bin/llvm when the packaging machine has it; without it the launcher still works
+    /// for import/push but Deploy shows ONE actionable local-toolchain error and Retry.
+    /// </summary>
+    public static IReadOnlyList<string> OptionalLocalBuildPaths { get; } = new[]
+    {
+        "Bin/llvm/bin/clang.exe",
+        "Bin/llvm/bin/llvm-ar.exe",
+        "Bin/llvm/bin/ld64.lld.exe",
+        "Bin/llvm/LICENSE.TXT",
     };
 
     /// <summary>Resolve (and on first run extract) the distribution root. Cached per process.</summary>

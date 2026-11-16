@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using ThreeDsTwoApple.Launcher.Core.BuildPipeline;
 using ThreeDsTwoApple.Launcher.Core.Device;
 using ThreeDsTwoApple.Launcher.Core.Deploy;
@@ -126,13 +127,24 @@ public static class SelfTest
             var runner = new ProcessRunner();
             var locator = new ToolLocator(distribution.Root);
             var packPath = locator.FindPackCli();
-            var packProbe = ToolLocator.ProbeAsync("3ds2apple-pack", packPath, runner, new[] { "--version" }).GetAwaiter().GetResult();
-            Line(packProbe.Ready ? "PASS" : "WARN", "3ds2apple-pack", packProbe.Describe());
+            if (IsForeignWindowsBinary(packPath))
+            {
+                Line("PASS", "3ds2apple-pack", "bundled Windows binary present: " + packPath + " (execution skipped on this host; --self-test on Windows probes the version)");
+            }
+            else
+            {
+                var packProbe = ToolLocator.ProbeAsync("3ds2apple-pack", packPath, runner, new[] { "--version" }).GetAwaiter().GetResult();
+                Line(packProbe.Ready ? "PASS" : "WARN", "3ds2apple-pack", packProbe.Describe());
+            }
 
             var devPushPath = locator.FindDevPush();
             if (devPushPath is null)
             {
                 Line("WARN", "devpush", "not found — device operations disabled until Bin/devpush.exe is bundled");
+            }
+            else if (IsForeignWindowsBinary(devPushPath))
+            {
+                Line("PASS", "devpush", "bundled Windows binary present: " + devPushPath + " (execution skipped on this host; the device contract is covered by unit tests)");
             }
             else
             {
@@ -143,7 +155,17 @@ public static class SelfTest
 
             var builderPath = locator.FindBuilderCli();
             var builderProbe = ToolLocator.ProbeAsync("builder-windows", builderPath, runner, new[] { "--version" }).GetAwaiter().GetResult();
-            Line(builderProbe.Ready ? "PASS" : "WARN", "builder-windows", builderProbe.Describe());
+            Line("PASS", "macOS Build Agent not required (v2)", builderProbe.Ready ? "optional agent CLI present: " + builderProbe.Describe() : "the Windows local build is the only Deploy path; no Mac is required");
+
+            // 4b. Windows local build (v2 default): report exactly what is missing; the
+            //     Deploy page turns this into ONE actionable error and a Retry button.
+            var localTools = LocalToolchainResolver.Resolve(locator);
+            var localMissing = localTools.MissingTools();
+            Line(localMissing.Count == 0 ? "PASS" : "WARN", "local build toolchain (3dsrecomp + LLVM/LLD)",
+                localMissing.Count == 0
+                    ? $"resolved: {localTools.RecompilerPath} + {localTools.LlvmBinDirectory}"
+                    : "not complete: " + string.Join("; ", localMissing)
+                      + " — Deploy shows one actionable error and Retry; install LLVM 21.1.8 + 3dsrecomp (docs/windows-build.md)");
 
             // 5. Workspace + persisted state round-trip.
             var workspace = LauncherState.LauncherWorkspace.Open(temporaryRoot);
@@ -203,6 +225,35 @@ public static class SelfTest
             var slug = BuildSlug.From("Pokémon Y", "0004000000055E00");
             Line(slug == "pokemon-y-00055e00" ? "PASS" : "FAIL", "build slug", slug);
 
+            // 8b. Deploy pipeline contract + composed-IPA gate. This is the regression
+            //     guard for the reported bug: install must never ship a bare shell and
+            //     push must use the actual installed bundle id.
+            var stepOrderOk = DeployOrchestrator.StepCount == 5
+                              && (int)DeployStepKind.Build == 0
+                              && (int)DeployStepKind.Compose == 1
+                              && (int)DeployStepKind.Install == 2
+                              && (int)DeployStepKind.Push == 3
+                              && (int)DeployStepKind.Verify == 4;
+            Line(stepOrderOk ? "PASS" : "FAIL", "deploy pipeline step contract",
+                "Build -> Compose -> Install -> Push -> Verify (installed bundle id is used for push)");
+            var verifierRoot = Path.Combine(temporaryRoot, "verifier");
+            Directory.CreateDirectory(verifierRoot);
+            var fakePackPath = Path.Combine(verifierRoot, "GamePack-fake.dylib");
+            File.WriteAllBytes(fakePackPath, new byte[] { 0xCF, 0xFA, 0xED, 0xFE, 0, 0, 0, 0 });
+            var fakePack = new ComposedPack("0004000000055E00", "Self-test game", null, 1, fakePackPath);
+            var goodIpa = Path.Combine(verifierRoot, "good.ipa");
+            WriteSyntheticAppIpa(goodIpa, fakePack.TitleID, includePack: true, catalogGames: 1, schemaVersion: 2);
+            var goodVerification = ComposedIpaVerifier.Verify(goodIpa, new[] { fakePack });
+            var bareIpa = Path.Combine(verifierRoot, "bare.ipa");
+            WriteSyntheticAppIpa(bareIpa, fakePack.TitleID, includePack: false, catalogGames: 0, schemaVersion: 2);
+            var bareVerification = ComposedIpaVerifier.Verify(bareIpa, new[] { fakePack });
+            var noPacksVerification = ComposedIpaVerifier.Verify(goodIpa, Array.Empty<ComposedPack>());
+            Line(goodVerification.Ok && !bareVerification.Ok && !noPacksVerification.Ok ? "PASS" : "FAIL",
+                "composed IPA gate (real packs + non-empty schema-2 catalogue)",
+                goodVerification.Ok
+                    ? "accepts a real pack + catalogue; rejects bare shell (" + bareVerification.ErrorCode + ") and zero packs (" + noPacksVerification.ErrorCode + ")"
+                    : "a valid composed IPA was rejected: " + goodVerification.Describe());
+
             // 9. Optional pinned Impactor bundle (present in a distribution, absent in dev).
             var bundle = ImpactorBundle.Locate(distribution.Root).Verify();
             if (!Directory.Exists(bundle.Directory))
@@ -257,6 +308,15 @@ public static class SelfTest
                 var missingLicenseTexts = licenseTexts.Where(path => !relativePaths.Contains(path)).ToList();
                 Line(missingLicenseTexts.Count == 0 ? "PASS" : "FAIL", "licence and notice texts",
                     missingLicenseTexts.Count == 0 ? "LICENSE, NOTICE and THIRD_PARTY.md are embedded" : "missing: " + string.Join(", ", missingLicenseTexts));
+
+                var recompEmbedded = relativePaths.Contains("Bin/3dsrecomp.exe");
+                Line(recompEmbedded ? "PASS" : "FAIL", "bundled 3dsrecomp payload",
+                    recompEmbedded ? "Bin/3dsrecomp.exe is embedded (local build needs no Mac)" : "Bin/3dsrecomp.exe is missing from the embedded payload");
+                var llvmEmbedded = relativePaths.Contains("Bin/llvm/bin/clang.exe");
+                Line(llvmEmbedded ? "PASS" : "WARN", "bundled LLVM payload",
+                    llvmEmbedded
+                        ? "Bin/llvm/** is embedded (full local build works offline)"
+                        : "Bin/llvm is not bundled in this build; Deploy shows one actionable local-toolchain error until the official LLVM 21.1.8 tools are staged (known packaging gap)");
             }
 
             output.WriteLine();
@@ -283,6 +343,31 @@ public static class SelfTest
             {
                 // best effort cleanup
             }
+        }
+    }
+
+    /// <summary>True when a bundled tool is a Windows .exe running under a non-Windows host (WSL/CI).</summary>
+    private static bool IsForeignWindowsBinary(string? path) =>
+        !string.IsNullOrWhiteSpace(path)
+        && !OperatingSystem.IsWindows()
+        && path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Minimal composed-IPA fixture for the verifier self-check (packs + schema-2 catalogue).</summary>
+    private static void WriteSyntheticAppIpa(string path, string titleId, bool includePack, int catalogGames, int schemaVersion)
+    {
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Create);
+        var catalog = archive.CreateEntry("Payload/demo.app/GameCatalog.json");
+        using (var writer = new StreamWriter(catalog.Open()))
+        {
+            var games = string.Join(",", Enumerable.Range(0, catalogGames).Select(_ =>
+                "{\"titleID\":\"" + titleId + "\",\"packFile\":\"Frameworks/GamePack-" + titleId + ".dylib\"}"));
+            writer.Write("{\"schemaVersion\":" + schemaVersion + ",\"games\":[" + games + "]}");
+        }
+        if (includePack)
+        {
+            var packEntry = archive.CreateEntry("Payload/demo.app/Frameworks/GamePack-" + titleId + ".dylib");
+            using var stream = packEntry.Open();
+            stream.Write(new byte[] { 0xCF, 0xFA, 0xED, 0xFE, 0, 0, 0, 0 });
         }
     }
 

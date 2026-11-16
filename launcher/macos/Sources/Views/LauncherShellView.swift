@@ -2,13 +2,13 @@
 //  LauncherShellView.swift
 //  3ds2apple macOS launcher
 //
-//  The whole window for the two-section launcher UI (docs/launcher-ui.md):
+//  The whole window for the two-section launcher UI (docs/launcher-flow-v2.md):
 //
-//      Library | Import              gear -> Settings panel
+//      Library | Deploy (导入手机)          gear -> minimal Settings panel
 //
-//  Settings and the per-game package detail/push dialog are modal panels, not
-//  top-level tabs. Pure SwiftUI (no NavigationSplitView) so the same view tree is
-//  drawn offscreen by SnapshotRenderer on the headless build VM.
+//  Import is a sheet of the Library; Settings is a modal panel. Pure SwiftUI (no
+//  NavigationSplitView) so the same view tree is drawn offscreen by
+//  SnapshotRenderer on the headless build VM.
 //
 
 import SwiftUI
@@ -48,18 +48,9 @@ struct LauncherShellView: View {
         .sheet(isPresented: $model.settingsPresented) {
             SettingsSheetView(model: model)
         }
-        .sheet(isPresented: gameDetailBinding) {
-            if let id = model.detailGameID, model.game(id: id) != nil {
-                GameDetailSheetView(model: model, gameID: id)
-            }
+        .sheet(isPresented: $model.importPresented) {
+            ImportSheetView(model: model)
         }
-    }
-
-    private var gameDetailBinding: Binding<Bool> {
-        Binding(
-            get: { model.detailGameID != nil },
-            set: { if !$0 { model.detailGameID = nil } }
-        )
     }
 
     @ViewBuilder
@@ -68,8 +59,8 @@ struct LauncherShellView: View {
             switch model.screen {
             case .library:
                 LibraryScreen(model: model, settings: settings, strings: strings)
-            case .importROM:
-                ImportScreen(model: model, strings: strings)
+            case .deploy:
+                DeployScreen(model: model, settings: settings, strings: strings)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -115,6 +106,11 @@ private struct LauncherSidebar: View {
                                 Text(String(model.games.count))
                                     .font(LauncherTheme.mono(10, weight: .semibold))
                                     .foregroundStyle(LauncherTheme.mutedText)
+                            }
+                            if screen == .deploy && !model.selectedForDeploy.isEmpty {
+                                Text(String(model.selectedForDeploy.count))
+                                    .font(LauncherTheme.mono(10, weight: .semibold))
+                                    .foregroundStyle(LauncherTheme.accentDeep)
                             }
                         }
                         .foregroundStyle(model.screen == screen ? Color.primary : Color.primary.opacity(0.72))
@@ -176,15 +172,15 @@ private struct LauncherSidebar: View {
     private func title(for screen: LauncherScreen) -> String {
         switch screen {
         case .library: return strings.navLibrary
-        case .importROM: return strings.navImport
+        case .deploy: return strings.navDeploy
         }
     }
 
     private var deviceLine: String {
         if let device = model.selectedDevice {
-            return strings.deviceSelected(device.name)
+            return device.name
         }
-        return strings.noDevice
+        return strings.deployDeviceNone
     }
 }
 
@@ -208,19 +204,31 @@ private struct LauncherTopBar: View {
                 ProgressView()
                     .controlSize(.small)
             }
-            if model.screen == .library && !model.builtGames.isEmpty {
+            switch model.screen {
+            case .library:
                 Button {
-                    Task { await model.buildAndInstallLibrary() }
+                    model.importPresented = true
                 } label: {
-                    Label(strings.buildInstallLibrary, systemImage: "iphone.and.arrow.forward")
+                    Label(strings.importGame, systemImage: "plus")
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(model.isBusy)
+            case .deploy:
+                if !model.games.isEmpty {
+                    Button {
+                        Task { await model.deploySelected() }
+                    } label: {
+                        Label(strings.deployButton(model.deployCandidates.isEmpty ? 0 : model.deployCandidates.count), systemImage: "iphone.and.arrow.forward")
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(model.isBusy || model.deployCandidates.isEmpty)
+                }
             }
             Button {
                 Task {
                     await model.refreshEnvironment()
-                    await model.refreshPackages()
+                    await model.refreshLibrary()
+                    await model.detectDevices()
                 }
             } label: {
                 Image(systemName: "arrow.clockwise")
@@ -245,14 +253,14 @@ private struct LauncherTopBar: View {
     private var title: String {
         switch model.screen {
         case .library: return strings.navLibrary
-        case .importROM: return strings.navImport
+        case .deploy: return strings.navDeploy
         }
     }
 
     private var subtitle: String {
         switch model.screen {
         case .library: return strings.librarySubtitle
-        case .importROM: return strings.importSubtitle
+        case .deploy: return strings.deploySubtitle
         }
     }
 }
@@ -271,7 +279,18 @@ private struct LauncherBusyBar: View {
             HStack(spacing: 12) {
                 ProgressView()
                     .controlSize(.small)
-                if let task = model.activeTask {
+                if let report = model.deployReport, report.state == .running {
+                    Text(strings.deployRunningFor(report.selectedTitles.count))
+                        .font(.system(size: 11, weight: .semibold))
+                        .lineLimit(1)
+                    Text(report.steps.first(where: { $0.state == .running })?.detail ?? "")
+                        .font(LauncherTheme.mono(10.5))
+                        .foregroundStyle(LauncherTheme.mutedText)
+                        .lineLimit(1)
+                    Spacer()
+                    ProgressBar(value: report.progress)
+                        .frame(width: 160)
+                } else if let task = model.activeTask {
                     Text(task.title)
                         .font(.system(size: 11, weight: .semibold))
                         .lineLimit(1)
@@ -282,15 +301,15 @@ private struct LauncherBusyBar: View {
                     Spacer()
                     ProgressBar(value: task.progress)
                         .frame(width: 160)
-                    Button(strings.cancel) {
-                        model.cancelActiveTask()
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
                 } else {
                     Text(strings.busyWorking)
                         .font(.system(size: 11))
                     Spacer()
                 }
+                Button(strings.cancel) {
+                    model.cancelActiveTask()
+                }
+                .buttonStyle(SecondaryButtonStyle())
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 8)

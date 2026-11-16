@@ -3,12 +3,11 @@
 //  3ds2apple macOS launcher
 //
 //  Two languages, chosen from the macOS system UI language (Simplified Chinese
-//  -> zh-Hans, everything else -> English) with a Settings override.
-//
-//  All visible UI strings live here so the views never contain user-facing
-//  literals and the headless self-check can verify both tables. Pipeline text
-//  (logs, stage details, Apple signing errors) is produced by the backends and
-//  stays in its raw form by design; it is diagnostic output, not chrome.
+//  -> zh-Hans, everything else -> English) with a Settings override. All visible
+//  UI strings live here so the views never contain user-facing literals and the
+//  headless self-check can verify both tables. Pipeline text (logs, stage
+//  details, Apple signing errors) is produced by the backends and stays in its
+//  raw form by design; it is diagnostic output, not chrome.
 //
 
 import Foundation
@@ -32,9 +31,7 @@ enum ResolvedLanguage: String, CaseIterable, Codable {
 enum LauncherLanguage: String, CaseIterable, Codable, Identifiable {
     /// Follow the macOS UI language.
     case system
-    /// Force English.
     case english
-    /// Force Simplified Chinese.
     case chinese
 
     var id: String { rawValue }
@@ -72,7 +69,7 @@ struct LauncherStrings {
     // Identity and global chrome
     var appTagline: String
     var navLibrary: String
-    var navImport: String
+    var navDeploy: String
     var settings: String
     var close: String
     var done: String
@@ -81,44 +78,35 @@ struct LauncherStrings {
     var export: String
     var clear: String
     var choose: String
-    var detect: String
     var versionLabel: String
     var modeLive: String
     var modeMock: String
     var busyWorking: String
     var busyCancelling: String
+    var statusReady: String
+    var statusNeedsAttention: String
+    var statusLabel: String
 
     // Library
     var librarySubtitle: String
-    var gamesCountFormat: String
+    var libraryCountFormat: String
+    var libraryIPALabel: String
     var emptyLibraryTitle: String
     var emptyLibraryMessage: String
-    var importFirstGame: String
-    var buildInstallLibrary: String
-    var rebuildInstallLibrary: String
-    var refreshPackages: String
-    var verifyPackages: String
-    var noDevice: String
-    var deviceSelectedFormat: String
-    var libraryStatusTitle: String
-    var installedGamesFormat: String
-    var libraryIPALabel: String
-    var libraryNotInstalled: String
-    var libraryUpToDate: String
-    var libraryNeedsRebuild: String
-    var libraryNoGamesBuilt: String
-    var romDataNote: String
-    var primaryBuild: String
-    var primaryInstall: String
-    var primaryPush: String
-    var primaryHowToPlay: String
-    var primaryBuilding: String
-    var secondaryDetails: String
-    var secondaryVerify: String
-    var secondaryBuildAgain: String
-    var secondaryPushAgain: String
-    var secondaryRefreshPackages: String
-    var secondarySettings: String
+    var importGame: String
+    var addFirstGame: String
+    var remove: String
+    var rename: String
+    var renameTitle: String
+    var renameSave: String
+    var removeConfirmTitle: String
+    var removeConfirmMessage: String
+    var removeConfirmAction: String
+    var romSizeLabel: String
+    var packSizeLabel: String
+    var dataStaged: String
+    var noDataStaged: String
+    var lastErrorLabel: String
     var phaseQueued: String
     var phaseBuilding: String
     var phaseBuilt: String
@@ -126,15 +114,14 @@ struct LauncherStrings {
     var phaseFailed: String
     var inLibraryBadge: String
     var notInLibraryBadge: String
-    var stagedDataLine: String
-    var lastError: String
     var howToPlayTitle: String
     var howToPlayStep1: String
     var howToPlayStep2: String
     var howToPlayStep3: String
     var howToPlayStep4: String
 
-    // Import
+    // Import sheet
+    var importTitle: String
     var importSubtitle: String
     var dropTitle: String
     var dropMessage: String
@@ -149,10 +136,10 @@ struct LauncherStrings {
     var fieldContainer: String
     var fieldROMSize: String
     var fieldContentSize: String
-    var queueGame: String
+    var addGame: String
     var clearSelection: String
-    var noSelection: String
-    var stepsTitle: String
+    var unrecognisedTitle: String
+    var importStepsTitle: String
     var step1Title: String
     var step1Detail: String
     var step2Title: String
@@ -161,8 +148,43 @@ struct LauncherStrings {
     var step3Detail: String
     var step4Title: String
     var step4Detail: String
-    var unrecognisedTitle: String
     var importLogsTitle: String
+
+    // Deploy
+    var deploySubtitle: String
+    var deploySelectionTitle: String
+    var deploySelectAll: String
+    var deployClearSelection: String
+    var deploySelectedFormat: String
+    var deployButtonFormat: String
+    var deployNoSelection: String
+    var deployNoGames: String
+    var deployDeviceTitle: String
+    var deployDeviceNone: String
+    var deployDetectDevice: String
+    var deployStepsTitle: String
+    var deployStepCheckDevice: String
+    var deployStepCompileFormat: String
+    var deployStepCompose: String
+    var deployStepVerifyIPA: String
+    var deployStepInstall: String
+    var deployStepPush: String
+    var deployStepDone: String
+    var deployRunningForFormat: String
+    var deployDoneTitle: String
+    var deployDoneMessage: String
+    var deployFailedTitle: String
+    var deployRetry: String
+    var deployLogTitle: String
+    var deployNoteROMFree: String
+    var deployInstalledBundle: String
+    var deployNotInstalledBundle: String
+    var deployEligible: String
+    var deployNeedsBuild: String
+    var deployPushedFormat: String
+    var deployIPAVerifiedFormat: String
+    var deployCompileProgressFormat: String
+    var deployInstallProgressFormat: String
 
     // Settings
     var settingsSubtitle: String
@@ -174,53 +196,20 @@ struct LauncherStrings {
     var languageAppliesHint: String
     var languageDetectedFormat: String
     var signingTitle: String
-    var signingTeamID: String
-    var signingTeamIDPlaceholder: String
+    var signingStatusReady: String
+    var signingStatusMissing: String
+    var signingXcodeFormat: String
+    var signingAssetsFormat: String
+    var signingTeamFormat: String
+    var signingTeamMissing: String
+    var signingOpenXcode: String
     var signingExplanation: String
+    var signingRefresh: String
     var deviceTitle: String
     var deviceNone: String
     var deviceRefresh: String
     var deviceBundleID: String
-    var deviceRemoteRoot: String
-    var deviceRemoteRootValue: String
-    var buildModeTitle: String
-    var modeDryTitle: String
-    var modeDryDetail: String
-    var modeFakeTitle: String
-    var modeFakeDetail: String
-    var modeRealTitle: String
-    var modeRealDetail: String
-    var installStrategyTitle: String
-    var strategyXcodeTitle: String
-    var strategyXcodeDetail: String
-    var strategyDeviceTitle: String
-    var strategyDeviceDetail: String
-    var strategyImpactorTitle: String
-    var strategyImpactorDetail: String
-    var strategyMockTitle: String
-    var strategyMockDetail: String
-    var toolsTitle: String
-    var toolsRepoRoot: String
-    var toolsOutDir: String
-    var toolsPackCLI: String
-    var toolsDevpush: String
-    var toolsDeviceCLI: String
-    var toolsAutoDetected: String
-    var toolsMockBackend: String
-    var toolsNotBuilt: String
-    var toolsNotSet: String
-    var toolsNotStaged: String
-    var toolsBundleID: String
-    var toolsLibraryIPA: String
-    var toolsInstalledTitles: String
-    var diagnosticsTitle: String
-    var diagnosticsChecksFormat: String
-    var diagnosticsXcode: String
-    var diagnosticsSigningAssetsFormat: String
-    var diagnosticsDevpush: String
-    var diagnosticsRefresh: String
-    var diagnosticsToolchainTitle: String
-    var diagnosticsNotesTitle: String
+    var deviceBundleIDNone: String
     var logsTitle: String
     var logsNoLines: String
     var logsExport: String
@@ -232,34 +221,15 @@ struct LauncherStrings {
     var aboutLicense: String
     var aboutIconCaption: String
     var aboutVersionFormat: String
+    var diagnosticsChecksFormat: String
+    var diagnosticsToolchainTitle: String
 
-    // Game detail dialog
-    var gameDetailTitle: String
-    var gamePackageTitle: String
-    var fieldStatus: String
-    var fieldROM: String
-    var fieldSaveNamespace: String
-    var fieldBuildName: String
-    var fieldPackPath: String
-    var fieldPackSize: String
-    var fieldPackSha: String
-    var fieldInLibrary: String
-    var fieldPackInLibraryYes: String
-    var fieldPackInLibraryNo: String
-    var fieldGameDataSource: String
-    var fieldPushedAt: String
-    var pushPlanTitle: String
-    var pushPlanSubtitle: String
-    var pushPlanNoPlan: String
-    var pushPlanFilesFormat: String
-    var pushPrepare: String
-    var pushToDevice: String
-    var pushVerify: String
-    var pushVerified: String
-    var activityTitle: String
-    var noActivity: String
-
-    // MARK: - Initializer
+    // Task states
+    var taskQueued: String
+    var taskRunning: String
+    var taskSucceeded: String
+    var taskFailed: String
+    var taskCancelled: String
 
     init(language: ResolvedLanguage) {
         self.language = language
@@ -268,7 +238,7 @@ struct LauncherStrings {
 
         appTagline = t("macOS launcher", "macOS 启动器")
         navLibrary = t("Library", "游戏库")
-        navImport = t("Import", "导入")
+        navDeploy = t("Deploy", "导入手机")
         settings = t("Settings", "设置")
         close = t("Close", "关闭")
         done = t("Done", "完成")
@@ -277,75 +247,59 @@ struct LauncherStrings {
         export = t("Export", "导出")
         clear = t("Clear", "清除")
         choose = t("Choose", "选择")
-        detect = t("Detect", "检测")
         versionLabel = t("Version", "版本")
         modeLive = t("LIVE", "实机")
         modeMock = t("MOCK / DRY RUN", "模拟 / 试运行")
         busyWorking = t("Working...", "正在处理...")
         busyCancelling = t("Cancelling...", "正在取消...")
+        statusReady = t("Ready", "就绪")
+        statusNeedsAttention = t("Needs attention", "需要处理")
+        statusLabel = t("Status", "状态")
 
-        librarySubtitle = t("One shell, many per-game AOT packs", "一个外壳，承载多个游戏的 AOT 包")
-        gamesCountFormat = t("%d game(s) in the library", "游戏库中有 %d 个游戏")
+        librarySubtitle = t("Your own games, one shell", "你自己的游戏，一个外壳")
+        libraryCountFormat = t("%d game(s) in the library", "游戏库中有 %d 个游戏")
+        libraryIPALabel = t("Library IPA", "游戏库 IPA")
         emptyLibraryTitle = t("Your library is empty", "游戏库还是空的")
         emptyLibraryMessage = t(
-            "Import a decrypted .3ds/.cci file that you own. The launcher builds one native AOT pack per game and installs a single shell on the iPhone/iPad.",
-            "导入你自己拥有的解密 .3ds/.cci 文件。启动器会为每个游戏编译原生 AOT 包，并在 iPhone/iPad 上安装一个统一的外壳。"
+            "Import a decrypted .3ds/.cci file that you own. The Deploy tab compiles one native AOT pack per game and installs a single shell on the iPhone/iPad.",
+            "导入你自己拥有的解密 .3ds/.cci 文件。在“导入手机”页里，启动器会为每个游戏编译原生 AOT 包，并在 iPhone/iPad 上安装一个统一的外壳。"
         )
-        importFirstGame = t("Import a game", "导入游戏")
-        buildInstallLibrary = t("Build & install library", "构建并安装游戏库")
-        rebuildInstallLibrary = t("Rebuild & install library", "重新构建并安装游戏库")
-        refreshPackages = t("Refresh", "刷新")
-        verifyPackages = t("Verify", "校验")
-        noDevice = t("No device connected", "未连接设备")
-        deviceSelectedFormat = t("%@ connected", "%@ 已连接")
-        libraryStatusTitle = t("On-device library", "设备上的游戏库")
-        installedGamesFormat = t("%d game(s) in the signed app", "已签名 App 中包含 %d 个游戏")
-        libraryIPALabel = t("Library IPA", "游戏库 IPA")
-        libraryNotInstalled = t("No library installed yet", "尚未安装游戏库")
-        libraryUpToDate = t("The installed library matches your built games.", "已安装的游戏库与已构建的游戏一致。")
-        libraryNeedsRebuild = t(
-            "The installed library does not match the built games. Rebuild and reinstall it; ROM data already pushed to Documents is kept.",
-            "已安装的游戏库与已构建的游戏不一致。请重新构建并安装；已推送到 Documents 的游戏数据会保留。"
+        importGame = t("Import game", "导入游戏")
+        addFirstGame = t("Import your first game", "导入第一个游戏")
+        remove = t("Remove", "移除")
+        rename = t("Rename", "重命名")
+        renameTitle = t("Rename game", "重命名游戏")
+        renameSave = t("Save", "保存")
+        removeConfirmTitle = t("Remove this game?", "移除这个游戏？")
+        removeConfirmMessage = t(
+            "The game is removed from the library. Files in out/ are local build data and can be rebuilt; nothing on the phone is deleted until you deploy again.",
+            "游戏会从游戏库中移除。out/ 里的文件是本地构建数据，可以重新生成；手机上的内容要等你再次部署时才会变化。"
         )
-        libraryNoGamesBuilt = t(
-            "Build at least one AOT pack before installing the library.",
-            "请先构建至少一个 AOT 包，然后再安装游戏库。"
-        )
-        romDataNote = t(
-            "Game data stays in Documents/Games and survives reinstalls.",
-            "游戏数据保存在 Documents/Games，重装 App 后仍然保留。"
-        )
-        primaryBuild = t("Build AOT", "构建 AOT")
-        primaryInstall = t("Install library", "安装游戏库")
-        primaryPush = t("Push game data", "推送游戏数据")
-        primaryHowToPlay = t("How to play", "如何游玩")
-        primaryBuilding = t("Building...", "正在构建...")
-        secondaryDetails = t("Package details", "包详情")
-        secondaryVerify = t("Verify on device", "在设备上校验")
-        secondaryBuildAgain = t("Build again", "重新构建")
-        secondaryPushAgain = t("Push again", "重新推送")
-        secondaryRefreshPackages = t("Refresh packages", "刷新包列表")
-        secondarySettings = t("Open settings", "打开设置")
+        removeConfirmAction = t("Remove", "移除")
+        romSizeLabel = t("ROM size", "ROM 大小")
+        packSizeLabel = t("AOT pack", "AOT 包")
+        dataStaged = t("Game data staged for push", "游戏数据已暂存待推送")
+        noDataStaged = t("Game data not staged yet", "游戏数据尚未暂存")
+        lastErrorLabel = t("Last error", "上次错误")
         phaseQueued = t("Queued", "已排队")
         phaseBuilding = t("Building", "构建中")
         phaseBuilt = t("AOT ready", "AOT 就绪")
         phaseOnDevice = t("On device", "已上设备")
         phaseFailed = t("Failed", "失败")
-        inLibraryBadge = t("IN LIBRARY", "已在库中")
-        notInLibraryBadge = t("NOT IN LIBRARY", "不在库中")
-        stagedDataLine = t("Game data staged", "游戏数据已暂存")
-        lastError = t("Last error", "上次错误")
+        inLibraryBadge = t("IN INSTALLED APP", "已在安装的 App 中")
+        notInLibraryBadge = t("NOT INSTALLED", "未安装")
         howToPlayTitle = t("How to play", "如何游玩")
-        howToPlayStep1 = t("The signed shell app with your AOT packs is installed on the device.", "已签名外壳 App（含你的 AOT 包）已安装到设备。")
-        howToPlayStep2 = t("Game data (ROM + GameInfo.json) has been pushed into the app Documents folder.", "游戏数据（ROM + GameInfo.json）已推送到 App 的 Documents 目录。")
-        howToPlayStep3 = t("Open the 3ds2apple app on the device and pick this game from its library.", "在设备上打开 3ds2apple App，在游戏库中选择该游戏。")
-        howToPlayStep4 = t("No ROM or game data is stored inside the launcher or the public IPA.", "启动器和公开 IPA 内不包含任何 ROM 或游戏数据。")
+        howToPlayStep1 = t("Select the game here in Deploy and press the one-click deploy button.", "在“导入手机”页勾选游戏，按一键部署。")
+        howToPlayStep2 = t("The launcher compiles the AOT packs, composes one ROM-free IPA and installs it with your own Apple ID.", "启动器会编译 AOT 包，组装一个无 ROM 的 IPA，并用你自己的 Apple ID 安装。")
+        howToPlayStep3 = t("It then pushes only GameRom.cci + GameInfo.json into the shell's Documents folder.", "随后只把 GameRom.cci + GameInfo.json 推送到外壳的 Documents 目录。")
+        howToPlayStep4 = t("Open the 3ds2apple app on the device and pick the game from its library.", "在设备上打开 3ds2apple App，在游戏库中选择该游戏。")
 
+        importTitle = t("Import a game", "导入游戏")
         importSubtitle = t("Add your own decrypted .3ds / .cci files", "添加你自己拥有的解密 .3ds / .cci 文件")
         dropTitle = t("Import a game you own", "导入你拥有的游戏")
         dropMessage = t(
-            "The launcher reads only the NCSD/NCCH header (a few KiB) to detect the title, then queues one AOT package. Your ROM is never uploaded, and it is not bundled into the shell IPA.",
-            "启动器只读取 NCSD/NCCH 文件头（几 KiB）来识别游戏，然后排队一个 AOT 包。ROM 不会被上传，也不会被打包进外壳 IPA。"
+            "The launcher reads only the NCSD/NCCH header (a few KiB) to detect the title, then keeps a gitignored copy of your ROM for the device push. The ROM is never uploaded and never bundled into the signed app.",
+            "启动器只读取 NCSD/NCCH 文件头（几 KiB）来识别游戏，然后在本地保留一份被 git 忽略的 ROM 副本用于推送。ROM 不会被上传，也不会被打进签名 App。"
         )
         dropHint = t("Drag a decrypted .3ds / .cci / .ncch / .cxi file here", "将解密的 .3ds / .cci / .ncch / .cxi 文件拖到这里")
         dropChoose = t("Choose ROM...", "选择 ROM...")
@@ -358,22 +312,59 @@ struct LauncherStrings {
         fieldContainer = t("Container", "容器")
         fieldROMSize = t("ROM size", "ROM 大小")
         fieldContentSize = t("Content size", "内容大小")
-        queueGame = t("Queue this game", "添加这个游戏")
+        addGame = t("Add to library", "添加到游戏库")
         clearSelection = t("Clear", "清除")
-        noSelection = t("No game selected yet", "尚未选择游戏")
-        stepsTitle = t("What happens next", "接下来会发生什么")
-        step1Title = t("Detect", "识别")
-        step1Detail = t("Header only: title ID, product code, display name.", "只读文件头：Title ID、产品代码、显示名称。")
-        step2Title = t("Build", "构建")
-        step2Detail = t("3dsrecomp translates the game; clang builds one GamePack.dylib for arm64.", "3dsrecomp 翻译游戏代码，clang 为 arm64 构建一个 GamePack.dylib。")
-        step3Title = t("Install the library", "安装游戏库")
-        step3Detail = t("A ROM-free IPA with your GamePacks inside is signed with your own Apple ID and installed with devicectl.", "包含 GamePack 的无 ROM IPA 会用你自己的 Apple ID 签名，并通过 devicectl 安装。")
-        step4Title = t("Push game data", "推送游戏数据")
-        step4Detail = t("GameRom.cci + GameInfo.json go to Documents/Games/TITLEID; the AOT code is already in the signed app.", "GameRom.cci + GameInfo.json 会写入 Documents/Games/TITLEID；AOT 代码已在签名 App 内。")
         unrecognisedTitle = t("That file was not recognised", "无法识别该文件")
+        importStepsTitle = t("What happens next", "接下来会发生什么")
+        step1Title = t("Import", "导入")
+        step1Detail = t("Header only: title ID, product code, display name; a gitignored local ROM copy is kept for the push.", "只读文件头：Title ID、产品代码、显示名称；同时保留一份被 git 忽略的本地 ROM 副本用于推送。")
+        step2Title = t("Deploy", "部署")
+        step2Detail = t("Select one or several games on the Deploy tab and press one-click deploy.", "在“导入手机”页勾选一个或多个游戏，按一键部署。")
+        step3Title = t("Install the library", "安装游戏库")
+        step3Detail = t("A ROM-free IPA with your real GamePacks and a schema-2 GameCatalog is signed with your Apple ID and installed.", "包含真实 GamePack 和 schema-2 GameCatalog 的无 ROM IPA 会用你的 Apple ID 签名并安装。")
+        step4Title = t("Push game data", "推送游戏数据")
+        step4Detail = t("GameRom.cci + GameInfo.json go to Documents/Games/TITLEID, verified by size/sha.", "GameRom.cci + GameInfo.json 写入 Documents/Games/TITLEID，并校验大小与 sha。")
         importLogsTitle = t("Import log", "导入日志")
 
-        settingsSubtitle = t("Language, signing, device, tools and logs", "语言、签名、设备、工具与日志")
+        deploySubtitle = t("Pick games, deploy them to the phone in one action", "勾选游戏，一键部署到手机")
+        deploySelectionTitle = t("Deploy game selection", "选择要部署的游戏")
+        deploySelectAll = t("Select all", "全选")
+        deployClearSelection = t("Clear", "清空")
+        deploySelectedFormat = t("%d selected", "已选择 %d 个")
+        deployButtonFormat = t("Deploy %d game(s) to phone", "一键部署（%d 个游戏）")
+        deployNoSelection = t("Select at least one game to deploy.", "请至少勾选一个游戏再部署。")
+        deployNoGames = t("Your library is empty. Import a game first.", "游戏库还是空的，请先导入游戏。")
+        deployDeviceTitle = t("Target device", "目标设备")
+        deployDeviceNone = t("No iPhone/iPad detected. Connect it, unlock it and tap Trust.", "未检测到 iPhone/iPad。请连接、解锁并点按信任。")
+        deployDetectDevice = t("Detect device", "检测设备")
+        deployStepsTitle = t("Deploy progress", "部署进度")
+        deployStepCheckDevice = t("Check device & Apple ID", "检查设备与 Apple ID")
+        deployStepCompileFormat = t("Compile GamePacks (%d)", "编译 GamePack（%d 个）")
+        deployStepCompose = t("Compose one ROM-free IPA", "组装无 ROM IPA")
+        deployStepVerifyIPA = t("Verify IPA (packs + GameCatalog)", "校验 IPA（包 + GameCatalog）")
+        deployStepInstall = t("Sign & install", "签名并安装")
+        deployStepPush = t("Push game data", "推送游戏数据")
+        deployStepDone = t("Done", "完成")
+        deployRunningForFormat = t("Deploying %d game(s)...", "正在部署 %d 个游戏...")
+        deployDoneTitle = t("Ready to play", "可以开始游玩")
+        deployDoneMessage = t("可以打开手机 App 游玩", "可以打开手机 App 游玩")
+        deployFailedTitle = t("Deploy failed", "部署失败")
+        deployRetry = t("Retry deploy", "重试部署")
+        deployLogTitle = t("Deploy log", "部署日志")
+        deployNoteROMFree = t(
+            "Only AOT code goes into the signed app: the IPA is verified to contain the real GamePacks and a schema-2 GameCatalog, and no ROM/game data.",
+            "签名 App 里只有 AOT 代码：IPA 会校验包含真实 GamePack 和 schema-2 GameCatalog，且不包含任何 ROM/游戏数据。"
+        )
+        deployInstalledBundle = t("Installed app", "已安装 App")
+        deployNotInstalledBundle = t("Not installed yet", "尚未安装")
+        deployEligible = t("Ready to deploy", "可部署")
+        deployNeedsBuild = t("Will be compiled during deploy", "部署时会自动编译")
+        deployPushedFormat = t("%d game(s) pushed", "已推送 %d 个游戏")
+        deployIPAVerifiedFormat = t("%d pack(s), schema-2 catalogue, no ROM", "%d 个包，schema-2 目录，无 ROM")
+        deployCompileProgressFormat = t("Compiling %d/%d", "正在编译 %d/%d")
+        deployInstallProgressFormat = t("Installing... %@", "正在安装... %@")
+
+        settingsSubtitle = t("Language, Apple ID signing, device, logs and about", "语言、Apple ID 签名、设备、日志与关于")
         languageTitle = t("Language", "语言")
         languageHint = t(
             "Follows the macOS UI language by default: Simplified Chinese uses the Chinese interface, every other language uses English.",
@@ -384,57 +375,24 @@ struct LauncherStrings {
         languageChinese = t("简体中文", "简体中文")
         languageAppliesHint = t("The interface switches immediately.", "界面会立即切换。")
         languageDetectedFormat = t("System language: %@", "系统语言：%@")
-        signingTitle = t("Apple ID & Team ID", "Apple ID 与 Team ID")
-        signingTeamID = t("Team ID", "Team ID")
-        signingTeamIDPlaceholder = t("ABCDE12345", "ABCDE12345")
+        signingTitle = t("Apple ID & Xcode signing", "Apple ID 与 Xcode 签名")
+        signingStatusReady = t("Signing ready", "签名已就绪")
+        signingStatusMissing = t("Sign in to Xcode", "请登录 Xcode")
+        signingXcodeFormat = t("Xcode %@", "Xcode %@")
+        signingAssetsFormat = t("%d certificate(s) / %d profile(s)", "%d 个证书 / %d 个描述文件")
+        signingTeamFormat = t("Detected Team ID: %@", "检测到的 Team ID：%@")
+        signingTeamMissing = t("No Team ID detected yet", "尚未检测到 Team ID")
+        signingOpenXcode = t("Open Xcode Accounts...", "打开 Xcode 账户设置...")
         signingExplanation = t(
-            "The launcher never asks for your Apple ID or password. Sign in once in Xcode > Settings > Accounts; Xcode manages the certificate and profile for your team.",
-            "启动器不会索取你的 Apple ID 或密码。只需在 Xcode > 设置 > 账户中登录一次，Xcode 会为你的团队管理证书与描述文件。"
+            "The launcher never asks for your Apple ID or password. Sign in once in Xcode > Settings > Accounts; the launcher detects the Team ID and Xcode manages the certificate and profile.",
+            "启动器不会索取你的 Apple ID 或密码。只需在 Xcode > 设置 > 账户中登录一次；启动器会自动检测 Team ID，证书与描述文件由 Xcode 管理。"
         )
+        signingRefresh = t("Check again", "重新检查")
         deviceTitle = t("Device", "设备")
         deviceNone = t("No device detected. Connect the iPhone/iPad, unlock it and tap Trust.", "未检测到设备。请连接 iPhone/iPad，解锁并点按信任。")
         deviceRefresh = t("Detect again", "重新检测")
-        deviceBundleID = t("Bundle ID", "Bundle ID")
-        deviceRemoteRoot = t("Remote folder", "远程目录")
-        deviceRemoteRootValue = t("Documents/Games/<TITLEID>/", "Documents/Games/<TITLEID>/")
-        buildModeTitle = t("Build mode", "构建模式")
-        modeDryTitle = t("Dry run", "试运行")
-        modeDryDetail = t("Prints the exact commands; compiles and writes nothing.", "只打印实际命令，不编译、不写入。")
-        modeFakeTitle = t("Fake preview pack", "模拟预览包")
-        modeFakeDetail = t("Writes labelled placeholder packs for UI and layout tests; not installable.", "写入带标记的占位包，用于界面与布局测试，不可安装。")
-        modeRealTitle = t("Real AOT build", "真实 AOT 构建")
-        modeRealDetail = t("Runs 3dsrecomp and the Xcode pack link on this Mac (slow).", "在本机运行 3dsrecomp 与 Xcode 打包链接（较慢）。")
-        installStrategyTitle = t("Sign & install", "签名与安装")
-        strategyXcodeTitle = t("Xcode build + devicectl", "Xcode 构建 + devicectl")
-        strategyXcodeDetail = t("Signs the ROM-free shell with your Apple ID in Xcode and installs it with devicectl.", "在 Xcode 中用你的 Apple ID 签名无 ROM 外壳，并用 devicectl 安装。")
-        strategyDeviceTitle = t("device_cli wrapper", "device_cli 封装")
-        strategyDeviceDetail = t("Uses builder/device/device_cli.py when the device-bridge task publishes it.", "在设备桥任务发布后使用 builder/device/device_cli.py。")
-        strategyImpactorTitle = t("Official Impactor (manual)", "官方 Impactor（手动）")
-        strategyImpactorDetail = t("Builds the unsigned IPA and opens it in the official Impactor; sign in and install there.", "构建未签名 IPA 并在官方 Impactor 中打开，登录后手动安装。")
-        strategyMockTitle = t("Mock (dry run)", "模拟（试运行）")
-        strategyMockDetail = t("Simulates readiness, build and install without touching a device.", "模拟就绪检查、构建和安装，不接触真机。")
-        toolsTitle = t("Tools & paths", "工具与路径")
-        toolsRepoRoot = t("Checkout", "代码目录")
-        toolsOutDir = t("Output", "输出目录")
-        toolsPackCLI = t("Pack CLI", "打包 CLI")
-        toolsDevpush = t("devpush", "devpush")
-        toolsDeviceCLI = t("device_cli", "device_cli")
-        toolsAutoDetected = t("auto-detected", "自动检测")
-        toolsMockBackend = t("mock backend", "模拟后端")
-        toolsNotBuilt = t("not built", "未构建")
-        toolsNotSet = t("not set", "未设置")
-        toolsNotStaged = t("not staged", "未暂存")
-        toolsBundleID = t("Bundle ID", "Bundle ID")
-        toolsLibraryIPA = t("Library IPA", "游戏库 IPA")
-        toolsInstalledTitles = t("Installed games", "已安装游戏")
-        diagnosticsTitle = t("Diagnostics", "诊断")
-        diagnosticsChecksFormat = t("%d/%d checks passed", "%d/%d 项检查通过")
-        diagnosticsXcode = t("Xcode", "Xcode")
-        diagnosticsSigningAssetsFormat = t("%d certificate(s) / %d profile(s)", "%d 个证书 / %d 个描述文件")
-        diagnosticsDevpush = t("Device bridge", "设备桥")
-        diagnosticsRefresh = t("Re-check environment", "重新检查环境")
-        diagnosticsToolchainTitle = t("Toolchain", "工具链")
-        diagnosticsNotesTitle = t("Notes", "说明")
+        deviceBundleID = t("Installed app ID", "已安装 App ID")
+        deviceBundleIDNone = t("No app installed yet", "尚未安装 App")
         logsTitle = t("Logs", "日志")
         logsNoLines = t("No log lines yet.", "暂无日志。")
         logsExport = t("Export log", "导出日志")
@@ -443,65 +401,70 @@ struct LauncherStrings {
         logsRawNote = t("Logs are raw engineering output and are not translated.", "日志是原始工程输出，不做翻译。")
         aboutTitle = t("About", "关于")
         aboutBodyFormat = t(
-            "3ds2apple macOS launcher %@ - Apache-2.0. The launcher orchestrates the desktop AOT build, Xcode signing and the device bridge. It never bundles Impactor, ROMs or game data.",
-            "3ds2apple macOS 启动器 %@ - Apache-2.0。启动器负责调度桌面端 AOT 构建、Xcode 签名与设备桥。它不捆绑 Impactor、ROM 或游戏数据。"
+            "3ds2apple macOS launcher %@ - Apache-2.0. The launcher orchestrates the local AOT build, Xcode signing and the device bridge. It never bundles Impactor, ROMs or game data.",
+            "3ds2apple macOS 启动器 %@ - Apache-2.0。启动器负责调度本机 AOT 构建、Xcode 签名与设备桥。它不捆绑 Impactor、ROM 或游戏数据。"
         )
         aboutLicense = t("License: Apache-2.0. No ROMs, keys or game data are included.", "许可证：Apache-2.0。不包含 ROM、密钥或游戏数据。")
         aboutIconCaption = t("Same icon as the iPhone/iPad shell app", "与 iPhone/iPad 外壳 App 使用同一图标")
         aboutVersionFormat = t("Version %@ (%@)", "版本 %@ (%@)")
+        diagnosticsChecksFormat = t("%d/%d checks passed", "%d/%d 项检查通过")
+        diagnosticsToolchainTitle = t("Toolchain", "工具链")
 
-        gameDetailTitle = t("Game package", "游戏包")
-        gamePackageTitle = t("Package details", "包详情")
-        fieldStatus = t("Status", "状态")
-        fieldROM = t("ROM file", "ROM 文件")
-        fieldSaveNamespace = t("Save namespace", "存档命名空间")
-        fieldBuildName = t("Build name", "构建名称")
-        fieldPackPath = t("GamePack", "GamePack")
-        fieldPackSize = t("GamePack size", "GamePack 大小")
-        fieldPackSha = t("GamePack SHA-256", "GamePack SHA-256")
-        fieldInLibrary = t("In installed library", "已在安装的游戏库中")
-        fieldPackInLibraryYes = t("yes (signed IPA)", "是（已签名 IPA）")
-        fieldPackInLibraryNo = t("no - build & install the library", "否 - 请构建并安装游戏库")
-        fieldGameDataSource = t("Game data (push source)", "游戏数据（推送源）")
-        fieldPushedAt = t("Pushed", "推送时间")
-        pushPlanTitle = t("Documents push plan", "Documents 推送计划")
-        pushPlanSubtitle = t("GamePacks stay in the signed IPA; only game data is pushed", "GamePack 保留在签名 IPA 中，只推送游戏数据")
-        pushPlanNoPlan = t("Prepare the push plan to see the files.", "准备推送计划后可查看文件列表。")
-        pushPlanFilesFormat = t("%d file(s) - %@", "%d 个文件 - %@")
-        pushPrepare = t("Prepare", "准备")
-        pushToDevice = t("Push to device", "推送到设备")
-        pushVerify = t("Verify", "校验")
-        pushVerified = t("Verified on device", "已在设备上校验")
-        activityTitle = t("Current activity", "当前活动")
-        noActivity = t("No task is running.", "当前没有运行中的任务。")
-
-        // No further initializer work.
+        taskQueued = t("Queued", "排队中")
+        taskRunning = t("Running", "进行中")
+        taskSucceeded = t("Succeeded", "成功")
+        taskFailed = t("Failed", "失败")
+        taskCancelled = t("Cancelled", "已取消")
     }
 
     // MARK: - Formatting helpers
 
     func gamesCount(_ count: Int) -> String {
-        String(format: gamesCountFormat, count)
+        String(format: libraryCountFormat, count)
     }
 
-    func installedGames(_ count: Int) -> String {
-        String(format: installedGamesFormat, count)
+    func deploySelected(_ count: Int) -> String {
+        String(format: deploySelectedFormat, count)
     }
 
-    func diagnosticsChecks(_ ok: Int, _ total: Int) -> String {
-        String(format: diagnosticsChecksFormat, ok, total)
+    func deployButton(_ count: Int) -> String {
+        String(format: deployButtonFormat, count)
+    }
+
+    func deployCompileStep(_ count: Int) -> String {
+        String(format: deployStepCompileFormat, count)
+    }
+
+    func deployRunningFor(_ count: Int) -> String {
+        String(format: deployRunningForFormat, count)
+    }
+
+    func deployPushed(_ count: Int) -> String {
+        String(format: deployPushedFormat, count)
+    }
+
+    func deployIPAVerified(_ packs: Int) -> String {
+        String(format: deployIPAVerifiedFormat, packs)
+    }
+
+    func deployCompileProgress(_ done: Int, _ total: Int) -> String {
+        String(format: deployCompileProgressFormat, done, total)
+    }
+
+    func deployInstallProgress(_ line: String) -> String {
+        String(format: deployInstallProgressFormat, line)
     }
 
     func signingAssets(_ certificates: Int, _ profiles: Int) -> String {
-        String(format: diagnosticsSigningAssetsFormat, certificates, profiles)
+        String(format: signingAssetsFormat, certificates, profiles)
     }
 
-    func pushPlanFiles(_ count: Int, _ bytes: String) -> String {
-        String(format: pushPlanFilesFormat, count, bytes)
+    func signingTeam(_ team: String) -> String {
+        String(format: signingTeamFormat, team)
     }
 
-    func deviceSelected(_ name: String) -> String {
-        String(format: deviceSelectedFormat, name)
+    func signingXcode(_ version: String) -> String {
+        String(format: signingXcodeFormat, version)
     }
 
     func languageDetected(_ label: String) -> String {
@@ -520,6 +483,10 @@ struct LauncherStrings {
         String(format: aboutVersionFormat, version, build)
     }
 
+    func diagnosticsChecks(_ ok: Int, _ total: Int) -> String {
+        String(format: diagnosticsChecksFormat, ok, total)
+    }
+
     // MARK: - Enum labels
 
     func phase(_ phase: GamePhase) -> String {
@@ -534,45 +501,11 @@ struct LauncherStrings {
 
     func taskState(_ state: TaskState) -> String {
         switch state {
-        case .queued: return phaseQueued
-        case .running: return primaryBuilding
-        case .succeeded: return language == .chinese ? "成功" : "Succeeded"
-        case .failed: return phaseFailed
-        case .cancelled: return language == .chinese ? "已取消" : "Cancelled"
-        }
-    }
-
-    func buildModeTitle(_ mode: BuildMode) -> String {
-        switch mode {
-        case .dryRun: return modeDryTitle
-        case .fake: return modeFakeTitle
-        case .real: return modeRealTitle
-        }
-    }
-
-    func buildModeDetail(_ mode: BuildMode) -> String {
-        switch mode {
-        case .dryRun: return modeDryDetail
-        case .fake: return modeFakeDetail
-        case .real: return modeRealDetail
-        }
-    }
-
-    func installStrategyTitle(_ strategy: InstallStrategy) -> String {
-        switch strategy {
-        case .xcodebuild: return strategyXcodeTitle
-        case .deviceCLI: return strategyDeviceTitle
-        case .impactor: return strategyImpactorTitle
-        case .mock: return strategyMockTitle
-        }
-    }
-
-    func installStrategyDetail(_ strategy: InstallStrategy) -> String {
-        switch strategy {
-        case .xcodebuild: return strategyXcodeDetail
-        case .deviceCLI: return strategyDeviceDetail
-        case .impactor: return strategyImpactorDetail
-        case .mock: return strategyMockDetail
+        case .queued: return taskQueued
+        case .running: return taskRunning
+        case .succeeded: return taskSucceeded
+        case .failed: return taskFailed
+        case .cancelled: return taskCancelled
         }
     }
 

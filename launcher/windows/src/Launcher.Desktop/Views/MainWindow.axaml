@@ -2,12 +2,12 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ThreeDsTwoApple.Launcher.App.Views.MainWindow"
         Title="{Binding WindowTitle}"
-        Width="1120" Height="800"
+        Width="1120" Height="820"
         MinWidth="900" MinHeight="640"
         WindowStartupLocation="CenterScreen"
         Icon="/Assets/app.ico">
   <Grid RowDefinitions="Auto,*,Auto">
-    <!-- Top bar: app identity, exactly two primary sections, Settings gear. -->
+    <!-- Top bar: app identity, exactly two primary sections (Library / Deploy), Settings gear. -->
     <Border Grid.Row="0" Padding="20,14" Background="{DynamicResource AppSurfaceBrush}">
       <Grid ColumnDefinitions="Auto,*,Auto">
         <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
@@ -24,129 +24,208 @@
               <Border Height="2" CornerRadius="1" Background="{DynamicResource AppAccentBrush}" IsVisible="{Binding IsLibrarySection}" />
             </StackPanel>
           </Button>
-          <Button Classes="nav" Command="{Binding ShowImportCommand}">
+          <Button Classes="nav" Command="{Binding ShowDeployCommand}">
             <StackPanel Spacing="3">
-              <TextBlock Text="{Binding L.NavImport}" FontSize="14" HorizontalAlignment="Center" />
-              <Border Height="2" CornerRadius="1" Background="{DynamicResource AppAccentBrush}" IsVisible="{Binding IsImportSection}" />
+              <TextBlock Text="{Binding L.NavDeploy}" FontSize="14" HorizontalAlignment="Center" />
+              <Border Height="2" CornerRadius="1" Background="{DynamicResource AppAccentBrush}" IsVisible="{Binding IsDeploySection}" />
             </StackPanel>
           </Button>
         </StackPanel>
         <Button Grid.Column="2" Classes="gear" Content="⚙" ToolTip.Tip="{Binding L.NavSettings}"
-                Command="{Binding ShowSettingsCommand}" VerticalAlignment="Center" />
+                Command="{Binding OpenSettingsCommand}" VerticalAlignment="Center" />
       </Grid>
     </Border>
 
     <!-- Content -->
     <Grid Grid.Row="1" Margin="20,16,20,8">
-      <!-- 1. Library -->
-      <Grid IsVisible="{Binding IsLibrarySection}" RowDefinitions="Auto,Auto,*">
-        <Grid ColumnDefinitions="*,Auto">
+      <!-- 1. Library: import / list / remove. No build-install-push actions here. -->
+      <ScrollViewer IsVisible="{Binding IsLibrarySection}">
+        <StackPanel Spacing="14" MaxWidth="1060" HorizontalAlignment="Stretch">
           <StackPanel Spacing="3">
             <TextBlock Text="{Binding L.LibraryTitle}" Classes="h1" />
-            <TextBlock Text="{Binding L.LibrarySubtitle}" Classes="muted" MaxWidth="720" HorizontalAlignment="Left" />
+            <TextBlock Text="{Binding L.LibrarySubtitle}" Classes="muted" MaxWidth="820" HorizontalAlignment="Left" />
           </StackPanel>
-          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-            <Button Content="{Binding L.LibraryRefresh}" Command="{Binding RefreshStatusCommand}" Classes="ghost" />
-            <Button Content="{Binding L.LibraryInstall}" Command="{Binding InstallShellCommand}" Classes="primary" IsVisible="{Binding HasGames}" />
-          </StackPanel>
-        </Grid>
-        <TextBlock Grid.Row="1" Text="{Binding ReadinessText}" Classes="caption" Margin="0,8,0,0" />
 
-        <Border Grid.Row="2" Classes="card" IsVisible="{Binding IsLibraryEmpty}" Margin="0,18,0,0" VerticalAlignment="Top">
-          <StackPanel Spacing="12" Margin="10,14">
-            <TextBlock Text="{Binding L.LibraryEmptyTitle}" Classes="h2" />
-            <TextBlock Text="{Binding L.LibraryEmptyBody}" Classes="muted" MaxWidth="640" HorizontalAlignment="Left" />
-            <Button Content="{Binding L.LibraryEmptyAction}" Command="{Binding BrowseRomCommand}" Classes="primary" HorizontalAlignment="Left" Margin="0,8,0,0" />
-          </StackPanel>
-        </Border>
-
-        <ScrollViewer Grid.Row="2" IsVisible="{Binding HasGames}" Margin="0,18,0,0">
-          <StackPanel Spacing="10">
-            <TextBlock Text="{Binding GameCountText}" Classes="caption" />
-            <ItemsControl ItemsSource="{Binding Games}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <WrapPanel Orientation="Horizontal" />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                  <Border Classes="card" Width="336" Margin="0,0,14,14">
-                    <Grid RowDefinitions="Auto,*,Auto">
-                      <Grid ColumnDefinitions="Auto,*">
-                        <Image Source="/Assets/game-placeholder.png" Width="48" Height="48" VerticalAlignment="Top" />
-                        <StackPanel Grid.Column="1" Margin="12,0,0,0" Spacing="3">
-                          <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="15" TextTrimming="CharacterEllipsis" />
-                          <Border Classes="badge" HorizontalAlignment="Left">
-                            <TextBlock Text="{Binding StateLabel}" FontSize="11" />
-                          </Border>
-                        </StackPanel>
-                      </Grid>
-                      <StackPanel Grid.Row="1" Margin="0,12,0,0" Spacing="3">
-                        <TextBlock Text="{Binding PackLine}" FontSize="12" Foreground="{DynamicResource AppAccentBrush}" />
-                        <TextBlock Text="{Binding TitleIdLine}" Classes="caption" />
-                        <TextBlock Text="{Binding RomLine}" Classes="caption" TextTrimming="CharacterEllipsis" />
-                      </StackPanel>
-                      <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,14,0,0">
-                        <Button Content="{Binding PrimaryLabel}" Command="{Binding PrimaryCommand}" Classes="primary" />
-                        <Button Content="{Binding MoreLabel}" Classes="ghost">
-                          <Button.Flyout>
-                            <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                              <MenuItem Header="{Binding BuildLabel}" Command="{Binding BuildCommand}" />
-                              <MenuItem Header="{Binding InstallLabel}" Command="{Binding InstallCommand}" />
-                              <MenuItem Header="{Binding PushLabel}" Command="{Binding PushCommand}" />
-                              <MenuItem Header="{Binding VerifyLabel}" Command="{Binding VerifyCommand}" />
-                              <Separator />
-                              <MenuItem Header="{Binding RemoveLabel}" Command="{Binding RemoveCommand}" />
-                            </MenuFlyout>
-                          </Button.Flyout>
-                        </Button>
-                      </StackPanel>
-                    </Grid>
-                  </Border>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </StackPanel>
-        </ScrollViewer>
-      </Grid>
-
-      <!-- 2. Import -->
-      <ScrollViewer IsVisible="{Binding IsImportSection}">
-        <StackPanel Spacing="14" MaxWidth="860" HorizontalAlignment="Left">
-          <StackPanel Spacing="3">
-            <TextBlock Text="{Binding L.ImportTitle}" Classes="h1" />
-            <TextBlock Text="{Binding L.ImportBody}" Classes="muted" />
-          </StackPanel>
           <Border Classes="card">
             <StackPanel Spacing="10">
-              <TextBlock Text="{Binding L.ImportPath}" Classes="caption" />
               <Grid ColumnDefinitions="*,Auto">
-                <TextBox Text="{Binding ImportPath}" PlaceholderText="{Binding L.ImportPathPlaceholder}" />
-                <Button Grid.Column="1" Content="{Binding L.ImportBrowse}" Click="BrowseRomClicked" Margin="8,0,0,0" Classes="ghost" />
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{Binding L.LibraryImportTitle}" Classes="h2" />
+                  <TextBlock Text="{Binding L.LibraryImportBody}" Classes="muted" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding GameCountText}" Classes="caption" VerticalAlignment="Center" />
               </Grid>
-              <TextBlock Text="{Binding L.ImportName}" Classes="caption" />
-              <TextBox Text="{Binding DisplayNameOverride}" PlaceholderText="{Binding L.ImportNamePlaceholder}" />
-              <Button Content="{Binding L.ImportAction}" Command="{Binding ImportCommand}" Classes="primary" HorizontalAlignment="Left" Margin="0,6,0,0" />
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBox Text="{Binding ImportPath}" PlaceholderText="D:/ROM/MyGame.cci" />
+                <Button Grid.Column="1" Content="{Binding L.CommonBrowse}" Click="BrowseRomClicked" Margin="8,0,0,0" Classes="ghost" />
+              </Grid>
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBox Text="{Binding DisplayNameOverride}" PlaceholderText="{Binding L.LibraryImportNamePlaceholder}" />
+                <Button Grid.Column="1" Content="{Binding L.LibraryImportAction}" Command="{Binding ImportCommand}" Classes="primary" Margin="8,0,0,0" />
+              </Grid>
               <ProgressBar Value="{Binding ProgressValue}" IsVisible="{Binding IsImportRunning}" Height="6" />
-              <TextBlock Text="{Binding StatusText}" IsVisible="{Binding IsImportRunning}" Classes="muted" />
-              <TextBlock Text="{Binding L.ImportSuccessHint}" Classes="caption" />
+              <TextBlock Text="{Binding L.LibraryImportHint}" Classes="caption" />
             </StackPanel>
           </Border>
-          <Border Classes="card">
-            <StackPanel Spacing="6">
-              <TextBlock Text="{Binding L.ImportStepsTitle}" Classes="h2" />
-              <TextBlock Text="{Binding L.ImportStepBuild}" Classes="muted" />
-              <TextBlock Text="{Binding L.ImportStepInstall}" Classes="muted" />
-              <TextBlock Text="{Binding L.ImportStepPush}" Classes="muted" />
+
+          <Border Classes="card" IsVisible="{Binding IsLibraryEmpty}" VerticalAlignment="Top">
+            <StackPanel Spacing="10">
+              <TextBlock Text="{Binding L.LibraryEmptyTitle}" Classes="h2" />
+              <TextBlock Text="{Binding L.LibraryEmptyBody}" Classes="muted" MaxWidth="640" HorizontalAlignment="Left" />
+              <Button Content="{Binding L.LibraryEmptyAction}" Click="BrowseRomClicked" Classes="primary" HorizontalAlignment="Left" />
             </StackPanel>
           </Border>
+
+          <ItemsControl ItemsSource="{Binding Games}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Classes="card" Width="330" Margin="0,0,14,14">
+                  <Grid RowDefinitions="Auto,*,Auto">
+                    <Grid ColumnDefinitions="Auto,*">
+                      <Image Source="/Assets/game-placeholder.png" Width="44" Height="44" VerticalAlignment="Top" />
+                      <StackPanel Grid.Column="1" Margin="12,0,0,0" Spacing="3">
+                        <TextBox Text="{Binding DisplayName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" FontWeight="SemiBold" FontSize="14" PlaceholderText="{Binding DisplayName}" />
+                        <Border Classes="badge" HorizontalAlignment="Left">
+                          <TextBlock Text="{Binding StateLabel}" FontSize="11" />
+                        </Border>
+                      </StackPanel>
+                    </Grid>
+                    <StackPanel Grid.Row="1" Margin="0,12,0,0" Spacing="4">
+                      <TextBlock Text="{Binding PackLine}" FontSize="12" Foreground="{DynamicResource AppAccentBrush}" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding TitleIdLine}" Classes="caption" />
+                      <TextBlock Text="{Binding RomLine}" Classes="caption" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,14,0,0">
+                      <Button Content="{Binding RemoveLabel}" Command="{Binding RemoveCommand}" Classes="ghost" />
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBlock Text="{Binding ReadinessText}" Classes="caption" />
         </StackPanel>
       </ScrollViewer>
 
-      <!-- Settings (gear only, not a top-level tab) -->
+      <!-- 2. Deploy: select one or many games -> one chained action with visible steps. -->
+      <ScrollViewer IsVisible="{Binding IsDeploySection}">
+        <StackPanel Spacing="14" MaxWidth="1060" HorizontalAlignment="Stretch">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="3">
+              <TextBlock Text="{Binding L.DeployTitle}" Classes="h1" />
+              <TextBlock Text="{Binding L.DeploySubtitle}" Classes="muted" MaxWidth="820" HorizontalAlignment="Left" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+              <TextBlock Text="{Binding DeployStateLabel}" Classes="caption" HorizontalAlignment="Right" />
+              <TextBlock Text="{Binding DeploySelectedCountText}" Classes="caption" HorizontalAlignment="Right" />
+            </StackPanel>
+          </Grid>
+
+          <!-- Toolchain / device readiness: one actionable line when something is missing. -->
+          <Border Classes="card" IsVisible="{Binding !IsToolchainReady}">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding L.DeployToolchainTitle}" Classes="h2" />
+              <TextBlock Text="{Binding ToolchainStatus}" Classes="muted" />
+              <TextBlock Text="{Binding ToolchainFix}" Classes="caption" />
+            </StackPanel>
+          </Border>
+          <TextBlock Text="{Binding ToolchainStatus}" Classes="caption" IsVisible="{Binding IsToolchainReady}" />
+          <TextBlock Text="{Binding DeviceStatus}" Classes="caption" />
+          <TextBlock Text="{Binding InstalledBundleIdLine}" Classes="caption" />
+
+          <Border Classes="card">
+            <StackPanel Spacing="10">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="{Binding L.DeployGamesTitle}" Classes="h2" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                  <Button Content="{Binding L.DeploySelectAll}" Command="{Binding SelectAllCommand}" Classes="ghost" />
+                  <Button Content="{Binding L.DeploySelectNone}" Command="{Binding SelectNoneCommand}" Classes="ghost" />
+                </StackPanel>
+              </Grid>
+              <TextBlock Text="{Binding L.DeployNoGames}" Classes="muted" IsVisible="{Binding IsDeployEmpty}" />
+              <ItemsControl ItemsSource="{Binding DeployGames}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Classes="badge" Margin="0,2" Padding="10,8" HorizontalAlignment="Stretch">
+                      <Grid ColumnDefinitions="Auto,*,Auto">
+                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Spacing="2" Margin="6,0,0,0">
+                          <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="13" />
+                          <TextBlock Text="{Binding DetailLine}" Classes="caption" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="2" Text="{Binding StateLabel}" Classes="caption" VerticalAlignment="Center" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <!-- One-click action + Retry. -->
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <Button Content="{Binding L.DeployAction}" Command="{Binding DeployCommand}" Classes="primary" IsVisible="{Binding !IsDeployFailed}" />
+            <Button Content="{Binding L.DeployRetry}" Command="{Binding DeployCommand}" Classes="primary" IsVisible="{Binding IsDeployFailed}" />
+            <ProgressBar Width="320" Height="8" Value="{Binding ProgressValue}" IsVisible="{Binding IsDeployRunning}" VerticalAlignment="Center" />
+          </StackPanel>
+
+          <!-- Step list with per-step state. -->
+          <Border Classes="card">
+            <StackPanel Spacing="8">
+              <ItemsControl ItemsSource="{Binding DeploySteps}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,5">
+                      <TextBlock Text="{Binding Label}" MinWidth="170" FontWeight="SemiBold" VerticalAlignment="Top" />
+                      <StackPanel Grid.Column="1" Spacing="1" Margin="8,0,8,0">
+                        <TextBlock Text="{Binding Detail}" Classes="caption" TextWrapping="Wrap" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="2" Text="{Binding StatusLabel}" Classes="caption" VerticalAlignment="Top" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <!-- Idle / done / failed banners. -->
+          <Border Classes="card" IsVisible="{Binding IsDeployIdle}">
+            <StackPanel Spacing="4">
+              <TextBlock Text="{Binding L.DeployIdleTitle}" Classes="h2" />
+              <TextBlock Text="{Binding L.DeployIdleBody}" Classes="muted" />
+            </StackPanel>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding IsDeployDone}">
+            <StackPanel Spacing="4">
+              <TextBlock Text="{Binding L.DeployDoneTitle}" Classes="h2" Foreground="{DynamicResource AppAccentBrush}" />
+              <TextBlock Text="{Binding L.DeployDoneBody}" Classes="muted" />
+            </StackPanel>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding IsDeployFailed}">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding DeployErrorTitle}" Classes="h2" Foreground="{DynamicResource AppWarningBrush}" />
+              <TextBlock Text="{Binding DeployErrorDetail}" Classes="muted" />
+              <TextBlock Text="{Binding DeployErrorFix}" Classes="caption" />
+              <TextBlock Text="{Binding DeployStepName}" Classes="caption" />
+              <TextBlock Text="{Binding L.DeployFailedHelp}" Classes="caption" />
+            </StackPanel>
+          </Border>
+
+          <Button Content="{Binding DeployLogToggleLabel}" Command="{Binding ToggleDeployLogCommand}" Classes="ghost" HorizontalAlignment="Left" />
+          <ListBox x:Name="LogList" ItemsSource="{Binding LogLines}" Height="200" IsVisible="{Binding ShowDeployLog}"
+                   FontFamily="Consolas, Menlo, monospace" FontSize="11" />
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- Settings (gear only, minimal: language / Apple ID / device / logs / about). -->
       <ScrollViewer IsVisible="{Binding ShowSettings}">
-        <StackPanel Spacing="14" MaxWidth="1040" HorizontalAlignment="Left">
+        <StackPanel Spacing="14" MaxWidth="1060" HorizontalAlignment="Stretch">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Spacing="3">
               <TextBlock Text="{Binding L.SettingsTitle}" Classes="h1" />
@@ -161,13 +240,9 @@
                 <StackPanel Spacing="8">
                   <TextBlock Text="{Binding L.SettingsAppleTitle}" Classes="h2" />
                   <TextBlock Text="{Binding L.SettingsAppleBody}" Classes="muted" />
+                  <TextBlock Text="{Binding InstalledBundleIdLine}" Classes="caption" />
                   <TextBlock Text="{Binding ShellStatus}" Classes="caption" />
-                  <TextBlock Text="{Binding ShellBundleIdLine}" Classes="caption" />
-                  <TextBlock Text="{Binding L.AppSectionBody}" Classes="caption" />
-                  <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-                    <Button Content="{Binding L.SettingsAppleOpen}" Command="{Binding OpenImpactorCommand}" Classes="ghost" />
-                    <Button Content="{Binding L.AppInstall}" Command="{Binding InstallShellCommand}" Classes="primary" />
-                  </StackPanel>
+                  <Button Content="{Binding L.SettingsAppleOpen}" Command="{Binding OpenImpactorCommand}" Classes="ghost" HorizontalAlignment="Left" />
                   <TextBlock Text="{Binding L.AppImpactorNote}" Classes="caption" />
                 </StackPanel>
               </Border>
@@ -176,7 +251,6 @@
                   <TextBlock Text="{Binding L.SettingsDeviceTitle}" Classes="h2" />
                   <TextBlock Text="{Binding DeviceStatus}" Classes="muted" />
                   <Button Content="{Binding L.DeviceRefresh}" Command="{Binding RefreshDevicesCommand}" Classes="ghost" HorizontalAlignment="Left" />
-                  <TextBlock Text="{Binding L.DevicePrereqTitle}" Classes="caption" />
                   <TextBlock Text="{Binding L.DevicePrereqUsb}" Classes="caption" />
                   <TextBlock Text="{Binding L.DevicePrereqTrust}" Classes="caption" />
                   <TextBlock Text="{Binding L.DevicePrereqUnlock}" Classes="caption" />
@@ -184,23 +258,8 @@
               </Border>
               <Border Classes="card">
                 <StackPanel Spacing="8">
-                  <TextBlock Text="{Binding L.SettingsBuildTitle}" Classes="h2" />
-                  <TextBlock Text="{Binding L.BuildMode}" Classes="caption" />
-                  <ComboBox ItemsSource="{Binding BuildModes}" SelectedItem="{Binding SelectedBuildMode}" HorizontalAlignment="Stretch">
-                    <ComboBox.ItemTemplate>
-                      <DataTemplate>
-                        <TextBlock Text="{Binding Label}" />
-                      </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                  </ComboBox>
-                  <TextBlock Text="{Binding L.BuildHost}" Classes="caption" />
-                  <TextBox Text="{Binding BuildHost}" PlaceholderText="{Binding L.BuildHostPlaceholder}" />
-                  <TextBlock Text="{Binding L.BuildNote}" Classes="caption" />
-                  <CheckBox Content="{Binding L.SettingsBuildLocal}" IsChecked="{Binding LocalBuildEnabled}" />
-                  <TextBlock Text="{Binding L.SettingsBuildRecomp}" Classes="caption" />
-                  <TextBox Text="{Binding RecompPathSetting}" />
-                  <TextBlock Text="{Binding L.SettingsBuildLlvm}" Classes="caption" />
-                  <TextBox Text="{Binding LlvmDirSetting}" />
+                  <TextBlock Text="{Binding L.SettingsAutoTitle}" Classes="h2" />
+                  <TextBlock Text="{Binding L.SettingsAutoBody}" Classes="muted" />
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -221,39 +280,15 @@
               </Border>
               <Border Classes="card">
                 <StackPanel Spacing="8">
-                  <TextBlock Text="{Binding L.SettingsToolsTitle}" Classes="h2" />
-                  <TextBlock Text="{Binding L.SettingsToolsBody}" Classes="caption" />
-                  <TextBlock Text="{Binding L.SettingsToolsPack}" Classes="caption" />
-                  <Grid ColumnDefinitions="*,Auto">
-                    <TextBox Text="{Binding PackPathSetting}" />
-                    <Button Grid.Column="1" Content="{Binding L.CommonBrowse}" Click="BrowsePackClicked" Margin="8,0,0,0" Classes="ghost" />
-                  </Grid>
-                  <TextBlock Text="{Binding L.SettingsToolsDevPush}" Classes="caption" />
-                  <Grid ColumnDefinitions="*,Auto">
-                    <TextBox Text="{Binding DevPushPathSetting}" />
-                    <Button Grid.Column="1" Content="{Binding L.CommonBrowse}" Click="BrowseDevPushClicked" Margin="8,0,0,0" Classes="ghost" />
-                  </Grid>
-                  <TextBlock Text="{Binding L.SettingsToolsBuilder}" Classes="caption" />
-                  <Grid ColumnDefinitions="*,Auto">
-                    <TextBox Text="{Binding BuilderPathSetting}" />
-                    <Button Grid.Column="1" Content="{Binding L.CommonBrowse}" Click="BrowseBuilderClicked" Margin="8,0,0,0" Classes="ghost" />
-                  </Grid>
-                  <TextBlock Text="{Binding L.SettingsToolsMock}" Classes="caption" />
-                  <TextBox Text="{Binding MockDirectory}" />
-                  <TextBlock Text="{Binding L.SettingsToolsBundle}" Classes="caption" />
-                  <TextBox Text="{Binding BundleIdOverride}" />
-                </StackPanel>
-              </Border>
-              <Border Classes="card">
-                <StackPanel Spacing="8">
                   <TextBlock Text="{Binding L.SettingsLogsTitle}" Classes="h2" />
-                  <TextBlock Text="{Binding L.SettingsLogsPath}" Classes="caption" />
+                  <TextBlock Text="{Binding CurrentLogPath}" Classes="caption" />
                   <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button Content="{Binding L.SettingsLogsSelfTest}" Command="{Binding RunSelfTestCommand}" Classes="ghost" />
                     <Button Content="{Binding L.SettingsLogsWorkspace}" Command="{Binding OpenWorkspaceCommand}" Classes="ghost" />
+                    <Button Content="{Binding L.SettingsLogsExport}" Command="{Binding ExportLogCommand}" Classes="ghost" />
                   </StackPanel>
                   <Button Content="{Binding DiagnosticsToggleLabel}" Command="{Binding ToggleDiagnosticsCommand}" Classes="ghost" HorizontalAlignment="Left" />
-                  <ListBox x:Name="LogList" ItemsSource="{Binding LogLines}" Height="180" IsVisible="{Binding ShowDiagnostics}"
+                  <ListBox x:Name="DiagnosticsLogList" ItemsSource="{Binding LogLines}" Height="180" IsVisible="{Binding ShowDiagnostics}"
                            FontFamily="Consolas, Menlo, monospace" FontSize="11" />
                 </StackPanel>
               </Border>
@@ -261,19 +296,18 @@
                 <StackPanel Spacing="8">
                   <TextBlock Text="{Binding L.SettingsAboutTitle}" Classes="h2" />
                   <TextBlock Text="{Binding L.SettingsAboutBody}" Classes="caption" />
-                  <TextBlock Text="{Binding L.SettingsDistribution}" Classes="caption" />
+                  <TextBlock Text="{Binding DistributionLine}" Classes="caption" />
                   <TextBlock Text="{Binding L.ReadinessTitle}" Classes="caption" />
                   <ItemsControl ItemsSource="{Binding Tools}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
                         <Grid ColumnDefinitions="*,Auto" Margin="0,1">
-                          <TextBlock Text="{Binding Name}" FontSize="11" />
+                          <TextBlock Text="{Binding Name}" FontSize="11" TextWrapping="Wrap" />
                           <TextBlock Grid.Column="1" Text="{Binding StateLabel}" FontSize="11" Classes="caption" />
                         </Grid>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                  <Button Content="{Binding L.SettingsSave}" Command="{Binding SaveSettingsCommand}" Classes="primary" HorizontalAlignment="Left" Margin="0,6,0,0" />
                 </StackPanel>
               </Border>
             </StackPanel>

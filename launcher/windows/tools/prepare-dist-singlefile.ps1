@@ -3,17 +3,22 @@
   Build the one-executable Windows launcher ZIP (self-contained .NET single-file).
 
 .DESCRIPTION
-  The exe embeds the ROM-free shell template, the pinned official Impactor/plumesign,
-  the Bin/ tool CLIs and LICENSE/NOTICE/THIRD_PARTY; on first run it extracts them to
-  %LOCALAPPDATA%\3ds2apple\distribution\<version>. The user-facing ZIP contains exactly
-  one file: 3ds2apple-launcher.exe.
+  The exe embeds the ROM-free shell template, the pinned official Impactor/plumesign, the Bin/
+  tool CLIs, 3dsrecomp.exe + the hand-written Darwin stubs/shim (Windows local build) and
+  LICENSE/NOTICE/THIRD_PARTY. On first run it extracts them to
+  %LOCALAPPDATA%\3ds2apple\distribution\<version>. The user-facing ZIP contains exactly one
+  file: 3ds2apple-launcher.exe.
 
-  This is the Windows-side twin of tools/prepare-dist-singlefile.sh (WSL). The WSL
-  script is the one exercised in this checkout; this PowerShell version mirrors it for
-  release engineers on a Windows PC.
+  The official LLVM 21.1.8 toolchain is staged under Bin/llvm when present
+  (THREEDS2APPLE_LLVM_DIR, default <repo>/build/win-toolchain/llvm). It is never faked: without
+  it the packaged launcher's Deploy page shows one actionable local-toolchain error + Retry.
+
+  This is the Windows-side twin of tools/prepare-dist-singlefile.sh (WSL). The WSL script is the
+  one exercised in this checkout; this PowerShell version mirrors it for release engineers on a
+  Windows PC. On Windows it also runs the clean-folder --self-test automatically.
 
 .PARAMETER Output
-  Output directory; the ZIP is written as 3ds2apple-windows-single-<version>.zip.
+  Output directory; defaults to the repo's git-ignored out/launchers/.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File launcher/windows/tools/prepare-dist-singlefile.ps1
@@ -24,18 +29,17 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$scriptDir = Split-Path -Parent $PSScriptRoot
-$windowsRoot = Split-Path -Parent $scriptDir
+$windowsRoot = Split-Path -Parent $PSScriptRoot
 $repoRoot = Split-Path -Parent (Split-Path -Parent $windowsRoot)
 if ([string]::IsNullOrWhiteSpace($Output)) {
-    $Output = Join-Path $repoRoot 'dist/windows-single'
+    $Output = Join-Path $repoRoot 'out/launchers'
 }
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 
 $version = ([xml](Get-Content -Raw -LiteralPath (Join-Path $windowsRoot 'Directory.Build.props'))).Project.PropertyGroup.Version
 if ([string]::IsNullOrWhiteSpace($version)) { $version = '0.1.0' }
 $exeName = '3ds2apple-launcher.exe'
-$publishDir = Join-Path $Output 'publish'
+$publishDir = Join-Path $Output 'publish-win-x64'
 $zipPath = Join-Path $Output "3ds2apple-windows-single-$version.zip"
 
 # 1. ROM-free base shell template + pinned manifest.
@@ -68,6 +72,53 @@ foreach ($tool in @('3ds2apple-pack.exe', 'builder-windows.exe', 'devpush.exe'))
     }
 }
 
+# 3b. Windows local-build payload: 3dsrecomp.exe.
+$recomp = Join-Path $windowsRoot 'Bin/3dsrecomp.exe'
+if (-not (Test-Path -LiteralPath $recomp)) {
+    foreach ($candidate in @(
+            (Join-Path $repoRoot 'third_party/3dsrecomp/target/x86_64-pc-windows-gnu/release/3dsrecomp.exe'),
+            (Join-Path $repoRoot 'third_party/3dsrecomp/target/release/3dsrecomp.exe'))) {
+        if (Test-Path -LiteralPath $candidate) {
+            Copy-Item -LiteralPath $candidate -Destination $recomp
+            break
+        }
+    }
+}
+if (Test-Path -LiteralPath $recomp) {
+    Write-Host "[single] 3dsrecomp.exe staged"
+} else {
+    Write-Warning 'Bin/3dsrecomp.exe is missing; Deploy will show one actionable local-toolchain error'
+}
+
+# 3c. Optional official LLVM 21.1.8 toolchain (real local GamePack compile).
+$llvmSource = $env:THREEDS2APPLE_LLVM_DIR
+if ([string]::IsNullOrWhiteSpace($llvmSource)) { $llvmSource = Join-Path $repoRoot 'build/win-toolchain/llvm' }
+$llvmStage = Join-Path $windowsRoot 'Bin/llvm'
+if ((Test-Path -LiteralPath (Join-Path $llvmSource 'bin/clang.exe')) -and (Test-Path -LiteralPath (Join-Path $llvmSource 'lib/clang'))) {
+    if (Test-Path -LiteralPath $llvmStage) { Remove-Item -Recurse -Force -LiteralPath $llvmStage }
+    New-Item -ItemType Directory -Force -Path (Join-Path $llvmStage 'bin') | Out-Null
+    foreach ($tool in @('clang.exe', 'llvm-ar.exe', 'ld64.lld.exe', 'llvm-nm.exe', 'llvm-objdump.exe')) {
+        $from = Join-Path $llvmSource "bin/$tool"
+        if (Test-Path -LiteralPath $from) { Copy-Item -LiteralPath $from -Destination (Join-Path $llvmStage 'bin/') }
+    }
+    Get-ChildItem -LiteralPath (Join-Path $llvmSource 'bin') -File -Filter '*.dll' | Copy-Item -Destination (Join-Path $llvmStage 'bin/')
+    foreach ($clangDir in Get-ChildItem -LiteralPath (Join-Path $llvmSource 'lib/clang') -Directory) {
+        $include = Join-Path $clangDir.FullName 'include'
+        if (Test-Path -LiteralPath $include) {
+            $target = Join-Path $llvmStage ("lib/clang/" + $clangDir.Name)
+            New-Item -ItemType Directory -Force -Path $target | Out-Null
+            Copy-Item -Recurse -Force -LiteralPath $include -Destination $target
+        }
+    }
+    foreach ($notice in @('LICENSE.TXT', 'LICENSE.txt')) {
+        $from = Join-Path $llvmSource $notice
+        if (Test-Path -LiteralPath $from) { Copy-Item -LiteralPath $from -Destination (Join-Path $llvmStage 'LICENSE.TXT') }
+    }
+    Write-Host "[single] LLVM staged under Bin/llvm"
+} else {
+    Write-Warning "official LLVM 21.1.8 not found at $llvmSource; packaging without it (Deploy shows one actionable local-toolchain error)"
+}
+
 # 4. Single-file self-contained publish (Release embeds the payload).
 if (Test-Path -LiteralPath $publishDir) { Remove-Item -Recurse -Force -LiteralPath $publishDir }
 New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
@@ -76,11 +127,27 @@ dotnet publish (Join-Path $windowsRoot 'src/Launcher.Desktop/ThreeDsTwoApple.Lau
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false --nologo
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-Get-ChildItem -LiteralPath $publishDir -File | Where-Object { $_.Name -ne $exeName } | Remove-Item -Force
+Get-ChildItem -LiteralPath $publishDir -Force | Where-Object { $_.Name -ne $exeName } | Remove-Item -Recurse -Force
 
 # 5. ZIP with exactly one file inside.
 if (Test-Path -LiteralPath $zipPath) { Remove-Item -Force -LiteralPath $zipPath }
 Compress-Archive -LiteralPath (Join-Path $publishDir $exeName) -DestinationPath $zipPath -CompressionLevel Optimal
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath).Hash.ToLowerInvariant()
 Write-Host "[single] zip: $zipPath ($hash)"
-Write-Host "[single] next: run $exeName --self-test from a folder that contains only the exe"
+
+# 6. Clean folder + real --self-test (Windows can execute the packaged exe).
+$cleanDir = Join-Path $Output 'clean-run-win'
+if (Test-Path -LiteralPath $cleanDir) { Remove-Item -Recurse -Force -LiteralPath $cleanDir }
+New-Item -ItemType Directory -Force -Path $cleanDir | Out-Null
+Copy-Item -LiteralPath (Join-Path $publishDir $exeName) -Destination $cleanDir
+Push-Location $cleanDir
+try {
+    & (Join-Path $cleanDir $exeName) --self-test
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "clean-folder self-test FAILED (exit $LASTEXITCODE)"
+        exit $LASTEXITCODE
+    }
+    Write-Host '[single] clean-folder self-test PASS'
+} finally {
+    Pop-Location
+}

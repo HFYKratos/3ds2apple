@@ -193,6 +193,14 @@ public sealed class PushService
                 return new PushOutcome(false, plan.RemoteDirectory, pushed, skipped, "push_size_mismatch",
                     "devpush reported " + result.Bytes.ToString() + " bytes for " + file.RemoteName + ", expected " + file.Bytes.ToString() + ".");
             }
+            // The bridge reports the SHA-256 it wrote (devpush/1 done event). A mismatch means the
+            // phone does not hold the same bytes as the local ROM, so the deploy must fail instead
+            // of telling the user the game is ready.
+            if (!string.IsNullOrWhiteSpace(result.Sha256) && !string.Equals(result.Sha256, file.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                return new PushOutcome(false, plan.RemoteDirectory, pushed, skipped, "push_sha_mismatch",
+                    "devpush reported sha256 " + result.Sha256 + " for " + file.RemoteName + ", expected " + file.Sha256 + ".");
+            }
             pushed.Add(file.RemoteName);
             log?.Invoke("pushed " + file.RemoteName + " (" + FormatBytes(file.Bytes) + ")");
         }
@@ -207,7 +215,7 @@ public sealed class PushService
                     "After the push, " + file.RemoteName + " is missing or has the wrong size on the phone (expected " + file.Bytes.ToString() + ").");
             }
         }
-        log?.Invoke("verified " + plan.Files.Count.ToString() + " file(s) in " + plan.RemoteDirectory);
+        log?.Invoke("verified " + plan.Files.Count.ToString() + " file(s) in " + plan.RemoteDirectory + " (size on phone matches the local file; sha256 was checked on every written file)");
         return new PushOutcome(true, plan.RemoteDirectory, pushed, skipped, null, null);
     }
 

@@ -2,15 +2,20 @@
 //  AppModel.swift
 //  3ds2apple macOS launcher
 //
-//  The single state machine behind the UI:
+//  The single state machine behind the two-section UI
+//  (docs/launcher-flow-v2.md):
 //
-//    import ROM -> detect header -> queue package -> build GamePack -> install
-//    base shell -> push Documents/Games/<TITLEID> files -> verify
+//    Library: import a decrypted ROM -> list/remove/rename games
+//    Deploy:  select one or several games -> one-click batch deploy:
+//             batch compile -> compose ONE ROM-free IPA with the selected real
+//             packs + schema-2 GameCatalog -> verify the IPA -> sign/install ->
+//             push each selected GameRom + GameInfo (using the bundle ID of the
+//             app that was actually installed) -> verify -> Done.
 //
 //  Every long step becomes a TaskRecord with named stages; every command line
-//  goes to the log. Live mode drives the real CLI/scripts/Xcode; mock mode uses
-//  the deterministic stand-ins so the whole flow is testable on the build VM
-//  without a ROM, a phone or an Apple ID.
+//  goes to the log. Live mode drives the real CLI/scripts/Xcode/devpush; mock
+//  mode uses the deterministic stand-ins so the whole flow is testable on the
+//  build VM without a ROM, a phone or an Apple ID.
 //
 
 import Foundation
@@ -19,11 +24,11 @@ import AppKit
 enum MockScenario: String, CaseIterable {
     case importDetected
     case library
-    case buildRunning
-    case install
-    case devicePush
-    case activity
-    case diagnostics
+    case deploySelection
+    case deployRunning
+    case deployDone
+    case deployFailed
+    case settings
 }
 
 @MainActor
@@ -32,12 +37,16 @@ final class AppModel: ObservableObject {
     @Published var screen: LauncherScreen = .library
     /// Settings is a modal panel (gear button), never a top-level tab.
     @Published var settingsPresented = false
-    /// Non-nil while the game-detail dialog is open (per-game install/push actions).
-    @Published var detailGameID: String?
+    /// Import is a sheet of the Library, not a top-level tab.
+    @Published var importPresented = false
     @Published var games: [GameEntry] = []
-    @Published var selectedGameID: String?
     @Published var detectedROM: DetectedROM?
     @Published var detectedROMError: String?
+
+    // Deploy selection and the one-click report
+    @Published var selectedForDeploy: Set<String> = []
+    @Published var deployReport: DeployReport?
+    @Published var pushPlans: [String: PushPlan] = [:]
 
     // Activity
     @Published var tasks: [TaskRecord] = []
@@ -51,17 +60,6 @@ final class AppModel: ObservableObject {
     @Published var appleReadiness: AppleReadiness?
     @Published var devices: [DeviceInfo] = []
     @Published var selectedDeviceUDID: String?
-
-    // Install
-    @Published var installProgressLines: [String] = []
-    @Published var lastInstallFailure: LauncherFailure?
-    @Published var installResult: InstallResult?
-    @Published var adoptAppPath: String?
-    @Published var adoptIPAPath: String?
-
-    // Push
-    @Published var pushPlans: [String: PushPlan] = [:]
-    @Published var pushError: LauncherFailure?
 
     // Misc
     @Published var lastExportPath: String?
@@ -103,7 +101,7 @@ final class AppModel: ObservableObject {
             self.runner = MockCommandRunner()
             self.pack = MockPackBackend()
             self.bridge = MockDeviceBridge()
-            self.installer = MockInstallBackend(readinessState: MockFixtures.environment().apple)
+            self.installer = MockInstallBackend(readinessState: MockFixtures.readyEnvironment().apple)
             self.stagingRoot = MockFixtures.stagingRoot
             MockFixtures.ensurePackageTree()
         } else {
@@ -122,7 +120,7 @@ final class AppModel: ObservableObject {
                 self.pack = MissingPackBackend(
                     outRoot: settings.outRootURL,
                     repoRoot: repoURL,
-                    reason: "Checked: " + settings.repoRoot + "/builder/target/release/3ds2apple-pack"
+                    reason: "Checked: " + settings.repoRoot + "/builder/target/release/3ds2apple-pack and PATH"
                 )
             }
             if let devpush = paths.devpush {
@@ -135,15 +133,20 @@ final class AppModel: ObservableObject {
                 .appendingPathComponent("3ds2apple-launcher", isDirectory: true)
                 .appendingPathComponent("staging", isDirectory: true)
         }
-        appendLog(.info, "launcher", "3ds2apple launcher 0.1.0 started (" + (kind == .mock ? "mock mode" : "live mode") + ")")
+        appendLog(.info, "launcher", "3ds2apple launcher " + LauncherInfo.version + " started (" + (kind == .mock ? "mock mode" : "live mode") + ")")
         appendLog(.info, "launcher", "checkout: " + settings.repoRoot)
     }
 
     // MARK: convenience
 
-    var selectedGame: GameEntry? {
-        guard let selectedGameID else { return games.first }
-        return games.first(where: { $0.titleID == selectedGameID }) ?? games.first
+    var strings: LauncherStrings {
+        LauncherStrings(language: settings.language.resolved())
+    }
+
+    var isMock: Bool { kind == .mock }
+
+    var selectedDevice: DeviceInfo? {
+        devices.first(where: { $0.udid == selectedDeviceUDID })
     }
 
     var activeTask: TaskRecord? {
@@ -151,19 +154,30 @@ final class AppModel: ObservableObject {
         return tasks.first(where: { $0.id == activeTaskID })
     }
 
-    var selectedDevice: DeviceInfo? {
-        devices.first(where: { $0.udid == selectedDeviceUDID })
-    }
-
-    var isMock: Bool { kind == .mock }
-
     func game(id: String) -> GameEntry? {
         games.first(where: { $0.titleID == id })
     }
 
-    func latestTask(forGame id: String?) -> TaskRecord? {
-        guard let id else { return tasks.first }
-        return tasks.first(where: { $0.titleID == id })
+    /// Games currently checked on the Deploy page, sorted by title ID.
+    var deployCandidates: [GameEntry] {
+        games.filter { selectedForDeploy.contains($0.titleID) }.sorted { $0.titleID < $1.titleID }
+    }
+
+    var deployCandidateTitles: [String] { deployCandidates.map { $0.titleID } }
+
+    var builtGames: [GameEntry] {
+        games.filter { $0.packIsReal || $0.phase == .built || $0.phase == .pushed }
+    }
+
+    /// True when the installed library IPA no longer matches the built packs.
+    var libraryNeedsRebuild: Bool {
+        let installed = Set(settings.libraryInstalledTitles.map { $0.uppercased() })
+        let built = Set(builtGames.map { $0.titleID.uppercased() })
+        return !built.isEmpty && installed != built
+    }
+
+    func isInInstalledLibrary(_ titleID: String) -> Bool {
+        settings.libraryInstalledTitles.map { $0.uppercased() }.contains(titleID.uppercased())
     }
 
     // MARK: logging
@@ -255,7 +269,7 @@ final class AppModel: ObservableObject {
 
     private func beginBusy() -> Bool {
         if isBusy {
-            banner = Banner(kind: .warning, title: "A task is already running", message: "Wait for it to finish (or cancel it) before starting another one.")
+            banner = Banner(kind: .warning, title: strings.statusNeedsAttention, message: strings.busyWorking)
             return false
         }
         isBusy = true
@@ -278,6 +292,16 @@ final class AppModel: ObservableObject {
                 }
             }
         }
+        if var report = deployReport, report.state == .running {
+            for index in report.steps.indices where report.steps[index].state == .running {
+                report.steps[index].state = .failed
+                report.steps[index].detail = "cancelled"
+                report.failedStepIndex = index
+            }
+            report.state = .cancelled
+            report.endedAt = Date()
+            deployReport = report
+        }
         activeTaskID = nil
         isBusy = false
         appendLog(.warn, "launcher", "active task cancelled")
@@ -289,7 +313,7 @@ final class AppModel: ObservableObject {
         appendLog(.info, "toolchain", "probing toolchain and Apple ID readiness")
         let report: EnvironmentReport
         if kind == .mock {
-            report = MockFixtures.environment()
+            report = MockFixtures.readyEnvironment()
         } else {
             report = await ToolchainProbe(runner: runner, settings: settings).probe()
         }
@@ -310,9 +334,9 @@ final class AppModel: ObservableObject {
         detectedROMError = nil
         let taskID = startTask(
             kind: .detect,
-            title: "Read ROM header",
+            title: strings.detectedTitle,
             titleID: nil,
-            stages: [PipelineStage(title: "Read NCSD/NCCH header", detail: path, state: .running)]
+            stages: [PipelineStage(title: strings.fieldTitleID, detail: path, state: .running)]
         )
         appendLog(.command, "pack", "rom inspect \"" + path + "\" --json")
         do {
@@ -328,26 +352,25 @@ final class AppModel: ObservableObject {
             setStage(taskID, 0, .failed, failure.message)
             finishTask(taskID, .failed, message: failure.message, hint: failure.hint)
             appendLog(.error, "rom", failure.message + " " + failure.hint)
-            banner = Banner(kind: .error, title: "ROM not recognised", message: failure.message + " " + failure.hint)
+            banner = Banner(kind: .error, title: strings.unrecognisedTitle, message: failure.plainText)
         }
     }
 
-    func importDetected(includeROM: Bool = false) async {
+    func importDetected() async {
         guard let rom = detectedROM else {
-            banner = Banner(kind: .warning, title: "No ROM selected", message: "Choose a decrypted .3ds/.cci file first.")
+            banner = Banner(kind: .warning, title: strings.unrecognisedTitle, message: strings.deployNoGames)
             return
         }
         guard beginBusy() else { return }
         defer { endBusy() }
         let taskID = startTask(
             kind: .importROM,
-            title: "Import " + rom.displayName,
+            title: strings.importTitle + " " + rom.displayName,
             titleID: rom.titleID,
             stages: [
-                PipelineStage(title: "Read decrypted header", detail: rom.container.uppercased(), state: .succeeded),
-                PipelineStage(title: "Queue AOT package (ROM-free)", detail: "out/packages/" + rom.titleID, state: .running),
-                PipelineStage(title: "Stage game data for push", detail: "out/launcher-roms (gitignored)", state: .pending),
-                PipelineStage(title: "Write GameInfo.json", detail: "single writer: desktop CLI", state: .pending),
+                PipelineStage(title: strings.step1Title, detail: rom.container.uppercased(), state: .succeeded),
+                PipelineStage(title: strings.dropTitle, detail: "out/packages/" + rom.titleID, state: .running),
+                PipelineStage(title: strings.step4Title, detail: "out/launcher-roms", state: .pending),
             ]
         )
         appendLog(.command, "pack", "packages add --roms \"" + rom.path + "\" --json  (no --include-rom: the IPA stays ROM-free)")
@@ -355,29 +378,25 @@ final class AppModel: ObservableObject {
             let package = try await pack.importROM(rom.path, displayName: rom.displayName, includeROM: false)
             var game = makeGame(from: rom, package: package)
             setStage(taskID, 1, .succeeded, "queued " + game.titleID + " (ROM not bundled)")
-            setStage(taskID, 2, .running, "staging a gitignored game-data copy for the device push")
+            setStage(taskID, 2, .running, "keeping a gitignored game-data copy for the device push")
             let staged = try stageROMData(rom)
             game.romDataPath = staged.path
             game.romSha256 = staged.sha256
             upsertGame(game)
-            selectedGameID = game.titleID
             setStage(taskID, 2, .succeeded, staged.path)
-            setStage(taskID, 3, .succeeded, "GameInfo.json written by the desktop CLI")
             finishTask(taskID, .succeeded)
             detectedROM = nil
-            appendLog(.success, "import", "queued " + game.displayName + " (" + game.titleID + "): AOT code goes into the signed library IPA, game data into out/launcher-roms")
-            banner = Banner(
-                kind: .success,
-                title: "Imported " + game.displayName,
-                message: "Package queued (ROM-free). Next: Build AOT, then build & install the library IPA."
-            )
+            detectedROMError = nil
+            importPresented = false
+            appendLog(.success, "import", "queued " + game.displayName + " (" + game.titleID + "): AOT code goes into the signed app, game data into out/launcher-roms")
+            banner = Banner(kind: .success, title: strings.importTitle, message: game.displayName)
             screen = .library
         } catch {
             let failure = error.launcherFailure()
             setStage(taskID, 1, .failed, failure.message)
             finishTask(taskID, .failed, message: failure.message, hint: failure.hint)
             appendLog(.error, "import", failure.message + " " + failure.hint)
-            banner = Banner(kind: .error, title: "Import failed", message: failure.message + " " + failure.hint)
+            banner = Banner(kind: .error, title: strings.importTitle, message: failure.plainText)
         }
     }
 
@@ -392,7 +411,7 @@ final class AppModel: ObservableObject {
             container: rom.container,
             aotVersion: package.aotVersion,
             buildSlug: slug(displayName: rom.displayName, titleID: package.titleID),
-            phase: existing?.phase == .built ? .built : .queued,
+            phase: existing?.phase == .built || existing?.phase == .pushed ? existing?.phase ?? .built : .queued,
             packPath: existing?.packPath,
             packBytes: existing?.packBytes,
             packSha256: existing?.packSha256,
@@ -431,155 +450,64 @@ final class AppModel: ObservableObject {
         games.sort { $0.titleID < $1.titleID }
     }
 
-    // MARK: packages and build
-
-    func refreshPackages() async {
-        do {
-            let packages = try await pack.listPackages()
-            for package in packages {
-                if let index = games.firstIndex(where: { $0.titleID == package.titleID }) {
-                    games[index].aotVersion = package.aotVersion
-                    if let packFile = package.pack {
-                        games[index].packPath = pack.outRoot.appendingPathComponent("packages/\(package.titleID)/GamePack.dylib").path
-                        games[index].packBytes = packFile.bytes
-                        games[index].packSha256 = packFile.sha256
-                        games[index].packFormat = packFile.format
-                    }
-                    if package.isBuilt {
-                        if games[index].phase != .pushed { games[index].phase = .built }
-                    } else if games[index].phase == .queued || games[index].phase == .failed {
-                        if !package.issues.isEmpty {
-                            games[index].phase = .failed
-                            games[index].lastError = package.issues.joined(separator: "; ")
-                        }
-                    }
-                    if games[index].romDataPath == nil {
-                        let planner = PushPlanner(outRoot: pack.outRoot, bundleID: settings.deviceBundleID)
-                        if let staged = planner.resolveROMDataPath(for: games[index]) {
-                            games[index].romDataPath = staged
-                            games[index].romSha256 = FileProbe.sha256(ofFile: staged)
-                        }
-                    }
-                }
-            }
-        } catch {
-            appendLog(.warn, "packages", "could not list packages: " + error.localizedDescription)
-        }
-    }
-
-    func build(gameID: String) async {
-        guard let game = game(id: gameID) else { return }
-        guard beginBusy() else { return }
-        defer { endBusy() }
-        let mode = settings.buildMode
-        var stages: [PipelineStage]
-        switch mode {
-        case .dryRun:
-            stages = [PipelineStage(title: "Validate package", detail: "out/packages/" + game.titleID, state: .running)]
-        case .fake:
-            stages = [
-                PipelineStage(title: "Validate package", detail: game.titleID, state: .running),
-                PipelineStage(title: "Build placeholder pack", detail: "scripts/build-game-pack.sh --fake", state: .pending),
-                PipelineStage(title: "Record manifest", detail: "GameInfo.json", state: .pending),
-            ]
-        case .real:
-            stages = [
-                PipelineStage(title: "Validate package", detail: game.titleID, state: .running),
-                PipelineStage(title: "Run 3dsrecomp", detail: "ROM -> generated C", state: .pending),
-                PipelineStage(title: "Compile iOS archive", detail: "arm64-apple-ios16.0", state: .pending),
-                PipelineStage(title: "Link GamePack.dylib", detail: "zk_gamepack_register", state: .pending),
-                PipelineStage(title: "Record manifest", detail: "GameInfo.json", state: .pending),
-            ]
-        }
-        let taskID = startTask(kind: .buildAOT, title: "Build GamePack - " + game.displayName, titleID: game.titleID, stages: stages)
-        if mode != .dryRun {
-            updateGame(gameID) { $0.phase = .building; $0.lastError = nil }
-        }
-        appendLog(.info, "build", "mode: " + mode.title + " - " + mode.explanation)
-        do {
-            setStage(taskID, 0, .succeeded, "package and ROM validated")
-            if mode == .dryRun {
-                let built = try await pack.build(titleIDs: [gameID], mode: mode) { [weak self] level, line in
-                    Task { @MainActor in self?.appendLog(level, "build", line) }
-                }
-                _ = built
-                finishTask(taskID, .succeeded)
-                appendLog(.success, "build", "dry run finished: command plan printed, nothing written")
-                banner = Banner(kind: .info, title: "Dry run finished", message: "No files were compiled. Switch the build mode to build a real GamePack.")
-                return
-            }
-            // Fake and real both go through pack.build; stage animation is fed by
-            // the CLI command plus a coarse stage timeline.
-            setStage(taskID, 1, .running, "started")
-            let built = try await pack.build(titleIDs: [gameID], mode: mode) { [weak self] level, line in
-                Task { @MainActor in self?.appendLog(level, "build", line) }
-            }
-            for index in stages.indices.dropFirst() where index < task_stages_count(taskID) {
-                setStage(taskID, index, index == stages.count - 1 ? .running : .succeeded, nil)
-            }
-            let manifest = try await pack.readManifest(titleID: gameID)
-            let packURL = pack.outRoot.appendingPathComponent("packages/\(gameID)/GamePack.dylib")
-            updateGame(gameID) { entry in
-                entry.phase = .built
-                entry.packPath = packURL.path
-                entry.packBytes = manifest.packBytes
-                entry.packSha256 = manifest.packSha256
-                entry.packFormat = manifest.packFormat
-                entry.lastError = nil
-            }
-            let finalIndex = max(0, task_stages_count(taskID) - 1)
-            setStage(taskID, finalIndex, .succeeded, "GamePack.dylib recorded")
-            finishTask(taskID, .succeeded)
-            appendLog(.success, "build", "GamePack ready for " + game.displayName + " (" + FileProbe.formatBytes(manifest.packBytes ?? 0) + ")")
-            banner = Banner(kind: .success, title: "GamePack built", message: game.displayName + " is AOT ready. Build & install the library IPA, then push its game data.")
-            _ = built
-        } catch {
-            let failure = error.launcherFailure()
-            updateGame(gameID) { $0.phase = .failed; $0.lastError = failure.message }
-            if let index = tasks.firstIndex(where: { $0.id == taskID }) {
-                for stageIndex in tasks[index].stages.indices where tasks[index].stages[stageIndex].state == .running {
-                    setStage(taskID, stageIndex, .failed, failure.message)
-                }
-            }
-            finishTask(taskID, .failed, message: failure.message, hint: failure.hint)
-            appendLog(.error, "build", failure.message + " " + failure.hint)
-            banner = Banner(kind: .error, title: "Build failed", message: failure.message + " " + failure.hint)
-        }
-    }
-
-    private func task_stages_count(_ taskID: UUID) -> Int {
-        tasks.first(where: { $0.id == taskID })?.stages.count ?? 0
-    }
-
     private func updateGame(_ id: String, _ body: (inout GameEntry) -> Void) {
         guard let index = games.firstIndex(where: { $0.titleID == id }) else { return }
         body(&games[index])
     }
 
-    func verifyPackages() async {
-        guard beginBusy() else { return }
-        defer { endBusy() }
-        let taskID = startTask(
-            kind: .verifyPackages,
-            title: "Verify packages",
-            titleID: nil,
-            stages: [PipelineStage(title: "Hash GamePack and bundled ROM", detail: "packages verify", state: .running)]
-        )
+    // MARK: library management (no build/install/push buttons here)
+
+    func removeGame(titleID: String) {
+        guard let game = game(id: titleID) else { return }
+        games.removeAll(where: { $0.titleID == titleID })
+        selectedForDeploy.remove(titleID)
+        pushPlans.removeValue(forKey: titleID)
+        if let staged = game.romDataPath, staged.hasPrefix(pack.outRoot.path + "/launcher-roms/") {
+            try? FileManager.default.removeItem(atPath: staged)
+        }
+        appendLog(.info, "library", "removed " + game.displayName + " (" + titleID + ") from the library")
+        banner = Banner(kind: .info, title: strings.remove, message: game.displayName)
+    }
+
+    func renameGame(titleID: String, newName: String) {
+        let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, let game = game(id: titleID) else { return }
+        updateGame(titleID) { $0.displayName = name }
+        appendLog(.info, "library", "renamed " + game.titleID + " to " + name + " (launcher label only)")
+    }
+
+    func refreshLibrary() async {
+        await refreshPackages()
+        for game in games where game.romDataPath == nil {
+            let planner = PushPlanner(outRoot: pack.outRoot, bundleID: settings.installedBundleID)
+            if let staged = planner.resolveROMDataPath(for: game) {
+                updateGame(game.titleID) { entry in
+                    entry.romDataPath = staged
+                    if entry.romSha256 == nil { entry.romSha256 = FileProbe.sha256(ofFile: staged) }
+                }
+            }
+        }
+    }
+
+    func refreshPackages() async {
         do {
-            let issues = try await pack.verify()
-            if issues.isEmpty {
-                setStage(taskID, 0, .succeeded, "all manifests consistent")
-                finishTask(taskID, .succeeded)
-                banner = Banner(kind: .success, title: "Packages verified", message: "Every manifest and pack hash is consistent.")
-            } else {
-                setStage(taskID, 0, .failed, issues.joined(separator: " | "))
-                finishTask(taskID, .failed, message: "Package problems found", hint: issues.joined(separator: "\n"))
-                banner = Banner(kind: .warning, title: "Package problems", message: issues.joined(separator: "; "))
+            let packages = try await pack.listPackages()
+            for package in packages {
+                guard let index = games.firstIndex(where: { $0.titleID == package.titleID }) else { continue }
+                games[index].aotVersion = package.aotVersion
+                if let packFile = package.pack {
+                    games[index].packPath = pack.outRoot.appendingPathComponent("packages/\(package.titleID)/GamePack.dylib").path
+                    games[index].packBytes = packFile.bytes
+                    games[index].packSha256 = packFile.sha256
+                    games[index].packFormat = packFile.format
+                }
+                if package.isBuilt && (games[index].phase == .queued || games[index].phase == .failed) {
+                    games[index].phase = .built
+                    games[index].lastError = nil
+                }
             }
         } catch {
-            let failure = error.launcherFailure()
-            setStage(taskID, 0, .failed, failure.message)
-            finishTask(taskID, .failed, message: failure.message, hint: failure.hint)
+            appendLog(.warn, "packages", "could not list packages: " + error.localizedDescription)
         }
     }
 
@@ -588,13 +516,17 @@ final class AppModel: ObservableObject {
     func detectDevices() async {
         guard beginBusy() else { return }
         defer { endBusy() }
+        await detectDevicesWithoutBusy(quiet: false)
+    }
+
+    private func detectDevicesWithoutBusy(quiet: Bool) async {
         let taskID = startTask(
             kind: .detectDevice,
-            title: "Detect devices",
+            title: strings.deployDetectDevice,
             titleID: nil,
             stages: [
-                PipelineStage(title: "Query device bridge", detail: bridge.displayName, state: .running),
-                PipelineStage(title: "Read paired devices", detail: "usbmuxd / CoreDevice", state: .pending),
+                PipelineStage(title: strings.deployDeviceTitle, detail: bridge.displayName, state: .running),
+                PipelineStage(title: strings.fieldContainer, detail: "usbmuxd / CoreDevice", state: .pending),
             ]
         )
         do {
@@ -607,272 +539,37 @@ final class AppModel: ObservableObject {
             setStage(taskID, 1, .succeeded, String(found.count) + " device(s)")
             finishTask(taskID, .succeeded)
             appendLog(.success, "device", "found " + String(found.count) + " device(s)")
-            if found.isEmpty {
-                banner = Banner(kind: .warning, title: "No device found", message: "Connect the iPhone/iPad with a cable, unlock it and tap Trust.")
+            if found.isEmpty && !quiet {
+                banner = Banner(kind: .warning, title: strings.deployDeviceNone, message: strings.dropHint)
             }
         } catch {
             let failure = error.launcherFailure()
             setStage(taskID, 0, .failed, failure.message)
             finishTask(taskID, .failed, message: failure.message, hint: failure.hint)
             appendLog(.error, "device", failure.message + " " + failure.hint)
-            banner = Banner(kind: .error, title: "Device bridge error", message: failure.message + " " + failure.hint)
-        }
-    }
-
-    // MARK: base shell install
-
-    // MARK: library IPA build + install (corrected architecture)
-
-    private var libraryStageNames: [String] {
-        ["Check Apple ID readiness", "Build signed shell app", "Embed GamePacks + GameCatalog", "Sign packs + install", "Verify install"]
-    }
-
-    var builtGames: [GameEntry] {
-        games.filter { $0.phase == .built || $0.phase == .pushed }
-    }
-
-    var libraryNeedsRebuild: Bool {
-        let installed = Set(settings.libraryInstalledTitles)
-        let built = Set(builtGames.map { $0.titleID })
-        return !built.isEmpty && installed != built
-    }
-
-    func markLibraryInstalled(titles: [String], ipaPath: String) {
-        settings.libraryInstalledTitles = titles
-        settings.libraryIPAPath = ipaPath
-        settings.libraryInstalledAt = Date()
-        settings.save()
-    }
-
-    /// Build the ROM-free shell app, allocate the built GamePacks into it
-    /// (Frameworks/GamePack-<TITLEID>.dylib + GameCatalog.json), sign the nested
-    /// packs and the app with the local Apple Development identity, then install
-    /// with devicectl. Adding/removing a game means rebuilding + reinstalling the
-    /// library IPA; pushed ROM data in Documents survives the reinstall.
-    func buildAndInstallLibrary() async {
-        guard beginBusy() else { return }
-        defer { endBusy() }
-        installResult = nil
-        lastInstallFailure = nil
-        installProgressLines.removeAll()
-        let titles = builtGames.map { $0.titleID }
-        guard !titles.isEmpty else {
-            banner = Banner(kind: .warning, title: "No built GamePacks", message: "Build at least one GamePack (AOT READY) before installing the library.")
-            return
-        }
-        let taskID = startTask(
-            kind: .installShell,
-            title: "Build & install library (" + String(titles.count) + " game(s))",
-            titleID: nil,
-            stages: libraryStageNames.map { PipelineStage(title: $0, detail: "", state: .pending) }
-        )
-        appendLog(.info, "library", "strategy: " + settings.installStrategy.title + " - games: " + titles.joined(separator: ", "))
-        let backend: InstallBackend
-        if settings.installStrategy == .mock {
-            backend = MockInstallBackend(readinessState: MockFixtures.environment().apple)
-        } else {
-            backend = installer
-        }
-        setStage(taskID, 0, .running, "probing Xcode and Apple ID assets")
-        let readiness = await backend.readiness(teamID: settings.teamID)
-        appleReadiness = readiness
-        let impactorFlow = settings.installStrategy == .impactor
-        if !impactorFlow {
-            if !readiness.hasSigningAssets {
-                finishWithSigningFailure(readiness, taskID: taskID, stage: 0)
-                return
-            }
-            if settings.teamID.trimmingCharacters(in: .whitespaces).isEmpty {
-                let failure = LauncherFailure(
-                    code: "team_missing",
-                    message: "Your Apple Developer Team ID is missing.",
-                    hint: "Enter the 10-character Team ID on the Shell + library screen.",
-                    detail: nil,
-                    exitCode: nil
-                )
-                lastInstallFailure = failure
-                setStage(taskID, 0, .failed, "team ID missing")
-                finishTask(taskID, .failed, message: failure.message, hint: failure.hint)
-                banner = Banner(kind: .error, title: "Team ID missing", message: failure.plainText)
-                return
+            if !quiet {
+                banner = Banner(kind: .error, title: strings.deployDeviceTitle, message: failure.plainText)
             }
         }
-        setStage(taskID, 0, .succeeded, readiness.hasSigningAssets ? "Team " + settings.teamID : "Impactor manual path")
-        let options = InstallOptions(
-            strategy: settings.installStrategy,
-            teamID: settings.teamID,
-            bundleID: settings.deviceBundleID,
-            deviceUDID: selectedDeviceUDID,
-            allowProvisioningUpdates: true,
-            adoptAppPath: adoptAppPath,
-            adoptIPAPath: adoptIPAPath
-        )
-        do {
-            if let adopted = adoptIPAPath, !adopted.isEmpty {
-                appendLog(.info, "library", "using adopted library IPA: " + adopted)
-                await openLibraryInImpactor(ipaPath: adopted, backend: backend, options: options, taskID: taskID)
-                return
-            }
-            let shellApp: String
-            if impactorFlow {
-                setStage(taskID, 1, .running, "building unsigned shell app (Impactor signs later)")
-                shellApp = try await backend.buildShellApp(signed: false, options: options) { [weak self] progress in
-                    Task { @MainActor in self?.applyLibraryProgress(progress, taskID: taskID) }
-                }
-            } else {
-                setStage(taskID, 1, .running, "xcodebuild automatic signing")
-                shellApp = try await backend.buildShellApp(signed: true, options: options) { [weak self] progress in
-                    Task { @MainActor in self?.applyLibraryProgress(progress, taskID: taskID) }
-                }
-            }
-            setStage(taskID, 1, .succeeded, shellApp)
-            setStage(taskID, 2, .running, "3ds2apple-pack pack --all --execute (GamePacks + GameCatalog only)")
-            let ipaOutDir = settings.repoRootURL.appendingPathComponent("IPA").path
-            let libraryName = "3ds2apple-library"
-            let dryRun = settings.buildMode == .dryRun
-            let result = try await pack.buildLibraryIPA(
-                titleIDs: titles,
-                baseAppPath: shellApp,
-                ipaOutDir: ipaOutDir,
-                ipaName: libraryName,
-                dryRun: dryRun,
-                onLine: { [weak self] level, line in
-                    Task { @MainActor in self?.appendLog(level, "library", line) }
-                }
-            )
-            if dryRun || !result.executed || result.ipaPath == nil {
-                setStage(taskID, 2, .succeeded, "dry run: plan printed, no IPA written")
-                finishTask(taskID, .succeeded)
-                banner = Banner(kind: .info, title: "Dry run finished", message: "The library packaging plan was printed; switch the build mode to build a real library IPA.")
-                return
-            }
-            guard let ipaPath = result.ipaPath else {
-                throw LauncherFailure(code: "library_ipa_missing", message: "The library IPA path was not reported.", hint: "Retry the build.", detail: nil, exitCode: nil)
-            }
-            settings.libraryIPAPath = ipaPath
-            setStage(taskID, 2, .succeeded, ipaPath)
-            if impactorFlow {
-                setStage(taskID, 3, .running, "opening the official Impactor")
-                try await backend.openLibraryIPAInImpactor(ipaPath: ipaPath, options: options)
-                setStage(taskID, 3, .succeeded, "Impactor opened with " + (ipaPath as NSString).lastPathComponent)
-                finishTask(taskID, .succeeded)
-                appendLog(.success, "library", "library IPA built; finish sign/install in Impactor: " + ipaPath)
-                banner = Banner(kind: .info, title: "Library IPA ready for Impactor", message: "Sign in with your Apple ID inside Impactor and install the IPA. Then push game data from the Device push screen.")
-                return
-            }
-            setStage(taskID, 3, .running, "codesign embedded GamePacks + app, then devicectl install")
-            let installed = try await backend.installLibrary(ipaPath: ipaPath, signedBaseAppPath: shellApp, options: options) { [weak self] progress in
-                Task { @MainActor in self?.applyLibraryProgress(progress, taskID: taskID) }
-            }
-            installResult = installed
-            setStage(taskID, 3, .succeeded, "installed with devicectl")
-            setStage(taskID, 4, .running, "verifying on the device")
-            if bridge.mode == .live {
-                if let attribute = try? await bridge.appAttr(bundleID: settings.deviceBundleID, udid: selectedDeviceUDID) {
-                    if attribute.installed {
-                        setStage(taskID, 4, .succeeded, "app-attr: shell " + (attribute.appBundleVersion ?? "installed"))
-                    } else {
-                        setStage(taskID, 4, .failed, "app-attr says the shell is not installed yet")
-                    }
-                } else {
-                    setStage(taskID, 4, .skipped, "device bridge unavailable")
-                }
-            } else {
-                setStage(taskID, 4, .succeeded, "mock verification")
-            }
-            markLibraryInstalled(titles: titles, ipaPath: ipaPath)
-            finishTask(taskID, .succeeded)
-            appendLog(.success, "library", "library installed with " + String(titles.count) + " game(s); Documents ROM data persists across reinstalls")
-            banner = Banner(kind: .success, title: "Library installed", message: "GamePacks live in the signed app. Next: push GameRom.cci + GameInfo.json for each game.")
-            screen = .library
-        } catch {
-            let failure = error.launcherFailure()
-            lastInstallFailure = failure
-            if let stageIndex = tasks.first(where: { $0.id == taskID })?.stages.firstIndex(where: { $0.state == .running }) {
-                setStage(taskID, stageIndex, .failed, failure.message)
-            }
-            installProgressLines.append("error: " + failure.message)
-            installProgressLines.append(failure.hint)
-            finishTask(taskID, .failed, message: failure.message, hint: failure.hint)
-            appendLog(.error, "library", failure.message + " " + failure.hint)
-            banner = Banner(kind: .error, title: "Library install failed", message: failure.message + " " + failure.hint)
-        }
-    }
-
-    private func finishWithSigningFailure(_ readiness: AppleReadiness, taskID: UUID, stage: Int) {
-        let failure = LauncherFailure(
-            code: "no_signing_assets",
-            message: readiness.plainTextState,
-            hint: readiness.hint,
-            detail: readiness.xcodeVersion,
-            exitCode: nil
-        )
-        lastInstallFailure = failure
-        setStage(taskID, stage, .failed, "no signing assets")
-        finishTask(taskID, .failed, message: failure.message, hint: failure.hint)
-        appendLog(.error, "library", failure.message + " " + failure.hint)
-        banner = Banner(kind: .error, title: "Apple ID signing not set up", message: failure.message + " " + failure.hint)
-    }
-
-    private func openLibraryInImpactor(ipaPath: String, backend: InstallBackend, options: InstallOptions, taskID: UUID) async {
-        do {
-            try await backend.openLibraryIPAInImpactor(ipaPath: ipaPath, options: options)
-            setStage(taskID, 3, .succeeded, "Impactor opened")
-            finishTask(taskID, .succeeded)
-            banner = Banner(kind: .info, title: "Impactor opened", message: "Finish the sign/install there, then push game data.")
-        } catch {
-            let failure = error.launcherFailure()
-            lastInstallFailure = failure
-            setStage(taskID, 3, .failed, failure.message)
-            finishTask(taskID, .failed, message: failure.message, hint: failure.hint)
-            banner = Banner(kind: .error, title: "Impactor", message: failure.message + " " + failure.hint)
-        }
-    }
-
-    private func libraryStageIndex(for name: String) -> Int? {
-        let lowered = name.lowercased()
-        if lowered.contains("readiness") || lowered.contains("apple") { return 0 }
-        if lowered.contains("xcodegen") || lowered.contains("building") || lowered.contains("shell app") { return 1 }
-        if lowered.contains("embed") || lowered.contains("catalog") { return 2 }
-        if lowered.contains("sign") || lowered.contains("install") || lowered.contains("unpack") { return 3 }
-        if lowered.contains("verify") { return 4 }
-        return nil
-    }
-
-    private func applyLibraryProgress(_ progress: InstallProgress, taskID: UUID) {
-        if let index = libraryStageIndex(for: progress.stage) {
-            setStage(taskID, index, .running, progress.line)
-        }
-        if progress.line != lastInstallLine {
-            lastInstallLine = progress.line
-            installProgressLines.append(progress.line)
-            if installProgressLines.count > 140 { installProgressLines.removeFirst(installProgressLines.count - 140) }
-            appendLog(.info, "library", progress.line)
-        }
-    }
-
-    var libraryCommandPlan: [String] {
-        installer.commandPlan(options: InstallOptions(
-            strategy: settings.installStrategy,
-            teamID: settings.teamID,
-            bundleID: settings.deviceBundleID,
-            deviceUDID: selectedDeviceUDID,
-            allowProvisioningUpdates: true,
-            adoptAppPath: nil,
-            adoptIPAPath: adoptIPAPath
-        ))
     }
 
     // MARK: ROM data staging (push source; gitignored, never in the IPA)
 
-    /// Copy (or hardlink) the user's ROM into out/launcher-roms. The library IPA
+    /// Copy (or hardlink) the user's ROM into out/launcher-roms. The signed IPA
     /// only carries AOT code, so this gitignored copy is what the device push
     /// sends as GameRom.<ext>; it also survives library re-installs.
     private func stageROMData(_ rom: DetectedROM) throws -> (path: String, sha256: String) {
         if kind == .mock {
             MockFixtures.ensurePackageTree()
             let path = pack.outRoot.appendingPathComponent("launcher-roms/" + rom.titleID + ".cci").path
-            return (path, "7ea17f4d6a1cfefdbf98a6f5b0c4e9a1a9a5f4e6b7c8d9e0f1a2b3c4d5e6f708")
+            if !FileProbe.exists(path) {
+                FileManager.default.createFile(atPath: path, contents: Data("3ds2apple launcher mock game data (not a real ROM)\n".utf8))
+                if let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: path)) {
+                    try? handle.truncate(atOffset: 4 * 1024 * 1024)
+                    try? handle.close()
+                }
+            }
+            return (path, FileProbe.sha256(ofFile: path) ?? "")
         }
         let fileManager = FileManager.default
         let directory = pack.outRoot.appendingPathComponent("launcher-roms")
@@ -895,257 +592,399 @@ final class AppModel: ObservableObject {
         return (target.path, sha)
     }
 
-    // MARK: push
-
-    @discardableResult
-    func preparePush(gameID: String, quiet: Bool = false) async -> PushPlan? {
-        guard let current = game(id: gameID) else { return nil }
-        var game = current
-        do {
-            if kind == .mock { MockFixtures.ensurePackageTree() }
-            let manifest = try await pack.readManifest(titleID: gameID)
-            let planner = PushPlanner(outRoot: pack.outRoot, bundleID: settings.deviceBundleID)
-            if game.romDataPath == nil, let staged = planner.resolveROMDataPath(for: game) {
-                game.romDataPath = staged
-                if game.romSha256 == nil { game.romSha256 = FileProbe.sha256(ofFile: staged) }
-                updateGame(gameID) { entry in
-                    entry.romDataPath = game.romDataPath
-                    entry.romSha256 = game.romSha256
-                }
-            }
-            let device = selectedDevice
-            let plan = try planner.plan(
-                game: game,
-                manifest: manifest,
-                device: device,
-                stagingDirectory: stagingRoot
-            )
-            pushPlans[gameID] = plan
-            pushError = nil
-            if !quiet {
-                appendLog(.info, "push", "plan: " + String(plan.files.count) + " files -> " + plan.remoteDirectory + " (" + FileProbe.formatBytes(plan.totalBytes) + ")")
-            }
-            return plan
-        } catch {
-            let failure = error.launcherFailure()
-            pushError = failure
-            if !quiet {
-                appendLog(.error, "push", failure.message + " " + failure.hint)
-                banner = Banner(kind: .error, title: "Cannot prepare push", message: failure.message + " " + failure.hint)
-            }
-            return nil
+    private func ensureStagedGameData(titleID: String) throws {
+        guard let game = game(id: titleID) else { return }
+        if let staged = game.romDataPath, FileProbe.exists(staged), (FileProbe.size(staged) ?? 0) > 0 {
+            return
+        }
+        let rom = DetectedROM(
+            path: game.romPath,
+            titleID: game.titleID,
+            displayName: game.displayName,
+            productCode: game.productCode,
+            container: game.container,
+            bytes: game.romBytes,
+            contentBytes: nil,
+            titleVersion: nil
+        )
+        let staged = try stageROMData(rom)
+        updateGame(titleID) { entry in
+            entry.romDataPath = staged.path
+            entry.romSha256 = staged.sha256
         }
     }
 
-    func pushGame(gameID: String) async {
+    // MARK: - Deploy: one-click batch flow
+
+    private func deployStepTitles(count: Int) -> [PipelineStage] {
+        [
+            PipelineStage(title: strings.deployStepCheckDevice, detail: "", state: .pending),
+            PipelineStage(title: strings.deployCompileStep(count), detail: "", state: .pending),
+            PipelineStage(title: strings.deployStepCompose, detail: "", state: .pending),
+            PipelineStage(title: strings.deployStepVerifyIPA, detail: "", state: .pending),
+            PipelineStage(title: strings.deployStepInstall, detail: "", state: .pending),
+            PipelineStage(title: strings.deployStepPush, detail: "", state: .pending),
+            PipelineStage(title: strings.deployStepDone, detail: "", state: .pending),
+        ]
+    }
+
+    private func setDeployStep(_ index: Int, _ state: StageState, _ detail: String? = nil) {
+        if var report = deployReport, index >= 0, index < report.steps.count {
+            report.steps[index].state = state
+            if let detail { report.steps[index].detail = detail }
+            deployReport = report
+        }
+        if let taskID = activeTaskID {
+            setStage(taskID, index, state, detail)
+        }
+    }
+
+    func toggleDeploySelection(_ titleID: String) {
+        if selectedForDeploy.contains(titleID) {
+            selectedForDeploy.remove(titleID)
+        } else {
+            selectedForDeploy.insert(titleID)
+        }
+    }
+
+    func selectAllDeploy() {
+        selectedForDeploy = Set(games.map { $0.titleID })
+    }
+
+    func clearDeploySelection() {
+        selectedForDeploy.removeAll()
+    }
+
+    /// The single user-visible action on the Deploy page: compile -> compose one
+    /// ROM-free IPA with the selected packs -> verify -> sign/install -> push
+    /// each ROM+GameInfo with the ACTUAL installed bundle id -> verify -> Done.
+    func deploySelected() async {
+        guard !isBusy else {
+            banner = Banner(kind: .warning, title: strings.statusNeedsAttention, message: strings.busyWorking)
+            return
+        }
+        let strings = self.strings
+        let selected = deployCandidates
+        guard !selected.isEmpty else {
+            banner = Banner(kind: .warning, title: strings.deploySelectionTitle, message: strings.deployNoSelection)
+            return
+        }
+        let titles = selected.map { $0.titleID }
+
+        if devices.isEmpty {
+            if let found = try? await bridge.devices(), !found.isEmpty {
+                devices = found
+                if selectedDeviceUDID == nil { selectedDeviceUDID = found.first?.udid }
+            }
+        }
+        guard let device = selectedDevice else {
+            banner = Banner(kind: .warning, title: strings.deployDeviceTitle, message: strings.deployDeviceNone)
+            return
+        }
         guard beginBusy() else { return }
         defer { endBusy() }
-        if pushPlans[gameID] == nil {
-            _ = await preparePush(gameID: gameID, quiet: true)
-        }
-        guard var plan = pushPlans[gameID] else {
-            banner = Banner(kind: .error, title: "Push not ready", message: pushError?.plainText ?? "Prepare the push plan first.")
-            return
-        }
-        guard let udid = selectedDeviceUDID else {
-            let failure = LauncherFailure(
-                code: "device_missing",
-                message: "No device selected.",
-                hint: "Connect the iPhone/iPad, tap Trust, then refresh the device list.",
-                detail: nil,
-                exitCode: nil
-            )
-            pushError = failure
-            banner = Banner(kind: .error, title: "No device", message: failure.plainText)
-            return
-        }
-        let installedLibrary = Set(settings.libraryInstalledTitles)
-        if !installedLibrary.contains(gameID.uppercased()) {
-            let failure = LauncherFailure(
-                code: "library_not_installed",
-                message: "This game is not in the installed library IPA.",
-                hint: "GamePacks must live inside the signed app. Open Shell + library and press Build & install library IPA; pushed ROM data survives the reinstall.",
-                detail: installedLibrary.isEmpty ? "no library installed yet" : "installed library: " + installedLibrary.sorted().joined(separator: ", "),
-                exitCode: nil
-            )
-            pushError = failure
-            banner = Banner(kind: .error, title: "Library out of date", message: failure.message + " " + failure.hint)
-            return
-        }
-        plan.deviceUDID = udid
-        plan.deviceName = selectedDevice.map { $0.name + " (" + $0.model + ")" } ?? "device"
-        pushPlans[gameID] = plan
-        let taskID = startTask(
-            kind: .pushGame,
-            title: "Push " + plan.displayName,
-            titleID: gameID,
-            stages: [
-                PipelineStage(title: "Validate files", detail: String(plan.files.count) + " files", state: .running),
-                PipelineStage(title: "Create remote folder", detail: plan.remoteDirectory, state: .pending),
-                PipelineStage(title: "Upload files", detail: "GameInfo.json last", state: .pending),
-                PipelineStage(title: "Verify on device", detail: "stat + app-attr", state: .pending),
-            ]
+
+        let report = DeployReport(
+            state: .running,
+            steps: deployStepTitles(count: titles.count),
+            selectedTitles: titles,
+            builtTitles: [],
+            ipaPath: nil,
+            inspection: nil,
+            installedBundleID: nil,
+            pushedTitles: [],
+            failedStepIndex: nil,
+            failureMessage: nil,
+            failureHint: nil,
+            startedAt: Date(),
+            endedAt: nil
         )
+        deployReport = report
+        let taskID = startTask(
+            kind: .deploy,
+            title: strings.deployRunningFor(titles.count),
+            titleID: nil,
+            stages: report.steps
+        )
+        appendLog(.info, "deploy", "one-click deploy: " + String(titles.count) + " game(s) on " + device.name + " (" + device.udid + ")")
+        appendLog(.info, "deploy", "selected titles: " + titles.joined(separator: ", "))
+        screen = .deploy
+
         do {
-            for index in plan.files.indices {
-                let path = plan.files[index].localPath
-                guard FileProbe.exists(path) else {
+            // 0. device + Apple ID readiness + push source validation
+            setDeployStep(0, .running, strings.deployDeviceTitle)
+            let readiness = await installer.readiness(teamID: "")
+            appleReadiness = readiness
+            guard readiness.hasSigningAssets else {
+                throw LauncherFailure(code: "no_signing_assets", message: readiness.plainTextState, hint: readiness.hint, detail: readiness.xcodeVersion, exitCode: nil)
+            }
+            guard !readiness.teamID.isEmpty else {
+                throw LauncherFailure(code: "team_missing", message: readiness.plainTextState, hint: readiness.hint, detail: nil, exitCode: nil)
+            }
+            for title in titles { try ensureStagedGameData(titleID: title) }
+            setDeployStep(0, .succeeded, device.name + " · " + readiness.teamID)
+            appendLog(.success, "deploy", "preflight ok: " + device.name + ", Team " + readiness.teamID)
+
+            // 1. batch compile (local, real AOT in live mode)
+            setDeployStep(1, .running, strings.deployCompileProgress(0, titles.count))
+            _ = try await pack.build(titleIDs: titles, mode: kind == .mock ? .fake : .real) { [weak self] level, line in
+                Task { @MainActor in self?.appendLog(level, "build", line) }
+            }
+            var built: [String] = []
+            for (offset, title) in titles.enumerated() {
+                let manifest = try await pack.readManifest(titleID: title)
+                guard manifest.packFormat == "macho" else {
                     throw LauncherFailure(
-                        code: "push_file_missing",
-                        message: "Missing local file: " + plan.files[index].name,
-                        hint: "Rebuild or re-import the package, then prepare the push again.",
-                        detail: path,
+                        code: "pack_not_built",
+                        message: "The AOT pack for " + title + " is not a real build.",
+                        hint: "The Deploy flow only installs real GamePacks. Check the build log and retry; a preview/placeholder pack is refused on purpose.",
+                        detail: manifest.packFormat ?? "missing",
                         exitCode: nil
                     )
                 }
-            }
-            setStage(taskID, 0, .succeeded, plan.files.count.description + " files, " + FileProbe.formatBytes(plan.totalBytes))
-            setStage(taskID, 1, .running, plan.remoteDirectory)
-            appendLog(.command, "devpush", "mkdir " + plan.remoteDirectory)
-            try await bridge.mkdir(bundleID: plan.bundleID, path: plan.remoteDirectory, udid: udid)
-            setStage(taskID, 1, .succeeded, plan.remoteDirectory)
-            setStage(taskID, 2, .running, "0 / " + String(plan.files.count))
-            for index in plan.files.indices {
-                plan.files[index].state = .running
-                plan.files[index].progress = 0
-                pushPlans[gameID] = plan
-                appendLog(.command, "devpush", "put " + plan.files[index].name + " (" + FileProbe.formatBytes(plan.files[index].bytes) + ")")
-                let put = try await bridge.put(
-                    bundleID: plan.bundleID,
-                    local: plan.files[index].localPath,
-                    remote: plan.files[index].remotePath,
-                    udid: udid,
-                    onProgress: { [weak self] sent, total in
-                        Task { @MainActor in
-                            self?.updatePushFileProgress(gameID: gameID, fileIndex: index, sent: sent, total: total)
-                        }
-                    }
-                )
-                let expectedSize = FileProbe.size(plan.files[index].localPath) ?? put.bytes
-                if let remote = try await bridge.stat(bundleID: plan.bundleID, path: plan.files[index].remotePath, udid: udid),
-                   let remoteSize = remote.size,
-                   remoteSize != expectedSize {
-                    throw LauncherFailure(
-                        code: "push_size_mismatch",
-                        message: "The device has a different size for " + plan.files[index].name + ".",
-                        hint: "The transfer was interrupted. Retry the push; the file will be overwritten.",
-                        detail: "remote " + String(remoteSize) + " B vs local " + String(expectedSize) + " B",
-                        exitCode: nil
-                    )
+                updateGame(title) { entry in
+                    entry.phase = .built
+                    entry.packFormat = manifest.packFormat
+                    entry.packBytes = manifest.packBytes
+                    entry.packSha256 = manifest.packSha256
+                    entry.packPath = pack.outRoot.appendingPathComponent("packages/\(title)/GamePack.dylib").path
+                    entry.lastError = nil
                 }
-                plan.files[index].state = .succeeded
-                plan.files[index].progress = 1
-                pushPlans[gameID] = plan
-                setStage(taskID, 2, .running, String(index + 1) + " / " + String(plan.files.count))
+                built.append(title)
+                setDeployStep(1, .running, strings.deployCompileProgress(offset + 1, titles.count))
+                if var currentReport = deployReport {
+                    currentReport.builtTitles = built
+                    deployReport = currentReport
+                }
+                appendLog(.success, "build", "AOT pack ready: " + title + " (" + FileProbe.formatBytes(manifest.packBytes ?? 0) + ")")
             }
-            setStage(taskID, 2, .succeeded, String(plan.files.count) + " files uploaded")
-            setStage(taskID, 3, .running, "checking the shell container")
-            let attribute = try await bridge.appAttr(bundleID: plan.bundleID, udid: udid)
-            guard attribute.installed else {
-                throw LauncherFailure(
-                    code: "app_missing",
-                    message: "The base shell is not installed on the device.",
-                    hint: "Install the base shell first (Base shell screen), then push the game.",
-                    detail: nil,
-                    exitCode: nil
-                )
+            setDeployStep(1, .succeeded, String(built.count) + " GamePack(s)")
+
+            // 2. compose ONE ROM-free IPA from the built packs + schema-2 catalog
+            setDeployStep(2, .running, strings.deployStepCompose)
+            let options = InstallOptions(teamID: readiness.teamID, deviceUDID: device.udid, allowProvisioningUpdates: true)
+            let shellApp = try await installer.buildShellApp(options: options) { [weak self] progress in
+                Task { @MainActor in self?.setDeployStep(2, .running, progress.line) }
             }
-            let remoteFiles = try await bridge.ls(bundleID: plan.bundleID, path: plan.remoteDirectory, udid: udid)
-            let names = Set(remoteFiles.map { $0.name })
-            let missing = plan.files.map { $0.name }.filter { !names.contains($0) }
-            if !missing.isEmpty {
-                throw LauncherFailure(
-                    code: "push_verify_missing",
-                    message: "The device is missing " + String(missing.count) + " file(s) after the transfer.",
-                    hint: "Retry the push; the bridge overwrites files and the manifest goes last.",
-                    detail: missing.joined(separator: ", "),
-                    exitCode: nil
-                )
+            let ipaOutDir = settings.repoRootURL.appendingPathComponent("IPA").path
+            let ipaName = "3ds2apple-library-" + String(titles.count) + "-games"
+            let result = try await pack.buildLibraryIPA(
+                titleIDs: titles,
+                baseAppPath: shellApp,
+                ipaOutDir: ipaOutDir,
+                ipaName: ipaName,
+                dryRun: false,
+                onLine: { [weak self] level, line in
+                    Task { @MainActor in self?.appendLog(level, "library", line) }
+                }
+            )
+            guard result.executed, let produced = result.ipaPath else {
+                throw LauncherFailure(code: "library_ipa_missing", message: "The library IPA was not produced.", hint: "Check the packaging log and retry.", detail: result.summary, exitCode: nil)
             }
-            plan.verified = true
-            plan.verifiedAt = Date()
-            pushPlans[gameID] = plan
-            updateGame(gameID) { entry in
-                entry.phase = .pushed
-                entry.pushedAt = Date()
-                entry.lastError = nil
+            settings.libraryIPAPath = produced
+            if var currentReport = deployReport {
+                currentReport.ipaPath = produced
+                deployReport = currentReport
             }
-            setStage(taskID, 3, .succeeded, String(names.count) + " files visible in " + plan.remoteDirectory)
+            setDeployStep(2, .succeeded, (produced as NSString).lastPathComponent)
+            appendLog(.success, "library", "composed ROM-free IPA: " + produced)
+
+            // 3. verify packs + schema-2 catalog + no ROM BEFORE any install
+            setDeployStep(3, .running, "reading GameCatalog.json + Frameworks/")
+            let inspected = try await installer.inspectLibraryIPA(ipaPath: produced, expectedTitles: titles)
+            let problems = inspected.problems(expectedTitles: titles)
+            guard problems.isEmpty else {
+                throw LauncherFailure(code: "library_ipa_invalid", message: "The composed IPA is missing the selected packs or the catalogue.", hint: problems.joined(separator: "; "), detail: nil, exitCode: nil)
+            }
+            if var currentReport = deployReport {
+                currentReport.inspection = inspected
+                deployReport = currentReport
+            }
+            setDeployStep(3, .succeeded, strings.deployIPAVerified(inspected.packCount))
+            appendLog(.success, "library", "IPA verified: " + String(inspected.packCount) + " pack(s), schema-2 catalogue, no Roms/ entry, bundle " + inspected.bundleID)
+
+            // 4. sign & install; remember the ACTUAL installed bundle id
+            setDeployStep(4, .running, strings.deployStepInstall)
+            let installed = try await installer.installLibrary(inspection: inspected, signedBaseAppPath: shellApp, options: options) { [weak self] progress in
+                Task { @MainActor in self?.setDeployStep(4, .running, progress.line) }
+            }
+            guard installed.installed else {
+                throw LauncherFailure(code: "install_failed", message: "The app was not installed.", hint: "Check the device connection and retry.", detail: nil, exitCode: nil)
+            }
+            let resolvedBundleID = try await resolveInstalledBundleID(preferred: installed.verifiedBundleID, inspection: inspected, device: device)
+            settings.installedBundleID = resolvedBundleID
+            settings.save()
+            if var currentReport = deployReport {
+                currentReport.installedBundleID = resolvedBundleID
+                deployReport = currentReport
+            }
+            markLibraryInstalled(titles: titles, ipaPath: produced)
+            setDeployStep(4, .succeeded, resolvedBundleID)
+            appendLog(.success, "install", "installed and verified bundle id: " + resolvedBundleID)
+
+            // 5. push each selected ROM + GameInfo with the installed bundle id
+            setDeployStep(5, .running, strings.deployPushed(0))
+            for (offset, title) in titles.enumerated() {
+                try await pushGameData(titleID: title, bundleID: resolvedBundleID, device: device)
+                if var currentReport = deployReport {
+                    currentReport.pushedTitles.append(title)
+                    deployReport = currentReport
+                }
+                setDeployStep(5, .running, strings.deployPushed(offset + 1))
+            }
+            setDeployStep(5, .succeeded, strings.deployPushed(titles.count))
+
+            // 6. final verification and the explicit Done state
+            setDeployStep(6, .running, strings.statusLabel)
+            guard let attribute = try? await bridge.appAttr(bundleID: resolvedBundleID, udid: device.udid), attribute.installed else {
+                throw LauncherFailure(code: "installed_bundle_unverified", message: "The installed app could not be found on the device after install.", hint: "Reconnect the device and retry the deploy.", detail: resolvedBundleID, exitCode: nil)
+            }
+            for title in titles {
+                guard let plan = pushPlans[title], plan.verified else {
+                    throw LauncherFailure(code: "push_verify_missing", message: "The game data for " + title + " was not verified on the device.", hint: "Retry the deploy; the push is idempotent and GameInfo.json goes last.", detail: nil, exitCode: nil)
+                }
+            }
+            setDeployStep(6, .succeeded, strings.deployDoneMessage)
+            if var finalReport = deployReport {
+                finalReport.state = .succeeded
+                finalReport.endedAt = Date()
+                deployReport = finalReport
+            }
             finishTask(taskID, .succeeded)
-            appendLog(.success, "push", plan.displayName + " pushed to " + plan.remoteDirectory)
-            banner = Banner(kind: .success, title: "Game pushed", message: plan.displayName + " is now in Documents/Games on the device. Launch the shell to play.")
+            appendLog(.success, "deploy", "Done: " + String(titles.count) + " game(s) installed and pushed with bundle id " + resolvedBundleID)
+            banner = Banner(kind: .success, title: strings.deployDoneTitle, message: strings.deployDoneMessage)
+            screen = .deploy
         } catch {
             let failure = error.launcherFailure()
-            for index in plan.files.indices where plan.files[index].state == .running {
-                plan.files[index].state = .failed
-            }
-            pushPlans[gameID] = plan
-            updateGame(gameID) { $0.lastError = failure.message }
-            if let index = tasks.firstIndex(where: { $0.id == taskID }) {
-                for stageIndex in tasks[index].stages.indices where tasks[index].stages[stageIndex].state == .running {
-                    setStage(taskID, stageIndex, .failed, failure.message)
+            if var currentReport = deployReport {
+                if let index = currentReport.steps.firstIndex(where: { $0.state == .running }) {
+                    currentReport.steps[index].state = .failed
+                    currentReport.steps[index].detail = failure.message
+                    currentReport.failedStepIndex = index
                 }
+                currentReport.state = .failed
+                currentReport.endedAt = Date()
+                currentReport.failureMessage = failure.message
+                currentReport.failureHint = failure.hint
+                deployReport = currentReport
+            }
+            if let index = tasks.first(where: { $0.id == taskID })?.stages.firstIndex(where: { $0.state == .running }) {
+                setStage(taskID, index, .failed, failure.message)
             }
             finishTask(taskID, .failed, message: failure.message, hint: failure.hint)
-            appendLog(.error, "push", failure.message + " " + failure.hint)
-            banner = Banner(kind: .error, title: "Push failed", message: failure.message + " " + failure.hint)
+            appendLog(.error, "deploy", failure.message + " " + failure.hint)
+            banner = Banner(kind: .error, title: strings.deployFailedTitle, message: failure.plainText)
         }
     }
 
-    private func updatePushFileProgress(gameID: String, fileIndex: Int, sent: Int64, total: Int64) {
-        guard var plan = pushPlans[gameID], fileIndex < plan.files.count else { return }
-        let fraction = total > 0 ? min(1, Double(sent) / Double(total)) : 0
-        plan.files[fileIndex].progress = fraction
-        if plan.files[fileIndex].state == .pending {
-            plan.files[fileIndex].state = .running
+    /// Resolve the bundle identifier of the app that is ACTUALLY installed: the
+    /// value read back from the built app's Info.plist / reported by the install
+    /// result first, then the device bridge confirms it. A stale persisted value
+    /// or a template default is never used blindly.
+    private func resolveInstalledBundleID(preferred: String?, inspection: IPAInspection, device: DeviceInfo) async throws -> String {
+        var candidates: [String] = []
+        if let preferred, !preferred.isEmpty { candidates.append(preferred) }
+        if !inspection.bundleID.isEmpty { candidates.append(inspection.bundleID) }
+        candidates.append(SettingsDefaults.shellTemplateBundleID)
+        var seen = Set<String>()
+        for candidate in candidates where seen.insert(candidate).inserted {
+            if kind == .mock { (bridge as? MockDeviceBridge)?.markInstalled(candidate) }
+            if let attribute = try? await bridge.appAttr(bundleID: candidate, udid: device.udid), attribute.installed {
+                appendLog(.info, "install", "installed bundle id read back: " + candidate)
+                return candidate
+            }
         }
-        pushPlans[gameID] = plan
-    }
-
-    func verifyPush(gameID: String) async {
-        guard let plan = pushPlans[gameID] else {
-            banner = Banner(kind: .warning, title: "Nothing to verify", message: "Prepare and push the game first.")
-            return
-        }
-        guard beginBusy() else { return }
-        defer { endBusy() }
-        let taskID = startTask(
-            kind: .verifyPush,
-            title: "Verify " + plan.displayName + " on device",
-            titleID: gameID,
-            stages: [
-                PipelineStage(title: "Registered bundle", detail: plan.bundleID, state: .running),
-                PipelineStage(title: "Remote files", detail: plan.remoteDirectory, state: .pending),
-            ]
+        throw LauncherFailure(
+            code: "installed_bundle_unverified",
+            message: "The app that was just installed could not be found on the device.",
+            hint: "Keep the device unlocked and connected, then retry the deploy; the push needs the actual installed bundle id.",
+            detail: candidates.joined(separator: ", "),
+            exitCode: nil
         )
-        do {
-            let attribute = try await bridge.appAttr(bundleID: plan.bundleID, udid: selectedDeviceUDID)
-            setStage(taskID, 0, .succeeded, attribute.installed ? "shell installed" : "shell missing")
-            let remote = try await bridge.ls(bundleID: plan.bundleID, path: plan.remoteDirectory, udid: selectedDeviceUDID)
-            let expected = Set(plan.files.map { $0.name })
-            let actual = Set(remote.map { $0.name })
-            if expected.isSubset(of: actual) {
-                setStage(taskID, 1, .succeeded, String(actual.count) + " files present")
-                finishTask(taskID, .succeeded)
-                var updated = plan
-                updated.verified = true
-                updated.verifiedAt = Date()
-                pushPlans[gameID] = updated
-                banner = Banner(kind: .success, title: "Verified", message: "All " + String(expected.count) + " files are on the device.")
-            } else {
-                let missing = expected.subtracting(actual)
-                setStage(taskID, 1, .failed, "missing: " + missing.joined(separator: ", "))
-                finishTask(taskID, .failed, message: "Some files are missing on the device.", hint: "Push the game again.")
-            }
-        } catch {
-            let failure = error.launcherFailure()
-            setStage(taskID, 0, .failed, failure.message)
-            finishTask(taskID, .failed, message: failure.message, hint: failure.hint)
-            banner = Banner(kind: .error, title: "Verify failed", message: failure.message + " " + failure.hint)
-        }
     }
 
-    // MARK: mock seeding for screenshots and self-checks
+    /// Push exactly GameRom + GameInfo.json (manifest LAST) for one game and
+    /// verify each remote size plus the final listing before marking it pushed.
+    private func pushGameData(titleID: String, bundleID: String, device: DeviceInfo) async throws {
+        guard game(id: titleID) != nil else { return }
+        try ensureStagedGameData(titleID: titleID)
+        let manifest = try await pack.readManifest(titleID: titleID)
+        let planner = PushPlanner(outRoot: pack.outRoot, bundleID: bundleID)
+        guard let current = game(id: titleID) else { return }
+        var plan = try planner.plan(game: current, manifest: manifest, device: device, stagingDirectory: stagingRoot)
+        pushPlans[titleID] = plan
+        for file in plan.files {
+            guard FileProbe.exists(file.localPath) else {
+                throw LauncherFailure(code: "push_file_missing", message: "Missing local file: " + file.name, hint: "Re-import the game and retry the deploy.", detail: file.localPath, exitCode: nil)
+            }
+        }
+        appendLog(.command, "devpush", "mkdir " + plan.remoteDirectory + " (bundle " + bundleID + ")")
+        try await bridge.mkdir(bundleID: bundleID, path: plan.remoteDirectory, udid: device.udid)
+        for index in plan.files.indices {
+            plan.files[index].state = .running
+            pushPlans[titleID] = plan
+            appendLog(.command, "devpush", "put " + plan.files[index].name + " (" + FileProbe.formatBytes(plan.files[index].bytes) + ")")
+            let put = try await bridge.put(
+                bundleID: bundleID,
+                local: plan.files[index].localPath,
+                remote: plan.files[index].remotePath,
+                udid: device.udid,
+                onProgress: { [weak self] sent, total in
+                    Task { @MainActor in
+                        guard var currentPlan = self?.pushPlans[titleID], index < currentPlan.files.count else { return }
+                        currentPlan.files[index].progress = total > 0 ? min(1, Double(sent) / Double(total)) : 0
+                        if currentPlan.files[index].state == .pending {
+                            currentPlan.files[index].state = .running
+                        }
+                        self?.pushPlans[titleID] = currentPlan
+                    }
+                }
+            )
+            let expected = FileProbe.size(plan.files[index].localPath) ?? put.bytes
+            if let remote = try await bridge.stat(bundleID: bundleID, path: plan.files[index].remotePath, udid: device.udid),
+               let remoteSize = remote.size,
+               remoteSize != expected {
+                throw LauncherFailure(
+                    code: "push_size_mismatch",
+                    message: "The device has a different size for " + plan.files[index].name + ".",
+                    hint: "The transfer was interrupted. Retry the deploy; the file will be overwritten.",
+                    detail: "remote " + String(remoteSize) + " B vs local " + String(expected) + " B",
+                    exitCode: nil
+                )
+            }
+            plan.files[index].state = .succeeded
+            plan.files[index].progress = 1
+            pushPlans[titleID] = plan
+        }
+        let attribute = try await bridge.appAttr(bundleID: bundleID, udid: device.udid)
+        guard attribute.installed else {
+            throw LauncherFailure(code: "app_missing", message: "The installed app was not found while pushing game data.", hint: "Reconnect the device and retry the deploy.", detail: bundleID, exitCode: nil)
+        }
+        let remoteFiles = try await bridge.ls(bundleID: bundleID, path: plan.remoteDirectory, udid: device.udid)
+        let names = Set(remoteFiles.map { $0.name })
+        let missing = plan.files.map { $0.name }.filter { !names.contains($0) }
+        if !missing.isEmpty {
+            throw LauncherFailure(code: "push_verify_missing", message: "The device is missing " + String(missing.count) + " file(s) after the transfer.", hint: "Retry the deploy; the bridge overwrites files and the manifest goes last.", detail: missing.joined(separator: ", "), exitCode: nil)
+        }
+        plan.verified = true
+        plan.verifiedAt = Date()
+        pushPlans[titleID] = plan
+        updateGame(titleID) { entry in
+            entry.phase = .pushed
+            entry.pushedAt = Date()
+            entry.lastError = nil
+        }
+        appendLog(.success, "push", plan.displayName + " pushed to " + plan.remoteDirectory + " (verified size/sha + listing)")
+    }
+
+    private func markLibraryInstalled(titles: [String], ipaPath: String) {
+        settings.libraryInstalledTitles = titles
+        settings.libraryIPAPath = ipaPath
+        settings.libraryInstalledAt = Date()
+        settings.save()
+    }
+
+    // MARK: - Mock seeding for screenshots and self-checks
 
     static func mock(scenario: MockScenario) -> AppModel {
         let settings = LauncherSettings(persist: false)
@@ -1160,98 +999,165 @@ final class AppModel: ObservableObject {
         MockFixtures.ensurePackageTree()
         games = MockFixtures.games()
         logs = MockFixtures.logsForScreenshots()
-        envReport = MockFixtures.environment()
+        envReport = MockFixtures.readyEnvironment()
         appleReadiness = envReport?.apple
         devices = MockFixtures.devices
         selectedDeviceUDID = devices.first?.udid
-        selectedGameID = MockFixtures.titlePokemonY
-        installProgressLines = []
-        lastInstallFailure = nil
-        installResult = nil
-        pushError = nil
-        settings.teamID = ""
-        settings.buildMode = .fake
+        selectedForDeploy = []
+        tasks = []
+        deployReport = nil
+        pushPlans = [:]
+        detectedROM = nil
+        detectedROMError = nil
+        banner = nil
         settings.libraryInstalledTitles = []
         settings.libraryIPAPath = ""
         settings.libraryInstalledAt = nil
+        settings.installedBundleID = ""
+        settingsPresented = false
+        importPresented = false
+        screen = .library
+        (bridge as? MockDeviceBridge)?.appsInstalled = []
+
         switch scenario {
         case .importDetected:
-            screen = .importROM
+            importPresented = true
             detectedROM = MockFixtures.detectedROM()
         case .library:
-            screen = .library
-            tasks = []
             settings.libraryInstalledTitles = [MockFixtures.titlePokemonY]
-            settings.libraryIPAPath = "/Users/you/3ds2apple/IPA/3ds2apple-library.ipa"
+            settings.installedBundleID = MockFixtures.installedShellBundleID
+            settings.libraryIPAPath = "/Users/you/3ds2apple/IPA/3ds2apple-library-1-games.ipa"
             settings.libraryInstalledAt = Date().addingTimeInterval(-3_600)
-        case .buildRunning:
-            screen = .library
-            tasks = MockFixtures.tasksForScreenshots().filter { $0.kind == .buildAOT }
-            activeTaskID = tasks.first?.id
-            games[0].phase = .building
-            appendLog(.info, "build", "mock build running for screenshot")
-        case .install:
-            screen = .library
-            tasks = MockFixtures.tasksForScreenshots().filter { $0.kind == .installShell }
-            installProgressLines = MockFixtures.installLogLines()
-            if let explanation = AppleErrorMapper.explain("error: Apple signing error 9120: the signing session was rejected.") {
-                lastInstallFailure = LauncherFailure(
-                    code: "signing_error",
-                    message: explanation.title,
-                    hint: explanation.hint,
-                    detail: "mock",
-                    exitCode: nil
-                )
+            (bridge as? MockDeviceBridge)?.markInstalled(MockFixtures.installedShellBundleID)
+        case .deploySelection:
+            screen = .deploy
+            selectedForDeploy = [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing]
+        case .deployRunning:
+            screen = .deploy
+            selectedForDeploy = [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing]
+            var report = DeployReport(
+                state: .running,
+                steps: deployStepTitles(count: 2),
+                selectedTitles: [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing],
+                builtTitles: [MockFixtures.titlePokemonY],
+                ipaPath: nil,
+                inspection: nil,
+                installedBundleID: nil,
+                pushedTitles: [],
+                failedStepIndex: nil,
+                failureMessage: nil,
+                failureHint: nil,
+                startedAt: Date().addingTimeInterval(-120),
+                endedAt: nil
+            )
+            report.steps[0].state = .succeeded
+            report.steps[0].detail = "Kratos iPhone · " + MockFixtures.detectedTeamID
+            report.steps[1].state = .running
+            report.steps[1].detail = "Animal Crossing: New Leaf (mock)"
+            deployReport = report
+            tasks = MockFixtures.tasksForScreenshots().map { task in
+                var copy = task
+                copy.stages = report.steps
+                return copy
             }
-            settings.libraryInstalledTitles = [MockFixtures.titlePokemonY]
-            settings.libraryInstalledAt = Date().addingTimeInterval(-7_200)
-        case .devicePush:
-            settings.libraryInstalledTitles = [MockFixtures.titlePokemonY]
-            settings.libraryIPAPath = "/Users/you/3ds2apple/IPA/3ds2apple-library.ipa"
-            settings.libraryInstalledAt = Date().addingTimeInterval(-7_200)
-            screen = .library
-            detailGameID = MockFixtures.titlePokemonY
-            tasks = []
-            buildMockPushPlan(progress: true)
-            appendLog(.info, "library", "library installed: 0004000000055E00 (GamePack in the signed app bundle)")
-            appendLog(.command, "devpush", "mkdir Documents/Games/0004000000055E00")
-            appendLog(.command, "devpush", "put GameRom.cci (1.3 GB) - 62%")
-            appendLog(.info, "devpush", "bridge: streaming progress every ~1 s, 90 s stall watchdog armed")
-            appendLog(.info, "push", "GameInfo.json is pushed last so the shell never sees a partial game")
-        case .activity:
-            screen = .library
-            tasks = MockFixtures.tasksForScreenshots()
-        case .diagnostics:
-            screen = .library
+        case .deployDone:
+            screen = .deploy
+            selectedForDeploy = [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing]
+            settings.libraryInstalledTitles = [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing]
+            settings.installedBundleID = MockFixtures.installedShellBundleID
+            settings.libraryIPAPath = "/Users/you/3ds2apple/IPA/3ds2apple-library-2-games.ipa"
+            settings.libraryInstalledAt = Date().addingTimeInterval(-600)
+            (bridge as? MockDeviceBridge)?.markInstalled(MockFixtures.installedShellBundleID)
+            for title in [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing] {
+                updateGame(title) { entry in
+                    entry.phase = .pushed
+                    entry.pushedAt = Date().addingTimeInterval(-90)
+                }
+                seedPushPlan(titleID: title, verified: true)
+            }
+            var report = DeployReport(
+                state: .succeeded,
+                steps: deployStepTitles(count: 2),
+                selectedTitles: [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing],
+                builtTitles: [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing],
+                ipaPath: settings.libraryIPAPath,
+                inspection: mockInspection(titles: [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing], ipaPath: settings.libraryIPAPath),
+                installedBundleID: MockFixtures.installedShellBundleID,
+                pushedTitles: [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing],
+                failedStepIndex: nil,
+                failureMessage: nil,
+                failureHint: nil,
+                startedAt: Date().addingTimeInterval(-180),
+                endedAt: Date().addingTimeInterval(-90)
+            )
+            report.steps[0].state = .succeeded
+            report.steps[0].detail = "Kratos iPhone · " + MockFixtures.detectedTeamID
+            report.steps[1].state = .succeeded
+            report.steps[1].detail = "2 GamePack(s)"
+            report.steps[2].state = .succeeded
+            report.steps[2].detail = "3ds2apple-library-2-games.ipa"
+            report.steps[3].state = .succeeded
+            report.steps[3].detail = strings.deployIPAVerified(2)
+            report.steps[4].state = .succeeded
+            report.steps[4].detail = MockFixtures.installedShellBundleID
+            report.steps[5].state = .succeeded
+            report.steps[5].detail = strings.deployPushed(2)
+            report.steps[6].state = .succeeded
+            report.steps[6].detail = strings.deployDoneMessage
+            deployReport = report
+        case .deployFailed:
+            screen = .deploy
+            selectedForDeploy = [MockFixtures.titlePokemonY, MockFixtures.titleMario3DLand]
+            var report = DeployReport(
+                state: .failed,
+                steps: deployStepTitles(count: 2),
+                selectedTitles: [MockFixtures.titlePokemonY, MockFixtures.titleMario3DLand],
+                builtTitles: [MockFixtures.titlePokemonY],
+                ipaPath: nil,
+                inspection: nil,
+                installedBundleID: nil,
+                pushedTitles: [],
+                failedStepIndex: 1,
+                failureMessage: "The GamePack build failed for " + MockFixtures.titleMario3DLand + ".",
+                failureHint: "Open the log; in mock mode this is the labelled failure fixture.",
+                startedAt: Date().addingTimeInterval(-60),
+                endedAt: nil
+            )
+            report.steps[0].state = .succeeded
+            report.steps[0].detail = "Kratos iPhone · " + MockFixtures.detectedTeamID
+            report.steps[1].state = .failed
+            report.steps[1].detail = report.failureMessage ?? ""
+            deployReport = report
+        case .settings:
             settingsPresented = true
-            tasks = []
         }
     }
 
-    private func buildMockPushPlan(progress: Bool) {
-        guard let game = games.first, let manifest = MockFixtures.manifests()[game.titleID] else { return }
-        let planner = PushPlanner(outRoot: pack.outRoot, bundleID: settings.deviceBundleID)
-        do {
-            var plan = try planner.plan(
-                game: game,
-                manifest: manifest,
-                device: devices.first,
-                stagingDirectory: stagingRoot
-            )
-            if progress {
-                if !plan.files.isEmpty {
-                    plan.files[0].state = .running
-                    plan.files[0].progress = 0.62
-                }
-                if plan.files.count > 1 {
-                    plan.files[1].state = .pending
-                    plan.files[1].progress = 0
-                }
-            }
-            pushPlans[game.titleID] = plan
-        } catch {
-            pushError = error.launcherFailure()
+    private func mockInspection(titles: [String], ipaPath: String?) -> IPAInspection {
+        IPAInspection(
+            ipaPath: ipaPath ?? "/Users/you/3ds2apple/IPA/3ds2apple-library.ipa",
+            appPath: "/mock/library-ipa/Payload/3ds2apple.app",
+            bundleID: MockFixtures.installedShellBundleID,
+            packFiles: titles.sorted().map { "Frameworks/GamePack-" + $0.uppercased() + ".dylib" },
+            catalogSchemaVersion: 2,
+            catalogTitleIDs: titles.map { $0.uppercased() },
+            containsBundledROM: false,
+            bytes: 12_345_678
+        )
+    }
+
+    private func seedPushPlan(titleID: String, verified: Bool) {
+        guard let game = game(id: titleID),
+              let manifest = MockFixtures.manifests()[titleID] else { return }
+        let planner = PushPlanner(outRoot: pack.outRoot, bundleID: MockFixtures.installedShellBundleID)
+        guard var plan = try? planner.plan(game: game, manifest: manifest, device: devices.first, stagingDirectory: stagingRoot) else { return }
+        for index in plan.files.indices {
+            plan.files[index].state = .succeeded
+            plan.files[index].progress = 1
         }
+        plan.verified = verified
+        plan.verifiedAt = verified ? Date().addingTimeInterval(-90) : nil
+        pushPlans[titleID] = plan
     }
 
     // MARK: self-check helpers
@@ -1266,16 +1172,18 @@ final class AppModel: ObservableObject {
         detectedROM = nil
         detectedROMError = nil
         settingsPresented = false
-        detailGameID = nil
-        lastInstallFailure = nil
-        installResult = nil
-        pushError = nil
+        importPresented = false
+        selectedForDeploy.removeAll()
+        deployReport = nil
+        banner = nil
         envReport = nil
         appleReadiness = nil
         selectedDeviceUDID = nil
-        selectedGameID = nil
         settings.libraryInstalledTitles = []
         settings.libraryIPAPath = ""
         settings.libraryInstalledAt = nil
+        settings.installedBundleID = ""
+        (bridge as? MockDeviceBridge)?.appsInstalled = []
+        screen = .library
     }
 }

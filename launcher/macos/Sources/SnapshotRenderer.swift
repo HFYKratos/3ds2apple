@@ -2,13 +2,12 @@
 //  SnapshotRenderer.swift
 //  3ds2apple macOS launcher
 //
-//  Headless screenshots for the build VM and for the docs. The macOS build VM
-//  boots to the login window (no Aqua session), so the app cannot show a window
-//  there and xcodebuild test cannot reach testmanagerd. SwiftUI ImageRenderer
-//  draws our pure-SwiftUI view tree offscreen and writes PNGs, then the caller
-//  exits:
+//  Headless screenshots for the build VM and the docs. The macOS build VM boots
+//  to the login window (no Aqua session), so the app cannot show a window there
+//  and xcodebuild test cannot reach testmanagerd. SwiftUI ImageRenderer draws our
+//  pure-SwiftUI view tree offscreen and writes PNGs, then the caller exits:
 //
-//     3ds2apple-launcher --screenshot-dir launcher/macos/screenshots --mock
+//     3ds2apple-launcher --screenshot-dir screenshots --mock
 //
 //  Only non-game UI is captured: mock fixtures show title metadata and text
 //  placeholders, never game pixels. Every shot is rendered in English and/or
@@ -28,7 +27,7 @@ enum SnapshotRenderer {
     enum Surface {
         case shell(MockScenario)
         case settings
-        case gameDetail
+        case importSheet
     }
 
     struct Shot {
@@ -40,57 +39,23 @@ enum SnapshotRenderer {
         var prepare: (AppModel) -> Void = { _ in }
     }
 
-    /// The non-game UI evidence set. Heights are chosen so the offscreen layout
-    /// fits without a ScrollView (ImageRenderer needs an explicit frame).
+    /// The non-game UI evidence set for the v2 Library -> Deploy flow. Heights
+    /// are chosen so the offscreen layout fits without a ScrollView.
     static let shots: [Shot] = [
-        Shot(
-            name: "library-empty",
-            surface: .shell(.library),
-            themes: [.dark, .light],
-            languages: [.english],
-            height: 700,
-            prepare: { model in
-                model.games = []
-                model.settings.libraryInstalledTitles = []
-                model.settings.libraryIPAPath = ""
-                model.settings.libraryInstalledAt = nil
-            }
-        ),
-        Shot(
-            name: "library",
-            surface: .shell(.library),
-            themes: [.dark, .light],
-            languages: [.english, .chinese],
-            height: 900
-        ),
-        Shot(
-            name: "import",
-            surface: .shell(.importDetected),
-            themes: [.dark, .light],
-            languages: [.english, .chinese],
-            height: 940
-        ),
-        Shot(
-            name: "build-running",
-            surface: .shell(.buildRunning),
-            themes: [.dark],
-            languages: [.english],
-            height: 1_040
-        ),
-        Shot(
-            name: "game-detail",
-            surface: .gameDetail,
-            themes: [.dark],
-            languages: [.english],
-            height: 1_120
-        ),
-        Shot(
-            name: "settings",
-            surface: .settings,
-            themes: [.dark, .light],
-            languages: [.english, .chinese],
-            height: 1_320
-        ),
+        Shot(name: "library-empty", surface: .shell(.library), themes: [.dark, .light], languages: [.english], height: 620,
+             prepare: { model in
+                 model.games = []
+                 model.settings.libraryInstalledTitles = []
+                 model.settings.installedBundleID = ""
+                 model.settings.libraryIPAPath = ""
+             }),
+        Shot(name: "library", surface: .shell(.library), themes: [.dark, .light], languages: [.english, .chinese], height: 860),
+        Shot(name: "import", surface: .importSheet, themes: [.dark, .light], languages: [.english, .chinese], height: 820),
+        Shot(name: "deploy-selected", surface: .shell(.deploySelection), themes: [.dark], languages: [.english, .chinese], height: 1_120),
+        Shot(name: "deploy-running", surface: .shell(.deployRunning), themes: [.dark], languages: [.english], height: 1_520),
+        Shot(name: "deploy-done", surface: .shell(.deployDone), themes: [.dark], languages: [.english, .chinese], height: 1_580),
+        Shot(name: "deploy-failed", surface: .shell(.deployFailed), themes: [.dark], languages: [.english], height: 1_420),
+        Shot(name: "settings", surface: .settings, themes: [.dark, .light], languages: [.english, .chinese], height: 980),
     ]
 
     /// Render the selected theme/language set into the directory; returns files.
@@ -149,8 +114,8 @@ enum SnapshotRenderer {
     private static func scenario(for surface: Surface) -> MockScenario {
         switch surface {
         case .shell(let scenario): return scenario
-        case .settings: return .diagnostics
-        case .gameDetail: return .devicePush
+        case .settings: return .settings
+        case .importSheet: return .importDetected
         }
     }
 
@@ -176,21 +141,11 @@ enum SnapshotRenderer {
                 LauncherShellView(model: model)
             case .settings:
                 SettingsSheetView(model: model)
-            case .gameDetail:
-                if let id = model.detailGameID {
-                    GameDetailSheetView(model: model, gameID: id)
-                } else {
-                    Text("game detail")
-                }
+            case .importSheet:
+                ImportSheetView(model: model)
             }
         }
 
-        private var snapshotWidth: CGFloat {
-            switch surface {
-            case .shell: return 1_180
-            case .settings: return 1_180
-            case .gameDetail: return 900
-            }
-        }
+        private var snapshotWidth: CGFloat { 1_180 }
     }
 }

@@ -2,25 +2,26 @@
 //  InstallBackend.swift
 //  3ds2apple macOS launcher
 //
-//  Corrected launcher-first architecture (2026-11-14): the per-game AOT code
-//  must live inside the signed app/IPA (iOS will not dlopen unsigned code from
-//  the container). The install path therefore is:
+//  Install half of the one-click Deploy flow (docs/launcher-flow-v2.md):
 //
-//    1. xcodebuild builds the ROM-free shell .app with the user's own Apple ID
-//       signing (automatic signing, -allowProvisioningUpdates);
-//    2. the desktop CLI allocates the built GamePacks into the app
-//       (Frameworks/GamePack-<TITLEID>.dylib + bundle GameCatalog.json) and
+//    1. xcodebuild builds the shell .app with the user's own Apple ID signing
+//       (automatic signing; the Team ID is detected from the local Xcode
+//       provisioning state, never typed into the UI);
+//    2. the desktop CLI allocates the selected built GamePacks into the app
+//       (Frameworks/GamePack-<TITLEID>.dylib + schema-2 GameCatalog.json) and
 //       produces the unsigned library IPA;
-//    3. the launcher unzips the IPA, code-signs every embedded GamePack and the
-//       staged .app with the same local Apple Development identity, and installs
-//       it with xcrun devicectl.
+//    3. this backend UNPACKS and INSPECTS that IPA before signing: every selected
+//       title needs its real GamePack dylib, the catalogue must be schema 2 and
+//       non-empty, and no ROM/game data may be bundled. A bare shell or a
+//       preview IPA is refused, so the app never installs nothing;
+//    4. the launcher code-signs every embedded GamePack and the staged app with
+//       the local Apple Development identity, installs with devicectl, and reads
+//       the installed bundle identifier back from the app's own Info.plist so
+//       the Documents push uses the actual installed bundle ID.
 //
 //  The launcher never asks for an Apple ID or password: the user signs in to
-//  Xcode once. The Impactor strategy opens the unsigned library IPA in the
-//  official Impactor (if installed) for a manual sign/install instead.
-//
-//  Apple signing failures (9120/9401 style) are translated to plain language by
-//  AppleErrorMapper. Certificate names/identities are never logged.
+//  Xcode once. Apple signing failures (9120/9401 style) are translated to plain
+//  language by AppleErrorMapper. Certificate names/identities are never logged.
 //
 
 import Foundation
@@ -31,25 +32,22 @@ protocol InstallBackend: AnyObject {
     var displayName: String { get }
     func readiness(teamID: String) async -> AppleReadiness
     func devices() async throws -> [DeviceInfo]
-    /// Build the shell .app with Xcode. signed=true is the base for the
-    /// library-IPA signing path; signed=false is used by the Impactor flow.
+    /// Build the signed shell .app with Xcode automatic signing.
     func buildShellApp(
-        signed: Bool,
         options: InstallOptions,
         onProgress: @escaping (InstallProgress) -> Void
     ) async throws -> String
-    /// Unpack the ROM-free library IPA, sign embedded GamePacks + app with the
-    /// local Apple Development identity, install with devicectl, verify.
+    /// Unpack the composed ROM-free library IPA and prove it carries the real
+    /// per-title GamePacks + schema-2 GameCatalog (and no ROM data).
+    func inspectLibraryIPA(ipaPath: String, expectedTitles: [String]) async throws -> IPAInspection
+    /// Re-sign the inspected app with the local Apple Development identity,
+    /// install with devicectl and return the actual installed bundle identifier.
     func installLibrary(
-        ipaPath: String,
+        inspection: IPAInspection,
         signedBaseAppPath: String,
         options: InstallOptions,
         onProgress: @escaping (InstallProgress) -> Void
     ) async throws -> InstallResult
-    /// Open an unsigned library IPA in the official Impactor (manual sign/install).
-    func openLibraryIPAInImpactor(ipaPath: String, options: InstallOptions) async throws
-    func commandPlan(options: InstallOptions) -> [String]
-    func impactorApplicationPath() -> String?
 }
 
 // MARK: - Apple signing error translation
@@ -86,13 +84,13 @@ enum AppleErrorMapper {
         if contains("no profiles for", "provisioning profile") {
             return Explanation(
                 title: "No provisioning profile matches the shell's bundle identifier.",
-                hint: "Set your Team ID, then retry with automatic signing. If the bundle ID was changed, use a unique com.yourname.3ds2apple value."
+                hint: "Open Xcode -> Settings -> Accounts once so automatic signing can create the profile, then retry."
             )
         }
         if contains("requires a development team", "development_team") {
             return Explanation(
                 title: "Xcode signing needs your Apple Developer Team ID.",
-                hint: "Enter the 10-character Team ID on the Shell + library screen (Xcode -> Settings -> Accounts shows it)."
+                hint: "Open Xcode -> Settings -> Accounts and sign in; Xcode manages the team, and the launcher detects it automatically."
             )
         }
         if contains("not signed in", "unable to authenticate", "session expired") {
@@ -146,7 +144,7 @@ enum AppleErrorMapper {
         if contains("expired") {
             return Explanation(
                 title: "A signing profile or certificate has expired.",
-                hint: "Rebuild and reinstall from the launcher so Xcode refreshes the profile (free Apple IDs expire after 7 days)."
+                hint: "Deploy again from the launcher so Xcode refreshes the profile (free Apple IDs expire after 7 days)."
             )
         }
         return nil
@@ -154,7 +152,7 @@ enum AppleErrorMapper {
 
     static func failure(command: String, text: String) -> LauncherFailure {
         let tail = text
-            .split(separator: "\n")
+            .split(separator: "\\n")
             .map(String.init)
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
             .suffix(3)
@@ -208,6 +206,55 @@ enum DevicectlJSON {
     }
 }
 
+// MARK: - Library IPA inspection
+
+/// Pure catalogue parsing / validation helpers. Kept static so the headless
+/// self-check can prove the "pack + schema-2 catalogue + no ROM" rules without a
+/// real IPA on disk.
+enum LibraryIPACatalog {
+    struct Facts: Equatable {
+        var schemaVersion: Int
+        var titleIDs: [String]
+        var packedROMFiles: [String]
+    }
+
+    static func parse(_ data: Data) -> Facts? {
+        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
+        let schema = PackJSON.int64(root["schemaVersion"])
+        let games = root["games"] as? [[String: Any]] ?? []
+        var titles: [String] = []
+        var romFiles: [String] = []
+        for game in games {
+            let title = (game["titleID"] as? String ?? "").uppercased()
+            if !title.isEmpty { titles.append(title) }
+            if let romFile = game["romFile"] as? String, !romFile.isEmpty {
+                romFiles.append(romFile)
+            }
+        }
+        return Facts(schemaVersion: Int(schema), titleIDs: titles, packedROMFiles: romFiles)
+    }
+
+    /// Frameworks/GamePack-<TITLEID>.dylib files present in an app bundle.
+    static func packDylibFiles(inAppAt appPath: String) -> [String] {
+        let frameworks = URL(fileURLWithPath: appPath).appendingPathComponent("Frameworks")
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: frameworks.path)) ?? []
+        return files
+            .filter { $0.hasPrefix("GamePack-") && $0.hasSuffix(".dylib") }
+            .sorted()
+            .map { "Frameworks/" + $0 }
+    }
+
+    /// True when the app bundle or catalogue bundles game data (must not happen
+    /// for a launcher deploy: only AOT code goes into the signed app).
+    static func containsBundledROM(appPath: String, facts: Facts?) -> Bool {
+        let roms = URL(fileURLWithPath: appPath).appendingPathComponent("Roms")
+        if let entries = try? FileManager.default.contentsOfDirectory(atPath: roms.path), !entries.isEmpty {
+            return true
+        }
+        return !(facts?.packedROMFiles.isEmpty ?? true)
+    }
+}
+
 // MARK: - Xcode / devicectl implementation
 
 final class XcodeInstallBackend: InstallBackend {
@@ -227,19 +274,20 @@ final class XcodeInstallBackend: InstallBackend {
     func readiness(teamID: String) async -> AppleReadiness {
         let xcode = try? await runner.run(CommandSpec(executable: paths.xcodebuild, arguments: ["-version"]), onLine: nil)
         let xcodeVersion = xcode?.combined
-            .split(separator: "\n")
+            .split(separator: "\\n")
             .first(where: { $0.hasPrefix("Xcode") })
             .map(String.init) ?? "Xcode not available"
         let devicectl = try? await runner.run(CommandSpec(executable: paths.xcrun, arguments: ["--find", "devicectl"]), onLine: nil)
         let identities = await countIdentities()
         let profiles = countProfiles()
+        let teams = await TeamDetector.detect(runner: runner)
         return AppleReadiness(
             xcodePath: await xcodeSelectPath(),
             xcodeVersion: xcodeVersion,
             devicectlAvailable: (devicectl?.succeeded ?? false),
             signingIdentityCount: identities,
             provisioningProfileCount: profiles,
-            teamID: teamID,
+            teamID: teams.first ?? teamID,
             checkedAt: Date()
         )
     }
@@ -284,27 +332,9 @@ final class XcodeInstallBackend: InstallBackend {
         return devices
     }
 
-    func commandPlan(options: InstallOptions) -> [String] {
-        let team = options.teamID.isEmpty ? "<YOUR_TEAM_ID>" : options.teamID
-        return [
-            "cd " + repoRoot.path + "/ios/app && xcodegen generate --spec project.yml",
-            "xcodebuild -project ios/app/3ds2apple.xcodeproj -scheme 3ds2apple -configuration Debug -destination 'generic/platform=iOS' -derivedDataPath build/launcher-shell CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM=" + team + " -allowProvisioningUpdates build",
-            "3ds2apple-pack --out out pack --all --execute --base-app build/launcher-shell/Build/Products/Debug-iphoneos/3ds2apple.app --ipa-out IPA --ipa-name 3ds2apple-library",
-            "codesign -f -s <Apple Development identity> <staged app>/Frameworks/GamePack-<TITLEID>.dylib",
-            "codesign -f -s <Apple Development identity> <staged app>",
-            "xcrun devicectl device install app --device <DEVICE_UDID> <staged app>",
-        ]
-    }
-
-    func impactorApplicationPath() -> String? {
-        let candidates = ["/Applications/Impactor.app", "/Applications/Impactor 2.app"]
-        return candidates.first(where: { FileProbe.exists($0) })
-    }
-
     // MARK: shell app build
 
     func buildShellApp(
-        signed: Bool,
         options: InstallOptions,
         onProgress: @escaping (InstallProgress) -> Void
     ) async throws -> String {
@@ -313,6 +343,15 @@ final class XcodeInstallBackend: InstallBackend {
                 code: "xcodegen_missing",
                 message: "xcodegen is not installed.",
                 hint: "Install it once with: brew install xcodegen (or put the binary in /usr/local/bin).",
+                detail: nil,
+                exitCode: nil
+            )
+        }
+        guard !options.teamID.isEmpty else {
+            throw LauncherFailure(
+                code: "team_missing",
+                message: "No Apple Developer Team ID could be detected.",
+                hint: "Open Xcode -> Settings -> Accounts, sign in with your own Apple ID and let Xcode create a development certificate/profile, then retry.",
                 detail: nil,
                 exitCode: nil
             )
@@ -340,8 +379,8 @@ final class XcodeInstallBackend: InstallBackend {
             throw LauncherFailure(code: "xcodegen_failed", message: "Could not generate the shell Xcode project.", hint: "Check ios/app/project.yml and the xcodegen install.", detail: generate.combined, exitCode: generate.exitCode)
         }
 
-        let derived = repoRoot.appendingPathComponent(signed ? "build/launcher-shell" : "build/launcher-shell-unsigned")
-        let stageName = signed ? "Building signed shell app" : "Building shell app"
+        let derived = repoRoot.appendingPathComponent("build/launcher-shell")
+        let stageName = "Building signed shell app"
         onProgress(InstallProgress(stage: stageName, fraction: 0.12, line: "xcodebuild build (this can take a few minutes)"))
         var arguments = [
             "-project", "ios/app/3ds2apple.xcodeproj",
@@ -349,19 +388,13 @@ final class XcodeInstallBackend: InstallBackend {
             "-configuration", "Debug",
             "-destination", "generic/platform=iOS",
             "-derivedDataPath", derived.path,
+            "CODE_SIGN_STYLE=Automatic",
+            "CODE_SIGNING_ALLOWED=YES",
+            "CODE_SIGNING_REQUIRED=YES",
+            "DEVELOPMENT_TEAM=" + options.teamID,
         ]
-        if signed {
-            arguments += [
-                "CODE_SIGN_STYLE=Automatic",
-                "CODE_SIGNING_ALLOWED=YES",
-                "CODE_SIGNING_REQUIRED=YES",
-                "DEVELOPMENT_TEAM=" + options.teamID,
-            ]
-            if options.allowProvisioningUpdates {
-                arguments.append("-allowProvisioningUpdates")
-            }
-        } else {
-            arguments += ["CODE_SIGNING_ALLOWED=NO", "CODE_SIGNING_REQUIRED=NO"]
+        if options.allowProvisioningUpdates {
+            arguments.append("-allowProvisioningUpdates")
         }
         arguments.append("build")
         let build = try await runner.run(CommandSpec(
@@ -387,10 +420,72 @@ final class XcodeInstallBackend: InstallBackend {
         return app.path
     }
 
-    // MARK: library IPA sign + install
+    // MARK: IPA inspection
+
+    func inspectLibraryIPA(ipaPath: String, expectedTitles: [String]) async throws -> IPAInspection {
+        guard FileProbe.exists(ipaPath) else {
+            throw LauncherFailure(
+                code: "ipa_missing",
+                message: "The composed library IPA was not found.",
+                hint: "Retry the deploy; the compose step must finish before install.",
+                detail: ipaPath,
+                exitCode: nil
+            )
+        }
+        let stagedApp = try await unpackIPA(ipaPath)
+        return try inspectStagedApp(appPath: stagedApp, ipaPath: ipaPath, expectedTitles: expectedTitles)
+    }
+
+    private func inspectStagedApp(appPath: String, ipaPath: String, expectedTitles: [String]) throws -> IPAInspection {
+        let bundleID = appBundleIdentifier(at: appPath) ?? ""
+        let packFiles = LibraryIPACatalog.packDylibFiles(inAppAt: appPath)
+        let catalogURL = URL(fileURLWithPath: appPath).appendingPathComponent("GameCatalog.json")
+        let facts = (try? Data(contentsOf: catalogURL)).flatMap { LibraryIPACatalog.parse($0) }
+        if facts == nil {
+            throw LauncherFailure(
+                code: "library_ipa_invalid",
+                message: "The composed IPA has no readable GameCatalog.json.",
+                hint: "The packaging script must embed a schema-2 GameCatalog.json in the app bundle. Check the packaging log and retry.",
+                detail: catalogURL.path,
+                exitCode: nil
+            )
+        }
+        let containsROM = LibraryIPACatalog.containsBundledROM(appPath: appPath, facts: facts)
+        let inspection = IPAInspection(
+            ipaPath: ipaPath,
+            appPath: appPath,
+            bundleID: bundleID,
+            packFiles: packFiles,
+            catalogSchemaVersion: facts?.schemaVersion ?? 0,
+            catalogTitleIDs: facts?.titleIDs ?? [],
+            containsBundledROM: containsROM,
+            bytes: FileProbe.size(ipaPath) ?? 0
+        )
+        let problems = inspection.problems(expectedTitles: expectedTitles)
+        if !problems.isEmpty {
+            throw LauncherFailure(
+                code: "library_ipa_invalid",
+                message: "The composed IPA is not a valid multi-game library payload.",
+                hint: problems.joined(separator: "; "),
+                detail: "app=" + appPath + " packs=" + packFiles.joined(separator: ",") + " catalog=" + (facts?.titleIDs.joined(separator: ",") ?? "none"),
+                exitCode: nil
+            )
+        }
+        return inspection
+    }
+
+    private func appBundleIdentifier(at appPath: String) -> String? {
+        let plist = appPath + "/Info.plist"
+        guard let data = FileManager.default.contents(atPath: plist),
+              let object = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+              let bundleID = object["CFBundleIdentifier"] as? String else { return nil }
+        return bundleID
+    }
+
+    // MARK: library sign + install
 
     func installLibrary(
-        ipaPath: String,
+        inspection: IPAInspection,
         signedBaseAppPath: String,
         options: InstallOptions,
         onProgress: @escaping (InstallProgress) -> Void
@@ -400,17 +495,8 @@ final class XcodeInstallBackend: InstallBackend {
             throw LauncherFailure(
                 code: "device_missing",
                 message: "No device selected.",
-                hint: "Connect the iPhone/iPad, tap Trust, and press Refresh in the device list.",
+                hint: "Connect the iPhone/iPad, tap Trust, then refresh the device list.",
                 detail: nil,
-                exitCode: nil
-            )
-        }
-        guard FileProbe.exists(ipaPath) else {
-            throw LauncherFailure(
-                code: "ipa_missing",
-                message: "The library IPA was not found.",
-                hint: "Build the library IPA first.",
-                detail: ipaPath,
                 exitCode: nil
             )
         }
@@ -423,27 +509,23 @@ final class XcodeInstallBackend: InstallBackend {
                 exitCode: nil
             )
         }
-
-        onProgress(InstallProgress(stage: "Unpacking library IPA", fraction: 0.1, line: "unzip " + ipaPath))
-        let stagedApp = try await unpackIPA(ipaPath)
-        onProgress(InstallProgress(stage: "Signing GamePacks", fraction: 0.35, line: "codesign embedded Frameworks/GamePack-*.dylib (local identity)"))
-
-        let frameworksURL = URL(fileURLWithPath: stagedApp).appendingPathComponent("Frameworks")
-        let frameworkFiles = (try? FileManager.default.contentsOfDirectory(at: frameworksURL, includingPropertiesForKeys: nil)) ?? []
-        let packs = frameworkFiles.filter { $0.pathExtension == "dylib" }
-        guard !packs.isEmpty else {
+        let stagedApp = inspection.appPath
+        guard FileProbe.exists(stagedApp), !inspection.packFiles.isEmpty else {
             throw LauncherFailure(
                 code: "library_ipa_no_packs",
-                message: "The library IPA contains no GamePack dylib.",
-                hint: "Build at least one GamePack and allocate it into the library IPA.",
-                detail: frameworksURL.path,
+                message: "The composed IPA contains no GamePack dylib.",
+                hint: "Build at least one real GamePack and compose the IPA again.",
+                detail: inspection.packFiles.joined(separator: ","),
                 exitCode: nil
             )
         }
-        for pack in packs {
+
+        onProgress(InstallProgress(stage: "Signing GamePacks", fraction: 0.35, line: "codesign embedded Frameworks/GamePack-*.dylib (local identity)"))
+        for pack in inspection.packFiles {
+            let packPath = stagedApp + "/" + pack
             let sign = try await runner.run(CommandSpec(
                 executable: "/usr/bin/codesign",
-                arguments: ["--force", "--sign", identity, "--timestamp=none", pack.path]
+                arguments: ["--force", "--sign", identity, "--timestamp=none", packPath]
             ), onLine: nil)
             if !sign.succeeded {
                 throw AppleErrorMapper.failure(command: "codesign (GamePack)", text: sign.combined)
@@ -469,7 +551,7 @@ final class XcodeInstallBackend: InstallBackend {
             throw LauncherFailure(
                 code: "signature_invalid",
                 message: "The re-signed library app did not pass codesign verification.",
-                hint: "Check that the Team ID matches the Apple ID signing in Xcode, then retry.",
+                hint: "Check that the detected Team ID matches the Apple ID signed in to Xcode, then retry.",
                 detail: verify.combined,
                 exitCode: verify.exitCode
             )
@@ -485,51 +567,17 @@ final class XcodeInstallBackend: InstallBackend {
         if !install.succeeded {
             throw AppleErrorMapper.failure(command: "devicectl install", text: install.combined)
         }
-        onProgress(InstallProgress(stage: "Installed", fraction: 1.0, line: "Library app installed. Next: push game data."))
+        let installedBundleID = appBundleIdentifier(at: stagedApp) ?? inspection.bundleID
+        onProgress(InstallProgress(stage: "Installed", fraction: 1.0, line: "Library app installed (" + installedBundleID + "). Next: push the game data."))
         return InstallResult(
             appPath: stagedApp,
             signed: true,
             installed: true,
-            verifiedBundleID: options.bundleID,
+            verifiedBundleID: installedBundleID,
+            packFiles: inspection.packFiles,
+            catalogTitleIDs: inspection.catalogTitleIDs,
             duration: Date().timeIntervalSince(started)
         )
-    }
-
-    func openLibraryIPAInImpactor(ipaPath: String, options: InstallOptions) async throws {
-        guard let impactor = impactorApplicationPath() else {
-            throw LauncherFailure(
-                code: "impactor_missing",
-                message: "The official Impactor app is not installed.",
-                hint: "Download Impactor from its official release and put it in /Applications, or use the Xcode + devicectl strategy.",
-                detail: nil,
-                exitCode: nil
-            )
-        }
-        try await openInImpactor(ipaPath: ipaPath, impactorPath: impactor)
-    }
-
-    private func openInImpactor(ipaPath: String, impactorPath: String) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            DispatchQueue.main.async {
-                NSWorkspace.shared.open(
-                    [URL(fileURLWithPath: ipaPath)],
-                    withApplicationAt: URL(fileURLWithPath: impactorPath),
-                    configuration: NSWorkspace.OpenConfiguration()
-                ) { _, error in
-                    if let error {
-                        continuation.resume(throwing: LauncherFailure(
-                            code: "impactor_open_failed",
-                            message: "Could not open Impactor with the library IPA.",
-                            hint: "Open Impactor manually and choose the IPA from IPA/3ds2apple-library.ipa.",
-                            detail: error.localizedDescription,
-                            exitCode: nil
-                        ))
-                    } else {
-                        continuation.resume()
-                    }
-                }
-            }
-        }
     }
 
     private func unpackIPA(_ ipaPath: String) async throws -> String {
@@ -573,7 +621,7 @@ final class XcodeInstallBackend: InstallBackend {
             throw LauncherFailure(
                 code: "profile_missing",
                 message: "The signed shell app carries no provisioning profile to reuse.",
-                hint: "Let xcodebuild sign the shell with automatic signing first (Team ID set and Xcode account signed in).",
+                hint: "Let xcodebuild sign the shell with automatic signing first (Xcode account signed in), then retry.",
                 detail: source,
                 exitCode: nil
             )
@@ -604,6 +652,12 @@ final class MockInstallBackend: InstallBackend {
     let mode: LauncherRunMode = .mock
     var displayName: String { "Mock installer" }
     var readinessState: AppleReadiness
+    /// Test hooks: the self-check proves that compose/install never runs when an
+    /// earlier deploy step failed, and can inject an invalid IPA inspection.
+    private(set) var shellBuildCalls = 0
+    private(set) var installCalls = 0
+    var overrideInspection: IPAInspection?
+    var overrideInstallBundleID: String?
 
     init(readinessState: AppleReadiness) {
         self.readinessState = readinessState
@@ -611,7 +665,7 @@ final class MockInstallBackend: InstallBackend {
 
     func readiness(teamID: String) async -> AppleReadiness {
         var state = readinessState
-        state.teamID = teamID
+        if state.teamID.isEmpty { state.teamID = teamID }
         return state
     }
 
@@ -620,66 +674,61 @@ final class MockInstallBackend: InstallBackend {
     }
 
     func buildShellApp(
-        signed: Bool,
         options: InstallOptions,
         onProgress: @escaping (InstallProgress) -> Void
     ) async throws -> String {
+        shellBuildCalls += 1
         let stages: [(String, Double, String)] = [
             ("Generate Xcode project", 0.08, "xcodegen generate --spec project.yml (mock)"),
-            ("Building signed shell app", 0.3, "xcodebuild ... DEVELOPMENT_TEAM=<team> (mock)"),
+            ("Building signed shell app", 0.3, "xcodebuild ... DEVELOPMENT_TEAM=<detected> (mock)"),
         ]
         for stage in stages {
-            try? await Task.sleep(nanoseconds: 120_000_000)
+            try? await Task.sleep(nanoseconds: 60_000_000)
             onProgress(InstallProgress(stage: stage.0, fraction: stage.1, line: stage.2))
         }
         return "/Users/you/3ds2apple/build/launcher-shell/Build/Products/Debug-iphoneos/3ds2apple.app"
     }
 
+    func inspectLibraryIPA(ipaPath: String, expectedTitles: [String]) async throws -> IPAInspection {
+        try? await Task.sleep(nanoseconds: 60_000_000)
+        if let overrideInspection { return overrideInspection }
+        return IPAInspection(
+            ipaPath: ipaPath,
+            appPath: "/mock/library-ipa/Payload/3ds2apple.app",
+            bundleID: MockFixtures.installedShellBundleID,
+            packFiles: expectedTitles.sorted().map { "Frameworks/GamePack-" + $0.uppercased() + ".dylib" },
+            catalogSchemaVersion: 2,
+            catalogTitleIDs: expectedTitles.map { $0.uppercased() },
+            containsBundledROM: false,
+            bytes: 12_345_678
+        )
+    }
+
     func installLibrary(
-        ipaPath: String,
+        inspection: IPAInspection,
         signedBaseAppPath: String,
         options: InstallOptions,
         onProgress: @escaping (InstallProgress) -> Void
     ) async throws -> InstallResult {
+        installCalls += 1
         let stages: [(String, Double, String)] = [
-            ("Signing GamePacks", 0.5, "codesign Frameworks/GamePack-0004000000055E00.dylib (local identity, mock)"),
+            ("Signing GamePacks", 0.5, "codesign Frameworks/GamePack-*.dylib (local identity, mock)"),
             ("Signing app bundle", 0.7, "codesign the staged library app (local identity, mock)"),
             ("Installing with devicectl", 0.9, "xcrun devicectl device install app --device <mock> (mock)"),
             ("Installed", 1.0, "Library app installed (mock)."),
         ]
         for stage in stages {
-            try? await Task.sleep(nanoseconds: 120_000_000)
+            try? await Task.sleep(nanoseconds: 60_000_000)
             onProgress(InstallProgress(stage: stage.0, fraction: stage.1, line: stage.2))
         }
         return InstallResult(
-            appPath: signedBaseAppPath,
+            appPath: inspection.appPath,
             signed: true,
             installed: true,
-            verifiedBundleID: options.bundleID,
-            duration: 0.6
+            verifiedBundleID: overrideInstallBundleID ?? inspection.bundleID,
+            packFiles: inspection.packFiles,
+            catalogTitleIDs: inspection.catalogTitleIDs,
+            duration: 0.3
         )
     }
-
-    func openLibraryIPAInImpactor(ipaPath: String, options: InstallOptions) async throws {
-        throw LauncherFailure(
-            code: "impactor_missing",
-            message: "The official Impactor app is not installed (mock).",
-            hint: "Use the Xcode + devicectl strategy, or install Impactor for the manual path.",
-            detail: nil,
-            exitCode: nil
-        )
-    }
-
-    func commandPlan(options: InstallOptions) -> [String] {
-        let team = options.teamID.isEmpty ? "<YOUR_TEAM_ID>" : options.teamID
-        return [
-            "cd ~/3ds2apple/ios/app && xcodegen generate --spec project.yml",
-            "xcodebuild -project ios/app/3ds2apple.xcodeproj -scheme 3ds2apple -configuration Debug -destination 'generic/platform=iOS' -derivedDataPath build/launcher-shell CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM=" + team + " -allowProvisioningUpdates build",
-            "3ds2apple-pack --out out pack --all --execute --base-app build/launcher-shell/Build/Products/Debug-iphoneos/3ds2apple.app --ipa-out IPA --ipa-name 3ds2apple-library",
-            "codesign -f -s <Apple Development identity> <staged app>/Frameworks/GamePack-<TITLEID>.dylib",
-            "xcrun devicectl device install app --device <DEVICE_UDID> <staged app>",
-        ]
-    }
-
-    func impactorApplicationPath() -> String? { nil }
 }

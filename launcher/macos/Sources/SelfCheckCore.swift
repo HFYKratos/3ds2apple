@@ -3,8 +3,9 @@
 //  3ds2apple macOS launcher
 //
 //  Self-check part 1: CLI arguments, checkout detection, the desktop CLI JSON
-//  contract, the shell GameInfo mapping, push-plan ordering and the devpush
-//  NDJSON contract v1.
+//  contract, the shell GameInfo mapping, push-plan ordering/bundle-id use, the
+//  library-IPA inspection rules, Team ID detection and the devpush NDJSON
+//  contract v1. Everything is headless logic; no ROM, phone or Apple ID.
 //
 
 import Foundation
@@ -115,10 +116,11 @@ enum SelfCheckCore {
             expect("shell GameInfo: fixture manifest parsed", false)
         }
 
-        // 7. Push plan ordering and paths
+        // 7. Push plan ordering, paths and the ACTUAL installed bundle id
         MockFixtures.ensurePackageTree()
         let fixtures = MockFixtures.games()
-        let planner = PushPlanner(outRoot: MockFixtures.outRoot, bundleID: "com.kratos.3ds2apple")
+        let actualInstalledBundleID = "com.kratos.3ds2apple.installed"
+        let planner = PushPlanner(outRoot: MockFixtures.outRoot, bundleID: actualInstalledBundleID)
         if let game = fixtures.first, let fixtureManifest = MockFixtures.manifests()[game.titleID] {
             do {
                 let plan = try planner.plan(
@@ -131,7 +133,8 @@ enum SelfCheckCore {
                 expect("push plan: no dylib in Documents", plan.files.allSatisfy { !$0.name.hasSuffix(".dylib") })
                 expect("push plan: GameInfo.json is last", plan.files.last?.name == "GameInfo.json", plan.files.last?.name ?? "nil")
                 expect("push plan: remote path uses Documents/Games/TITLEID", plan.files.allSatisfy { $0.remotePath.hasPrefix("Documents/Games/0004000000055E00/") })
-                expect("push plan: bundle id and device recorded", plan.bundleID == "com.kratos.3ds2apple" && plan.deviceUDID == MockFixtures.devices.first?.udid)
+                expect("push plan: uses the passed installed bundle id", plan.bundleID == actualInstalledBundleID)
+                expect("push plan: bundle id and device recorded", plan.bundleID == actualInstalledBundleID && plan.deviceUDID == MockFixtures.devices.first?.udid)
                 expect("push plan: rom hash comes from the staged game data", plan.files[0].sha256 == game.romSha256)
             } catch {
                 expect("push plan: fixture plan builds", false, error.localizedDescription)
@@ -145,31 +148,74 @@ enum SelfCheckCore {
             } catch {
                 expect("push plan: rejects a game without staged ROM data", error.launcherFailure().code == "rom_data_missing")
             }
-            // The library IPA (packs + catalog) is ROM-free: the mock pack backend
-            // simulates the allocation and reports an IPA path.
-            let mockModel = AppModel.mock(scenario: .library)
-            if let allocated = try? await mockModel.pack.buildLibraryIPA(
-                titleIDs: [MockFixtures.titlePokemonY],
-                baseAppPath: "/Users/you/3ds2apple/build/launcher-shell/Build/Products/Debug-iphoneos/3ds2apple.app",
-                ipaOutDir: NSTemporaryDirectory() + "zl-selfcheck-ipa",
-                ipaName: "3ds2apple-library",
-                dryRun: false,
-                onLine: { _, _ in }
-            ) {
-                expect("library IPA: allocation executes", allocated.executed && allocated.titles == [MockFixtures.titlePokemonY])
-                expect("library IPA: output path exists", allocated.ipaPath.map { FileProbe.exists($0) } == true)
-            } else {
-                expect("library IPA: mock allocation runs", false)
-            }
         }
 
-        // 8. devpush NDJSON contract v1
+        // 8. Library IPA inspection rules (never install a bare shell / a ROM-full IPA)
+        let validInspection = IPAInspection(
+            ipaPath: "/tmp/3ds2apple-library.ipa",
+            appPath: "/tmp/Payload/3ds2apple.app",
+            bundleID: "com.kratos.3ds2apple",
+            packFiles: [
+                "Frameworks/GamePack-0004000000055E00.dylib",
+                "Frameworks/GamePack-0004000000086400.dylib",
+            ],
+            catalogSchemaVersion: 2,
+            catalogTitleIDs: ["0004000000055E00", "0004000000086400"],
+            containsBundledROM: false,
+            bytes: 12_345_678
+        )
+        let expectedTitles = ["0004000000055E00", "0004000000086400"]
+        expect("IPA check: valid multi-game payload has no problems", validInspection.problems(expectedTitles: expectedTitles).isEmpty)
+        var missingPack = validInspection
+        missingPack.packFiles = ["Frameworks/GamePack-0004000000055E00.dylib"]
+        expect("IPA check: missing selected GamePack is refused", !missingPack.problems(expectedTitles: expectedTitles).isEmpty)
+        var oldCatalog = validInspection
+        oldCatalog.catalogSchemaVersion = 1
+        expect("IPA check: schema-1 catalogue is refused", !oldCatalog.problems(expectedTitles: expectedTitles).isEmpty)
+        var emptyCatalog = validInspection
+        emptyCatalog.catalogTitleIDs = []
+        expect("IPA check: empty catalogue is refused", !emptyCatalog.problems(expectedTitles: expectedTitles).isEmpty)
+        var wrongTitle = validInspection
+        wrongTitle.catalogTitleIDs = ["0004000000055E00"]
+        expect("IPA check: a selected title missing from the catalogue is refused", !wrongTitle.problems(expectedTitles: expectedTitles).isEmpty)
+        var romFull = validInspection
+        romFull.containsBundledROM = true
+        expect("IPA check: bundled ROM data is refused (ROM-free rule)", !romFull.problems(expectedTitles: expectedTitles).isEmpty)
+        var noBundle = validInspection
+        noBundle.bundleID = ""
+        expect("IPA check: app without CFBundleIdentifier is refused", !noBundle.problems(expectedTitles: expectedTitles).isEmpty)
+
+        let catalogJSON = """
+        {"schemaVersion":2,"games":[{"titleID":"0004000000055E00","displayName":"Pokemon Y","packFile":"Frameworks/GamePack-0004000000055E00.dylib"},{"titleID":"0004000000086400","displayName":"Animal Crossing","packFile":"Frameworks/GamePack-0004000000086400.dylib"}]}
+        """
+        let facts = LibraryIPACatalog.parse(Data(catalogJSON.utf8))
+        expect("catalog JSON: schema-2 games parse", facts?.schemaVersion == 2 && facts?.titleIDs == expectedTitles)
+        expect("catalog JSON: no bundled ROM files in a ROM-free catalogue", facts?.packedROMFiles.isEmpty == true)
+        let romCatalog = LibraryIPACatalog.parse(Data("""
+        {"schemaVersion":2,"games":[{"titleID":"0004000000055E00","romFile":"Roms/0004000000055E00.cci"}]}
+        """.utf8))
+        expect("catalog JSON: romFile entries are detected", romCatalog?.packedROMFiles.count == 1)
+        expect("catalog JSON: invalid JSON parses to nil", LibraryIPACatalog.parse(Data("not json".utf8)) == nil)
+
+        // 9. Team ID detection from Xcode's local state (never typed by the user)
+        let profilePlist = """
+        <key>TeamIdentifier</key>
+        <array>
+            <string>ABCDE12345</string>
+        </array>
+        """
+        expect("team detection: TeamIdentifier in a profile plist", TeamDetector.firstTeamID(inPlistText: profilePlist) == "ABCDE12345")
+        let identityLines = "  1) 0123456789ABCDEF Apple Development: player (ABCDE12345)"
+        expect("team detection: certificate subject fallback", TeamDetector.certificateTeamIDs(in: identityLines) == ["ABCDE12345"])
+        expect("team detection: no team returns nil", TeamDetector.firstTeamID(inPlistText: "no team here") == nil)
+
+        // 10. devpush NDJSON contract v1
         let beginLine = """
         {"schema":"devpush/1","type":"begin","command":"put","udid":"mock"}
         """
         expect("devpush: begin line parses", DevpushNDJSON.parse(beginLine)?.type == "begin")
         let progressLine = """
-        {"schema":"devpush/1","type":"progress","command":"put","file":"GamePack.dylib","bytesSent":120000,"bytesTotal":480000,"percent":25}
+        {"schema":"devpush/1","type":"progress","command":"put","file":"GameRom.cci","bytesSent":120000,"bytesTotal":480000,"percent":25}
         """
         if let line = DevpushNDJSON.parse(progressLine), let parsed = DevpushNDJSON.progress(line) {
             expect("devpush: progress bytes parse", parsed.sent == 120000 && parsed.total == 480000)

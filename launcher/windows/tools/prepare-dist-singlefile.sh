@@ -2,31 +2,38 @@
 # Build the one-executable Windows launcher ZIP (self-contained .NET single-file).
 #
 # The exe embeds the ROM-free shell template, the pinned official Impactor/plumesign,
-# the Bin/ tool CLIs and LICENSE/NOTICE/THIRD_PARTY; on first run it extracts them to
+# the Bin/ tool CLIs, 3dsrecomp.exe + Darwin stubs/shim (Windows local build) and
+# LICENSE/NOTICE/THIRD_PARTY. On first run it extracts them to
 # %LOCALAPPDATA%\3ds2apple\distribution\<version>. The user-facing ZIP contains exactly
 # one file: 3ds2apple-launcher.exe.
 #
-# Requirements: .NET 10 SDK, cross-built Windows tool binaries under Bin/, the verified
-# Impactor bundle under vendor/impactor/ and the ROM-free shell template under shell/.
-# Every missing input aborts instead of producing a package that cannot install.
+# The official LLVM 21.1.8 toolchain (clang.exe / llvm-ar.exe / ld64.lld.exe +
+# lib/clang/21/include) is staged under Bin/llvm when available (THREEDS2APPLE_LLVM_DIR,
+# default build/win-toolchain/llvm or third_party/llvm-win). It is NOT faked: without it
+# the packaged launcher's Deploy page shows one actionable local-toolchain error + Retry.
+#
+# Output defaults to the repo's own git-ignored out/launchers/ (never temp_transfer).
 #
 # Usage: tools/prepare-dist-singlefile.sh [output-dir]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WINDOWS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-OUTPUT_ROOT="/mnt/f/temp_transfer/dist/windows-single"
+REPO_ROOT="$(cd "$WINDOWS_ROOT/../.." && pwd)"
+OUTPUT_ROOT="$REPO_ROOT/out/launchers"
 if [ "$#" -ge 1 ]; then OUTPUT_ROOT="$1"; fi
+mkdir -p "$OUTPUT_ROOT"
 VERSION="$(awk -F'[<>]' '/<Version>/{print $3; exit}' "$WINDOWS_ROOT/Directory.Build.props")"
 if [ -z "$VERSION" ]; then VERSION="0.1.0"; fi
 EXE_NAME="3ds2apple-launcher.exe"
-PUBLISH_DIR="$OUTPUT_ROOT/publish"
+PUBLISH_DIR="$OUTPUT_ROOT/publish-win-x64"
 ZIP_PATH="$OUTPUT_ROOT/3ds2apple-windows-single-$VERSION.zip"
 
 if [ -z "${DOTNET_ROOT:-}" ]; then DOTNET_ROOT="$HOME/.dotnet10"; fi
 export DOTNET_ROOT
 export PATH="$DOTNET_ROOT:$PATH"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
+export DOTNET_NOLOGO=1
 
 echo "[single] 3ds2apple Windows launcher $VERSION -> $ZIP_PATH"
 
@@ -55,9 +62,55 @@ for tool in 3ds2apple-pack.exe builder-windows.exe devpush.exe; do
     exit 2
   fi
 done
-echo "[single] Bin tools: $(ls "$WINDOWS_ROOT/Bin" | tr "\n" " ")"
 
-# 4. Single-file self-contained publish (Release embeds the payload).
+# 3b. Windows local-build payload: 3dsrecomp.exe (built from the pinned upstream).
+if [ ! -f "$WINDOWS_ROOT/Bin/3dsrecomp.exe" ]; then
+  for candidate in \
+    "$REPO_ROOT/third_party/3dsrecomp/target/x86_64-pc-windows-gnu/release/3dsrecomp.exe" \
+    "$REPO_ROOT/third_party/3dsrecomp/target/release/3dsrecomp.exe"; do
+    if [ -f "$candidate" ]; then
+      cp "$candidate" "$WINDOWS_ROOT/Bin/3dsrecomp.exe"
+      break
+    fi
+  done
+fi
+if [ -f "$WINDOWS_ROOT/Bin/3dsrecomp.exe" ]; then
+  echo "[single] 3dsrecomp.exe staged ($(sha256sum "$WINDOWS_ROOT/Bin/3dsrecomp.exe" | cut -d' ' -f1 | cut -c1-16)…)"
+else
+  echo "[single] WARN: Bin/3dsrecomp.exe is missing; the packaged launcher will show one actionable local-toolchain error on Deploy"
+fi
+
+# 3c. Optional official LLVM 21.1.8 toolchain (real local GamePack compile).
+LLVM_SOURCE="${THREEDS2APPLE_LLVM_DIR:-$REPO_ROOT/build/win-toolchain/llvm}"
+if [ -d "$LLVM_SOURCE/lib/clang" ] && [ -f "$LLVM_SOURCE/bin/clang.exe" ]; then
+  LLVM_STAGE="$WINDOWS_ROOT/Bin/llvm"
+  rm -rf "$LLVM_STAGE"
+  mkdir -p "$LLVM_STAGE/bin" "$LLVM_STAGE/lib/clang"
+  for tool in clang.exe llvm-ar.exe ld64.lld.exe llvm-nm.exe llvm-objdump.exe; do
+    if [ -f "$LLVM_SOURCE/bin/$tool" ]; then cp "$LLVM_SOURCE/bin/$tool" "$LLVM_STAGE/bin/"; fi
+  done
+  # Runtime DLLs/CRT files shipped next to clang/lld (official Windows release).
+  find "$LLVM_SOURCE/bin" -maxdepth 1 -type f \( -name '*.dll' -o -name '*.pdb' -o -name 'clang.exe' \) -exec cp {} "$LLVM_STAGE/bin/" \;
+  # The clang resource headers 3dsrecomp's generated C needs (-isystem).
+  for clang_dir in "$LLVM_SOURCE"/lib/clang/*/; do
+    if [ -d "${clang_dir}include" ]; then
+      cp -r "${clang_dir}include" "$LLVM_STAGE/lib/clang/$(basename "$clang_dir")/" 2>/dev/null || {
+        mkdir -p "$LLVM_STAGE/lib/clang/$(basename "$clang_dir")"
+        cp -r "${clang_dir}include" "$LLVM_STAGE/lib/clang/$(basename "$clang_dir")/"
+      }
+    fi
+  done
+  for notice in LICENSE.TXT LICENSE.txt; do
+    if [ -f "$LLVM_SOURCE/$notice" ]; then cp "$LLVM_SOURCE/$notice" "$LLVM_STAGE/LICENSE.TXT"; fi
+  done
+  echo "[single] LLVM staged under Bin/llvm ($(du -sh "$LLVM_STAGE" | cut -f1))"
+else
+  echo "[single] WARN: official LLVM 21.1.8 not found at $LLVM_SOURCE; packaging without it (Deploy shows one actionable local-toolchain error; set THREEDS2APPLE_LLVM_DIR to stage it)"
+fi
+
+echo "[single] Bin tools: $(ls "$WINDOWS_ROOT/Bin" | tr '\n' ' ')"
+
+# 4. Single-file self-contained Windows publish (Release embeds the payload).
 rm -rf "$PUBLISH_DIR"
 mkdir -p "$PUBLISH_DIR"
 dotnet publish "$WINDOWS_ROOT/src/Launcher.Desktop/ThreeDsTwoApple.Launcher.Desktop.csproj" \
@@ -66,8 +119,8 @@ dotnet publish "$WINDOWS_ROOT/src/Launcher.Desktop/ThreeDsTwoApple.Launcher.Desk
   -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false \
   --nologo
 
-# Only the executable stays in the release folder (native packages ship loose .pdb files).
-find "$PUBLISH_DIR" -maxdepth 1 -type f ! -name "$EXE_NAME" -delete
+# Only the executable stays in the release folder.
+find "$PUBLISH_DIR" -mindepth 1 -maxdepth 1 ! -name "$EXE_NAME" -exec rm -rf {} +
 
 # 5. ZIP with exactly one file inside.
 rm -f "$ZIP_PATH"
@@ -76,10 +129,40 @@ echo "[single] zip: $ZIP_PATH"
 unzip -l "$ZIP_PATH"
 sha256sum "$ZIP_PATH" "$PUBLISH_DIR/$EXE_NAME" | tee "$OUTPUT_ROOT/SHA256SUMS-single.txt"
 
-# 6. Clean-folder staging (no other files next to the exe).
-CLEAN_DIR="$OUTPUT_ROOT/clean-run"
+# 6. Clean-folder staging for the Windows exe (acceptance: run --self-test there).
+CLEAN_DIR="$OUTPUT_ROOT/clean-run-win"
 rm -rf "$CLEAN_DIR"
 mkdir -p "$CLEAN_DIR"
 cp "$PUBLISH_DIR/$EXE_NAME" "$CLEAN_DIR/"
 echo "[single] clean folder: $CLEAN_DIR"
-echo "[single] next: cd $CLEAN_DIR && ./$EXE_NAME --self-test"
+echo "[single] Windows acceptance: cd $CLEAN_DIR && $EXE_NAME --self-test"
+
+# 7. Linux-host clean-folder self-test of the SAME embedded payload (WSL/CI cannot run
+#    the Windows PE). Publish a framework-dependent single-file Linux executable,
+#    copy it alone into a clean folder and run --self-test with an isolated HOME so the
+#    first-run payload extraction into LOCALAPPDATA is exercised for real.
+if command -v dotnet >/dev/null 2>&1; then
+  LINUX_PUBLISH="$OUTPUT_ROOT/self-test-linux-x64"
+  rm -rf "$LINUX_PUBLISH"
+  dotnet publish "$WINDOWS_ROOT/src/Launcher.Desktop/ThreeDsTwoApple.Launcher.Desktop.csproj" \
+    -c Release -r linux-x64 --self-contained false -o "$LINUX_PUBLISH" \
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+    -p:EnableCompressionInSingleFile=false \
+    -p:DebugType=None -p:DebugSymbols=false --nologo
+  CLEAN_LINUX="$OUTPUT_ROOT/clean-run-linux"
+  rm -rf "$CLEAN_LINUX"
+  mkdir -p "$CLEAN_LINUX/home"
+  cp "$LINUX_PUBLISH/3ds2apple-launcher" "$CLEAN_LINUX/"
+  ( cd "$CLEAN_LINUX" && HOME="$CLEAN_LINUX/home" XDG_DATA_HOME="$CLEAN_LINUX/home/.local/share" \
+      DOTNET_CLI_TELEMETRY_OPTOUT=1 ./3ds2apple-launcher --self-test > self-test.log 2>&1 ) || true
+  echo "----- clean-folder self-test (payload extraction, Linux host) -----"
+  tail -45 "$CLEAN_LINUX/self-test.log"
+  if grep -q "SELF-TEST OK" "$CLEAN_LINUX/self-test.log"; then
+    echo "[single] clean-folder self-test PASS ($CLEAN_LINUX/self-test.log)"
+  else
+    echo "[single] clean-folder self-test FAIL ($CLEAN_LINUX/self-test.log)" >&2
+    exit 1
+  fi
+else
+  echo "[single] WARN: dotnet not on PATH; skipped the Linux clean-folder self-test"
+fi

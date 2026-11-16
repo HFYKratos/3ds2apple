@@ -51,16 +51,6 @@ enum GamePhase: String, Codable, CaseIterable {
     case built
     case pushed
     case failed
-
-    var title: String {
-        switch self {
-        case .queued: return "Queued"
-        case .building: return "Building"
-        case .built: return "Built"
-        case .pushed: return "Installed on device"
-        case .failed: return "Failed"
-        }
-    }
 }
 
 struct GameEntry: Identifiable, Equatable {
@@ -88,6 +78,8 @@ struct GameEntry: Identifiable, Equatable {
     var romSha256: String?
 
     var packIsReal: Bool { (packFormat ?? "") == "macho" }
+    var isAOTReady: Bool { packIsReal && phase != .failed }
+    var isOnDevice: Bool { phase == .pushed || pushedAt != nil }
 }
 
 struct DetectedROM: Equatable {
@@ -166,39 +158,17 @@ struct PipelineStage: Identifiable, Equatable {
 enum TaskKind: String, Codable {
     case detect
     case importROM
-    case buildAOT
-    case verifyPackages
-    case buildShell
-    case installShell
     case detectDevice
-    case pushGame
-    case verifyPush
-
-    var title: String {
-        switch self {
-        case .detect: return "Detect ROM"
-        case .importROM: return "Import ROM"
-        case .buildAOT: return "Build GamePack"
-        case .verifyPackages: return "Verify packages"
-        case .buildShell: return "Build base shell"
-        case .installShell: return "Install base shell"
-        case .detectDevice: return "Detect device"
-        case .pushGame: return "Push game files"
-        case .verifyPush: return "Verify on device"
-        }
-    }
+    case deploy
+    case verifyPackages
 
     var symbolName: String {
         switch self {
         case .detect: return "magnifyingglass"
         case .importROM: return "square.and.arrow.down"
-        case .buildAOT: return "hammer"
-        case .verifyPackages: return "checkmark.shield"
-        case .buildShell: return "shippingbox"
-        case .installShell: return "iphone.and.arrow.forward"
         case .detectDevice: return "cable.connector"
-        case .pushGame: return "arrow.up.doc.on.clipboard"
-        case .verifyPush: return "checkmark.seal"
+        case .deploy: return "iphone.and.arrow.forward"
+        case .verifyPackages: return "checkmark.shield"
         }
     }
 }
@@ -209,16 +179,6 @@ enum TaskState: String, Codable, CaseIterable {
     case succeeded
     case failed
     case cancelled
-
-    var title: String {
-        switch self {
-        case .queued: return "Queued"
-        case .running: return "Running"
-        case .succeeded: return "Succeeded"
-        case .failed: return "Failed"
-        case .cancelled: return "Cancelled"
-        }
-    }
 }
 
 struct TaskRecord: Identifiable, Equatable {
@@ -248,26 +208,13 @@ struct TaskRecord: Identifiable, Equatable {
 
 // MARK: - Build
 
+/// Kept as a backend-level switch: the Deploy flow always uses a real local AOT
+/// build in the live app and the labelled fake packs in mock/self-check mode.
+/// It is not user-visible any more (docs/launcher-flow-v2.md).
 enum BuildMode: String, Codable, CaseIterable {
     case dryRun
     case fake
     case real
-
-    var title: String {
-        switch self {
-        case .dryRun: return "Dry run"
-        case .fake: return "Fake preview pack"
-        case .real: return "Real AOT build"
-        }
-    }
-
-    var explanation: String {
-        switch self {
-        case .dryRun: return "Prints the exact commands; compiles and writes nothing."
-        case .fake: return "Writes labelled placeholder packs for UI and layout tests; not installable."
-        case .real: return "Runs 3dsrecomp and the Xcode pack link on this Mac (slow)."
-        }
-    }
 }
 
 // MARK: - App readiness
@@ -292,17 +239,24 @@ struct AppleReadiness: Equatable {
     var devicectlAvailable: Bool
     var signingIdentityCount: Int
     var provisioningProfileCount: Int
+    /// Team ID detected from the local provisioning profiles / certificate
+    /// subject. The launcher never asks the user to type it: Xcode owns the
+    /// account and this is read-only (docs/launcher-flow-v2.md §Settings).
     var teamID: String
     var checkedAt: Date
 
     var hasSigningAssets: Bool { signingIdentityCount > 0 || provisioningProfileCount > 0 }
+
+    var ready: Bool {
+        hasSigningAssets && !teamID.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 
     var plainTextState: String {
         if signingIdentityCount == 0 && provisioningProfileCount == 0 {
             return "No Apple ID signing assets found on this Mac."
         }
         if teamID.trimmingCharacters(in: .whitespaces).isEmpty {
-            return "Signing certificate found; set your Apple Developer Team ID."
+            return "Signing certificate found, but no Team ID could be detected."
         }
         return "Signing assets and Team ID are ready."
     }
@@ -312,7 +266,7 @@ struct AppleReadiness: Equatable {
             return "Open Xcode -> Settings -> Accounts, sign in with your own Apple ID, then let Xcode manage signing once. The launcher never asks for or stores your password."
         }
         if teamID.trimmingCharacters(in: .whitespaces).isEmpty {
-            return "Enter the 10-character Team ID from developer.apple.com (Membership) or Xcode -> Settings -> Accounts."
+            return "Sign in to Xcode -> Settings -> Accounts and create a development certificate/provisioning profile for your team."
         }
         return ""
     }
@@ -345,39 +299,10 @@ struct DeviceInfo: Identifiable, Equatable, Codable {
     var connectionLabel: String { connection == "network" ? "Wi-Fi" : "USB" }
 }
 
-enum InstallStrategy: String, CaseIterable, Codable {
-    case xcodebuild
-    case deviceCLI
-    case impactor
-    case mock
-
-    var title: String {
-        switch self {
-        case .xcodebuild: return "Xcode build + devicectl"
-        case .deviceCLI: return "device_cli sign/install wrapper"
-        case .impactor: return "Official Impactor (manual)"
-        case .mock: return "Mock (dry run)"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .xcodebuild: return "Signs the ROM-free shell with your Apple ID in Xcode and installs it with devicectl."
-        case .deviceCLI: return "Uses builder/device/device_cli.py when the device-bridge task publishes it."
-        case .impactor: return "Opens the official Impactor with the unsigned IPA; sign in and install there."
-        case .mock: return "Simulates readiness, build and install without touching a device."
-        }
-    }
-}
-
 struct InstallOptions: Equatable {
-    var strategy: InstallStrategy
     var teamID: String
-    var bundleID: String
     var deviceUDID: String?
     var allowProvisioningUpdates: Bool
-    var adoptAppPath: String?
-    var adoptIPAPath: String?
 }
 
 struct InstallProgress: Equatable {
@@ -390,8 +315,90 @@ struct InstallResult: Equatable {
     var appPath: String
     var signed: Bool
     var installed: Bool
+    /// The bundle identifier of the app that was actually staged/installed,
+    /// read back from the built app's Info.plist (not a template value). The
+    /// Documents push must use this value.
     var verifiedBundleID: String?
+    var packFiles: [String]
+    var catalogTitleIDs: [String]
     var duration: TimeInterval
+}
+
+/// Read-only facts about a composed ROM-free library IPA, used to prove the
+/// selected real GamePacks and the schema-2 GameCatalog are inside the signed
+/// payload before anything is installed (docs/launcher-flow-v2.md).
+struct IPAInspection: Equatable {
+    var ipaPath: String
+    var appPath: String
+    var bundleID: String
+    var packFiles: [String]
+    var catalogSchemaVersion: Int
+    var catalogTitleIDs: [String]
+    var containsBundledROM: Bool
+    var bytes: Int64
+
+    var packCount: Int { packFiles.count }
+    var catalogIsSchema2: Bool { catalogSchemaVersion == 2 }
+
+    /// Everything the Deploy flow must prove before sign/install. An empty
+    /// result means the IPA is a valid ROM-free multi-game library payload.
+    func problems(expectedTitles: [String]) -> [String] {
+        var issues: [String] = []
+        if ipaPath.isEmpty { issues.append("IPA path is empty") }
+        if bundleID.trimmingCharacters(in: .whitespaces).isEmpty {
+            issues.append("the composed app has no CFBundleIdentifier")
+        }
+        if catalogSchemaVersion != 2 {
+            issues.append("GameCatalog.json is not schema 2 (found " + String(catalogSchemaVersion) + ")")
+        }
+        if catalogTitleIDs.isEmpty {
+            issues.append("GameCatalog.json lists no games")
+        }
+        let normalized = catalogTitleIDs.map { $0.uppercased() }
+        for title in expectedTitles.map({ $0.uppercased() }) where !normalized.contains(title) {
+            issues.append("GameCatalog.json is missing " + title)
+        }
+        let expectedPacks = expectedTitles.map { "Frameworks/GamePack-" + $0.uppercased() + ".dylib" }
+        let actualPacks = Set(packFiles.map { $0 })
+        for pack in expectedPacks where !actualPacks.contains(pack) {
+            issues.append("Frameworks/GamePack-" + (pack.split(separator: "-").last.map(String.init) ?? "") + " is missing")
+        }
+        if containsBundledROM {
+            issues.append("the IPA contains bundled ROM/game data (Roms/ or romFile) but the deploy must be ROM-free")
+        }
+        return issues
+    }
+}
+
+// MARK: - Deploy run
+
+/// State of the one-click Deploy batch action: compile -> compose one ROM-free
+/// IPA -> verify -> sign/install -> push each ROM+GameInfo -> done.
+struct DeployReport: Identifiable, Equatable {
+    let id = UUID()
+    var state: TaskState
+    var steps: [PipelineStage]
+    var selectedTitles: [String]
+    var builtTitles: [String]
+    var ipaPath: String?
+    var inspection: IPAInspection?
+    var installedBundleID: String?
+    var pushedTitles: [String]
+    var failedStepIndex: Int?
+    var failureMessage: String?
+    var failureHint: String?
+    var startedAt: Date
+    var endedAt: Date?
+
+    var isDone: Bool { state == .succeeded }
+    var progress: Double {
+        guard !steps.isEmpty else { return state == .succeeded ? 1 : 0 }
+        let finished = steps.filter { $0.state == .succeeded || $0.state == .skipped }.count
+        let running = steps.contains { $0.state == .running } ? 0.5 : 0
+        return min(1, (Double(finished) + running) / Double(steps.count))
+    }
+
+    var duration: TimeInterval { (endedAt ?? Date()).timeIntervalSince(startedAt) }
 }
 
 // MARK: - Device bridge (devpush contract v1)
@@ -484,21 +491,21 @@ extension Error {
     }
 }
 
-// MARK: - Selection
+// MARK: - Navigation
 
-/// The launcher has exactly two top-level sections (docs/launcher-ui.md):
-/// Library and Import. Settings, install/push and diagnostics are dialogs.
-/// Raw values are kept stable for persisted UI state and logs.
+/// The launcher has exactly two top-level sections (docs/launcher-flow-v2.md):
+/// Library (import/add/list/remove) and Deploy (select games -> one-click batch
+/// deploy). Import is a sheet of the Library; Settings is a modal panel.
 enum LauncherScreen: String, CaseIterable, Identifiable {
     case library = "library"
-    case importROM = "import"
+    case deploy = "deploy"
 
     var id: String { rawValue }
 
     var symbolName: String {
         switch self {
         case .library: return "square.grid.2x2"
-        case .importROM: return "square.and.arrow.down"
+        case .deploy: return "iphone.and.arrow.forward"
         }
     }
 }

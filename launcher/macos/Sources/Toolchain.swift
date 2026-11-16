@@ -3,7 +3,9 @@
 //  3ds2apple macOS launcher
 //
 //  Locate the checkout and every external tool the pipeline drives, then report
-//  a readiness snapshot for the Diagnostics screen. Nothing here writes file
+//  a readiness snapshot for Settings and the Deploy preflight. The v2 flow has
+//  no tool-path controls: the launcher looks inside its own bundle first, then
+//  the checkout, then PATH (docs/launcher-flow-v2.md). Nothing here writes file
 //  content or contacts the network.
 //
 
@@ -13,7 +15,6 @@ struct ToolchainPaths: Equatable {
     var repoRoot: String?
     var packCLI: String?
     var devpush: String?
-    var deviceCLI: String?
     var xcodegen: String?
     var xcodebuild: String
     var security: String
@@ -22,36 +23,48 @@ struct ToolchainPaths: Equatable {
     @MainActor
     static func resolve(settings: LauncherSettings) -> ToolchainPaths {
         let repo = settings.repoRoot
-        let packCLI = firstExecutable([
-            settings.packCLIPath,
+        var packCandidates: [String] = []
+        var devpushCandidates: [String] = []
+        if let resourceTools = Bundle.main.resourceURL?.appendingPathComponent("tools", isDirectory: true).path {
+            packCandidates.append(resourceTools + "/3ds2apple-pack")
+            devpushCandidates.append(resourceTools + "/devpush")
+        }
+        packCandidates.append(contentsOf: [
             repo + "/builder/target/release/3ds2apple-pack",
             repo + "/builder/target/debug/3ds2apple-pack",
         ])
-        let devpush = firstExecutable([
-            settings.devpushPath,
-            ProcessInfo.processInfo.environment["DEVPUSH_EXE"] ?? "",
+        devpushCandidates.append(contentsOf: [
             repo + "/tools/devpush/target/release/devpush",
             repo + "/tools/devpush/target/debug/devpush",
             repo + "/builder/device/devpush",
         ])
-        let deviceCLI = firstExecutable([
-            settings.deviceCLIPath,
-            repo + "/builder/device/device_cli.py",
-        ])
-        let xcodegen = firstExecutable([
-            "/usr/local/bin/xcodegen",
-            "/opt/homebrew/bin/xcodegen",
-        ])
+        let environment = ProcessInfo.processInfo.environment
+        if let explicit = environment["THREEDS2APPLE_PACK"], !explicit.isEmpty {
+            packCandidates.insert(explicit, at: 0)
+        }
+        if let explicit = environment["DEVPUSH_EXE"], !explicit.isEmpty {
+            devpushCandidates.insert(explicit, at: 0)
+        }
+        packCandidates.append(contentsOf: pathCandidates(named: "3ds2apple-pack"))
+        devpushCandidates.append(contentsOf: pathCandidates(named: "devpush"))
         return ToolchainPaths(
             repoRoot: SettingsDefaults.isRepoRoot(repo) ? repo : nil,
-            packCLI: packCLI,
-            devpush: devpush,
-            deviceCLI: deviceCLI,
-            xcodegen: xcodegen,
+            packCLI: firstExecutable(packCandidates),
+            devpush: firstExecutable(devpushCandidates),
+            xcodegen: firstExecutable(["/usr/local/bin/xcodegen", "/opt/homebrew/bin/xcodegen", "/usr/bin/xcodegen"]),
             xcodebuild: "/usr/bin/xcodebuild",
             security: "/usr/bin/security",
             xcrun: "/usr/bin/xcrun"
         )
+    }
+
+    /// Candidates found on PATH, so a user who installed the tools with cargo or
+    /// a package manager does not need any Settings override.
+    static func pathCandidates(named name: String) -> [String] {
+        let path = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        return path.split(separator: ":").map { directory in
+            String(directory) + "/" + name
+        }
     }
 
     private static func firstExecutable(_ candidates: [String]) -> String? {
@@ -59,6 +72,64 @@ struct ToolchainPaths: Equatable {
             if FileProbe.isExecutable(candidate) { return candidate }
         }
         return nil
+    }
+}
+
+/// Read the Apple Developer Team ID from the local Xcode state so Settings and
+/// the Deploy preflight never ask the user to type it. The Team ID is not a
+/// secret (it is in every provisioning profile) but certificate names and
+/// identity hashes are never logged.
+enum TeamDetector {
+    static func detect(runner: CommandRunning) async -> [String] {
+        var teams: Set<String> = []
+        let directory = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Developer/Xcode/UserData/Provisioning Profiles")
+        let profiles = ((try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.pathExtension == "mobileprovision" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            .prefix(12)
+        for profile in profiles {
+            guard let result = try? await runner.run(CommandSpec(
+                executable: "/usr/bin/security",
+                arguments: ["cms", "-D", "-i", profile.path]
+            ), onLine: nil), result.succeeded else { continue }
+            if let team = firstTeamID(inPlistText: result.stdout) {
+                teams.insert(team)
+            }
+        }
+        if teams.isEmpty,
+           let result = try? await runner.run(CommandSpec(
+               executable: "/usr/bin/security",
+               arguments: ["find-identity", "-v", "-p", "codesigning"]
+           ), onLine: nil) {
+            teams.formUnion(certificateTeamIDs(in: result.combined))
+        }
+        return teams.sorted()
+    }
+
+    /// Find the first TeamIdentifier in a decoded provisioning plist.
+    static func firstTeamID(inPlistText text: String) -> String? {
+        let pattern = "<key>TeamIdentifier</key>[\\s\\S]*?<string>([A-Z0-9]{6,12})</string>"
+        return firstMatch(pattern: pattern, in: text)
+    }
+
+    /// Xcode identity lines end with "(TEAMID)" for Apple Development certs.
+    static func certificateTeamIDs(in text: String) -> [String] {
+        let pattern = "\\(([A-Z0-9]{10})\\)"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.matches(in: text, range: range).compactMap { match in
+            guard match.numberOfRanges > 1, let captured = Range(match.range(at: 1), in: text) else { return nil }
+            return String(text[captured])
+        }
+    }
+
+    private static func firstMatch(pattern: String, in text: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range), match.numberOfRanges > 1,
+              let captured = Range(match.range(at: 1), in: text) else { return nil }
+        return String(text[captured])
     }
 }
 
@@ -98,36 +169,31 @@ struct ToolchainProbe {
 
         // 3. Repository checkout
         if let repoRoot = paths.repoRoot {
-            let scriptsOK = FileProbe.exists(repoRoot + "/scripts/build-game-pack.sh")
+            let scriptsOK = FileProbe.exists(repoRoot + "/ios/app/project.yml")
             tools.append(ToolStatus(
                 name: "3ds2apple checkout",
                 state: scriptsOK ? .ok : .missing,
                 detail: repoRoot,
-                hint: scriptsOK ? "" : "Set the checkout path in Settings or THREEDS2APPLE_ROOT."
+                hint: scriptsOK ? "" : "Put a clone of the 3ds2apple repository at ~/3ds2apple or set THREEDS2APPLE_ROOT (developer environment variable, not a UI setting)."
             ))
         } else {
             tools.append(ToolStatus(
                 name: "3ds2apple checkout",
                 state: .missing,
                 detail: "not found",
-                hint: "Point Settings -> Checkout at a clone of the 3ds2apple repository."
+                hint: "Put a clone of the 3ds2apple repository at ~/3ds2apple or set THREEDS2APPLE_ROOT."
             ))
         }
 
         // 4. Desktop pack CLI (import/build/catalogue writer)
         if let packCLI = paths.packCLI {
-            tools.append(ToolStatus(
-                name: "3ds2apple-pack CLI",
-                state: .ok,
-                detail: packCLI,
-                hint: ""
-            ))
+            tools.append(ToolStatus(name: "3ds2apple-pack CLI", state: .ok, detail: packCLI, hint: ""))
         } else {
             tools.append(ToolStatus(
                 name: "3ds2apple-pack CLI",
                 state: .warning,
-                detail: "not built",
-                hint: "Run: cd builder && cargo build -p builder-pack --release (the CLI does ROM detection and package metadata)."
+                detail: "not found (auto-detected)",
+                hint: "Build it once: cd builder && cargo build -p builder-pack --release. The Deploy flow needs it to compile packs and compose the GameCatalog."
             ))
         }
 
@@ -150,7 +216,7 @@ struct ToolchainProbe {
             ))
         }
 
-        // 6. xcodegen (generates the shell/launcher Xcode project)
+        // 6. xcodegen (generates the shell Xcode project)
         tools.append(ToolStatus(
             name: "xcodegen",
             state: paths.xcodegen == nil ? .warning : .ok,
@@ -158,43 +224,42 @@ struct ToolchainProbe {
             hint: paths.xcodegen == nil ? "brew install xcodegen (used to generate the shell Xcode project on demand)." : ""
         ))
 
-        // 7. Device bridge (tools/devpush) - optional until the task publishes it
+        // 7. Device bridge (tools/devpush)
         if let devpush = paths.devpush {
-            tools.append(ToolStatus(
-                name: "device bridge (devpush)",
-                state: .ok,
-                detail: devpush,
-                hint: ""
-            ))
+            tools.append(ToolStatus(name: "device bridge (devpush)", state: .ok, detail: devpush, hint: ""))
         } else {
             tools.append(ToolStatus(
                 name: "device bridge (devpush)",
                 state: .warning,
-                detail: "not built yet",
-                hint: "Push-to-device needs tools/devpush (device-bridge task). Mock/dry-run mode works without it."
+                detail: "not found (auto-detected)",
+                hint: "Build tools/devpush with cargo build --release; the Deploy flow pushes the ROM data with it."
             ))
         }
 
-        // 8. App signing assets (counts only: never log certificate names or IDs)
+        // 8. App signing assets (counts + detected Team ID only; never log
+        // certificate names, identities, passwords or UDIDs)
         let identities = await countSigningIdentities(paths)
         let profiles = countProvisioningProfiles()
+        let teamIDs = await TeamDetector.detect(runner: runner)
         let apple = AppleReadiness(
             xcodePath: (await runTool(paths.xcrun, ["--find", "devicectl"])).succeeded ? "/usr/bin/xcrun" : "",
             xcodeVersion: xcodeVersion,
             devicectlAvailable: devicectl.succeeded,
             signingIdentityCount: identities,
             provisioningProfileCount: profiles,
-            teamID: settings.teamID,
+            teamID: teamIDs.first ?? "",
             checkedAt: Date()
         )
         if !apple.hasSigningAssets {
-            notes.append("No Apple ID signing assets: sign in to Xcode -> Settings -> Accounts on this Mac before installing the shell.")
+            notes.append("No Apple ID signing assets: sign in to Xcode -> Settings -> Accounts on this Mac before deploying.")
+        } else if apple.teamID.isEmpty {
+            notes.append("Signing assets found, but no Team ID could be read from the provisioning profiles. Open Xcode -> Settings -> Accounts once to create one.")
         }
         if paths.packCLI == nil {
-            notes.append("Desktop pack CLI missing: import/build actions need the Rust CLI built once.")
+            notes.append("Desktop pack CLI missing: the Deploy flow cannot compile packs or compose the GameCatalog.")
         }
         if paths.devpush == nil {
-            notes.append("Device bridge missing: pushes are simulated until tools/devpush is available.")
+            notes.append("Device bridge missing: the Deploy flow cannot push the ROM data.")
         }
 
         var capabilities: BridgeCapabilities?

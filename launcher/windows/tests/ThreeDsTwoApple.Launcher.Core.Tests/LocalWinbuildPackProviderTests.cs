@@ -227,7 +227,7 @@ public sealed class LocalWinbuildPackProviderTests
     }
 
     [Fact]
-    public void FeatureFlag_GatesProviderCreation()
+    public void LocalBuildIsTheDefaultDeployProvider_NoFeatureFlag()
     {
         using var temp = new TempDir();
         var dist = Path.Combine(temp.Path, "dist");
@@ -237,13 +237,12 @@ public sealed class LocalWinbuildPackProviderTests
         File.WriteAllText(packCli, string.Empty);
         var runner = new FakeProcessRunner(_ => new ProcessResult(0, string.Empty, string.Empty, false, true));
         var services = LauncherServices.Create(workspaceRoot: Path.Combine(temp.Path, "workspace"), distributionRoot: dist, runner: runner);
-        Assert.Null(services.CreateBuildProvider(PackBuildMode.LocalWinbuild));
 
-        services.Workspace.State.LocalBuildEnabled = true;
-        var provider = services.CreateBuildProvider(PackBuildMode.LocalWinbuild);
-        Assert.NotNull(provider);
-        Assert.Equal(PackBuildMode.LocalWinbuild, services.Workspace.State.Mode == PackBuildMode.Preview
-            ? PackBuildMode.LocalWinbuild
-            : services.Workspace.State.Mode); // state round-trip guard for the new enum member
+        // v2: the local build provider is the default Deploy path and is NOT gated by
+        // the old experimental flag; a missing toolchain becomes one actionable
+        // build failure on the Deploy page instead of a hidden fallback.
+        Assert.False(services.Workspace.State.LocalBuildEnabled);
+        Assert.NotNull(services.CreateBuildProvider(PackBuildMode.LocalWinbuild));
+        Assert.NotNull(services.CreateDeployBuildProvider());
     }
 }

@@ -2,8 +2,11 @@
 //  SelfCheckFlow.swift
 //  3ds2apple macOS launcher
 //
-//  Self-check part 2: Apple signing error translation, log redaction and the
-//  full mock import -> build -> push -> install-readiness flow.
+//  Self-check part 2: Apple signing error translation, log redaction, library
+//  management and the one-click Deploy batch flow end-to-end against the mock
+//  backends: compile -> compose -> verify IPA -> install -> push with the actual
+//  installed bundle id -> Done, plus the failure paths that must never install a
+//  bare shell or a ROM-full/placeholder IPA.
 //
 
 import Foundation
@@ -31,92 +34,134 @@ enum SelfCheckFlow {
         expect("logs: SHA-1 redacted", !redacted.contains("0123456789abcdef0123456789abcdef01234567"))
         expect("logs: normal text kept", LogStore.redact("build finished for 0004000000055E00").contains("0004000000055E00"))
 
-        // 11. End-to-end mock flow: import (ROM-free) -> build -> library -> push data
+        // 11. Import a ROM-free package + staged game data
+        let importModel = AppModel.mock(scenario: .importDetected)
+        importModel.resetForSelfCheck()
+        importModel.detectedROM = MockFixtures.detectedROM()
+        await importModel.importDetected()
+        expect("import: queues one game", importModel.games.count == 1 && importModel.games.first?.titleID == MockFixtures.titlePokemonY)
+        expect("import: stages the ROM data for the Documents push", importModel.game(id: MockFixtures.titlePokemonY)?.romDataPath != nil)
+        expect("import: closes the import sheet and lands in the library", importModel.importPresented == false && importModel.screen == .library)
+
+        // 11b. Library management: rename + remove only (no build/install buttons)
+        let libraryModel = AppModel.mock(scenario: .library)
+        libraryModel.resetForSelfCheck()
+        libraryModel.games = MockFixtures.games()
+        libraryModel.renameGame(titleID: MockFixtures.titlePokemonY, newName: "Pokemon Y (mine)")
+        expect("library: rename updates the launcher label", libraryModel.game(id: MockFixtures.titlePokemonY)?.displayName == "Pokemon Y (mine)")
+        libraryModel.removeGame(titleID: MockFixtures.titleAnimalCrossing)
+        expect("library: remove drops the game", libraryModel.games.count == 2 && libraryModel.game(id: MockFixtures.titleAnimalCrossing) == nil)
+
+        // 12. One-click Deploy success: batch compile -> compose -> verify IPA ->
+        // install -> push each ROM with the ACTUAL installed bundle id -> Done.
         let model = AppModel.mock(scenario: .library)
         model.resetForSelfCheck()
-        model.detectedROM = MockFixtures.detectedROM()
-        await model.importDetected(includeROM: false)
-        expect("flow: import queues a game", model.games.count == 1 && model.games.first?.titleID == MockFixtures.titlePokemonY)
-        expect("flow: import stages ROM data for the Documents push", model.game(id: MockFixtures.titlePokemonY)?.romDataPath != nil)
+        model.settings.installedBundleID = MockFixtures.staleInstalledBundleID
+        model.games = MockFixtures.games()
         await model.detectDevices()
-        expect("flow: device detection selects a device", model.devices.count == 2 && model.selectedDeviceUDID == MockFixtures.devices.first?.udid)
-        model.settings.buildMode = .fake
-        await model.build(gameID: MockFixtures.titlePokemonY)
-        expect("flow: build sets AOT-ready phase", model.game(id: MockFixtures.titlePokemonY)?.phase == .built)
-        expect("flow: build task succeeded", model.tasks.first(where: { $0.kind == .buildAOT })?.state == .succeeded)
-        model.markLibraryInstalled(titles: [MockFixtures.titlePokemonY], ipaPath: "/tmp/3ds2apple-library.ipa")
-        expect("flow: library matches after marking installed", model.libraryNeedsRebuild == false)
-        _ = await model.preparePush(gameID: MockFixtures.titlePokemonY)
-        expect("flow: push plan prepared (2 files, GameInfo last)", model.pushPlans[MockFixtures.titlePokemonY]?.files.count == 2 && model.pushPlans[MockFixtures.titlePokemonY]?.files.last?.name == "GameInfo.json")
-        await model.pushGame(gameID: MockFixtures.titlePokemonY)
-        expect("flow: push marks on-device", model.game(id: MockFixtures.titlePokemonY)?.phase == .pushed)
-        expect("flow: push verified on device", model.pushPlans[MockFixtures.titlePokemonY]?.verified == true)
-        expect("flow: push task succeeded", model.tasks.first(where: { $0.kind == .pushGame })?.state == .succeeded)
+        expect("deploy: device detection selects a device", model.devices.count == 2 && model.selectedDeviceUDID == MockFixtures.devices.first?.udid)
+        model.selectedForDeploy = [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing]
+        await model.deploySelected()
+        let report = model.deployReport
+        expect("deploy: one-click run succeeds", report?.state == .succeeded, report.map { String(describing: $0.state) } ?? "nil")
+        expect("deploy: all 7 steps succeeded", report?.steps.allSatisfy { $0.state == .succeeded } == true)
+        expect("deploy: composed IPA contains 2 packs + schema-2 catalogue", report?.inspection?.packCount == 2 && report?.inspection?.catalogSchemaVersion == 2)
+        expect("deploy: installed bundle id comes from the install result, not the stale value", report?.installedBundleID == MockFixtures.installedShellBundleID && model.settings.installedBundleID == MockFixtures.installedShellBundleID)
+        let plans = model.pushPlans.filter { [MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing].contains($0.key) }.values
+        expect("deploy: every push uses the actual installed bundle id", plans.count == 2 && plans.allSatisfy { $0.bundleID == MockFixtures.installedShellBundleID })
+        expect("deploy: every push verified (size/sha + listing)", plans.allSatisfy { $0.verified })
+        expect("deploy: both games pushed", report?.pushedTitles.sorted() == [MockFixtures.titleAnimalCrossing, MockFixtures.titlePokemonY].sorted())
+        expect("deploy: installed library titles persisted", Set(model.settings.libraryInstalledTitles) == Set([MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing]))
+        expect("deploy: games marked on device", model.game(id: MockFixtures.titlePokemonY)?.phase == .pushed && model.game(id: MockFixtures.titleAnimalCrossing)?.phase == .pushed)
+        expect("deploy: task recorded as succeeded", model.tasks.first(where: { $0.kind == .deploy })?.state == .succeeded)
 
-        // 11b. Pushing a game whose pack is not in the installed library is refused.
-        let guarded = AppModel.mock(scenario: .library)
-        guarded.resetForSelfCheck()
-        guarded.games = [MockFixtures.games()[0]]
-        guarded.selectedDeviceUDID = MockFixtures.devices.first?.udid
-        await guarded.pushGame(gameID: MockFixtures.titlePokemonY)
-        expect("flow: push refused when the pack is not in the installed library", guarded.pushError?.code == "library_not_installed")
+        // 13. No selection: nothing runs, an actionable warning is shown.
+        let emptySelection = AppModel.mock(scenario: .library)
+        emptySelection.resetForSelfCheck()
+        emptySelection.games = MockFixtures.games()
+        await emptySelection.deploySelected()
+        expect("deploy: empty selection is refused with a warning", emptySelection.deployReport == nil && emptySelection.banner?.kind == .warning)
 
-        // 11c. Library rebuild detection when the built set changes.
-        var extraGame = MockFixtures.games()[1]
-        extraGame.phase = .built
-        model.games.append(extraGame)
-        expect("flow: adding a built game marks the library for rebuild", model.libraryNeedsRebuild == true)
+        // 14. A failed compile must never install the bare shell.
+        let failureModel = AppModel.mock(scenario: .library)
+        failureModel.resetForSelfCheck()
+        failureModel.games = MockFixtures.games()
+        await failureModel.detectDevices()
+        (failureModel.pack as? MockPackBackend)?.failingTitles = [MockFixtures.titleMario3DLand]
+        failureModel.selectedForDeploy = [MockFixtures.titlePokemonY, MockFixtures.titleMario3DLand]
+        await failureModel.deploySelected()
+        let failedReport = failureModel.deployReport
+        let failedInstaller = failureModel.installer as? MockInstallBackend
+        expect("deploy: compile failure fails the run at the compile step", failedReport?.state == .failed && failedReport?.failedStepIndex == 1)
+        expect("deploy: compile failure never composes or installs", failedInstaller?.installCalls == 0 && failedReport?.installedBundleID == nil)
+        expect("deploy: failure explains the failed step", failedReport?.failureMessage?.isEmpty == false && failureModel.banner?.kind == .error)
 
-        // 12. Library install readiness failure is plain language (no Apple ID on the VM)
-        let installModel = AppModel.mock(scenario: .install)
-        installModel.settings.installStrategy = .xcodebuild
-        await installModel.buildAndInstallLibrary()
-        expect("flow: library install refuses without signing assets", installModel.lastInstallFailure?.code == "no_signing_assets")
-        expect("flow: install failure explains Xcode accounts", installModel.lastInstallFailure?.hint.contains("Xcode") == true)
-        expect("flow: install task records the failure", installModel.tasks.first(where: { $0.kind == .installShell })?.state == .failed)
+        // 14b. Retry after fixing the build succeeds on the same model.
+        (failureModel.pack as? MockPackBackend)?.failingTitles = []
+        failureModel.selectedForDeploy = [MockFixtures.titlePokemonY]
+        await failureModel.deploySelected()
+        expect("deploy: retry after a failure succeeds", failureModel.deployReport?.state == .succeeded && failureModel.settings.installedBundleID == MockFixtures.installedShellBundleID)
 
-        // 13. Mock strategy keeps a structured outcome instead of crashing
-        let readyModel = AppModel.mock(scenario: .install)
-        readyModel.settings.installStrategy = .mock
-        await readyModel.buildAndInstallLibrary()
-        expect("flow: mock strategy returns a structured outcome", readyModel.lastInstallFailure != nil || readyModel.installResult != nil)
+        // 15. A composed IPA that is not a real multi-game library payload is
+        // refused before sign/install (never install a bare shell / preview IPA).
+        let invalidIPAModel = AppModel.mock(scenario: .library)
+        invalidIPAModel.resetForSelfCheck()
+        invalidIPAModel.games = MockFixtures.games()
+        await invalidIPAModel.detectDevices()
+        let invalidInstaller = invalidIPAModel.installer as? MockInstallBackend
+        var badInspection = IPAInspection(
+            ipaPath: "/tmp/3ds2apple-library.ipa",
+            appPath: "/tmp/Payload/3ds2apple.app",
+            bundleID: "com.kratos.3ds2apple",
+            packFiles: [],
+            catalogSchemaVersion: 1,
+            catalogTitleIDs: [],
+            containsBundledROM: false,
+            bytes: 1024
+        )
+        invalidInstaller?.overrideInspection = badInspection
+        invalidIPAModel.selectedForDeploy = [MockFixtures.titlePokemonY]
+        await invalidIPAModel.deploySelected()
+        expect("deploy: invalid IPA is refused at the IPA verify step", invalidIPAModel.deployReport?.state == .failed && invalidIPAModel.deployReport?.failedStepIndex == 3)
+        expect("deploy: invalid IPA never reaches sign/install", invalidInstaller?.installCalls == 0)
+        badInspection.containsBundledROM = true
+        expect("deploy: ROM-full IPA is refused by the shared check", !badInspection.problems(expectedTitles: [MockFixtures.titlePokemonY]).isEmpty)
 
-        // 14. Dry run never changes the package phase
-        let dryModel = AppModel.mock(scenario: .library)
-        dryModel.settings.buildMode = .dryRun
-        let before = dryModel.game(id: MockFixtures.titlePokemonY)?.phase
-        await dryModel.build(gameID: MockFixtures.titlePokemonY)
-        expect("flow: dry run keeps the package phase", dryModel.game(id: MockFixtures.titlePokemonY)?.phase == before, String(describing: before))
-        expect("flow: dry run task succeeded", dryModel.tasks.first(where: { $0.kind == .buildAOT })?.state == .succeeded)
-
-        // 15. Task progress math
-        var task = TaskRecord(
-            kind: .buildAOT,
-            title: "t",
-            titleID: "1",
+        // 16. Task/report progress math
+        var synthetic = DeployReport(
             state: .running,
-            stages: [
+            steps: [
                 PipelineStage(title: "a", detail: "", state: .succeeded),
                 PipelineStage(title: "b", detail: "", state: .running),
                 PipelineStage(title: "c", detail: "", state: .pending),
             ],
+            selectedTitles: ["x"],
+            builtTitles: [],
+            ipaPath: nil,
+            inspection: nil,
+            installedBundleID: nil,
+            pushedTitles: [],
+            failedStepIndex: nil,
+            failureMessage: nil,
+            failureHint: nil,
             startedAt: Date(),
-            endedAt: nil,
-            errorMessage: nil,
-            errorHint: nil,
-            detail: ""
+            endedAt: nil
         )
-        expect("tasks: progress counts completed and running stage", abs(task.progress - 0.5) < 0.001, String(task.progress))
-        task.state = .succeeded
-        task.endedAt = Date()
-        expect("tasks: succeeded task duration is non-negative", task.duration >= 0)
+        expect("tasks: progress counts completed and running stage", abs(synthetic.progress - 0.5) < 0.001, String(synthetic.progress))
+        synthetic.state = .succeeded
+        synthetic.endedAt = Date()
+        expect("tasks: succeeded report duration is non-negative", synthetic.duration >= 0)
 
-        // 16. Mock environment report and log export
-        let report = MockFixtures.environment()
-        expect("diagnostics: mock environment has tools", report.tools.count >= 8)
-        expect("diagnostics: mock environment flags missing signing", !report.apple.hasSigningAssets)
-        expect("diagnostics: mock devpush capabilities present", report.devpushCapabilities?.schema == "devpush/1")
-        let logModel = AppModel.mock(scenario: .activity)
+        // 17. Mock environment report and log export
+        let environment = MockFixtures.readyEnvironment()
+        expect("diagnostics: mock environment has tools", environment.tools.count >= 8)
+        expect("diagnostics: mock environment is signing-ready with a detected Team ID", environment.apple.ready && environment.apple.teamID == MockFixtures.detectedTeamID)
+        expect("diagnostics: mock devpush capabilities present", environment.devpushCapabilities?.schema == "devpush/1")
+        let missing = MockFixtures.missingSigningEnvironment()
+        expect("diagnostics: missing-signing fixture is not ready", !missing.apple.ready && missing.apple.hint.contains("Xcode"))
+        let logModel = AppModel.mock(scenario: .library)
+        logModel.resetForSelfCheck()
+        logModel.appendLog(.info, "launcher", "export me")
         logModel.exportLog()
         expect("logs: export writes a file", logModel.lastExportPath.map { FileProbe.exists($0) } == true)
 

@@ -3,9 +3,10 @@
 //  3ds2apple macOS launcher
 //
 //  Deterministic stand-ins for the desktop CLI, the installer and the device
-//  bridge. Mock mode exercises the real models, view state and push planner but
-//  never touches a ROM, a device or a signing identity. This is what the build VM
-//  (no Apple ID, no phone) and the screenshot renderer use.
+//  bridge. Mock mode exercises the real models, the deploy state machine and the
+//  push planner but never touches a ROM, a device, an Apple ID or the network.
+//  This is what the build VM (no signing assets, no phone) and the offscreen
+//  screenshot renderer use.
 //
 
 import Foundation
@@ -14,6 +15,15 @@ enum MockFixtures {
     static let titlePokemonY = "0004000000055E00"
     static let titleAnimalCrossing = "0004000000086400"
     static let titleMario3DLand = "0004000000030600"
+
+    /// Bundle ID of the app the mock installer reports as actually installed.
+    /// It is deliberately read back from the install result (not from a template)
+    /// by the Deploy flow.
+    static let installedShellBundleID = "com.kratos.3ds2apple"
+    /// A stale value a previous install could have left in UserDefaults; the
+    /// self-check proves the Deploy flow replaces it with the install result.
+    static let staleInstalledBundleID = "com.kratos.stale.shell"
+    static let detectedTeamID = "ABCDE12345"
 
     static let devices: [DeviceInfo] = [
         DeviceInfo(
@@ -88,8 +98,8 @@ enum MockFixtures {
                 saveNamespace: titleAnimalCrossing,
                 pushedAt: nil,
                 lastError: nil,
-                romDataPath: nil,
-                romSha256: nil
+                romDataPath: "out/launcher-roms/\(titleAnimalCrossing).cci",
+                romSha256: "aa11bb22cc33dd44ee55ff6600778899aabbccddeeff00112233445566778899"
             ),
             GameEntry(
                 titleID: titleMario3DLand,
@@ -114,38 +124,48 @@ enum MockFixtures {
         ]
     }
 
+    static func builtManifest(for titleID: String) -> PackageManifest {
+        let game = games().first(where: { $0.titleID == titleID })
+        return PackageManifest(
+            schemaVersion: 1,
+            titleID: titleID,
+            displayName: game?.displayName ?? titleID,
+            productCode: game?.productCode ?? "",
+            aotVersion: 1,
+            saveNamespace: titleID,
+            packFile: "GamePack.dylib",
+            packSha256: game?.packSha256 ?? String(repeating: "9f", count: 32),
+            packBytes: game?.packBytes ?? 218_103_808,
+            packFormat: "macho",
+            romFile: "GameRom.cci",
+            romSha256: game?.romSha256,
+            romBytes: game?.romBytes
+        )
+    }
+
+    static func queuedManifest(for titleID: String) -> PackageManifest {
+        PackageManifest(
+            schemaVersion: 1,
+            titleID: titleID,
+            displayName: games().first(where: { $0.titleID == titleID })?.displayName ?? titleID,
+            productCode: games().first(where: { $0.titleID == titleID })?.productCode ?? "",
+            aotVersion: 1,
+            saveNamespace: titleID,
+            packFile: nil,
+            packSha256: nil,
+            packBytes: 0,
+            packFormat: "queued",
+            romFile: nil,
+            romSha256: nil,
+            romBytes: nil
+        )
+    }
+
     static func manifests() -> [String: PackageManifest] {
         [
-            titlePokemonY: PackageManifest(
-                schemaVersion: 1,
-                titleID: titlePokemonY,
-                displayName: "Pokemon Y",
-                productCode: "CTR-P-EK2A",
-                aotVersion: 1,
-                saveNamespace: titlePokemonY,
-                packFile: "GamePack.dylib",
-                packSha256: "92bab7aaf4fbe7628ed82d392792f8bbc2085423f8518f830160ec1ba2145da2",
-                packBytes: 218_103_808,
-                packFormat: "macho",
-                romFile: "GameRom.cci",
-                romSha256: "7ea17f4d6a1cfefdbf98a6f5b0c4e9a1a9a5f4e6b7c8d9e0f1a2b3c4d5e6f708",
-                romBytes: 1_446_201_088
-            ),
-            titleAnimalCrossing: PackageManifest(
-                schemaVersion: 1,
-                titleID: titleAnimalCrossing,
-                displayName: "Animal Crossing: New Leaf",
-                productCode: "CTR-P-ECJE",
-                aotVersion: 1,
-                saveNamespace: titleAnimalCrossing,
-                packFile: "GamePack.dylib",
-                packSha256: String(repeating: "ab", count: 32),
-                packBytes: 0,
-                packFormat: "queued",
-                romFile: nil,
-                romSha256: nil,
-                romBytes: nil
-            ),
+            titlePokemonY: builtManifest(for: titlePokemonY),
+            titleAnimalCrossing: queuedManifest(for: titleAnimalCrossing),
+            titleMario3DLand: queuedManifest(for: titleMario3DLand),
         ]
     }
 
@@ -162,17 +182,21 @@ enum MockFixtures {
         )
     }
 
-    /// Create the tiny mock package files the push planner checks for. The files
-    /// are sparse, labelled mock artifacts; they are never real packs or ROMs.
+    /// Create the mock package files the planner checks for. They are sparse,
+    /// labelled mock artifacts; they are never real packs or ROMs. Sizes are
+    /// small so the headless self-check and screenshots stay fast.
     static func ensurePackageTree() {
         let fileManager = FileManager.default
-        try? fileManager.createDirectory(at: outRoot.appendingPathComponent("packages/\(titlePokemonY)"), withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: outRoot.appendingPathComponent("packages"), withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: outRoot.appendingPathComponent("launcher-roms"), withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
+        for titleID in [titlePokemonY, titleAnimalCrossing] {
+            try? fileManager.createDirectory(at: outRoot.appendingPathComponent("packages/\(titleID)"), withIntermediateDirectories: true)
+        }
         writePlaceholder(at: outRoot.appendingPathComponent("packages/\(titlePokemonY)/GamePack.dylib"), bytes: 8 * 1024 * 1024)
-        try? FileManager.default.createDirectory(at: outRoot.appendingPathComponent("launcher-roms"), withIntermediateDirectories: true)
-        writePlaceholder(at: outRoot.appendingPathComponent("launcher-roms/\(titlePokemonY).cci"), bytes: 1_446_201_088)
-        writePlaceholder(at: outRoot.appendingPathComponent("packages/\(titlePokemonY)/GameRom.cci"), bytes: 32 * 1024 * 1024)
-        try? "mock cover".data(using: .utf8)?.write(to: outRoot.appendingPathComponent("packages/\(titlePokemonY)/cover.png"))
+        writePlaceholder(at: outRoot.appendingPathComponent("launcher-roms/\(titlePokemonY).cci"), bytes: 8 * 1024 * 1024)
+        writePlaceholder(at: outRoot.appendingPathComponent("launcher-roms/\(titleAnimalCrossing).cci"), bytes: 4 * 1024 * 1024)
+        writePlaceholder(at: outRoot.appendingPathComponent("packages/\(titlePokemonY)/cover.png"), bytes: 512)
     }
 
     private static func writePlaceholder(at url: URL, bytes: Int64) {
@@ -184,17 +208,17 @@ enum MockFixtures {
         }
     }
 
-    static func environment() -> EnvironmentReport {
+    static func readyEnvironment() -> EnvironmentReport {
         var apple = AppleReadiness(
             xcodePath: "/Applications/Xcode.app/Contents/Developer",
             xcodeVersion: "Xcode 26.6",
             devicectlAvailable: true,
-            signingIdentityCount: 0,
-            provisioningProfileCount: 0,
-            teamID: "",
+            signingIdentityCount: 2,
+            provisioningProfileCount: 3,
+            teamID: detectedTeamID,
             checkedAt: Date()
         )
-        apple.teamID = ""
+        apple.teamID = detectedTeamID
         return EnvironmentReport(
             generatedAt: Date(),
             repoRoot: "/Users/you/3ds2apple",
@@ -211,84 +235,81 @@ enum MockFixtures {
             ],
             apple: apple,
             devpushCapabilities: capabilities,
-            notes: [
-                "Mock mode: no ROM, device, Apple ID or network is used.",
-                "No Apple ID signing assets on this Mac. Sign in to Xcode -> Settings -> Accounts before installing on a real device.",
-            ]
+            notes: ["Mock mode: no ROM, device, Apple ID or network is used."]
         )
     }
 
+    static func missingSigningEnvironment() -> EnvironmentReport {
+        var report = readyEnvironment()
+        report.apple = AppleReadiness(
+            xcodePath: "/Applications/Xcode.app/Contents/Developer",
+            xcodeVersion: "Xcode 26.6",
+            devicectlAvailable: true,
+            signingIdentityCount: 0,
+            provisioningProfileCount: 0,
+            teamID: "",
+            checkedAt: Date()
+        )
+        report.notes = [
+            "Mock mode: no ROM, device, Apple ID or network is used.",
+            "No Apple ID signing assets on this Mac. Sign in to Xcode -> Settings -> Accounts before deploying.",
+        ]
+        return report
+    }
+
     static func tasksForScreenshots() -> [TaskRecord] {
-        var build = TaskRecord(
-            kind: .buildAOT,
-            title: "Build GamePack - Pokemon Y",
-            titleID: titlePokemonY,
+        [TaskRecord(
+            kind: .deploy,
+            title: "Deploy 2 games",
+            titleID: nil,
             state: .running,
             stages: [
-                PipelineStage(title: "Queue AOT build", detail: "out/aot-queue.json", state: .succeeded),
-                PipelineStage(title: "Run 3dsrecomp", detail: "ROM header -> generated C", state: .succeeded),
-                PipelineStage(title: "Compile iOS archive", detail: "arm64-apple-ios16.0", state: .running),
-                PipelineStage(title: "Link GamePack.dylib", detail: "zk_gamepack_register", state: .pending),
-                PipelineStage(title: "Record package manifest", detail: "GameInfo.json via desktop CLI", state: .pending),
+                PipelineStage(title: "Check device & Apple ID", detail: "Kratos iPhone, ABCDE12345", state: .succeeded),
+                PipelineStage(title: "Compile GamePacks", detail: "Animal Crossing: 218 MB generated C (mock)", state: .running),
+                PipelineStage(title: "Compose ROM-free IPA", detail: "Frameworks/GamePack-*.dylib + GameCatalog.json", state: .pending),
+                PipelineStage(title: "Verify IPA", detail: "schema 2, no ROM", state: .pending),
+                PipelineStage(title: "Sign & install", detail: "Xcode + devicectl", state: .pending),
+                PipelineStage(title: "Push game data", detail: "GameRom.cci + GameInfo.json", state: .pending),
+                PipelineStage(title: "Done", detail: "可以打开手机 App 游玩", state: .pending),
             ],
-            startedAt: Date().addingTimeInterval(-252),
+            startedAt: Date().addingTimeInterval(-126),
             endedAt: nil,
             errorMessage: nil,
             errorHint: nil,
-            detail: "Mock build for UI review"
-        )
-        build.stages[2].detail = "218 MB of generated C (mock)"
-        let install = TaskRecord(
-            kind: .installShell,
-            title: "Build & install library (1 game)",
-            titleID: nil,
-            state: .failed,
-            stages: [
-                PipelineStage(title: "Check Apple ID readiness", detail: "no signing assets", state: .failed),
-                PipelineStage(title: "Build signed shell app", detail: "xcodebuild automatic signing", state: .pending),
-                PipelineStage(title: "Embed GamePacks + GameCatalog", detail: "3ds2apple-pack pack --execute", state: .pending),
-                PipelineStage(title: "Sign packs + install", detail: "codesign + devicectl", state: .pending),
-                PipelineStage(title: "Verify install", detail: "app-attr", state: .pending),
-            ],
-            startedAt: Date().addingTimeInterval(-86),
-            endedAt: Date().addingTimeInterval(-81),
-            errorMessage: "Apple signing error 9120: the signing session was rejected.",
-            errorHint: "Open Xcode -> Settings -> Accounts, sign out and sign back in with your own Apple ID, approve two-factor authentication, then retry.",
-            detail: "Mock readiness failure"
-        )
-        return [install, build]
+            detail: "Mock deploy for UI review"
+        )]
     }
 
     static func logsForScreenshots() -> [LogEntry] {
         [
-            LogEntry(date: Date().addingTimeInterval(-360), level: .info, category: "launcher", message: "3ds2apple launcher 0.1.0 started (mock mode)"),
-            LogEntry(date: Date().addingTimeInterval(-355), level: .info, category: "toolchain", message: "repository: /Users/you/3ds2apple"),
-            LogEntry(date: Date().addingTimeInterval(-340), level: .command, category: "pack", message: "3ds2apple-pack --out out rom inspect \"/Users/you/ROM/Pokemon Y.cci\" --json"),
-            LogEntry(date: Date().addingTimeInterval(-338), level: .success, category: "rom", message: "titleID=0004000000055E00 productCode=CTR-P-EK2A container=ncsd bytes=1.7 GiB"),
-            LogEntry(date: Date().addingTimeInterval(-320), level: .command, category: "pack", message: "3ds2apple-pack --out out packages add --roms \"/Users/you/ROM/Pokemon Y.cci\" --include-rom --json"),
-            LogEntry(date: Date().addingTimeInterval(-318), level: .success, category: "import", message: "queued 0004000000055E00 Pokemon Y -> out/packages/0004000000055E00"),
-            LogEntry(date: Date().addingTimeInterval(-300), level: .info, category: "build", message: "build mode: fake preview pack (mock)"),
-            LogEntry(date: Date().addingTimeInterval(-298), level: .info, category: "build", message: "[build-game-pack] compiling 218 MB generated C (mock)"),
-            LogEntry(date: Date().addingTimeInterval(-160), level: .command, category: "library", message: "xcodebuild -project ios/app/3ds2apple.xcodeproj -scheme 3ds2apple -destination 'generic/platform=iOS' ... build"),
-            LogEntry(date: Date().addingTimeInterval(-140), level: .command, category: "library", message: "3ds2apple-pack pack --all --execute --base-app ... --ipa-out IPA --ipa-name 3ds2apple-library"),
-            LogEntry(date: Date().addingTimeInterval(-132), level: .success, category: "library", message: "embedded Frameworks/GamePack-0004000000055E00.dylib + GameCatalog.json (IPA stays ROM-free)"),
-            LogEntry(date: Date().addingTimeInterval(-121), level: .command, category: "library", message: "codesign --force --sign <Apple Development identity> Frameworks/GamePack-0004000000055E00.dylib"),
-            LogEntry(date: Date().addingTimeInterval(-119), level: .error, category: "library", message: "Apple signing error 9120: the signing session was rejected."),
-            LogEntry(date: Date().addingTimeInterval(-60), level: .warn, category: "device", message: "device bridge: mock backend (no USB device touched)"),
+            LogEntry(date: Date().addingTimeInterval(-300), level: .info, category: "launcher", message: "3ds2apple launcher started (mock mode)"),
+            LogEntry(date: Date().addingTimeInterval(-295), level: .info, category: "deploy", message: "selected 2 game(s): 0004000000055E00, 0004000000086400"),
+            LogEntry(date: Date().addingTimeInterval(-280), level: .info, category: "deploy", message: "device: Kratos iPhone (iPhone 17 Pro, iOS 26.5)"),
+            LogEntry(date: Date().addingTimeInterval(-240), level: .command, category: "pack", message: "3ds2apple-pack --out out build --queued --execute --json"),
+            LogEntry(date: Date().addingTimeInterval(-200), level: .success, category: "deploy", message: "GamePack built: Frameworks/GamePack-0004000000055E00.dylib (218 MB, macho)"),
+            LogEntry(date: Date().addingTimeInterval(-160), level: .command, category: "library", message: "xcodebuild -project ios/app/3ds2apple.xcodeproj -scheme 3ds2apple ... build"),
+            LogEntry(date: Date().addingTimeInterval(-140), level: .command, category: "library", message: "3ds2apple-pack pack --title-id ... --execute --base-app ... --ipa-out IPA --ipa-name 3ds2apple-library"),
+            LogEntry(date: Date().addingTimeInterval(-130), level: .success, category: "library", message: "embedded Frameworks/GamePack-*.dylib + GameCatalog.json (ROM-free IPA)"),
+            LogEntry(date: Date().addingTimeInterval(-110), level: .success, category: "library", message: "IPA verified: 2 packs, schema-2 catalogue, no Roms/ entry"),
+            LogEntry(date: Date().addingTimeInterval(-90), level: .command, category: "install", message: "xcrun devicectl device install app --device <device> <staged app>"),
+            LogEntry(date: Date().addingTimeInterval(-70), level: .success, category: "install", message: "installed bundle id: com.kratos.3ds2apple"),
+            LogEntry(date: Date().addingTimeInterval(-50), level: .command, category: "push", message: "devpush put --bundle-id com.kratos.3ds2apple --local GameRom.cci --remote Documents/Games/0004000000055E00/GameRom.cci"),
+            LogEntry(date: Date().addingTimeInterval(-30), level: .info, category: "push", message: "GameInfo.json is pushed last so the shell never sees a partial game"),
         ]
     }
 
     static func installLogLines() -> [String] {
         [
             "Xcode 26.6 at /Applications/Xcode.app",
-            "Team ID: (not set)",
-            "Apple signing assets: 0 certificates, 0 profiles",
-            "Sign in to Xcode -> Settings -> Accounts first.",
+            "Detected Team ID: ABCDE12345",
+            "Apple signing assets: 2 certificates, 3 profiles",
             "xcodebuild ... -allowProvisioningUpdates build",
-            "3ds2apple-pack pack --all --execute (ROM-free)",
+            "3ds2apple-pack pack --title-id ... --execute (ROM-free)",
+            "IPA verified: 2 packs, GameCatalog schema 2, no bundled ROM",
             "codesign embedded GamePack dylibs (local identity)",
             "xcrun devicectl device install app",
-            "error: Apple signing error 9120 (session rejected)",
+            "installed bundle id: com.kratos.3ds2apple",
+            "devpush put Documents/Games/... (GameInfo.json last)",
         ]
     }
 }
@@ -299,10 +320,11 @@ final class MockPackBackend: PackBackend {
     let mode: LauncherRunMode = .mock
     let outRoot: URL = MockFixtures.outRoot
     let repoRoot = URL(fileURLWithPath: "/Users/you/3ds2apple", isDirectory: true)
-    var manifests = MockFixtures.manifests()
+    var builtTitles: Set<String> = [MockFixtures.titlePokemonY]
+    var failingTitles: Set<String> = []
 
     func inspectROM(_ path: String) async throws -> DetectedROM {
-        try? await Task.sleep(nanoseconds: 180_000_000)
+        try? await Task.sleep(nanoseconds: 60_000_000)
         var rom = MockFixtures.detectedROM()
         rom.path = path
         if path.lowercased().contains("animal") {
@@ -314,12 +336,14 @@ final class MockPackBackend: PackBackend {
     }
 
     func importROM(_ path: String, displayName: String?, includeROM: Bool) async throws -> DetectedPackage {
-        try? await Task.sleep(nanoseconds: 220_000_000)
-        let titleID = path.lowercased().contains("animal") ? MockFixtures.titleAnimalCrossing : MockFixtures.titlePokemonY
+        try? await Task.sleep(nanoseconds: 60_000_000)
+        let isAnimal = path.lowercased().contains("animal")
+        let titleID = isAnimal ? MockFixtures.titleAnimalCrossing : MockFixtures.titlePokemonY
+        MockFixtures.ensurePackageTree()
         return DetectedPackage(
             titleID: titleID,
-            displayName: displayName ?? (titleID == MockFixtures.titleAnimalCrossing ? "Animal Crossing: New Leaf" : "Pokemon Y"),
-            productCode: titleID == MockFixtures.titleAnimalCrossing ? "CTR-P-ECJE" : "CTR-P-EK2A",
+            displayName: displayName ?? (isAnimal ? "Animal Crossing: New Leaf" : "Pokemon Y"),
+            productCode: isAnimal ? "CTR-P-ECJE" : "CTR-P-EK2A",
             aotVersion: 1,
             state: "queued",
             pack: nil,
@@ -328,46 +352,61 @@ final class MockPackBackend: PackBackend {
     }
 
     func listPackages() async throws -> [DetectedPackage] {
-        try? await Task.sleep(nanoseconds: 120_000_000)
+        try? await Task.sleep(nanoseconds: 40_000_000)
         return MockFixtures.games().map { game in
-            DetectedPackage(
+            let built = builtTitles.contains(game.titleID)
+            return DetectedPackage(
                 titleID: game.titleID,
                 displayName: game.displayName,
                 productCode: game.productCode,
                 aotVersion: game.aotVersion,
-                state: game.phase == .built || game.phase == .pushed ? "built" : (game.phase == .failed ? "broken" : "queued"),
-                pack: game.packPath == nil ? nil : PackFileInfo(
-                    sha256: game.packSha256 ?? "",
+                state: built ? "built" : (game.phase == .failed ? "broken" : "queued"),
+                pack: built ? PackFileInfo(
+                    sha256: game.packSha256 ?? MockFixtures.builtManifest(for: game.titleID).packSha256 ?? "",
                     bytes: game.packBytes ?? 0,
-                    format: game.packFormat ?? ""
-                ),
+                    format: "macho"
+                ) : nil,
                 issues: []
             )
         }
     }
 
     func build(titleIDs: [String], mode buildMode: BuildMode, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage] {
-        let lines = [
-            "[build-game-pack] name=pokemon-y titleID=0004000000055E00",
-            "[build-game-pack] source: generated C in build/game/pokemon-y (mock)",
-            "[build-game-pack] target: arm64-apple-ios16.0 shim=zk_gamepack_shim.c",
-            "[build-game-pack] linking GamePack.dylib (mock)",
-            "[3ds2apple-pack] recorded out/packages/0004000000055E00/GamePack.dylib",
-        ]
-        for line in lines {
-            try? await Task.sleep(nanoseconds: 160_000_000)
-            onLine(.info, line)
-        }
         if buildMode == .dryRun {
             onLine(.info, "dry run: printed the macOS command plan; nothing was built")
             return []
         }
-        let packages = try await listPackages()
-        return packages.filter { titleIDs.contains($0.titleID) }
+        for titleID in titleIDs.sorted() {
+            if failingTitles.contains(titleID) {
+                onLine(.error, "[3ds2apple-pack] build failed for " + titleID + " (mock failure)")
+                throw LauncherFailure(
+                    code: "build_failed",
+                    message: "The GamePack build failed for " + titleID + ".",
+                    hint: "Open the log; in mock mode this is the labelled failure fixture.",
+                    detail: "mock 3dsrecomp exit 1",
+                    exitCode: 1
+                )
+            }
+            let game = MockFixtures.games().first(where: { $0.titleID == titleID })
+            let lines = [
+                "[3ds2apple-pack] building " + titleID + " (" + (game?.displayName ?? "") + ")",
+                "[build-recomp-ios] ROM -> generated C (mock)",
+                "[build-game-pack] target: arm64-apple-ios16.0 (mock)",
+                "[build-game-pack] linking Frameworks/GamePack-" + titleID + ".dylib",
+                "[3ds2apple-pack] recorded out/packages/" + titleID + "/GameInfo.json",
+            ]
+            for line in lines {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                onLine(.info, line)
+            }
+            builtTitles.insert(titleID)
+            MockFixtures.ensurePackageTree()
+        }
+        return try await listPackages()
     }
 
     func verify() async throws -> [String] {
-        try? await Task.sleep(nanoseconds: 120_000_000)
+        try? await Task.sleep(nanoseconds: 40_000_000)
         return []
     }
 
@@ -381,12 +420,12 @@ final class MockPackBackend: PackBackend {
     ) async throws -> LibraryIPAResult {
         let lines = [
             "[build-multi-game-ipa] allocating " + String(titleIDs.count) + " package(s) into one shell IPA",
-            "[build-multi-game-ipa] embedded Frameworks/GamePack-" + (titleIDs.first ?? "0004000000055E00") + ".dylib",
-            "[build-multi-game-ipa] catalog installed in the app bundle: GameCatalog.json",
+            "[build-multi-game-ipa] embedded Frameworks/GamePack-<TITLEID>.dylib for each selected game",
+            "[build-multi-game-ipa] schema-2 GameCatalog.json installed in the app bundle",
             "[build-multi-game-ipa] ipa: " + ipaName + ".ipa (ROM-free: no Roms/ entry, no GameRom)",
         ]
         for line in lines {
-            try? await Task.sleep(nanoseconds: 140_000_000)
+            try? await Task.sleep(nanoseconds: 60_000_000)
             onLine(.info, line)
         }
         let command = ["scripts/build-multi-game-ipa.sh", "--base-app", baseAppPath, "--ipa-name", ipaName]
@@ -396,7 +435,7 @@ final class MockPackBackend: PackBackend {
         }
         let ipaPath = (ipaOutDir as NSString).appendingPathComponent(ipaName + ".ipa")
         try? FileManager.default.createDirectory(atPath: ipaOutDir, withIntermediateDirectories: true)
-        try? Data("mock library ipa - layout only, not installable (no packs/ROMs)\n".utf8).write(to: URL(fileURLWithPath: ipaPath))
+        try? Data("mock library ipa - layout only, not installable (mock pack bytes)\n".utf8).write(to: URL(fileURLWithPath: ipaPath))
         return LibraryIPAResult(
             ipaPath: ipaPath,
             titles: titleIDs,
@@ -407,7 +446,12 @@ final class MockPackBackend: PackBackend {
     }
 
     func readManifest(titleID: String) async throws -> PackageManifest {
-        if let manifest = manifests[titleID] { return manifest }
+        if builtTitles.contains(titleID) {
+            return MockFixtures.builtManifest(for: titleID)
+        }
+        if MockFixtures.games().contains(where: { $0.titleID == titleID }) {
+            return MockFixtures.queuedManifest(for: titleID)
+        }
         throw LauncherFailure(
             code: "manifest_missing",
             message: "GameInfo.json is missing for " + titleID + " (mock).",
@@ -464,32 +508,38 @@ final class MockDeviceBridge: DeviceBridge {
     var displayName: String { "devpush (mock)" }
     private var files: [String: Int64] = [:]
     private var directories: Set<String> = []
-    var appsInstalled: Set<String> = ["com.kratos.3ds2apple"]
+    var appsInstalled: Set<String> = []
 
     private func key(_ bundleID: String, _ path: String) -> String { bundleID + ":" + path }
+
+    /// Called by the Deploy flow after a mock install, mirroring the real
+    /// install -> app-attr chain.
+    func markInstalled(_ bundleID: String) {
+        appsInstalled.insert(bundleID)
+    }
 
     func capabilities() async throws -> BridgeCapabilities {
         MockFixtures.capabilities
     }
 
     func devices() async throws -> [DeviceInfo] {
-        try? await Task.sleep(nanoseconds: 160_000_000)
+        try? await Task.sleep(nanoseconds: 40_000_000)
         return MockFixtures.devices
     }
 
     func appAttr(bundleID: String, udid: String?) async throws -> AppAttr {
-        try? await Task.sleep(nanoseconds: 120_000_000)
+        try? await Task.sleep(nanoseconds: 30_000_000)
         let installed = appsInstalled.contains(bundleID)
         return AppAttr(
             installed: installed,
             dataContainer: installed ? "/mock/containers/" + bundleID : nil,
-            appBundleVersion: "0.2.0-beta1",
+            appBundleVersion: installed ? "0.2.0-beta1" : nil,
             fileSharingEnabled: installed
         )
     }
 
     func mkdir(bundleID: String, path: String, udid: String?) async throws {
-        try? await Task.sleep(nanoseconds: 60_000_000)
+        try? await Task.sleep(nanoseconds: 20_000_000)
         directories.insert(key(bundleID, path))
     }
 
@@ -506,20 +556,20 @@ final class MockDeviceBridge: DeviceBridge {
         while sent < total {
             sent = min(total, sent + max(total / 4, 1))
             onProgress(sent, total)
-            try? await Task.sleep(nanoseconds: 70_000_000)
+            try? await Task.sleep(nanoseconds: 20_000_000)
         }
         files[key(bundleID, remote)] = total
         return PutResult(remotePath: remote, bytes: total, sha256: FileProbe.sha256(ofFile: local) ?? "", elapsed: Date().timeIntervalSince(started))
     }
 
     func stat(bundleID: String, path: String, udid: String?) async throws -> RemoteEntry? {
-        try? await Task.sleep(nanoseconds: 40_000_000)
+        try? await Task.sleep(nanoseconds: 15_000_000)
         guard let size = files[key(bundleID, path)] else { return nil }
         return RemoteEntry(name: path.split(separator: "/").last.map(String.init) ?? path, isDirectory: false, size: size, modifiedAt: nil)
     }
 
     func ls(bundleID: String, path: String, udid: String?) async throws -> [RemoteEntry] {
-        try? await Task.sleep(nanoseconds: 40_000_000)
+        try? await Task.sleep(nanoseconds: 15_000_000)
         let prefix = key(bundleID, path) + "/"
         return files.compactMap { pair in
             guard pair.key.hasPrefix(prefix) else { return nil }

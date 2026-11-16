@@ -39,11 +39,11 @@ public sealed record LocalToolchain(
         var file = fileExists ?? File.Exists;
         var directory = directoryExists ?? Directory.Exists;
         var missing = new List<string>();
-        if (!IsFile(file, RecompilerPath)) missing.Add("3dsrecomp.exe (set its path in Settings)");
-        if (!IsFile(file, ClangPath)) missing.Add("clang.exe (install the official LLVM release and set its bin folder)");
+        if (!IsFile(file, RecompilerPath)) missing.Add("3dsrecomp.exe (missing from the launcher payload; expected at Bin/3dsrecomp.exe)");
+        if (!IsFile(file, ClangPath)) missing.Add("clang.exe (install the official LLVM 21.1.8 release; the launcher also looks in Bin/llvm)");
         if (!IsFile(file, LlvmArPath)) missing.Add("llvm-ar.exe (part of the LLVM release)");
         if (!IsFile(file, Ld64LldPath)) missing.Add("ld64.lld.exe (part of the LLVM release)");
-        if (!IsDirectory(directory, ResourceIncludeDirectory)) missing.Add("LLVM clang resource headers (lib/clang/<version>/include)");
+        if (!IsDirectory(directory, ResourceIncludeDirectory)) missing.Add("LLVM clang resource headers (lib/clang/21/include)");
         if (!IsDirectory(directory, DarwinStubsDirectory)) missing.Add("tools/winbuild/darwin-stubs/include (hand-written ISO C headers, no Apple SDK)");
         if (!IsFile(file, ShimSourcePath)) missing.Add("ios/zakuro-ios/gamepack/zk_gamepack_shim.c");
         if (!IsDirectory(directory, GamePackIncludeDirectory)) missing.Add("ios/zakuro-ios/include (zakuro_gamepack.h)");
@@ -184,7 +184,7 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
         _directoryExists = directoryExists ?? Directory.Exists;
     }
 
-    public string Name => "Local build (3dsrecomp + open-source LLVM/LLD on this PC — experimental)";
+    public string Name => "Local build (3dsrecomp + open-source LLVM/LLD on this PC)";
 
     public bool Installable => true;
 
@@ -197,7 +197,7 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
         if (_tools is null)
         {
             return PackBuildOutcome.Failure(MissingToolsCode,
-                "The experimental local build is enabled but no toolchain was resolved. Install the official LLVM release (winget install LLVM.LLVM), build/install 3dsrecomp, and set the paths in Settings.");
+                "No local build toolchain was resolved. The launcher expects Bin/3dsrecomp.exe and the official LLVM 21.1.8 tools in Bin/llvm (or an installed LLVM on PATH); this single message is shown instead of a hidden fallback.");
         }
         var missing = _tools.MissingTools(_fileExists, _directoryExists);
         if (missing.Count > 0)

@@ -684,3 +684,129 @@ single-file with `IncludeNativeLibrariesForSelfExtract` + compression.
   Impactor sign-in and device flows still need the manual test plan (section 11).
 - `prepare-dist-singlefile.ps1` mirrors the exercised `.sh` script but was not run in this
   checkout (no Windows host).
+## 16. Launcher v2 (2026-11-16, task-30): two-section Library→Deploy, local build by default
+
+> Status: implemented, unit/integration tested, packaged. Not yet run on a Windows PC or a
+> real phone in this checkout (see 16.7). This section supersedes the flow in sections 1 and
+> 14-15 for the user-visible behaviour; the tool contracts in section 5 are unchanged.
+
+### 16.1 Reported failure and root cause (evidence in the pre-v2 code)
+
+Symptom: the Windows launcher signed and installed the app successfully, but the phone's
+library stayed empty and no ROM data arrived.
+
+Three independent defects combined into that one symptom:
+
+1. **Bare-shell install fallback.** `MainViewModel.InstallShellAsync` only composed the IPA
+   when at least one real pack existed. With zero real packs it logged
+   "No real GamePacks are built yet; installing the bare shell template" and signed/installed
+   `Shell/3ds2apple-shell.ipa` directly — an app with an **empty schema-2 catalogue and no
+   `Frameworks/GamePack-*.dylib`**. Because the old experimental local-build flag was off by
+   default and the macOS Build Agent was not configured, a normal library had no real pack, so
+   the install could never show a game. (`IpaComposer.ComposeAsync` already refused zero packs
+   with `pack_missing`; the UI fallback bypassed that contract by installing the template.)
+2. **Push/verify used the wrong bundle id.** `PushSelectedAsync`/`VerifyPushAsync` resolved
+   the container as `BundleIdOverride ?? shell.BundleId` (the *template manifest* value) and
+   never read `Workspace.State.InstalledBundleId`, which `ShellInstallService.InstallAsync`
+   receives from plumesign. Whenever the actual signed/installed id differed from the manifest
+   value, `devpush app-attr/put` addressed a missing container — so nothing was pushed.
+3. **No chained deploy.** Build / install / push were three separate per-card menu actions;
+   nothing forced a push after install and the UI did not make the empty-shell outcome visible.
+
+Regression coverage added for each: `DeployFlowTests` (bare-shell refusal, wrong-bundle-id push,
+build/install/push/verify failure steps, no-selection), `ComposedIpaVerifierTests` (packs +
+non-empty schema-2 catalogue gate), and `--self-test` line
+"composed IPA gate (real packs + non-empty schema-2 catalogue)".
+
+### 16.2 New UI flow (exactly two sections + gear)
+
+- **Library**: import a decrypted .3ds/.cci (headers only), list/rename/remove games. No
+  build/install/push buttons here.
+- **Deploy**: check one or many library games → **一键部署 / Deploy selected**. One action runs the
+  whole chain in order and shows five per-step rows with live detail:
+  1. Compile (local 3dsrecomp + LLVM/LLD; games with a real pack are reused),
+  2. Compose one ROM-free app IPA with all selected packs + GameCatalog and verify it,
+  3. Sign + install the composed IPA with the bundled official Impactor/plumesign,
+  4. Push each selected `GameRom.cci` + `GameInfo.json` using the **actual installed bundle id**,
+  5. Read-back verification.
+  Success shows "完成 — 可以在手机上玩了"; failure names the exact step + error + fix and offers
+  **重试 / Retry**. Toolchain/device readiness and a deploy log are also on this page.
+- **Settings (gear)**: language, Apple ID/signing (Open Impactor), device status/refresh, logs
+  (show/export/open folder/self-test), about/version. Build mode, tool paths, UDID selection,
+  bundle-id override and tool overrides are removed; tools are auto-detected from the extracted
+  payload/PATH.
+
+### 16.3 Install/push correctness gates (the failure chain is now structurally impossible)
+
+- `Deploy` never installs a bare shell: it fails at Compose when no real pack exists, when the
+  build produced a placeholder (`pack_placeholder`), or when `ComposedIpaVerifier` rejects the
+  composed IPA. No macOS-Agent/preview fallback exists in the Deploy path.
+- `DeployOrchestrator` (Core/Deploy/) only builds packs via the local provider, then:
+  `ComposedIpaVerifier` requires a non-empty `Frameworks/GamePack-<TITLEID>.dylib` for every
+  selected game, a non-empty **schema-2** `GameCatalog.json` whose `packFile` values are exactly
+  `Frameworks/GamePack-<TITLEID>.dylib`, and no `Roms/` entry. Only then is the installer called.
+- The installer's bundle id is persisted to `Workspace.State.InstalledBundleId`; push resolves
+  `InstalledBundleId → BundleIdOverride → template manifest` (persisted across restarts).
+- Push verifies the size and the SHA-256 reported by each devpush `done` event
+  (`push_sha_mismatch`), then a read-back `stat` pass; `PushedAt` is set only after verification.
+
+### 16.4 Windows local build is the default and only build path
+
+- `PackBuildMode.LocalWinbuild` is always created; the old feature flag no longer gates it and
+  Preview/macOS-Agent choices are gone from the UI. The single-file payload now embeds
+  `Bin/3dsrecomp.exe` (13,184,125 B, SHA-256 `c40481d46a9a76e8…`), the hand-written Darwin
+  stubs (`tools/winbuild/darwin-stubs/include`), `tools/winbuild/zk_gamepack_shim.c` and
+  `tools/winbuild/include/zakuro_gamepack.h`, plus the provenance note
+  `licenses/3dsrecomp-NOTE.txt`.
+- The official **LLVM 21.1.8** toolchain (clang/llvm-ar/ld64.lld/llvm-nm/llvm-objdump +
+  `lib/clang/21/include`) is staged under `Bin/llvm/**` by the packaging script when present
+  (`THREEDS2APPLE_LLVM_DIR` or `build/win-toolchain/llvm`). It is **never faked**: without it
+  the Deploy page shows one actionable local-toolchain error (with the exact missing files) and
+  Retry, and `--self-test` prints a WARN.
+- Missing components never silently fall back: exactly one error, one retry button.
+
+### 16.5 Packaging
+
+- `launcher/windows/tools/prepare-dist-singlefile.sh` (and the `.ps1` twin) now defaults to the
+  repo's git-ignored **`out/launchers/`** (never temp_transfer), keeps exactly one
+  `3ds2apple-launcher.exe` in the ZIP, and runs a clean-folder `--self-test`:
+  on Linux/WSL it publishes a framework-dependent single-file executable of the *same* payload,
+  copies it alone into `out/launchers/clean-run-linux/` with an isolated `HOME`, so first-run
+  extraction into `%LOCALAPPDATA%` is exercised for real; on Windows the exe can be run directly
+  from `out/launchers/clean-run-win/`.
+- Embedded payload inventory (23 files in this build): ROM-free shell IPA+manifest, pinned
+  Impactor/plumesign + licences + PINS.json, Bin tools (3ds2apple-pack/builder-windows/devpush/
+  3dsrecomp), Darwin stubs/shim/header, LICENSE/NOTICE/THIRD_PARTY + 3dsrecomp provenance note.
+
+### 16.6 Verification performed (2026-11-16, WSL + .NET 10.0.403, no Windows/phone)
+
+```text
+dotnet build Launcher.slnx -c Debug                     -> 0 warnings, 0 errors
+dotnet test  ...Core.Tests.csproj                        -> Passed! 125/125 (was 111; +14 deploy/verifier)
+Debug --self-test (developer layout)                     -> SELF-TEST OK with 3 warnings
+                                                            (LLVM payload absent, Impactor ThirdParty absent, embedded payload absent)
+THREEDS2APPLE_DIST=launcher/windows ... --self-test      -> deploy step contract + composed-IPA gate PASS
+Xvfb --ui-smoke (library/deploy/settings)                -> no binding errors; screenshots docs/ui/v2-*.png
+prepare-dist-singlefile.sh                               -> out/launchers/3ds2apple-windows-single-0.1.0.zip
+  zip entry count                                        -> 1 (3ds2apple-launcher.exe, 74,724,050 B)
+  ZIP  SHA-256 1e2d0b1c5784c4ec1c2a0a6cb96ff413bbc59f1b50c8547783d383012c2aa607
+  EXE  SHA-256 00b6789055f2dbd387165eb69e4e6640386be86def65d85600f13eba932f5258
+clean-folder self-test (Linux host, extracted payload)   -> SELF-TEST OK with 2 warnings
+                                                            (LLVM payload absent; everything else incl. 3dsrecomp PASS)
+```
+
+### 16.7 Remaining real-device risks
+
+- **LLVM 21.1.8 payload is not bundled in this artifact** (the GitHub download stalled in WSL;
+  only a probe file exists under `build/win-toolchain/`). On the user's Windows PC the Deploy
+  page will therefore fail at step 1 with the single actionable local-toolchain error until
+  `Bin/llvm/**` is staged (or LLVM is installed/PATH-visible) — no Mac fallback exists by design.
+  Next packaging pass: set `THREEDS2APPLE_LLVM_DIR`, rerun the script, re-run its self-test.
+- Not executed on Windows/iPhone in this checkout: plumesign signing of nested `GamePack-*.dylib`,
+  devpush AFC transfer, overwrite-install keeping Documents data. The Win11 exe self-test can be
+  run directly from `out/launchers/clean-run-win/` by the user/QA.
+- 3dsrecomp upstream publishes no LICENSE file; the bundled binary is documented as a build tool
+  (no generated C is shipped). Replace the note with upstream terms if they publish a licence.
+- Bundle-id override was removed from Settings: an Apple 9401 app-id conflict now requires a new
+  base shell template build (bundle id is part of the signed template).
+

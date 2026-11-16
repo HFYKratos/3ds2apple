@@ -19,7 +19,8 @@ public sealed record HostReadiness(
     bool CanAgentBuild,
     bool CanInstallShell,
     bool CanPush,
-    bool CanLocalBuild)
+    bool CanLocalBuild,
+    bool CanDeploy)
 {
     public string Summary
     {
@@ -30,6 +31,13 @@ public sealed record HostReadiness(
         }
     }
 }
+
+/// <summary>What the Deploy page needs: local build tools + signing + device bridge + shell template.</summary>
+public sealed record DeployReadiness(
+    bool CanDeploy,
+    IReadOnlyList<string> Missing,
+    bool LocalBuildToolsReady,
+    string Summary);
 
 /// <summary>
 /// Composition root for the launcher: owns the process runner, the workspace,
@@ -57,7 +65,7 @@ public sealed class LauncherServices
 
     public ToolLocator Locator => _locator;
 
-    /// <summary>Resolved experimental local-build toolchain (3dsrecomp + LLVM/LLD); null when unresolved.</summary>
+    /// <summary>Resolved local-build toolchain (3dsrecomp + LLVM/LLD); null when unresolved.</summary>
     public LocalToolchain? LocalTools { get; private set; }
 
     public ImpactorBundle Impactor { get; }
@@ -134,11 +142,66 @@ public sealed class LauncherServices
         PackBuildMode.Preview => Pack is null ? null : new PreviewBuildProvider(Pack),
         PackBuildMode.MacAgentIpa => Builder is null || Pack is null ? null : new MacAgentIpaBuildProvider(Builder, Pack),
         PackBuildMode.MacAgentPack => new MacAgentPackBuildProvider(),
-        PackBuildMode.LocalWinbuild => _workspace.State.LocalBuildEnabled
-            ? (Pack is null ? null : new LocalWinbuildPackProvider(LocalTools, Pack, _runner))
-            : null,
+        // v2: the Windows local LLVM/3dsrecomp build is the only build path the UI
+        // offers. It is always created; a missing toolchain is reported by the provider
+        // as ONE actionable build failure (Retry on the Deploy page), never as a silent
+        // fallback to a placeholder or the macOS Build Agent.
+        PackBuildMode.LocalWinbuild => Pack is null ? null : new LocalWinbuildPackProvider(LocalTools, Pack, _runner),
         _ => null,
     };
+
+    /// <summary>The local build provider the Deploy page uses (there is no build-mode choice in the UI).</summary>
+    public IPackBuildProvider? CreateDeployBuildProvider() => CreateBuildProvider(PackBuildMode.LocalWinbuild);
+
+    /// <summary>One batch deploy pipeline over the currently resolved tools.</summary>
+    public DeployOrchestrator CreateDeployOrchestrator(ShellManifest shell) => new(
+        _workspace,
+        shell,
+        ShellDirectory,
+        CreateDeployBuildProvider(),
+        CreateComposer(),
+        CreateShellInstallService(),
+        CreatePushService() is { } push ? new LauncherGameDataPusher(push) : null);
+
+    /// <summary>Pre-check for the Deploy page: exactly which components are missing (one actionable line).</summary>
+    public async Task<DeployReadiness> CheckDeployReadinessAsync(CancellationToken cancellationToken = default)
+    {
+        var missing = new List<string>();
+        if (Pack is null)
+        {
+            missing.Add("3ds2apple-pack.exe");
+        }
+        if (LocalTools is null)
+        {
+            missing.Add("local build toolchain (3dsrecomp + LLVM 21.1.8)");
+        }
+        else
+        {
+            missing.AddRange(LocalTools.MissingTools());
+        }
+        if (PlumeSign is null)
+        {
+            missing.Add("official Impactor/plumesign");
+        }
+        if (DevPush is null)
+        {
+            missing.Add("devpush.exe (device bridge)");
+        }
+        var shell = Shell ?? await LoadShellAsync(cancellationToken).ConfigureAwait(false);
+        if (shell is null)
+        {
+            missing.Add("Shell/manifest.json (ROM-free base shell)");
+        }
+        var localReady = LocalTools is { } local && local.MissingTools().Count == 0;
+        var canDeploy = missing.Count == 0;
+        return new DeployReadiness(
+            canDeploy,
+            missing,
+            localReady,
+            canDeploy
+                ? "Ready: local build, signing and device push are available."
+                : "Deploy needs: " + string.Join("; ", missing));
+    }
 
     public PushService? CreatePushService() => DevPush is null ? null : new PushService(DevPush);
 
@@ -178,14 +241,14 @@ public sealed class LauncherServices
         var builderProbe = await ToolLocator.ProbeAsync("builder-windows", builderPath, _runner, new[] { "--version" }, cancellationToken).ConfigureAwait(false);
         tools.Add(new ToolStatus("builder-windows", builderProbe.Ready, builderProbe.Ready ? "ready" : "missing", builderProbe.Describe()));
 
-        var localMissing = LocalTools?.MissingTools() ?? new[] { "local build toolchain not configured" };
+        var localMissing = LocalTools?.MissingTools() ?? new[] { "local build toolchain not resolved" };
         tools.Add(new ToolStatus(
             "local build (3dsrecomp + LLVM/LLD)",
             localMissing.Count == 0,
             localMissing.Count == 0 ? "ready" : "missing",
             localMissing.Count == 0
-                ? $"experimental, feature flag {(Workspace.State.LocalBuildEnabled ? "on" : "off")}: {LocalTools!.RecompilerPath} + {LocalTools.LlvmBinDirectory}"
-                : "experimental local build needs: " + string.Join(", ", localMissing)));
+                ? $"{LocalTools!.RecompilerPath} + {LocalTools.LlvmBinDirectory}"
+                : "local build needs: " + string.Join("; ", localMissing) + " — " + DeployOrchestrator.LocalBuildFix));
 
         var bundle = Impactor.Verify();
         tools.Add(new ToolStatus("Impactor v" + ImpactorPins.TestedVersion, bundle.Ready, bundle.Ready ? "ready" : "missing", bundle.Summary));
@@ -207,12 +270,16 @@ public sealed class LauncherServices
             tools.Add(new ToolStatus("Shell template IPA", ready, state, message));
         }
 
+        var shellReady = shell is not null && shell.Verify(ShellDirectory).Ok;
+        var localBuildReady = LocalTools is { } localTools && localTools.MissingTools().Count == 0;
+        var installReady = PlumeSign is not null && Impactor.Verify().BinariesOk && shellReady;
         return new HostReadiness(
             tools,
-            CanPreviewBuild: Pack is not null,
-            CanAgentBuild: Builder is not null && Pack is not null,
-            CanInstallShell: PlumeSign is not null && Impactor.Verify().BinariesOk && shell is not null,
+            CanPreviewBuild: false,
+            CanAgentBuild: false,
+            CanInstallShell: installReady,
             CanPush: DevPush is not null,
-            CanLocalBuild: Workspace.State.LocalBuildEnabled && LocalTools is { } local && local.MissingTools().Count == 0);
+            CanLocalBuild: localBuildReady,
+            CanDeploy: Pack is not null && localBuildReady && installReady && DevPush is not null);
     }
 }

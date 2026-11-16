@@ -36,7 +36,7 @@ struct PushPlanner {
             throw LauncherFailure(
                 code: "rom_data_missing",
                 message: "Game data for " + game.displayName + " has not been staged for pushing.",
-                hint: "Re-import the ROM: the launcher keeps a gitignored copy in out/launcher-roms for the device push.",
+                hint: "Re-import the ROM from the Library; the launcher keeps a gitignored copy in out/launcher-roms for the device push.",
                 detail: "out/launcher-roms/" + game.titleID,
                 exitCode: nil
             )

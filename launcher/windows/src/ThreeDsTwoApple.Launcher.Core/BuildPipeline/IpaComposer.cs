@@ -39,7 +39,7 @@ public sealed record ComposedAppIpa(
 /// GameInfo.json already pushed into Documents/Games/TITLEID survive an overwrite
 /// install and are not part of the IPA.
 /// </remarks>
-public sealed class IpaComposer
+public sealed class IpaComposer : IComposedIpaComposer
 {
     public const string GameCatalogFileName = "GameCatalog.json";
     public const string FrameworksDirectory = "Frameworks";
@@ -60,8 +60,10 @@ public sealed class IpaComposer
         string shellTemplateIpaPath,
         IReadOnlyList<ComposedPack> packs,
         string outputDirectory,
+        Action<string>? log = null,
         CancellationToken cancellationToken = default)
     {
+        log?.Invoke("compose: shell template " + shellTemplateIpaPath + "; " + packs.Count + " real pack(s)");
         if (!File.Exists(shellTemplateIpaPath))
         {
             throw new LauncherToolException("shell_invalid", "The shell template IPA is missing: " + shellTemplateIpaPath, "Reinstall the launcher package or set the shell path in Settings.");
@@ -181,6 +183,7 @@ public sealed class IpaComposer
         }
 
         var (sha256, bytes) = HashFile(ipaPath);
+        log?.Invoke("compose: wrote " + ipaPath + " (" + bytes + " bytes, sha256 " + sha256 + ", games " + string.Join(",", titleIds) + ")");
         return new ComposedAppIpa(ipaPath, sha256, bytes, packs.Count, titleIds, appRoot);
     }
 
