@@ -746,3 +746,85 @@ fields (directory, file count, size, newest file), followed by the previous and
 current session logs. These values make renderer, presentation, scheduler,
 settings, fast-forward, language and graphics warm-up changes measurable on
 device.
+
+## Performance data capture
+
+The shell records rolling stutter statistics while a game runs, so a hitch on a
+device can be reported without a debugger, a Mac or a cable. A stutter is one
+presented frame whose frame-to-frame interval or measured work item exceeded
+33.3 ms (two 60 Hz slots); a frame over 100 ms is counted as severe. Each
+stutter is attributed to the measured phase that took the largest share of it
+(`run`, `present`, `read`, `cgImage`, `audio`), or to `other` when the measured
+phases cannot explain the time - for example a frame block the scheduler ran
+late. The counters are session-wide; the report keeps the 20 most recent spikes
+with their relative time, interval, work item, phase and presented frame number.
+
+The diagnostics header carries the block `stutter_definition=`,
+`stutter_count=`, `stutter_per_min=`, `stutter_severe_count=`,
+`stutter_worst_ms=`, `stutter_top_phase=`, `stutter_phase_share=` and
+`stutter_events=`, followed by one `stutter_event=` line per spike. A frame
+costs two tick comparisons; nothing is written to disk while the game runs and
+the tracker takes no lock (it is read on the runtime queue at the existing
+0.5 s stats boundary). The same numbers are appended to the periodic `perf:`
+log line as `| stutter=<count> (<n>/min, worst <ms>, <top phase>)`.
+
+### Capture steps (2-3 minutes)
+
+1. Start the game and play the scene that hitches for 2-3 minutes. The first
+   seconds after a load are not representative when the optional graphics
+   warm-up is off (GPU pipelines still compile on first use), so drive past them
+   and, if possible, capture a second, warmed-up run as well.
+2. Open the in-game menu (pause button) and tap **Export logs** (Simplified
+   Chinese UI: **导出日志**). Opening the menu pauses the frame loop, so the
+   numbers stop changing at the moment you tap it.
+3. The share sheet opens with the report, and the same file is also kept on the
+   device as `Documents/Diagnostics/3ds2apple-diagnostics-yyyyMMdd-HHmmss.txt`
+   (the newest 5 are kept). The export entry exists twice: the in-game menu
+   above, and the home page's **Settings -> More -> Export logs** (设置 -> 更多 ->
+   导出日志). Use the in-game menu for performance data: unloading a game resets
+   the frame/stutter counters, so a report exported from Settings after returning
+   home has the counter block at 0 even though the session log (including the
+   periodic `perf:` lines) is complete. Use either retrieval path:
+   - **Files app**: *On My iPhone/iPad -> 3ds2apple -> Diagnostics*, then share
+     the newest `3ds2apple-diagnostics-*.txt`. After the export the in-game menu
+     shows the exact kept path (`Saved to Documents/Diagnostics/<file>.txt`);
+     the folder keeps only the 5 most recent exports.
+   - **devpush** (from the desktop launcher's `tools/devpush`, USB or Wi-Fi):
+
+     ```sh
+     tools/devpush/target/release/devpush ls --bundle-id com.kratos.3ds2apple --path Documents/Diagnostics
+     tools/devpush/target/release/devpush get --bundle-id com.kratos.3ds2apple --remote Documents/Diagnostics/3ds2apple-diagnostics-20261116-181500.txt --local ./3ds2apple-diagnostics.txt
+     ```
+
+     Replace the file name with the one printed by `ls` (or shown in the in-game
+     menu). `--container app` is the default and the correct one for Documents;
+     add `--udid <UDID>` only when more than one device is connected.
+4. Send the text file together with the details below.
+
+### What to report with the file
+
+- game name and title ID (`game=`; filled in when the export is made while the
+  game is loaded) and what was happening (battle, menu, cutscene, ...);
+- device model and iOS version (`device=`) and the app build (`app=`);
+- AOT proof: `aot=`, `aot_percent=`, `aot_interpreted_percent=`,
+  `aot_fallbacks=`, `aot_recompiled=`;
+- renderer path: `display=`, `hardware=`, `metal_moltenvk_embedded=`;
+- HUD state: `system_metal_hud=`, `system_metal_hud_build_enabled=`,
+  `system_metal_hud_plist=`;
+- warm-up: `warmup_enabled=`, `warmup_outcome=`,
+  `warmup_from_cached_pipelines=`;
+- the `stutter_*` block, plus the two `perf:` lines in the current-session log
+  around the hitch;
+- whether the hitch appeared on the first run after install or on later runs,
+  and which non-default settings (frame cap, render scale, fast-forward, Metal
+  HUD, warm-up) were active.
+
+The same export is also reachable from the home page's Settings page (More ->
+Export logs). The frame and stutter counters are cleared when a game is unloaded,
+so export from the in-game menu (or the pause overlay) when the numbers matter;
+the Settings copy still carries the complete session log, including the periodic
+`perf:` lines and all `zk_perf`/runtime lines.
+
+The report carries no UDID, serial number, Apple ID or signing identity (device
+model and iOS version are included); it does contain the app log, so treat it as
+user data and share it deliberately.

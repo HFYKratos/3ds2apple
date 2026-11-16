@@ -100,6 +100,210 @@ struct FrameTimingSnapshot: Equatable {
     var audioPump = FramePhaseStats()
 }
 
+/// One presented frame that ran long enough to be seen as a hitch.
+struct StutterEvent: Equatable {
+    /// Milliseconds between the start of the frame loop and this frame.
+    var atMilliseconds: Double = 0
+    /// Frame-to-frame interval: how long this frame took before the next one
+    /// started. This is the duration the player sees, and it includes a frame
+    /// block that was scheduled late.
+    var milliseconds: Double = 0
+    /// Measured `renderFrame` work item: set_input + run + presentation + audio.
+    /// `milliseconds - workMilliseconds` is time no phase accounted for
+    /// (scheduling); such a frame is attributed to `other`.
+    var workMilliseconds: Double = 0
+    /// Phase with the largest measured share of this frame.
+    var phase: StutterPhase = .other
+    /// 1-based presented frame number since the loop started.
+    var frame: UInt64 = 0
+}
+
+/// Phase a stutter frame is attributed to: the measured phase that took the
+/// largest share of that frame. `other` covers time no phase accounted for
+/// (for example waiting for a CAMetalLayer drawable in `zk_present`).
+enum StutterPhase: Int, CaseIterable {
+    case run
+    case present
+    case read
+    case cgImage
+    case audio
+    case other
+
+    /// Stable English label for the device log and the diagnostics report.
+    var label: String {
+        switch self {
+        case .run: return "run"
+        case .present: return "present"
+        case .read: return "read"
+        case .cgImage: return "cgImage"
+        case .audio: return "audio"
+        case .other: return "other"
+        }
+    }
+}
+
+/// Rolling stutter statistics carried by `FrameStats` into the UI and the
+/// diagnostics report. Built from `StutterTracker.snapshot` at the 0.5 s stats
+/// boundary, so the frame path itself only does a tick comparison.
+struct StutterSnapshot: Equatable {
+    /// A presented frame slower than this is a stutter (two 60 Hz slots).
+    static let thresholdMilliseconds = 1000.0 / 30.0
+    /// A presented frame slower than this is severe: a visible freeze.
+    static let severeThresholdMilliseconds = 100.0
+
+    /// Presented frames over the stutter threshold since the loop started.
+    var count: Int = 0
+    /// Of those, frames over the severe threshold.
+    var severeCount: Int = 0
+    /// `count` per minute of measured frame-loop time (pauses excluded).
+    var perMinute: Double = 0
+    /// Worst presented frame since the loop started, in milliseconds.
+    var worstMilliseconds: Double = 0
+    /// Stutter frames per attribution phase, indexed by `StutterPhase`.
+    var phaseCounts: [Int] = [0, 0, 0, 0, 0, 0]
+    /// Most recent events, oldest first (at most `StutterTracker.maximumEvents`).
+    var events: [StutterEvent] = []
+
+    /// Stutter frames attributed to one phase.
+    func count(for phase: StutterPhase) -> Int {
+        let index = phase.rawValue
+        return index < phaseCounts.count ? phaseCounts[index] : 0
+    }
+
+    /// Phase most stutter frames are attributed to; `.other` with no stutters.
+    var topPhase: StutterPhase {
+        var best = StutterPhase.other
+        var bestCount = 0
+        for phase in StutterPhase.allCases {
+            let value = count(for: phase)
+            if value > bestCount {
+                best = phase
+                bestCount = value
+            }
+        }
+        return best
+    }
+
+    /// Share of the stutter frames attributed to one phase, 0...100.
+    func share(for phase: StutterPhase) -> Double {
+        guard count > 0 else { return 0 }
+        return Double(count(for: phase)) / Double(count) * 100.0
+    }
+}
+
+/// Collects the rolling stutter statistics of the presented frame loop.
+///
+/// `record` runs once per presented frame on the runtime serial queue: it
+/// compares mach ticks and, only on a rare stutter, writes one preallocated
+/// ring-buffer slot. No lock, no allocation on the frame path and no disk I/O.
+/// `snapshot` runs at the existing 0.5 s stats boundary and is copied into
+/// `FrameStats` for the UI and the diagnostics exporter.
+struct StutterTracker {
+    /// Recent events kept for the diagnostics report.
+    static let maximumEvents = 20
+
+    private var startedTicks: UInt64 = 0
+    /// Tick the last presented frame started at; pauses between frames are not
+    /// counted into the per-minute rate.
+    private var lastFrameStartTicks: UInt64 = 0
+    private var stutterTicks: UInt64 = 0
+    private var severeTicks: UInt64 = 0
+    private var count = 0
+    private var severeCount = 0
+    private var worstTicks: UInt64 = 0
+    private var phaseCounts: [Int] = []
+    private var events: [StutterEvent] = []
+    private var recordedEvents = 0
+
+    init() {
+        phaseCounts = [Int](repeating: 0, count: StutterPhase.allCases.count)
+        events = [StutterEvent](repeating: StutterEvent(), count: StutterTracker.maximumEvents)
+        start(at: 0)
+    }
+
+    /// Starts a new measurement window (a new frame loop). The runtime queue is
+    /// idle when this runs, so no recorded frame can race it.
+    mutating func start(at ticks: UInt64) {
+        startedTicks = ticks
+        lastFrameStartTicks = ticks
+        stutterTicks = FrameClock.ticks(seconds: StutterSnapshot.thresholdMilliseconds / 1000.0)
+        severeTicks = FrameClock.ticks(seconds: StutterSnapshot.severeThresholdMilliseconds / 1000.0)
+        count = 0
+        severeCount = 0
+        worstTicks = 0
+        recordedEvents = 0
+        for index in phaseCounts.indices {
+            phaseCounts[index] = 0
+        }
+    }
+
+    /// Records one presented frame. runtimeQueue only.
+    ///
+    /// A hitch is detected on the frame-to-frame interval (what the player
+    /// sees) and on the measured work item; the larger of the two is the
+    /// reported duration. A frame whose interval is much longer than its work
+    /// item is attributed to `other`: the phases cannot explain the wait (the
+    /// frame block was scheduled late or the runtime queue was busy).
+    mutating func record(frameStartTicks: UInt64,
+                         workTicks: UInt64,
+                         runTicks: UInt64,
+                         presentTicks: UInt64,
+                         readTicks: UInt64,
+                         cgImageTicks: UInt64,
+                         audioTicks: UInt64,
+                         frame: UInt64) {
+        let intervalTicks = frameStartTicks > lastFrameStartTicks
+            ? frameStartTicks - lastFrameStartTicks
+            : workTicks
+        lastFrameStartTicks = frameStartTicks
+        let durationTicks = max(intervalTicks, workTicks)
+        guard durationTicks > stutterTicks else { return }
+        count += 1
+        if durationTicks > severeTicks { severeCount += 1 }
+        if durationTicks > worstTicks { worstTicks = durationTicks }
+        // Attribute the hitch to the largest share: the measured phase with the
+        // most ticks, or the interval time the phases do not account for.
+        var topPhase = StutterPhase.other
+        var topTicks = intervalTicks > workTicks ? intervalTicks - workTicks : 0
+        if runTicks > topTicks { topPhase = .run; topTicks = runTicks }
+        if presentTicks > topTicks { topPhase = .present; topTicks = presentTicks }
+        if readTicks > topTicks { topPhase = .read; topTicks = readTicks }
+        if cgImageTicks > topTicks { topPhase = .cgImage; topTicks = cgImageTicks }
+        if audioTicks > topTicks { topPhase = .audio; topTicks = audioTicks }
+        phaseCounts[topPhase.rawValue] += 1
+        events[recordedEvents % StutterTracker.maximumEvents] = StutterEvent(
+            atMilliseconds: FrameClock.milliseconds(frameStartTicks - startedTicks),
+            milliseconds: FrameClock.milliseconds(durationTicks),
+            workMilliseconds: FrameClock.milliseconds(workTicks),
+            phase: topPhase,
+            frame: frame
+        )
+        recordedEvents += 1
+    }
+
+    /// Immutable summary for `FrameStats`; called on the 0.5 s stats boundary.
+    func snapshot() -> StutterSnapshot {
+        var snapshot = StutterSnapshot()
+        snapshot.count = count
+        snapshot.severeCount = severeCount
+        snapshot.worstMilliseconds = FrameClock.milliseconds(worstTicks)
+        snapshot.phaseCounts = phaseCounts
+        let measuredSeconds = FrameClock.seconds(lastFrameStartTicks - startedTicks)
+        snapshot.perMinute = measuredSeconds > 0 ? Double(count) / (measuredSeconds / 60.0) : 0
+        let available = min(recordedEvents, StutterTracker.maximumEvents)
+        let first = recordedEvents > StutterTracker.maximumEvents
+            ? recordedEvents % StutterTracker.maximumEvents
+            : 0
+        var recent: [StutterEvent] = []
+        recent.reserveCapacity(available)
+        for offset in 0..<available {
+            recent.append(events[(first + offset) % StutterTracker.maximumEvents])
+        }
+        snapshot.events = recent
+        return snapshot
+    }
+}
+
 /// The phases recorded per frame. Recorded once per executed frame on the
 /// runtime serial queue.
 enum FramePhase {

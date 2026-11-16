@@ -89,6 +89,9 @@ struct FrameStats {
     var lastResult: Int32 = 0
     /// Per-phase durations in milliseconds (I3-T6; recorded for diagnostics).
     var timing = FrameTimingSnapshot()
+    /// Rolling stutter counts and the recent spike events (recorded for
+    /// diagnostics; see `StutterTracker`).
+    var stutter = StutterSnapshot()
 }
 
 /// The AOT state of the running session. The shell only ever starts a game
@@ -386,6 +389,8 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private var didLogScreenReadFailure = false
     /// Per-phase frame timings; runtimeQueue only, published as snapshots.
     private var timingWindow = FrameTimingWindow()
+    /// Rolling stutter statistics; runtimeQueue only, published in FrameStats.
+    private var stutterTracker = StutterTracker()
     /// Reusable RGBA8 buffers for zk_read_screen + CGImage presentation.
     private let screenBufferPool = ScreenFrameBufferPool()
     /// The warm-up running behind the loading overlay, nil when the game is
@@ -1687,6 +1692,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         // Accumulators are runtimeQueue-owned, but the queue is idle here: no
         // frame loop is running yet, so no frame can race this.
         timingWindow.reset()
+        stutterTracker.start(at: statsWindowStartTicks)
         frameStats = FrameStats()
         if let plan {
             warmUpRun = GraphicsWarmUpRun(
@@ -1861,7 +1867,8 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
 
         let runStart = FrameClock.now()
         let result = zk_run_frame(system)
-        timingWindow.record(.runFrame, ticks: FrameClock.now() - runStart)
+        let runTicks = FrameClock.now() - runStart
+        timingWindow.record(.runFrame, ticks: runTicks)
         framesRendered += 1
 
         guard result == 0 else {
@@ -1876,16 +1883,25 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         // so the sound speeds up with the game instead of being muted.
         let audioStart = FrameClock.now()
         pumpAudio(system: system)
-        timingWindow.record(.audioPump, ticks: FrameClock.now() - audioStart)
+        let audioTicks = FrameClock.now() - audioStart
+        timingWindow.record(.audioPump, ticks: audioTicks)
 
         var top: CGImage?
         var bottom: CGImage?
+        // Ticks of this frame's phases, kept for stutter attribution. The CGImage
+        // path derives its read time from the two screenImage() calls (total time
+        // minus the image creation they report), so no extra clock read per
+        // screen is needed.
+        var presentTicks: UInt64 = 0
+        var readTicks: UInt64 = 0
+        var cgImageTicks: UInt64 = 0
         if let presenter = framePresenter {
             // A1: the screens go to the CAMetalLayer (straight from the
             // renderer's GPU images when the device is shared).
             let presentStart = FrameClock.now()
             let presented = zk_present(system, presenter)
-            timingWindow.record(.present, ticks: FrameClock.now() - presentStart)
+            presentTicks = FrameClock.now() - presentStart
+            timingWindow.record(.present, ticks: presentTicks)
             if presented <= -2 {
                 presentFailed(result: presented)
             } else {
@@ -1893,13 +1909,27 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             }
         } else {
             // Pre-A1 path: copy both screens to the CPU and build CGImages.
-            var cgImageTicks: UInt64 = 0
+            let screenStart = FrameClock.now()
             top = screenImage(system: system, which: 0, cgImageTicks: &cgImageTicks)
             bottom = screenImage(system: system, which: 1, cgImageTicks: &cgImageTicks)
+            let screenTicks = FrameClock.now() - screenStart
+            readTicks = screenTicks > cgImageTicks ? screenTicks - cgImageTicks : 0
             timingWindow.record(.cgImage, ticks: cgImageTicks)
         }
 
-        timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
+        let totalTicks = FrameClock.now() - frameStart
+        timingWindow.record(.renderTotal, ticks: totalTicks)
+        // Two tick comparisons per frame; only a stutter writes to the tracker.
+        stutterTracker.record(
+            frameStartTicks: frameStart,
+            workTicks: totalTicks,
+            runTicks: runTicks,
+            presentTicks: presentTicks,
+            readTicks: readTicks,
+            cgImageTicks: cgImageTicks,
+            audioTicks: audioTicks,
+            frame: framesRendered
+        )
         publishFrame(top: top, bottom: bottom, result: result)
         advanceGraphicsWarmUp(frameMilliseconds: FrameClock.milliseconds(FrameClock.now() - frameStart))
         return true
@@ -2122,6 +2152,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             considerPlaybackSpeedFallback(presentedFPS: fps)
             var snapshot = FrameStats(fps: fps, frames: framesRendered, lastResult: result)
             snapshot.timing = timingWindow.publish()
+            snapshot.stutter = stutterTracker.snapshot()
             stats = snapshot
 
             // One `perf:` line every ~2 s for idevicesyslog; the diagnostics
@@ -2179,10 +2210,12 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// milliseconds (total also carries the last frame). runtimeQueue only.
     private func logPerfLine(_ stats: FrameStats) {
         let timing = stats.timing
+        let stutter = stats.stutter
         let line = String(
             format: "perf: fps=%.1f frames=%llu | total=%.1f/%.1f/%.1f "
                 + "run=%.1f/%.1f present=%.2f/%.2f readTop=%.2f/%.2f "
                 + "readBottom=%.2f/%.2f image=%.2f/%.2f audio=%.2f/%.2f ms "
+                + "| stutter=%ld (%.1f/min, worst %.1fms, %@) "
                 + "(avg/max; total avg/max/last)",
             stats.fps,
             stats.frames,
@@ -2192,7 +2225,11 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             timing.topScreenRead.average, timing.topScreenRead.maximum,
             timing.bottomScreenRead.average, timing.bottomScreenRead.maximum,
             timing.cgImage.average, timing.cgImage.maximum,
-            timing.audioPump.average, timing.audioPump.maximum
+            timing.audioPump.average, timing.audioPump.maximum,
+            stutter.count,
+            stutter.perMinute,
+            stutter.worstMilliseconds,
+            stutter.topPhase.label
         )
         AppLog.log("[3ds2apple] %@", line)
     }
@@ -2212,6 +2249,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         // Show the timings accumulated up to the last frame even when the loop
         // died before the next 0.5 s boundary.
         let finalTiming = timingWindow.publish()
+        let finalStutter = stutterTracker.snapshot()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.stopFrameLoopOnMain()
@@ -2226,6 +2264,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             stats.fps = 0
             stats.lastResult = isError ? -1 : 1
             stats.timing = finalTiming
+            stats.stutter = finalStutter
             self.frameStats = stats
             self.setPhase(isError ? .failed(message: message) : .finished(message: message))
         }

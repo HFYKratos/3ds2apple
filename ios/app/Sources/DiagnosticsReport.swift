@@ -35,21 +35,96 @@ struct ZakuroScreen {
     }
 }
 
+/// One diagnostics export: the share-sheet copy and the copy kept on the
+/// device (visible in the Files app / pullable with `devpush get`).
+struct DiagnosticsExport {
+    /// Temporary file the share sheet shows (the pre-existing behaviour).
+    let shareURL: URL
+    /// `Documents/Diagnostics/<timestamp>.txt`, nil when it could not be written.
+    let documentsURL: URL?
+    /// Path relative to Documents for the UI hint, nil when not archived.
+    let documentsPath: String?
+}
+
 enum DiagnosticsExporter {
-    /// Writes a report to a temporary file and returns it, or nil on failure.
-    static func write(model: ROMSession, settings: AppSettings) -> URL? {
+    /// Diagnostics files kept in Documents/Diagnostics; older ones are pruned.
+    static let retainedFiles = 5
+    /// Subfolder of Documents the exports are kept in.
+    static let folderName = "Diagnostics"
+
+    /// Writes the report to a temporary file (share sheet) and keeps a copy in
+    /// Documents/Diagnostics, so it can be taken from the Files app or pulled
+    /// with `devpush get`. Returns nil only when the share-sheet copy fails; a
+    /// failed on-device copy is logged and does not break the old flow.
+    static func write(model: ROMSession, settings: AppSettings) -> DiagnosticsExport? {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         let filename = "3ds2apple-diagnostics-\(formatter.string(from: Date())).txt"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        let text = report(model: model, settings: settings)
+        let temporaryURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
         do {
-            try report(model: model, settings: settings).write(to: url, atomically: true, encoding: .utf8)
-            AppLog.log("[3ds2apple] diagnostics exported: %@", filename)
-            return url
+            try text.write(to: temporaryURL, atomically: true, encoding: .utf8)
         } catch {
             AppLog.log("[3ds2apple] diagnostics export failed: %@", error.localizedDescription)
             return nil
+        }
+        AppLog.log("[3ds2apple] diagnostics exported: %@", filename)
+        let keptURL = keepInDocuments(text: text, filename: filename)
+        if let keptURL {
+            AppLog.log("[3ds2apple] diagnostics kept (Files app → 3ds2apple → %@): %@",
+                  folderName, keptURL.lastPathComponent)
+        }
+        return DiagnosticsExport(
+            shareURL: temporaryURL,
+            documentsURL: keptURL,
+            documentsPath: keptURL.map { "\(folderName)/\($0.lastPathComponent)" }
+        )
+    }
+
+    /// Writes one copy into Documents/Diagnostics and prunes the folder to the
+    /// newest `retainedFiles` exports (the names sort by their timestamp).
+    private static func keepInDocuments(text: String, filename: String) -> URL? {
+        let fileManager = FileManager.default
+        let folder = StorageInspector.documentsURL.appendingPathComponent(folderName, isDirectory: true)
+        do {
+            try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+            let url = uniqueURL(in: folder, filename: filename, fileManager: fileManager)
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            prune(folder: folder, fileManager: fileManager)
+            return url
+        } catch {
+            AppLog.log("[3ds2apple] diagnostics could not be kept on the device: %@",
+                  error.localizedDescription)
+            return nil
+        }
+    }
+
+    /// Avoids overwriting an export made in the same second (`-2`, `-3`, ...).
+    private static func uniqueURL(in folder: URL,
+                                  filename: String,
+                                  fileManager: FileManager) -> URL {
+        let base = (filename as NSString).deletingPathExtension
+        let ext = (filename as NSString).pathExtension
+        var candidate = folder.appendingPathComponent(filename)
+        var suffix = 2
+        while fileManager.fileExists(atPath: candidate.path) {
+            let name = ext.isEmpty ? "\(base)-\(suffix)" : "\(base)-\(suffix).\(ext)"
+            candidate = folder.appendingPathComponent(name)
+            suffix += 1
+        }
+        return candidate
+    }
+
+    /// Keeps the newest `retainedFiles` exports (`yyyyMMdd-HHmmss` names sort
+    /// chronologically).
+    private static func prune(folder: URL, fileManager: FileManager) {
+        guard let names = try? fileManager.contentsOfDirectory(atPath: folder.path) else { return }
+        let diagnostics = names
+            .filter { $0.hasPrefix("3ds2apple-diagnostics-") && $0.hasSuffix(".txt") }
+            .sorted()
+        for name in diagnostics.dropLast(retainedFiles) {
+            try? fileManager.removeItem(at: folder.appendingPathComponent(name))
         }
     }
 
@@ -82,6 +157,7 @@ enum DiagnosticsExporter {
         let device = UIDevice.current
         let screen = UIScreen.main
         let timing = model.frameStats.timing
+        let stutter = model.frameStats.stutter
         let warmUp = model.warmUp
         let cache = model.pipelineCacheStats
         let aot = model.aotDiagnostics
@@ -183,11 +259,41 @@ enum DiagnosticsExporter {
         timing_share_audio_pct=\(share(timing.audioPump.average))
         frame_budget_ms=\(String(format: "%.2f", frameBudgetMs))
         frame_budget_used_pct=\(budgetUsedText)
+        \(stutterLines(stutter))
         perf_log=zk_perf window every 60 frames on stderr (ios/zakuro-ios/README.md)
         metal_moltenvk_env=\(MoltenVKTuning.diagnosticsLine)
         """
         header += "\n\n"
         return AppLog.shared.exportReport(header: header)
+    }
+
+    /// The stutter block of the header: thresholds, counters, per-phase
+    /// attribution and the recent spikes (one line each).
+    private static func stutterLines(_ stutter: StutterSnapshot) -> String {
+        func share(_ phase: StutterPhase) -> String {
+            String(format: "%.1f", stutter.share(for: phase))
+        }
+        var lines = [
+            "stutter_definition=presented frame interval or work item over 33.3 ms (>100 ms severe); attributed to its largest measured phase or to other (unaccounted wait/scheduling)",
+            "stutter_count=\(stutter.count)",
+            "stutter_per_min=\(String(format: "%.2f", stutter.perMinute))",
+            "stutter_severe_count=\(stutter.severeCount)",
+            "stutter_worst_ms=\(String(format: "%.2f", stutter.worstMilliseconds))",
+            "stutter_top_phase=\(stutter.count > 0 ? stutter.topPhase.label : "-")",
+            "stutter_phase_share=run:\(share(.run)),present:\(share(.present)),read:\(share(.read)),cgImage:\(share(.cgImage)),audio:\(share(.audio)),other:\(share(.other))",
+            "stutter_events=\(stutter.events.count) recent (t since loop start, ms = interval, work = measured work item, phase, presented frame)"
+        ]
+        for event in stutter.events {
+            lines.append(String(
+                format: "stutter_event=t=%.3fs ms=%.2f work=%.2f phase=%@ frame=%llu",
+                event.atMilliseconds / 1000.0,
+                event.milliseconds,
+                event.workMilliseconds,
+                event.phase.label,
+                event.frame
+            ))
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// One line for the current session phase (also shown on the home page).

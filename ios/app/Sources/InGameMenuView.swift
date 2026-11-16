@@ -28,6 +28,9 @@ struct InGameMenuView: View {
     /// Called after a state load succeeded: the game view closes the menu and
     /// resumes the restored session.
     let onLoadStateCompleted: () -> Void
+    /// Path (relative to Documents) of the diagnostics file the last export
+    /// kept, so it can also be pulled from the Files app after sharing.
+    var diagnosticsHint: String? = nil
 
     var body: some View {
         ZStack {
@@ -237,6 +240,14 @@ struct InGameMenuView: View {
                 identifier: "menu-diagnostics",
                 action: onDiagnostics
             )
+            if let diagnosticsHint {
+                Text(diagnosticsHint)
+                    .font(.caption2)
+                    .foregroundColor(.white.opacity(0.55))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("menu-diagnostics-hint")
+            }
             rowDivider
             actionRow(
                 "Reset game",

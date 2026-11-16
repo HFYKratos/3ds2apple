@@ -32,6 +32,8 @@ struct GameView: View {
 
     @State private var isMenuPresented = false
     @State private var sheet: GameSheet?
+    /// Kept copy of the last diagnostics export (relative to Documents).
+    @State private var diagnosticsHint: String?
 
     @State private var isConfirmationPresented = false
     @State private var confirmationKind: ConfirmationKind = .reset
@@ -89,7 +91,8 @@ struct GameView: View {
                         onSaveManager: { sheet = .saveManager },
                         onDiagnostics: exportDiagnostics,
                         onExit: { requestConfirmation(.exit) },
-                        onLoadStateCompleted: resumeAfterStateLoad
+                        onLoadStateCompleted: resumeAfterStateLoad,
+                        diagnosticsHint: diagnosticsHint
                     )
                 }
 
@@ -742,8 +745,11 @@ struct GameView: View {
     // MARK: - Diagnostics
 
     private func exportDiagnostics() {
-        if let url = DiagnosticsExporter.write(model: model, settings: settings) {
-            sheet = .diagnostics(url)
-        }
+        guard let export = DiagnosticsExporter.write(model: model, settings: settings) else { return }
+        // The share sheet keeps working exactly as before; the same file is also
+        // kept in Documents/Diagnostics and its path is shown in the paused menu
+        // (and the app log) so it can be fetched later from the Files app.
+        diagnosticsHint = export.documentsPath.map { "Saved to Documents/\($0)" }
+        sheet = .diagnostics(export.shareURL)
     }
 }

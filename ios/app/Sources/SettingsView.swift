@@ -42,6 +42,8 @@ struct SettingsView: View {
     @State private var storage = StorageSnapshot.empty
     @State private var isClearCacheConfirmationPresented = false
     @State private var shareItem: SettingsShareItem?
+    /// Kept copy of the last diagnostics export (relative to Documents).
+    @State private var diagnosticsHint: String?
 
     var body: some View {
         Form {
@@ -263,6 +265,14 @@ struct SettingsView: View {
             } label: {
                 Label("Export logs", systemImage: "square.and.arrow.up")
             }
+            if let diagnosticsHint {
+                Text(diagnosticsHint)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("settings-diagnostics-hint")
+            }
             NavigationLink {
                 AboutView(model: model)
             } label: {
@@ -310,9 +320,9 @@ struct SettingsView: View {
     }
 
     private func exportDiagnostics() {
-        if let url = DiagnosticsExporter.write(model: model, settings: settings) {
-            shareItem = SettingsShareItem(url: url)
-        }
+        guard let export = DiagnosticsExporter.write(model: model, settings: settings) else { return }
+        diagnosticsHint = export.documentsPath.map { "Saved to Documents/\($0)" }
+        shareItem = SettingsShareItem(url: export.shareURL)
     }
 
     // MARK: - Text
