@@ -5,7 +5,7 @@ Both desktop launchers must match the iOS app: simple, two primary sections plus
 ## Top-level navigation
 - **游戏库 / Library** (default once games exist): game cards with cover/placeholder, title, status, and one primary action per game (构建 / 安装 / 推送 / 启动说明). Empty state: a single prominent Import button.
 - **导入 / Import**: drag-and-drop or file picker for a decrypted .3ds/.cci; after selection show detected titleID/name, then one primary button to import (and build if configured); progress/logs inline on this page only while a job runs.
-- **Settings** (gear icon, not a top-level tab): Apple ID / team ID + signing explanation, device/connection state, build mode (macOS Build Agent vs local experimental), tool paths, language override (System / 简体中文 / English), logs/diagnostics, About/licenses.
+- **Settings** (gear icon, not a top-level tab): Apple ID / team ID + signing explanation, device/connection state, language override (System / 简体中文 / English), logs/diagnostics, About/licenses.
 - Move every other screen (old Device, Install, Push, Activity, Diagnostics) out of top-level navigation; keep the essential install/push actions on a game card or in a small dialog launched from it.
 
 ## Language

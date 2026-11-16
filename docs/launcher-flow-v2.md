@@ -17,7 +17,7 @@ and no single batch action. The new flow must make the successful path obvious a
 - Local LLVM/3dsrecomp build must be the default path, not a hidden experimental flag.
 - Bundle/auto-locate the required tools; no file picker/path settings in the first version. If a bundled component is
   missing, show one actionable error on the Deploy page and still allow retry after fixing.
-- Do not silently fall back to Preview or macOS Build Agent; macOS agent is not a prerequisite for the Windows flow.
+- Do not silently fall back to Preview; the macOS Build Agent stack was deleted on 2026-11-16 (the v2 launcher builds locally), so it is not part of the flow.
 
 ## Install/push correctness
 - Never install the bare shell when games are selected: build first, compose with the selected real packs, verify the

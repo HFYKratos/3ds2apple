@@ -5,16 +5,13 @@
 > [launcher-architecture.md](launcher-architecture.md) and
 > [desktop-aot.md](desktop-aot.md).
 >
-> Question: can the Windows launcher compile a per-game AOT GamePack locally, the way S2Arm's
-> Windows launcher does, or must it drive a macOS build host? Short answer (§§1-6, task-19):
-> **the MVP pipeline uses a macOS toolchain; the Windows launcher drives the existing
-> builder-windows Build Agent.** §7 (task-22) then proves a *phase-2* local no-Apple-SDK
-> compile with open-source LLVM/LLD is technically feasible and legal; keep the MVP answer,
-> see §7.7 for the recommendation update. No Apple SDK/binaries are redistributed by this
-> project.
-> use a macOS toolchain for the real compile; the Windows launcher drives the existing
-> builder-windows Build Agent.** A Windows-side recomp split is a legal phase-2 optimization, not
-> an MVP requirement. No Apple SDK/binaries are redistributed by this project.
+> **Status update 2026-11-16: the local build won.** The Windows launcher now compiles
+> GamePacks locally (3dsrecomp + official LLVM/LLD + hand-written Darwin stubs) and the
+> remote macOS Build Agent was deleted; the sections below are kept as the decision record.
+> Original answer (§§1-6, task-19): the first MVP used a macOS toolchain through a remote
+> agent. §7/§8 (task-22/26) then proved a local no-Apple-SDK compile with open-source
+> LLVM/LLD; the local build became the only Deploy path in the v2 launcher. No Apple
+> SDK/binaries are redistributed by this project.
 
 ## 1. What S2Arm does on Windows (studied from /mnt/f/project/S2Arm-study, Apache-2.0)
 
@@ -62,7 +59,7 @@ Existing infrastructure we already have:
 | Piece | Where | Role for Windows |
 |---|---|---|
 | 3ds2apple-pack CLI | builder/pack (Rust) | runs on Windows: ROM header detection, packages, GameInfo.json, catalogue. Already used by the launcher. |
-| Build Agent + builder-windows CLI | builder/agent, builder/core, builder/windows (Rust) | runs on macOS; uploads the user's ROM over SSH, runs scripts/ as a isolated job, streams logs, downloads the IPA, deletes inputs afterwards. Already run on Windows 11 by the earlier Builder slice. |
+| macOS Build Agent CLI (removed 2026-11-16) | — | Was the remote macOS build path: uploaded the ROM over SSH, ran scripts/ in an isolated job and returned the IPA. Deleted once the local LLVM build shipped; its protocol/client code is in git history. |
 | AOT scripts | scripts/build-recomp-ios.sh, build-linked-ios-lib.sh, build-game-pack.sh, build-game-ipa.sh | macOS-only real compile; generate the per-game IPA/GamePack. |
 | Device bridge | tools/devpush (task-16) | Windows-side install ABI: JSON/NDJSON CLI over usbmuxd + house_arrest + AFC, with progress and a 90 s stall watchdog. |
 | Signing | official Impactor v2.7.2 + plumesign, bundled | Windows signing/install path; no custom signing, no Apple ID handling in our code. |
@@ -71,7 +68,7 @@ Existing infrastructure we already have:
 
 | # | Option | How it would work | Licensing / practical verdict |
 |---|---|---|---|
-| A | **macOS Build Agent (recommended)** | Windows launcher calls builder-windows (or zkb) with --rom/--host; the user's Mac/VM runs the existing scripts; launcher downloads the result and extracts GamePack.dylib | Project code is Apache-2.0/MIT; Xcode/iOS SDK stay on the user's Mac under Apple's licence; nothing Apple is redistributed. Works today via the existing per-game IPA path (MVP), and is the base for a dedicated packbuild stage (below). |
+| A | **macOS Build Agent (historical MVP, removed)** | The first Windows launcher drove a remote macOS host over SSH; the host ran the existing scripts and returned the per-game IPA. | Legal (Xcode stays on the user's Mac), but the path was deleted on 2026-11-16 once the local build (option D2/§7) shipped; it needed a Mac and added a whole protocol to maintain. |
 | B | macOS host paired directly | same as A without SSH (local Mac) | Not applicable to a Windows PC; same licence story. |
 | C | Rented/remote Mac | same as A, host is a cloud Mac the user controls | Same as A; the user is responsible for the host and its Apple licence. Launcher needs no change beyond host configuration. |
 | D | Bundle a Windows cross toolchain (osxcross/LLVM + iPhoneOS SDK + libc++ headers) | compile generated C for arm64-apple-ios on the user's PC | **Not recommended / not shippable.** Apple SDK and Xcode components are not redistributable, and Apple's licence limits their use to Apple-branded hardware. Even when a hobbyist supplies their own SDK, the project cannot ship or support this path; it also multiplies toolchain support cost and makes signing/linking behaviour untestable here. |
@@ -84,39 +81,32 @@ licence: build tool only, not vendored), Impactor (MIT) + embedded apple-codesig
 unmodified official binary + licence text + source link in vendor/impactor/), devpush
 (project code), Avalonia/.NET (MIT). No GPL/AGPL code is used or copied.
 
-## 4. What the MVP implements (option A, today's Agent)
+## 4. First MVP (option A: remote macOS Build Agent — removed 2026-11-16)
 
-The Windows launcher already drives the existing builder-windows flow:
+The first Windows launcher drove a user-owned macOS host over SSH: the retired agent
+CLI uploaded the ROM, ran the existing scripts in an isolated job, streamed JSON
+progress and downloaded the unsigned per-game IPA. The launcher then opened that IPA as
+a zip, located `Payload/<app>.app/Frameworks/GamePack-<TITLEID>.dylib` plus
+`GameCatalog.json`, verified the Mach-O magic (so a `--fake` placeholder was rejected)
+and recorded the dylib with `3ds2apple-pack packages record`, keeping the pack CLI the
+single manifest/catalogue writer.
 
-    builder-windows build --host <host profile> --rom <ROM> --name <slug> --display-name <name> --out <dir> --json
-    # exit codes: 0 ok, 1 build failed, 2 usage/config, 3 transport, 4 canceled, 5 local I/O
-    # streams protocol JSON events; the launcher shows them as build progress/log lines
+That remote path was deleted on 2026-11-16 when the local build below became the only
+Deploy path. The rest of the then-MVP is still how the product works today:
 
-The Agent builds the project's existing **per-game IPA** (3dsrecomp -> iOS clang -> link ->
-xcodebuild/package). The launcher then:
-
-1. finds the downloaded .ipa (newest *.ipa in the requested --out directory),
-2. opens it as a zip, locates Payload/<app>.app/Frameworks/GamePack-<TITLEID>.dylib and
-   GameCatalog.json, verifies the Mach-O magic (a --fake placeholder is rejected),
-3. records the dylib into the local package with 3ds2apple-pack packages record, so the Rust
-   CLI stays the single manifest/catalogue writer,
-4. composes the installable app IPA on Windows: pinned ROM-free shell template +
+1. composes the installable app IPA on Windows: pinned ROM-free shell template +
    Frameworks/GamePack-<TITLEID>.dylib for every built game + generated GameCatalog.json
    (schema v2), then signs and installs that whole IPA with the bundled official plumesign.
    IPA signing covers the nested Frameworks dylibs, which is why the pack must NOT be pushed
    into Documents (iOS refuses to dlopen a loose unsigned dylib there),
-5. pushes only the user's GameRom.cci + GameInfo.json into Documents/Games/<TITLEID>/ via
+2. pushes only the user's GameRom.cci + GameInfo.json into Documents/Games/<TITLEID>/ via
    devpush; those data files are expected to persist across an app recompose/overwrite
-install (a clean uninstall clears them; verify on device).
+   install (a clean uninstall clears them; verify on device).
 
-This is explicitly labelled a transitional build path: it builds a whole per-game IPA just to
-extract one GamePack. The phone never installs that per-game IPA; it installs the composed app
-IPA (shell template + all packs), and only ROM data goes to Documents.
+## 5. Historical proposal: a dedicated packbuild Agent stage (never shipped)
 
-## 5. Recommended next step: a dedicated pod2packbuild Agent stage
-
-Implement one new job type in builder/agent + builder/core (build-infra task), so the Windows
-launcher stops building full IPAs:
+The remote agent was deleted before this stage was implemented, so the packbuild proposal
+below is kept only as a record of the option we evaluated:
 
 Request (JSON uploaded with the job, paths are host-relative):
 
@@ -147,21 +137,18 @@ Artifacts streamed back (NDJSON events, same style as the existing job protocol)
 Failure semantics: non-zero exit + stage name + hint; the ROM and generated C are deleted at job
 end by default (same cleanup rule as the existing Builder). The launcher then downloads the pack
 dylib, records it, and includes it in the next composed app IPA; only game ROM data is pushed to
-Documents. Launcher side is already prepared:
-Core/BuildPipeline/BuildProviders.cs contains MacAgentPackBuildProvider, which currently refuses with a
-clear "not implemented" message (no fake success); switching the default provider is a one-line
-change once the Agent stage exists.
+Documents. The launcher-side placeholder provider was removed with the agent stack; the local build
+already produces packs directly, so no remote packbuild stage is needed.
 
-Optional phase-2: run 3dsrecomp on Windows (option E) and make the Agent stage accept a
-pre-generated C tree (scripts/build-recomp-ios.sh --code-dir, which already exists on the macOS
-side), cutting Mac wall time roughly to compile+link only.
+Optional phase-2 (now shipped): 3dsrecomp runs on the Windows PC and the local LLVM/LLD
+toolchain links the GamePack there, so no Mac is involved at all (see §7/§8).
 
 ## 6. Verification and evidence
 
 Verified in this checkout (WSL, .NET 10 SDK 10.0.403, Rust):
 
-- Launcher solution builds (0 errors); 35/35 unit tests pass; --self-test passes with only
-  optional-tool warnings (see docs/windows-launcher.md for exact commands/results).
+- Launcher solution builds (0 errors); the current xUnit suite passes 146/146; --self-test
+  passes with only optional-tool warnings (see docs/windows-launcher.md for exact commands/results).
 - The app-IPA composer is unit-tested with a synthetic template IPA + fake pack CLI: it injects
   Frameworks/GamePack-<TITLEID>.dylib, replaces GameCatalog.json with the generated catalogue
   (registrationSymbol/packABIVersion filled, bundle-relative packFile checked), preserves the
@@ -333,14 +320,12 @@ game correctly (the pack registers tables, but no game frame was executed under 
   release/commands; the prototype executed the Ubuntu LLVM 21.1.8 build of the same compiler.
   `--selfcheck` is the intended first-run gate on Windows (installer only, no SDK).
 
-### 7.7 Recommendation update
+### 7.7 Recommendation (final, 2026-11-16)
 
-Keep **option A (macOS Build Agent) as the MVP default**; the S2Arm-style local build is not a
-drop-in replacement yet because its codegen/runtime has not been validated with a running game.
-Add this as **option D2, a phase-2 optional local build backend** behind a launcher feature flag:
-it removes the Mac from the loop for users who need it, is fully legal (open-source LLVM, no Apple
-files), and reuses the existing GamePack ABI, `zk_gamepack_register`, catalogue and signing flow.
-Evidence for this section is reproducible from the gitignored artifacts under `build/winbuild/`
+The local build is the default and only Deploy path; the remote macOS Build Agent (option A)
+was deleted. The local compile is legal (official open-source LLVM/LLD, no Apple files), needs
+no Mac, and reuses the existing GamePack ABI, `zk_gamepack_register`, catalogue and signing
+flow. Evidence is reproducible from the gitignored artifacts under `build/winbuild/`
 (dylib + `GamePack-check.json` + build logs); nothing game-derived was committed.
 ## 8. End-to-end proof (task-26, 2026-11-15): ROM → C on the PC → LLVM GamePack → real shell AOT run
 
@@ -437,16 +422,15 @@ Xcode-built pack's expectations (software renderer ~4-5 fps, no Metal). The simu
 afterwards (`simctl shutdown all`; verified no booted device). Raw logs are kept in the gitignored
 `build/winbuild-host/evidence/` (`sim-harness-fresh-pack.log`, `sim-shell-fresh-pack.log`).
 
-### 8.4 Windows launcher: feature-flagged LocalPackBuildProvider
+### 8.4 Windows launcher: LocalWinbuildPackProvider (now the only build path)
 
-`launcher/windows` implements the local build behind an off-by-default flag
-(`LauncherStateDocument.LocalBuildEnabled`, Settings checkbox). Flow: 3dsrecomp port under the
-CC/CPATH environment above → shim compile + `ld64.lld` link (`-platform_version ios 16.0.0`,
-`-undefined dynamic_lookup`, `@rpath/GamePack-<TITLE>.dylib`) → thin-arm64 Mach-O check →
-`3ds2apple-pack packages record`. See [windows-launcher.md](windows-launcher.md) §13 for the tool
-requirements, readiness row and limitations. Tests: 6 provider tests + full suite **63/63**
-(`dotnet test`, .NET 10); Core + Avalonia Desktop build 0 warnings / 0 errors. The macOS Build Agent
-stays the supported, default path.
+`launcher/windows` implements the local build as `LocalWinbuildPackProvider`. Flow: 3dsrecomp
+port under the CC/CPATH environment above → shim compile + `ld64.lld` link
+(`-platform_version ios 16.0.0`, `-undefined dynamic_lookup`, `@rpath/GamePack-<TITLE>.dylib`) →
+thin-arm64 Mach-O check → `3ds2apple-pack packages record`. See
+[windows-launcher.md](windows-launcher.md) §13 for the tool requirements, readiness row and
+limitations. Core + Avalonia Desktop build 0 warnings / 0 errors. This provider is the v2
+launcher's only Deploy path and needs no Mac.
 
 ### 8.5 Residual gaps (honest)
 
@@ -461,11 +445,12 @@ stays the supported, default path.
 * Device/simulator outputs stay distinct (`GamePack-<TID>.dylib` vs `GamePack-<TID>-sim.dylib`) so
   one output root can hold both.
 
-### 8.6 Recommendation update (after task-26)
+### 8.6 Recommendation (final, 2026-11-16)
 
-Keep **option A (macOS Build Agent) as the supported default**. The local path is now proven
-end-to-end for ROM → C → pack → **simulator AOT run (0.00% interpreted)** and is implemented in the
-Windows launcher behind a flag. Promote it after (1) a real-Windows smoke test and (2) a device AOT
-acceptance run. No Apple SDK is involved anywhere in the local path; the LLVM toolchain is
-redistributable under Apache-2.0 WITH LLVM-exception (THIRD_PARTY/NOTICE updated in this task).
+The local path is the product path: ROM → C → local LLVM GamePack → simulator AOT run
+(0.00% interpreted) and the Windows launcher's default Deploy flow. The remote macOS agent
+was deleted once the local build shipped. Remaining acceptance items are a real-Windows
+smoke test and a device AOT run. No Apple SDK is involved anywhere in the local path; the
+LLVM toolchain is redistributable under Apache-2.0 WITH LLVM-exception
+(THIRD_PARTY/NOTICE updated in this task).
 

@@ -37,7 +37,7 @@ Azahar（GPLv3，3DS 设置/每游戏配置）、goldenpad（无 LICENSE，N64 �
   不能直接整体依赖；正确做法是**按组件移植 + 保留 MIT 版权声明**（我们 Apache-2.0 兼容），
   或评估是否把最低系统提到 iOS 18/26（需产品决定）。
 - 启动器（`frontend/`）用 SwiftPM 分 `NXCore`/`NXModel`/`NXLauncher`，把纯逻辑、store、
-  视图严格分层，构建进度有阶段/ETA/日志/诊断导出——我们的 `builder/` 可以照这个信息架构做。
+  视图严格分层，构建进度有阶段/ETA/日志/诊断导出——我们的桌面启动器可以照这个信息架构做。
 
 ## 3. S2Arm 里具体可复用什么（最接近我们要做的分发模型）
 
@@ -63,7 +63,7 @@ Azahar（GPLv3，3DS 设置/每游戏配置）、goldenpad（无 LICENSE，N64 �
   「单 App + 游戏包」打包/命名/签名占位/封面抓取/存档身份管线，可抽出来改造成我们的
   `scripts/`（例如把现在「每游戏一个 IPA」升级成「一个 shell + 游戏包」）。
 - **launchers/ + s2armctl**：图形启动器带进度/耗时/磁盘占用，且暴露 CLI 给 AI 操作，
-  并有自检/自修/反馈工具。我们的 `builder/`（Rust + zkb）可以借鉴其命令集与诊断包设计。
+  并有自检/自修/反馈工具。我们的桌面启动器可以借鉴其命令集与诊断包设计（旧 Rust builder 前端已于 2026-11-16 删除）。
 - **docs/开发监控与MetalHUD.md**：确认 `MTL_HUD_ENABLED` 只在启动时读、
   `MetalHUDForceEnabled` 默认项 + 重启生效、Developer→Graphics HUD 需要 development
   provisioning profile——和我们这轮结论一致，可作为 HUD 文档依据。
@@ -98,7 +98,7 @@ Azahar（GPLv3，3DS 设置/每游戏配置）、goldenpad（无 LICENSE，N64 �
    并明确标注哪些游戏是 AOT。
 3. **封面/库体验**：接入 libretro-thumbnails/GameTDB 运行时抓取 + 本地缓存；标题 ID
    自动命名/分组；沿用 NX2Apple「删除游戏保留存档」。
-4. **构建/分发体验**：照 S2Arm launcher + `s2armctl` 的信息架构升级 `builder/`：
+4. **构建/分发体验**：照 S2Arm launcher + `s2armctl` 的信息架构升级 Windows/macOS 启动器：
    阶段进度/ETA/日志/诊断包、一键安装、AI 可调用的命令集。
 5. **HUD/性能**：沿用 S2Arm 的「官方 HUD 请求 + 自有浮层」两条线；把
    `docs/开发监控与MetalHUD.md` 的结论写进我们 docs（HUD 只在 Metal/AOT 路径有意义）。

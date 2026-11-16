@@ -7,9 +7,10 @@
 >
 > This document is the contract between the desktop build and the AOT shell: the
 > per-game package layout, the `GameInfo.json` manifest, the `GameCatalog.json`
-> schema v2 and the `GamePack.dylib` ABI hand-off. The real macOS compile/link
-> runs through the scripts in `scripts/` (or the Build Agent); everything else
-> runs natively on the user's desktop, including on Linux.
+> schema v2 and the `GamePack.dylib` ABI hand-off. The real compile/link runs on
+> macOS through the scripts in `scripts/` or locally on Windows through the
+> launcher's 3dsrecomp + LLVM/LLD toolchain; everything else runs natively on the
+> user's desktop, including on Linux.
 
 The AOT-first model moves ROM import and compilation off the phone:
 
@@ -18,8 +19,8 @@ The AOT-first model moves ROM import and compilation off the phone:
 2. The desktop reads the **headers only** (a few KiB, never a copy or a full
    hash), detects title ID / product code / display name and queues one AOT
    build per title.
-3. A macOS host (local Mac or Build Agent) compiles the game; the result becomes
-   one package: `out/packages/<TITLE_ID>/GamePack.dylib + GameInfo.json`.
+3. A macOS host or the Windows launcher's local LLVM toolchain compiles the game;
+   the result becomes one package: `out/packages/<TITLE_ID>/GamePack.dylib + GameInfo.json`.
 4. The user selects packages; one **shell IPA** is produced that carries all of
    them: `Payload/3ds2apple.app/Frameworks/GamePack-<TITLE_ID>.dylib` plus a
    generated `GameCatalog.json`.
@@ -91,7 +92,7 @@ scripts/build-recomp-ios.sh <name> --code-dir build/game/<name>
 ```
 
 Wiring a real "generate only" mode (3dsrecomp's current `port` command compiles
-with `CC`) is a follow-up in `scripts/build-recomp-ios.sh`/`builder/agent`; the
+with `CC`) is a follow-up in `scripts/build-recomp-ios.sh`; the
 `--code-dir` path above is the documented split, and this MVP keeps the whole
 recomp step on the macOS host until that wiring is verified. The CLI dry run
 below makes the split visible without a Mac.
@@ -110,10 +111,11 @@ below makes the split visible without a Mac.
 3ds2apple-pack pack --all --execute --fake-shell --ipa-out IPA/
 ```
 
-`build --queued --execute` is the only mode that runs the macOS scripts; on a
-non-macOS host it fails with a clear hint, which is why the fake/dry-run path
-exists for Linux/Windows development and for a Windows desktop without a Mac
-(until the remote Build Agent multi-game stage lands, see §10).
+`build --queued --execute` runs the macOS scripts; on a non-macOS host it fails
+with a clear hint, which is why the fake/dry-run path exists for Linux/Windows
+development. The shipped Windows launcher does not use this mode: it drives the
+local 3dsrecomp + LLVM/LLD build in its own Deploy page (see
+[windows-build.md](windows-build.md)).
 
 ## 3. CLI flow
 
@@ -489,8 +491,8 @@ Section 7's "Bundled-ROM device IPA" runs the whole real path:
 `build-game-pack.sh --code-dir --target device` -> `packages record
 --include-rom` -> `build-ios-app.sh` -> `build-multi-game-ipa.sh --base-app`.
 `3ds2apple-pack build --queued --execute` still drives the script plan (the CLI
-prints it for review), but it remains a single-game/one-pack plan until the
-Build Agent multi-pack stage lands (section 10).
+prints it for review). Multi-game packaging is done by the launchers: the Windows
+launcher builds each pack locally and composes the multi-pack IPA itself (section 10).
 
 Two operational notes from the run: rebuild `build/ios/libzakuro_ios.a` with
 `scripts/build-zakuro-ios.sh` whenever the GamePack C ABI changes (the device
@@ -564,17 +566,17 @@ Gaps / follow-ups (owners):
    device has `dlopen()`ed the nested pack; SideStore/Sideloadly must re-sign
    `Frameworks/GamePack-*.dylib` with the user's certificate. `--from-libs`
    (linking the old static archive) remains unproven.
-2. **Build Agent / zkb integration** (task-7 follow-up): the Agent still builds
-   one static-link game IPA; extend its packaging stage to invoke
-   `build-game-pack.sh` / `build-multi-game-ipa.sh` and stream package
-   artifacts. The desktop CLI plan already matches the Agent's script contract.
+2. **Local build integration** (task-7 follow-up, done in v2): the Windows launcher
+   now builds each GamePack locally (3dsrecomp + LLVM/LLD) and composes the
+   multi-game IPA itself; the old remote Agent integration was removed on
+   2026-11-16. The desktop CLI plan is still the script contract of record.
 3. **Host-native 3dsrecomp generation** (build-infra): wire a generate-only mode
    on Linux and benchmark; use `--code-dir` adoption on the Mac for the compile.
 4. **CIA support**: the MVP rejects CIA containers (title ID lives in the ticket,
    executable encrypted). Requires the user's decrypted `.3ds`/`.cci` or a
    separate safe extraction step (not in scope).
-5. **GUI launchers**: Windows/macOS graphical shells remain design-only; the CLI
-   is the MVP interface (same as the rest of `builder/`).
+5. **GUI launchers**: the Windows launcher ships; the macOS launcher is being brought
+   to parity. The CLI remains available for scripting and QA.
 6. **Covers**: the 48x48 SMDH icon is extracted automatically and a user
    `cover.png` is respected, but downloading/fetching artwork is not
    implemented (legal/UI decision left to the launcher work).
