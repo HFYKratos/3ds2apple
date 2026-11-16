@@ -86,7 +86,9 @@ if game_catalog_write_empty "$EMPTY_CATALOG"; then
 else
   fail "write empty catalog ($GAME_CATALOG_ERROR)"
 fi
-expect_eq "empty catalog is byte-exact" '{"schemaVersion":1,"games":[]}' "$(cat "$EMPTY_CATALOG")"
+# The ROM-free template/shell catalog is schemaVersion 2 (see scripts/lib/game-catalog.sh);
+# schemaVersion 1 remains the legacy statically-linked static form and is still validated.
+expect_eq "empty catalog is byte-exact (schema 2 template)" '{"schemaVersion":2,"games":[]}' "$(cat "$EMPTY_CATALOG")"
 if game_catalog_validate "$EMPTY_CATALOG"; then
   pass "validate empty catalog"
   expect_eq "empty catalog games count" '0' "$GAME_CATALOG_COUNT"
