@@ -13,7 +13,7 @@
 
 <p align="center">
   <img src="launcher/windows/docs/ui/v4-library-zh.png" width="470" alt="Windows 启动器游戏库">
-  <img src="launcher/macos/screenshots/launcher-library-empty-dark-zh.png" width="380" alt="macOS 启动器空游戏库">
+  <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="380" alt="macOS 启动器空游戏库">
 </p>
 <p align="center"><sub>Windows 启动器（游戏库，合成演示条目）与 macOS 启动器（空游戏库）。</sub></p>
 
