@@ -788,11 +788,11 @@ Debug --self-test (developer layout)                     -> SELF-TEST OK with 3 
 THREEDS2APPLE_DIST=launcher/windows ... --self-test      -> deploy step contract + composed-IPA gate PASS
 Xvfb --ui-smoke (library/deploy/settings)                -> no binding errors; screenshots docs/ui/v2-*.png
 prepare-dist-singlefile.sh                               -> out/launchers/3ds2apple-windows-single-0.1.0.zip
-  zip entry count                                        -> 1 (3ds2apple-launcher.exe, 155,195,017 B)
-  ZIP  SHA-256 b3b7712a3cd1be5fba017047828ad1eb5d2f0884e026b66517c896da854df154
-  EXE  SHA-256 6197c6fa1db0257de379875ba2138bd36f12a1d0c275ec49179a7f91dac4ddc0
+  zip entry count                                        -> 1 (3ds2apple-launcher.exe, 155,195,215 B)
+  ZIP  SHA-256 0ce16c213a7fc7ebf1455dac78b31c3c6650862cc68b156130ef9833e76efaeb
+  EXE  SHA-256 0f5f57027f0b594e390d2df64cdfcfbfc90b1923aeb3c191775c6e7b276f3dc8
 clean-folder self-test (Linux host, extracted payload)   -> SELF-TEST OK with 1 warning (PINS source-checkout only)
-                                                            (bundled LLVM payload PASS)
+                                                            (local build toolchain + bundled LLVM payload PASS)
 ```
 
 ### 16.7 Remaining real-device risks

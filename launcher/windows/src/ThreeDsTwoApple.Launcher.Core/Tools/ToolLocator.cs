@@ -75,6 +75,8 @@ public sealed class ToolLocator
         }
         foreach (var candidate in new[]
                  {
+                     // The single-file payload stages LLVM as Bin/llvm/bin/clang.exe.
+                     Path.Combine(_distributionRoot, "Bin", "llvm", "bin"),
                      Path.Combine(_distributionRoot, "Bin", "llvm"),
                      Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LLVM", "bin"),
                  })

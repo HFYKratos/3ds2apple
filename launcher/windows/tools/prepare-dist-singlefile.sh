@@ -93,11 +93,10 @@ if [ -d "$LLVM_SOURCE/lib/clang" ] && [ -f "$LLVM_SOURCE/bin/clang.exe" ]; then
   find "$LLVM_SOURCE/bin" -maxdepth 1 -type f \( -name '*.dll' -o -name '*.pdb' -o -name 'clang.exe' \) -exec cp {} "$LLVM_STAGE/bin/" \;
   # The clang resource headers 3dsrecomp's generated C needs (-isystem).
   for clang_dir in "$LLVM_SOURCE"/lib/clang/*/; do
+    version="$(basename "$clang_dir")"
     if [ -d "${clang_dir}include" ]; then
-      cp -r "${clang_dir}include" "$LLVM_STAGE/lib/clang/$(basename "$clang_dir")/" 2>/dev/null || {
-        mkdir -p "$LLVM_STAGE/lib/clang/$(basename "$clang_dir")"
-        cp -r "${clang_dir}include" "$LLVM_STAGE/lib/clang/$(basename "$clang_dir")/"
-      }
+      mkdir -p "$LLVM_STAGE/lib/clang/$version/include"
+      cp -a "${clang_dir}include/." "$LLVM_STAGE/lib/clang/$version/include/"
     fi
   done
   for notice in LICENSE.TXT LICENSE.txt; do
