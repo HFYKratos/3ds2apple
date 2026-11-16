@@ -49,10 +49,13 @@ enum ShellRuntime {
     /// Pinned ROM-free shell template that carries the verified framework
     /// (shell 0.1.0 build 1, Metal HUD + Documents file sharing enabled).
     static let pinnedTemplateRelativePath = "out/shell/3ds2apple-shell.ipa"
-    // TODO(task-13): refresh bytes/SHA-256 from the rebuilt 0.1.0 build 1 shell IPA
-    // before shipping; the values below are the pre-reset 0.2.3 build 11 template.
-    static let pinnedTemplateBytes: Int64 = 5_487_675
-    static let pinnedTemplateSHA256 = "831357dbfeffa81f92fbde0eab8c2962d36e99c924d08f535aa5b60557cfba21"
+    /// Rebuilt 0.1.0 build 1 ROM-free shell IPA (task-12).
+    static let pinnedTemplateBytes: Int64 = 5_487_673
+    static let pinnedTemplateSHA256 = "b54a00f4ce1fc7522df8a5651dd21d92d1f06d80870f4174299ebffd6fd6aa14"
+    /// The rebuilt shell identity the launcher is built against. The pinned
+    /// template must report exactly these values; another shell build is refused.
+    static let expectedShellVersion = "0.1.0"
+    static let expectedShellBuild = "1"
 
     /// Info.plist keys the shell must keep: the Metal HUD build flag and the
     /// Documents/Games file sharing the launcher pushes game data into.
@@ -198,6 +201,36 @@ enum ShellRuntime {
         return problems
     }
 
+    /// The pinned shell's advertised product version/build (0.1.0 build 1 since
+    /// the product-version reset). Empty means the shell is the identity this
+    /// launcher pins; anything else means a mismatched template/build.
+    static func shellIdentityProblems(inShellAppAt appPath: String) -> [String] {
+        let plistPath = appPath + "/Info.plist"
+        guard let data = FileManager.default.contents(atPath: plistPath),
+              let root = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil),
+              let object = root as? [String: Any] else {
+            return ["Info.plist is missing or unreadable for the pinned shell identity"]
+        }
+        var problems: [String] = []
+        let version = object["CFBundleShortVersionString"] as? String ?? ""
+        let buildValue = object["CFBundleVersion"]
+        let build: String
+        if let text = buildValue as? String {
+            build = text
+        } else if let number = buildValue as? NSNumber {
+            build = number.stringValue
+        } else {
+            build = ""
+        }
+        if version != expectedShellVersion {
+            problems.append("expected shell version " + expectedShellVersion + ", found " + (version.isEmpty ? "missing" : version))
+        }
+        if build != expectedShellBuild {
+            problems.append("expected shell build " + expectedShellBuild + ", found " + (build.isEmpty ? "missing" : build))
+        }
+        return problems
+    }
+
     /// The full rule for a shell .app the launcher may sign/install: it must
     /// carry the pinned Frameworks/MoltenVK.framework AND keep the Metal HUD +
     /// file-sharing Info.plist keys. Empty means Metal/HUD ready.
@@ -259,6 +292,7 @@ enum ShellRuntime {
                     let extraction = try extractFrameworkFromPinnedTemplate(ipaPath: candidate.directory)
                     var issues = problemsWithFramework(at: extraction.frameworkPath)
                     issues.append(contentsOf: infoPlistProblems(inShellAppAt: extraction.appPath))
+                    issues.append(contentsOf: shellIdentityProblems(inShellAppAt: extraction.appPath))
                     if issues.isEmpty {
                         return Source(
                             origin: .pinnedTemplate,
@@ -284,13 +318,15 @@ enum ShellRuntime {
     }
 
     /// Validate the pinned shell template itself (IPA bytes + the embedded
-    /// framework + the shell Info.plist). Used by the self-check; empty is good.
+    /// framework + the shell Info.plist + the 0.1.0 build 1 identity). Used by
+    /// the self-check; empty is good.
     static func inspectPinnedTemplate(at ipaPath: String) -> [String] {
         do {
             let extraction = try extractFrameworkFromPinnedTemplate(ipaPath: ipaPath)
             defer { try? FileManager.default.removeItem(atPath: extraction.temporaryRoot) }
             var issues = problemsWithFramework(at: extraction.frameworkPath)
             issues.append(contentsOf: infoPlistProblems(inShellAppAt: extraction.appPath))
+            issues.append(contentsOf: shellIdentityProblems(inShellAppAt: extraction.appPath))
             return issues
         } catch {
             return [error.localizedDescription]

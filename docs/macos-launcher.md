@@ -369,11 +369,13 @@ runs with `THREEDS2APPLE_DATA_DIR=/tmp/zl-launcher-data-vm` so the VM tree stays
 clean; the live app resolves its own portable root beside the .app.
 
 For launcher 0.1.0 (build 1) the script needs the pinned ROM-free shell template
-`out/shell/3ds2apple-shell.ipa` **0.1.0 build 1**, rebuilt together with the app
-version (the pre-reset template was 0.2.3 build 11: 5,487,675 bytes, sha256
-831357db…); the template bytes/SHA-256 constants in `ShellRuntime.swift` are
-refreshed with the rebuilt shell. Only the template's framework bytes are
-hash-pinned again (MoltenVK 1.4.2, 4,822,128 bytes, sha256 6cd58884…).
+`out/shell/3ds2apple-shell.ipa` **0.1.0 build 1**: 5,487,673 bytes,
+sha256 b54a00f4…, rebuilt together with the app version. `ShellRuntime.swift`
+pins the template size and SHA-256 and additionally verifies the template's
+`CFBundleShortVersionString`/`CFBundleVersion` are exactly `0.1.0`/`1`, so a
+mismatched shell build fails the self-check instead of being embedded. The
+template's framework bytes are still hash-pinned to MoltenVK 1.4.2
+(4,822,128 bytes, sha256 6cd58884…).
 
 ## 7. Manual device test (not executable on the shared VM)
 
@@ -461,16 +463,42 @@ build/ios/libzakuro_ios.a built; decrypted ROMs the player owns.
    build/third_party/MoltenVK.framework or the pinned out/shell template in the
    checkout, and the deploy is refused if neither is present.
 
-## 10. Build and test evidence (pre-reset 0.2.4 + task-35 MoltenVK + task-34, 2026-11-16 — historical)
+## 10. Build and test evidence (launcher 0.1.0 build 1 + pre-reset history, 2026-11-16)
 
 Environment: macOS 26.7.3 VM (8 vCPU / 12 GB, QEMU on the CachyOS host), Xcode
 26.6 (17F113), xcodegen 2.46.0, no Aqua GUI session, no Apple ID signing assets,
 no attached iPhone/iPad. Sources were synced to ~/3ds2apple on the VM and built
-over SSH with launcher/macos/scripts/vm-build.sh. The task-35 build used an
-isolated checkout on the same VM (~/3ds2apple-moltenvk, sources synced over
-SSH) so the task-34 checkout was untouched.
+over SSH with launcher/macos/scripts/vm-build.sh. Historical builds used an
+isolated checkout on the same VM (~/3ds2apple-moltenvk, sources synced over SSH)
+so the task-34 checkout was untouched.
 
-### launcher 0.2.4 (portable data / SMDH metadata / hardware line, 2026-11-16)
+### launcher 0.1.0 build 1 (product version reset, 2026-11-16)
+
+- xcodebuild: BUILD SUCCEEDED (Release), 0 errors; universal binary
+  (lipo x86_64 arm64, 7,154,240-byte executable), bundle
+  com.kratos.3ds2apple.launcher, version **0.1.0 build 1**.
+- self-check: **207/207 passed** (exit 0); the shell-runtime check now also
+  proves the pinned template identity: exactly 5,487,673 bytes, sha256
+  b54a00f4…, 4,822,128-byte MoltenVK 1.4.2 framework (sha256 6cd58884…), Metal
+  HUD + Documents file-sharing keys, CFBundleShortVersionString 0.1.0 /
+  CFBundleVersion 1. The packaged app, freshly extracted from the ZIP, also
+  passed 207/207.
+- screenshots: 18 non-game PNGs at 2x (English + Simplified Chinese, dark +
+  light) with SMDH cover icons, localized titles/publisher, the Deploy hardware
+  line and Settings showing **Version 0.1.0 (1)**, data folder and compile
+  hardware; the 4 Settings shots changed with the reset, the other 14 were
+  byte-identical.
+- artifact: out/launchers/3ds2apple-launcher-0.1.0-macos-app.zip =
+  5,498,294 bytes, sha256
+  d44416dd7120f2492a2016577eece1ef60c823593a1543154edd6677a88439f7; one .app
+  only (16 entries, 13,973,837 bytes uncompressed) including
+  Contents/Resources/MoltenVK.framework; a fresh extraction ran 207/207 checks
+  and reported x86_64 + arm64, version 0.1.0 build 1.
+- raw VM logs: /tmp/zl-010-build.log, /tmp/zl-launcher-selfcheck.log,
+  /tmp/zl-launcher-selfcheck-packaged.log; copied to
+  out/launchers/build-logs-macos-0.1.0/ in the WSL tree.
+
+### launcher 0.2.4 (portable data / SMDH metadata / hardware line, 2026-11-16 — pre-reset, historical)
 
 Environment: macOS 26.7.3 VM (8 vCPU / 12 GB, QEMU on the CachyOS host), Xcode
 26.6 (17F113), xcodegen 2.46.0, no Aqua GUI session, no Apple ID signing assets,

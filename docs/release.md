@@ -48,17 +48,18 @@ launcher-first 链路（AGENTS.md §4）：
 
 | 资产 | 构建来源 | 版本/标识 | 大小 / SHA-256 |
 |---|---|---|---|
-| 3ds2apple-0.1.0-windows-x64.zip | out/launchers/3ds2apple-windows-single-0.1.0.zip（assemble 重命名） | Windows 启动器 0.1.0 | 重建后由 assemble-release.sh 写入 SHA256SUMS.txt（禁止手填旧哈希） |
-| 3ds2apple-0.1.0-macos-universal.zip | out/launchers/3ds2apple-launcher-0.1.0-macos-app.zip（assemble 重命名） | macOS 启动器 0.1.0 build 1 | 同上（task-13 产出） |
-| 3ds2apple-0.1.0-shell.ipa | out/shell/3ds2apple-shell.ipa（assemble 重命名；manifest 0.1.0/build 1） | 壳模板 0.1.0 / build 1 | 同上（task-12 产出） |
+| 3ds2apple-0.1.0-windows-x64.zip | out/launchers/3ds2apple-windows-single-0.1.0.zip（assemble 重命名） | Windows 启动器 0.1.0（内 exe 155,464,345 B） | 148,819,303 B · SHA-256 `be270f553c3c7acb2dbb385a9d2dc4ef16b50366edf31f411fff0424330a7035` |
+| 3ds2apple-0.1.0-macos-universal.zip | out/launchers/3ds2apple-launcher-0.1.0-macos-app.zip（assemble 重命名） | macOS 启动器 0.1.0 build 1 | 5,498,294 B · SHA-256 `d44416dd7120f2492a2016577eece1ef60c823593a1543154edd6677a88439f7` |
+| 3ds2apple-0.1.0-shell.ipa | out/shell/3ds2apple-shell.ipa（assemble 重命名；manifest 0.1.0/build 1） | 壳模板 0.1.0 / build 1 | 5,487,673 B · SHA-256 `b54a00f4ce1fc7522df8a5651dd21d92d1f06d80870f4174299ebffd6fd6aa14` |
 | SHA256SUMS.txt | scripts/release/assemble-release.sh 生成 | 本目录全部文件的 SHA-256 | 由脚本生成 |
 | LICENSE / NOTICE / THIRD_PARTY.md | 仓库根目录 | 项目许可、Nintendo 声明与第三方清单 | 由脚本纳入校验 |
 
-Windows zip 内部只有一个 <code>3ds2apple-launcher.exe</code>；macOS zip 内部只有
+Windows zip 内部只有一个 <code>3ds2apple-launcher.exe</code>（155,464,345 B，SHA-256
+`2896b74e8bfdf478a6d0a21e92bc1db4a6ea1c6c06616e489b7bd2b3827b8d56`）；macOS zip 内部只有
 <code>3ds2apple-launcher.app</code>（含内嵌 MoltenVK.framework，框架 SHA-256
 6cd5888490d08b36356d04c50c05e2eda5b9bcb3d0338ece693a28987de96aff 与壳模板一致）。
-0.1.0 重建后各资产的字节数/SHA-256 以当次 <code>SHA256SUMS.txt</code> 为准，发布前由 Lead
-从脚本输出回填到 release notes，不在文档里预填猜测值。
+以上为 2026-11-16 0.1.0 定稿值，与 <code>out/release/v0.1.0/SHA256SUMS.txt</code> 一致；任何重发以新 tag 的
+<code>SHA256SUMS.txt</code> 为准，不覆盖已发布资产的哈希。
 
 > 哈希规则：**每期发布以当次 <code>assemble-release.sh</code> 生成的 <code>SHA256SUMS.txt</code> 为准**，
 > 并把各资产 SHA-256 复制到 release notes；禁止手填、复用旧哈希或发布未经脚本校验的文件。
@@ -80,28 +81,29 @@ Windows zip 内部只有一个 <code>3ds2apple-launcher.exe</code>；macOS zip �
 
 ### 3.1 现状（2026-11-16 产品版本重置）
 
-- 源码：launcher-first 重构（仓库清理 + 产品级 README）与版本统一 0.1.0 的改动仍在工作树，发布前必须先由 Lead 收敛、跑完测试并 push。
-- 公开 Release 仍是旧版本线：最新为 <code>v0.1.5-beta3</code>（pre-release，资产
-  <code>3ds2apple-shell-0.1.5-beta3.ipa</code>）；最后一个非 pre-release 是 <code>v0.1.4</code>。
-  launcher-first 尚未公开发布（以 <https://github.com/HFYKratos/3ds2apple/releases> 为准）。
-- 待发布组件（0.1.0 重建线）：Windows 启动器 **0.1.0**、macOS 启动器 **0.1.0 build 1**、
-  手机壳模板 **0.1.0 / build 1**（由 task-12/13/14 重建）。
+- 源码：launcher-first 重构（仓库清理 + 产品级 README）与版本统一 0.1.0 已由 Lead 验证并 commit；
+  发布时 push 到 main 并打 tag <code>v0.1.0</code>（当前本地 main 领先远端）。
+- 公开 Release 仍是旧版本线：<code>v0.1.5-beta3/beta2/beta1</code>、<code>v0.1.4</code>、
+  <code>v0.1.0-alpha</code>；发布 0.1.0 时这 5 个旧 Release 与 tag 将被删除（保留 git 历史），
+  旧 <code>agent/*</code> 分支一并清理。
+- 0.1.0 定稿组件（2026-11-16 重建）：Windows 启动器 **0.1.0**、macOS 启动器 **0.1.0 build 1**、
+  手机壳模板 **0.1.0 / build 1**；三件套与本 Release 使用同一版本号。
 
 ### 3.2 本轮 tag 计划
 
 | 阶段 | tag | GitHub 标记 | 内容 | 放行门槛 |
 |---|---|---|---|---|
-| 发布（0.1.0 重建后） | v0.1.0 | macOS 真机仍未验证时 pre-release = 是并在正文标注"开发者预览"；否则 latest | 3ds2apple-0.1.0-windows-x64.zip、3ds2apple-0.1.0-macos-universal.zip、3ds2apple-0.1.0-shell.ipa、SHA256SUMS.txt、LICENSE/NOTICE/THIRD_PARTY.md | task-12/13/14 的 0.1.0 重建通过、verify-release 全 PASS、NOTICE/THIRD_PARTY 与随包内容一致；未验证项写入 release notes |
+| 发布（0.1.0 定稿） | v0.1.0 | **正式 Release（latest）**：Release 标题只用 `0.1.0`；macOS 真机待外部验证写入正文 | 3ds2apple-0.1.0-windows-x64.zip、3ds2apple-0.1.0-macos-universal.zip、3ds2apple-0.1.0-shell.ipa、SHA256SUMS.txt、LICENSE/NOTICE/THIRD_PARTY.md | 0.1.0 重建与 self-test 通过、verify-release 全 PASS、NOTICE/THIRD_PARTY 与随包内容一致；macOS 真机未验证、分发包不自包含在正文如实标注 |
 | 需要重发时 | v0.1.1（或新的 0.1.x tag） | 按阶段 | 新 tag + 修好的资产 | 旧 tag 不移动；旧 release 保留并在正文标注 superseded |
 
 版本命名理由：产品版本重置为 **0.1.0 / build 1**，Windows 启动器、macOS 启动器、手机壳模板与
 发布 tag 使用同一版本号（组件不再独立编 0.2.x）。Release 标题示例：
-<code>3ds2apple v0.1.0 — launcher-first (Windows launcher / macOS launcher / shell 0.1.0 build 1)</code>。
+标题只用版本号：<code>0.1.0</code>（tag <code>v0.1.0</code>）。
 
 ### 3.3 tag / 版本规则
 
 - tag 形式：<code>v&lt;major&gt;.&lt;minor&gt;.&lt;patch&gt;[-suffix]</code>；用 annotated tag：
-  <code>git tag -a v0.1.0 -m "3ds2apple 0.1.0"</code>，由 Lead push。
+  <code>git tag -a v0.1.0 -m "0.1.0"</code>，由 Lead push；GitHub Release 标题只用 <code>0.1.0</code>。
 - 已 push 的 tag 不移动、不删除、不 force-push；tag 打错就发新 tag。
 - 已上传的 Release 资产不静默替换；修正必须新版本。
 - release notes 必须包含：组件版本表、资产 SHA-256、验证状态、已知问题、安装摘要、法律声明（§8.4 模板）。
@@ -114,16 +116,16 @@ Windows zip 内部只有一个 <code>3ds2apple-launcher.exe</code>；macOS zip �
 
 | # | 组件 / 链路 | 版本 | 状态 | 证据 | 阻塞正式版？ |
 |---|---|---|---|---|---|
-| 0 | 三件套 0.1.0 重建（壳 / Windows / macOS） | 0.1.0 / build 1 | **待重建验证**（task-12/13/14） | 发布前回填 task handoff 与 verify-release 输出 | 是 |
+| 0 | 三件套 0.1.0 重建（壳 / Windows / macOS） | 0.1.0 / build 1 | **已验证**：壳 5,487,673 B `b54a00f4…`；Windows zip 148,819,303 B `be270f55…`（clean-folder self-test 32 PASS/0 FAIL/0 WARN）；macOS zip 5,498,294 B `d44416dd…`（VM selfcheck 207/207）；verify-release 6/6 PASS | out/release/v0.1.0/SHA256SUMS.txt、out/shell/BUILD-EVIDENCE.md、docs/{windows,macos}-launcher.md | 否 |
 | 1 | Windows 全链路真机（导入→编译→Impactor 签名→devpush→启动） | 0.2.3 构建线 | **已验证** | 用户真机：Pokémon Y 约 57–60fps、AOT 100%、Metal GPU、HUD 开启；GPU 4–6ms/帧、present 10–11ms、screen readback 0、interpreted 0.04% | 否 |
-| 2 | Windows 0.2.5 修复/新增：SMDH icon 花屏修复（pack 0x24C0 + tile 解码）、重新导入自动 --force 自愈旧封面、删除旧 Build Agent/builder 前端（exe 约小 1.24 MB）、便携数据目录/SMDH 元数据/硬件行 | 0.2.5 | **clean-folder self-test 32 PASS / 0 FAIL / 0 WARN（Lead 复核）**；游戏库 UI/icon 真机交互**待用户复测** | Lead 复核记录；launcher/windows/README、AGENTS.md §3 | 是（beta 需标注"待用户复测"） |
-| 3 | Windows 单文件包 clean-folder self-test（32 项检查） | 0.2.5 | **已验证**：32 PASS / 0 FAIL / 0 WARN，SELF-TEST OK（portable 0.2.5、payload 326 files、shell 0.2.3/build11、Impactor v2.7.2、LLVM 21.1.8 PASS） | Lead 复核；out/launchers/SHA256SUMS-single.txt、clean-run-win/ | 否 |
+| 2 | SMDH icon 修复（0x24C0 + tile 解码）、重新导入 `--force` 自愈封面、硬件行、自检灯、下屏画面 | 0.1.0（自 0.2.5 修复线继承） | **真机已验证**：用户 2026-11-16 确认重新导入后 icon 正常、硬件行/自检灯正常、下屏粉色区域为游戏画面 | 用户复测反馈；launcher/windows/README、AGENTS.md §3 | 否 |
+| 3 | Windows 单文件包 clean-folder self-test（32 项检查） | 0.1.0 | **已验证**：32 PASS / 0 FAIL / 0 WARN，SELF-TEST OK（portable 0.1.0、payload 326 files、shell 0.1.0/build1、Impactor v2.7.2、LLVM 21.1.8 PASS；内嵌 pack.exe `f51150e7…`） | Lead 复核；out/launchers/SHA256SUMS-single.txt、clean-run-win/ | 否 |
 | 4 | 壳模板 host 验证：MoltenVK.framework、空 schema-2 catalog、无 ROM/无 dylib | 0.2.3 / build 11 | **已验证** | out/shell/BUILD-EVIDENCE.md；verify-release.sh 2026-11-16 实跑 PASS | 否 |
 | 5 | 壳 Simulator AOT smoke（软件渲染） | 0.2.3 | **已验证** | BUILD-EVIDENCE.md：dlopen + register OK，interpreted 0.00% | 否 |
 | 6 | 壳真机 Metal 路径（嵌套 MoltenVK/GamePack 签名） | 0.2.3 | **已验证**（Windows 链路） | handoff §2 | 否 |
-| 7 | macOS 启动器构建 / self-check / UI 截图 | 0.2.4 build 7 | **已验证**（macOS VM，selfcheck 207/207；新增重新导入 --force 自愈） | launcher/macos 构建日志、docs/macos-launcher.md | 否 |
-| 8 | macOS 启动器真机（Mac + iPhone：Xcode 签名 + devicectl + 推送） | 0.2.4 build 7 | **未验证**（真实 iPhone 仍未验证） | Lead 说明；.internal/PROJECT_HANDOFF.md | 是 |
-| 9 | macOS 分发包自包含性（工具是否内嵌） | 0.2.4 build 7 | **不足**：app-only zip 未内嵌 3ds2apple-pack/devpush/xcodegen，运行依赖仓库 checkout + Xcode + 单独构建工具 | launcher/macos/Sources/Toolchain.swift 检测顺序：bundle Resources/tools → checkout → PATH；0.2.4 zip 仍只有 .app（16 条目，无 tools/、无许可文本） | 是（或由 Lead 明确接受"开发者预览"定位） |
+| 7 | macOS 启动器构建 / self-check / UI 截图 | 0.1.0 build 1 | **已验证**（macOS VM，xcodebuild 成功、selfcheck 207/207、壳 pin b54a00f4… 身份校验通过） | launcher/macos 构建日志、docs/macos-launcher.md | 否 |
+| 8 | macOS 启动器真机（Mac + iPhone：Xcode 签名 + devicectl + 推送） | 0.1.0 build 1 | **未验证**（真实 iPhone 仍未验证；0.1.0 Release 正文如实标注，欢迎外部验证） | Lead 说明；.internal/PROJECT_HANDOFF.md | 是 |
+| 9 | macOS 分发包自包含性（工具是否内嵌） | 0.1.0 build 1 | **不足**：app-only zip 未内嵌 3ds2apple-pack/devpush/xcodegen，运行依赖仓库 checkout + Xcode + 单独构建工具 | launcher/macos/Sources/Toolchain.swift 检测顺序：bundle Resources/tools → checkout → PATH；0.1.0 zip 仍只有 .app（16 条目，无 tools/、无许可文本） | 是（release notes 已标明"需要 checkout"） |
 | 10 | Impactor/plumesign v2.7.2 官方二进制 SHA-256 固定且未被修改 | v2.7.2 | **已验证**（GitHub API release digests，2026-11-14） | launcher/windows/vendor/impactor/PINS.json、licenses/impactor/README-bundled-tools.txt | 否 |
 | 11 | LLVM 21.1.8 工具链 payload SHA-256 + 许可随包 | 21.1.8 | **已验证**（manifest pin；打包脚本 staging LICENSE.TXT） | tools/winbuild/llvm-manifest.json、launcher/windows/tools/prepare-dist-singlefile.sh | 否 |
 

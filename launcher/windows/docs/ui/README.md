@@ -1,13 +1,16 @@
 # Windows launcher UI evidence
 
-> These renders are from the pre-reset 0.2.4 launcher (0.2.x numbering); the
-> current product version is 0.1.0 build 1 and ships the same UI.
+> These renders are from the current 0.1.0 launcher (product version 0.1.0 build 1;
+> the previous 0.2.x numbering is retired). The embedded shell template shown is
+> v0.1.0/build 1, and the bundled tools/payload report 0.1.0.
 
 ## v4 polish (task-39, 2026-11-16)
 
-Local Linux/Xvfb renders of the 0.2.4 launcher (Avalonia 12, x64). **The games,
-cover icons, titles and publisher in these captures are synthetic fixtures** created for
-the screenshot run — no ROM, game icon or game title from a real ROM is stored in this
+Local Linux/Xvfb renders of the 0.1.0 launcher (Avalonia 12, x64), re-rendered
+2026-11-16 with the unified 0.1.0 build (embedded shell v0.1.0/build 1).
+
+**The games, cover icons, titles and publisher in these captures are synthetic fixtures**
+created for the screenshot run — no ROM, game icon or game title from a real ROM is stored in this
 repository. Each render starts the launcher's developer-only `--ui-smoke` mode with a
 temporary `state.json` (two fake library entries: one with a 48x48 synthetic `cover.png`,
 one without an icon) so the new ROM-metadata UI can be reviewed without a ROM.

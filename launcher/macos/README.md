@@ -146,11 +146,41 @@ it from a source tree).
 
 ## Evidence / QA
 
-The evidence below is the pre-reset 0.2.4 build 7 record (0.2.x numbering,
-kept for history); the 0.1.0 build 1 package is rebuilt and re-verified on the
-VM by the 0.1.0 packaging task. Original record: the Windows-0.2.4-sync
-revision (launcher 0.2.4, **build 7** with the task-8 forced re-import
-self-heal) on the macOS VM (Xcode 26.6, headless), 2026-11-16:
+### launcher 0.1.0 build 1 (product version reset, 2026-11-16)
+
+The rebuilt 0.1.0 build 1 package on the macOS VM (Xcode 26.6, headless):
+
+- xcodebuild: BUILD SUCCEEDED (Release), 0 errors; universal binary
+  (x86_64 + arm64, 7,154,240-byte executable), bundle
+  com.kratos.3ds2apple.launcher, version 0.1.0 build 1.
+- self-check: **207/207 checks passed** (exit 0), including the shell-runtime
+  identity check: the pinned ROM-free shell template is exactly 5,487,673 bytes,
+  sha256 b54a00f4…, carries the pinned 4,822,128-byte MoltenVK 1.4.2 framework
+  (sha256 6cd58884…), keeps the Metal HUD + Documents file-sharing Info.plist keys
+  and reports CFBundleShortVersionString 0.1.0 / CFBundleVersion 1. The packaged
+  app, freshly extracted from the ZIP, also passed 207/207.
+- screenshots: 18 non-game PNGs, English + Simplified Chinese, dark + light
+  (Library SMDH icons/names/publisher, Deploy hardware line, Settings
+  "Version 0.1.0 (1)" + data folder + compile hardware); the 4 Settings shots were
+  regenerated for the reset, the other 14 stayed byte-identical.
+- artifact: out/launchers/3ds2apple-launcher-0.1.0-macos-app.zip
+  (5,498,294 bytes, sha256
+  d44416dd7120f2492a2016577eece1ef60c823593a1543154edd6677a88439f7), one
+  .app only (16 entries, 13,973,837 bytes uncompressed) including
+  Contents/Resources/MoltenVK.framework. The packaged launcher is self-contained
+  for device deploys (the user's Mac needs no shell template).
+- real iPhone acceptance is NOT done: the shared VM has no attached iPhone and no
+  Apple ID signing assets. Signing/install/push need the player's own Xcode
+  account and a USB device; the manual checklist is in
+  [docs/macos-launcher.md](../../docs/macos-launcher.md) section 7.
+- raw VM logs: /tmp/zl-010-build.log, /tmp/zl-launcher-selfcheck.log,
+  /tmp/zl-launcher-selfcheck-packaged.log; copied to
+  out/launchers/build-logs-macos-0.1.0/ in the WSL tree.
+
+### historical: pre-reset 0.2.4 build 7 record
+
+The Windows-0.2.4-sync revision (launcher 0.2.4, **build 7** with the task-8
+forced re-import self-heal) on the macOS VM (Xcode 26.6, headless), 2026-11-16:
 
 - xcodebuild: BUILD SUCCEEDED (Release), 0 errors; universal binary
   (x86_64 + arm64, 7,120,032-byte executable), bundle
@@ -172,21 +202,17 @@ self-heal) on the macOS VM (Xcode 26.6, headless), 2026-11-16:
   The migration self-check adopts a synthetic old `<checkout>/out` tree without
   touching it (packages + cover.png adopted, `work/` scratch skipped, marker
   written once).
-- shell template pin updated to the ROM-free shell (pre-reset values below;
-  the 0.1.0 build 1 rebuild is pinned by `ShellRuntime.swift`/task-13)
-  `out/shell/3ds2apple-shell.ipa` 0.2.3 build 11 (5,487,675 bytes, sha256
-  831357db…); the embedded Frameworks/MoltenVK.framework is still the pinned
-  4,822,128-byte MoltenVK 1.4.2 (sha256 6cd58884…).
+- shell template pin at that time: `out/shell/3ds2apple-shell.ipa` 0.2.3
+  build 11 (5,487,675 bytes, sha256 831357db…); the embedded
+  Frameworks/MoltenVK.framework is still the pinned 4,822,128-byte MoltenVK 1.4.2
+  (sha256 6cd58884…). The 0.1.0 build 1 rebuild is pinned at the top of this
+  section.
 - artifact: out/launchers/3ds2apple-launcher-0.2.4-macos-app.zip
   (5,495,796 bytes, sha256
   8c34398f7a25709598626769adc56d146ea89ff9f3718313c7c0d796f719d28b), one
   .app only (16 entries, 13,939,629 bytes uncompressed) including
   Contents/Resources/MoltenVK.framework. The packaged launcher is self-contained
   for device deploys (the user's Mac needs no shell template).
-- real iPhone acceptance is NOT done: the shared VM has no attached iPhone and no
-  Apple ID signing assets. Signing/install/push need the player's own Xcode
-  account and a USB device; the manual checklist is in
-  [docs/macos-launcher.md](../../docs/macos-launcher.md) section 7.
 
 Full architecture, contracts, build commands and the manual device-test
 checklist are in [docs/macos-launcher.md](../../docs/macos-launcher.md).
