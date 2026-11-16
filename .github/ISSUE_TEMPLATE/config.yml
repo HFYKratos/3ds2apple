@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 使用说明 / Usage guide (README)
+    url: https://github.com/HFYKratos/3ds2apple/blob/main/README.md
+    about: 安装、签名、部署、推送与限制只写在 README。/ Install, signing, deploy, push and limits live in the README.
+  - name: 构建与发布规范 / Contributing and release policy
+    url: https://github.com/HFYKratos/3ds2apple/blob/main/CONTRIBUTING.md
+    about: 构建、测试、提交与发布规则。/ Build, test, commit and release rules.

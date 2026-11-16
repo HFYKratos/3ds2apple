@@ -15,8 +15,9 @@ pinned commit 5171e34e3a236842af1160a84d955d037ddca3af), and S2Arm
 (Apache-2.0) as the API-usage reference for the device bridge. See
 THIRD_PARTY.md for the full list and licenses.
 
-The launchers bundle the official Impactor v2.7.2 and plumesign release files
-(unmodified) so the user can sign the base shell IPA with their own Apple ID.
+The Windows launcher bundles the official Impactor v2.7.2 and plumesign release
+files (unmodified) so the user can sign the base shell IPA with their own Apple ID;
+the macOS launcher signs through Xcode and does not bundle Impactor.
 Impactor is MIT (Copyright 2025 Samara M) and embeds apple-codesign 0.29.0 under
 MPL-2.0. The binaries are downloaded from the official GitHub release
 (https://github.com/claration/impactor/releases/tag/v2.7.2) at launcher packaging
@@ -30,35 +31,42 @@ unmodified under the same upstream MIT licence and its SHA-256 is pinned as well
 The iOS shell template and the macOS launcher bundle the unmodified MoltenVK 1.4.2
 framework (Apache-2.0, https://github.com/KhronosGroup/MoltenVK) for the
 Vulkan-to-Metal renderer path. The framework is a build/packaging input and is not
-committed to this repository; its upstream licence is listed in THIRD_PARTY.md, and
-the licence texts live in this repository; public releases publish only the two platform launcher zips (see CONTRIBUTING.md#release-policy).
+committed to this repository; its licence is listed in THIRD_PARTY.md, and the
+project's Apache-2.0 LICENSE (the same licence text MoltenVK uses) is included in
+every release package from 0.1.1 on. See "License texts in the release packages"
+in THIRD_PARTY.md.
 
 The Windows single-file launcher is a self-contained .NET 10 application (MIT) using
 the Avalonia 12.1.5 UI framework (MIT), built only from the sources in this
 repository. The launcher embeds the project LICENSE/NOTICE/THIRD_PARTY texts and the
-relevant third-party licence files in its payload and extracts them on first run.
+relevant third-party licence files in its payload and extracts them on first run; the
+release zip also carries the three project texts at its root.
 
 The device bridge does not contain or distribute game data. Game files are
 pushed by the user from their own machine to their own device; ROMs, IPAs and
 generated C code stay out of git.
-The optional Windows/Linux local-build path (tools/winbuild, launcher feature flag)
-uses the official open-source LLVM/Clang/LLD 21.1.8 release, licensed under the
-Apache License v2.0 WITH LLVM-exception (https://llvm.org/LICENSE.txt). No Apple
+The Windows/Linux local-build path (tools/winbuild, the Windows launcher's only
+GamePack build path since 0.1.0) uses the official open-source LLVM/Clang/LLD
+21.1.8 release, licensed under the Apache License v2.0 WITH LLVM-exception
+(https://llvm.org/LICENSE.txt). No Apple
 SDK, iPhoneOS stub library or Xcode component is used, copied or redistributed by
 that path; it links the GamePack with -undefined dynamic_lookup so libSystem and
 the app's runtime resolve host symbols at dlopen() time. The LLVM release files are
-not committed to this repository: when the launcher bundles an official LLVM
-build, the binaries stay unmodified, are verified against the SHA-256 values pinned
-in tools/winbuild/llvm-manifest.json, and the LLVM licence text plus copyright
+not committed to this repository: the launcher bundles an official LLVM build
+unmodified, verifies it against the SHA-256 values pinned in
+tools/winbuild/llvm-manifest.json, and the LLVM licence text plus copyright
 notices are shipped alongside them (source: https://github.com/llvm/llvm-project).
 3dsrecomp declares MIT in its Cargo.toml but ships no LICENSE file upstream; it is
 only run as a build tool (cloned at a pinned revision at build time) and is never
 vendored or redistributed by this project.
 
 Public binaries are distributed only through the project's GitHub Releases
-(https://github.com/HFYKratos/3ds2apple/releases): each release publishes only the
-Windows and macOS launcher zips; the licence texts live in this repository and the
-ROM-free shell template is embedded in the launchers. No Nintendo ROMs, decryption keys,
+(https://github.com/HFYKratos/3ds2apple/releases): each release publishes exactly the
+Windows and macOS launcher zips. From 0.1.1 on, each zip contains LICENSE, NOTICE and
+THIRD_PARTY.md at its root, byte-identical to the copies in this repository, so the
+licence texts ship with the binaries and are not separate release assets; the ROM-free
+shell template is embedded in the launchers. GPL projects are read-only references and
+contribute no code or text to the packages. No Nintendo ROMs, decryption keys,
 BIOS or firmware, generated C, per-game GamePack dylibs or composed game IPAs are
 published, and the release policy/checks are documented in
 CONTRIBUTING.md#release-policy.

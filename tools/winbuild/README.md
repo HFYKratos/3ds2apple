@@ -1,8 +1,10 @@
 # winbuild — local GamePack cross-build with open-source LLVM + LLD (no macOS SDK)
 
-Part of 3ds2apple (Apache-2.0). Status: **prototype proven on a Linux/WSL host
-(2026-11-14, task-22)**; the Windows equivalents use the same official LLVM
-release and the same command lines (see below). Not wired into the launcher yet.
+Part of 3ds2apple (Apache-2.0). Status: **in production** — proven on a Linux/WSL
+host (2026-11-14) and now the only GamePack build path of the Windows launcher,
+which runs the same official LLVM release and the same command lines (see below)
+and has been exercised end-to-end on Windows 11 for 0.1.0 (import, local compile,
+install, push, play).
 
 This directory is the no-Apple-SDK answer to: *can a Windows launcher compile a
 3dsrecomp-generated C game into an arm64 iOS GamePack dylib without a Mac?*
@@ -253,10 +255,10 @@ back to llvm-nm/llvm-objdump checks). A failing check fails the build.
 * **Platform metadata:** `sdk` in `LC_BUILD_VERSION` is set to 16.0 (we do not
   know the phone's SDK); dyld only checks `minos`/platform at load. `arm64e` is
   not emitted (device packs are plain `arm64`).
-* **Windows-native run not executed in this session:** the Windows procedure is
-  the same LLVM release + same commands, verified here through the official
-  Ubuntu LLVM 21.1.8 build of the same compiler; run `--selfcheck` on the first
-  Windows machine to confirm (it needs only the installer, no SDK).
+* **Windows-native run:** the Windows launcher compiled GamePacks with this path on
+  Windows 11 for 0.1.0 (same official LLVM 21.1.8 release, same commands as below).
+  The standalone `--selfcheck` on a clean Windows machine still needs only the LLVM
+  installer and no Apple SDK, and is worth running for new machines.
 * **Runtime symbol availability:** a symbol only resolved at `dlopen` because a
   libSystem exports it. Anything not in iOS's libSystem would make the pack fail
   to load; the probe catches this for the pack actually built.
@@ -266,9 +268,9 @@ back to llvm-nm/llvm-objdump checks). A failing check fails the build.
 * Bundle the **official unmodified LLVM release** (or install it on the user's
   machine); pin SHA-256 from `llvm-manifest.json` and verify before use.
 * Ship `https://llvm.org/LICENSE.txt` (Apache-2.0 WITH LLVM-exception) and the
-  LLVM copyright notice; add the component to `THIRD_PARTY.md`/`NOTICE` when the
-  launcher starts bundling it (not done by this prototype because it bundles
-  nothing).
+  LLVM copyright notice; the component is listed in `THIRD_PARTY.md`/`NOTICE`,
+  and the Windows launcher bundles the official binaries unmodified with the
+  licence text and notices.
 * Never ship ROMs, generated C, GamePacks or IPAs; never ship Apple SDK files,
   `.tbd` stubs or Xcode components.
 * `3dsrecomp` is run as a build tool only (no LICENSE upstream, do not vendor);
@@ -286,11 +288,12 @@ back to llvm-nm/llvm-objdump checks). A failing check fails the build.
 | `recomp-port.sh` | ROM -> generated C -> arm64 objects on Linux/WSL/macOS via 3dsrecomp + `darwin-cc.sh` (the host half of the local build) |
 | `llvm-manifest.json` | pinned LLVM 21.1.8 release URLs + SHA-256 + licence facts + tool requirements |
 
-## Launcher integration (task-26, feature-flagged)
+## Launcher integration (shipped in 0.1.0)
 
-The Windows launcher now has an experimental provider that does the whole local
-build on the PC, implemented in
-`launcher/windows/src/ThreeDsTwoApple.Launcher.Core/BuildPipeline/LocalWinbuildPackProvider.cs`:
+The Windows launcher does the whole local build on the PC in
+`launcher/windows/src/ThreeDsTwoApple.Launcher.Core/BuildPipeline/LocalWinbuildPackProvider.cs`;
+since 0.1.0 it is the only Deploy build path (the old remote macOS Build Agent
+and the preview providers are gone, and there is no feature flag to turn on):
 
 1. `3dsrecomp.exe port <rom> <work>/recomp --name <slug>` with
    `CC=clang.exe --target=arm64-apple-ios16.0`, `AR=llvm-ar.exe`,
@@ -300,20 +303,9 @@ build on the PC, implemented in
 3. Mach-O validation (thin arm64 dylib) and `3ds2apple-pack packages record` so
    `GameInfo.json` keeps its single schema writer.
 
-It is gated by `LauncherStateDocument.LocalBuildEnabled` (Settings checkbox,
-default off) and shown as a readiness row; the macOS Build Agent stays the
-supported path. Tests: command construction/environment, missing-tool errors,
-recompile/link failures, invalid Mach-O rejection, and the feature flag gating
-creation (`LocalWinbuildPackProviderTests`, 6 tests; full launcher suite 63/63).
-See [launcher/windows/README.md](../../launcher/windows/README.md).
-
-## Next steps (for the Windows launcher, task-19/task-21)
-
-1. Add a `LocalPackBuildProvider` that stages the ROM through 3dsrecomp (already
-   Windows-runnable Rust) and calls this build path with bundled LLVM + MinGit,
-   or directly spawns `clang.exe`/`ld64.lld.exe` (command lines above).
-2. Wire `--pack-bin` so `3ds2apple-pack packages record` writes `GameInfo.json`
-   (single schema writer, same as the macOS path).
-3. Run the built pack in the simulator/device before enabling the provider for
-   users; gate it behind a feature flag until AOT correctness is validated.
-4. Add the LLVM component to `THIRD_PARTY.md`/`NOTICE` with the pinned SHA-256.
+The bundled official LLVM 21.1.8 payload is what makes this work without a Mac:
+it is staged into the launcher's single-file payload, verified against the pins
+in `llvm-manifest.json`, and shown as a readiness row. Tests: command
+construction/environment, missing-tool errors, recompile/link failures, invalid
+Mach-O rejection (`LocalWinbuildPackProviderTests`; the full launcher suite is
+147 tests). See [launcher/windows/README.md](../../launcher/windows/README.md).

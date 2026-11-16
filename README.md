@@ -70,12 +70,12 @@ On a physical iPhone, Pokémon Y run through the Windows launcher path measures 
 
 ## Download
 
-Public builds are published on [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases). Each release carries two platform packages:
+Public builds are published on [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases). Each release carries exactly two platform packages:
 
-- `3ds2apple-<version>-windows-x64.zip` - Windows 10/11 launcher (one self-contained executable).
-- `3ds2apple-<version>-macos-universal.zip` - macOS 13+ launcher (`.app`, Intel + Apple silicon).
+- `3ds2apple-<version>-windows-x64.zip` - Windows 10/11 launcher: the self-contained `3ds2apple-launcher.exe` plus `LICENSE`, `NOTICE` and `THIRD_PARTY.md`.
+- `3ds2apple-<version>-macos-universal.zip` - macOS 13+ launcher: `3ds2apple-launcher.app` (Intel + Apple silicon) plus `LICENSE`, `NOTICE` and `THIRD_PARTY.md`.
 
-The ROM-free shell template is embedded in both launchers and is not a separate download. GitHub shows the SHA-256 digest of every release asset; no game data is ever attached.
+From 0.1.1 on, both zips carry those three license texts at their root, byte-identical to the copies in this repository, so a downloaded package is self-contained. They are not published as separate release assets, and the GPL projects listed in [THIRD_PARTY.md](THIRD_PARTY.md) remain read-only references - no GPL code or text is packaged. The 0.1.0 packages predate this and rely on the repository copies. The ROM-free shell template is embedded in both launchers and is not a separate download. GitHub shows the SHA-256 digest of every release asset; no game data is ever attached.
 
 ## Build from source
 
@@ -102,6 +102,7 @@ bash scripts/tests/desktop-aot-selfcheck.sh
 
 ```text
 assets/            app icon used by this README
+.github/           issue report and pull request templates
 ios/app/           iOS app: library, in-game menu, touch controls, save states
 ios/zakuro-ios/    Zakuro iOS C ABI: GamePack loader, Metal presenter, perf counters
 launcher/windows/  Windows launcher (C#/Avalonia), single-file packaging
@@ -115,14 +116,30 @@ licenses/          third-party license texts (Impactor MIT, apple-codesign MPL-2
 
 ## Honest boundaries
 
-- **Compatibility is per game.** Some titles may fail to boot or render incorrectly; reports with the title ID are welcome.
+- **Compatibility is per game.** Some titles may fail to boot or render incorrectly; reports with the title ID are welcome - see [Issue reports and performance data](#issue-reports-and-performance-data).
 - **The macOS package is a developer preview.** It is not self-contained and its device install has not been verified by the maintainers yet; the Windows package is the verified path.
 - **No ROMs, keys or BIOS are provided.** Only decrypted ROMs that you own are supported.
 - **No CPU JIT by design.** The shipping path is AOT code plus the Zakuro HLE runtime; there is no interpreter fallback.
 
+## Issue reports and performance data
+
+Bug reports and compatibility reports are welcome. Start with the [compatibility report form](.github/ISSUE_TEMPLATE/compatibility-report.yml) (GitHub offers it under **New issue**): it asks for the game title, the 16-hex title ID, region and version (base/update/DLC), device model and iOS version, the 3ds2apple version or commit, the AOT state, what happens and how to reproduce it. Never attach ROMs, decryption keys, BIOS/firmware, generated C, screenshots or recordings that contain game art, signed IPAs, Apple credentials or a device UDID.
+
+Every build can export a diagnostics report: open the in-game menu and press **Export logs** (the menu pauses the frame loop, so the stutter counters stop at the moment you tap it), then share the `.txt` through the system share sheet. The home page path **Settings -> More -> Export logs** works too, but unloading a game resets the frame and stutter counters - use the in-game menu when those numbers matter; the Settings copy still contains the complete session log. Builds from 0.1.1 on also write each export to `Documents/Diagnostics/<timestamp>.txt` in the app container (the last five are kept); the same folder appears in the Files app under **On My iPhone -> 3ds2apple -> Diagnostics**, or you can pull it over USB with the device bridge:
+
+```bash
+devpush ls  --bundle-id com.kratos.3ds2apple --remote Documents/Diagnostics
+devpush get --bundle-id com.kratos.3ds2apple --remote Documents/Diagnostics/<timestamp>.txt --local diagnostics.txt
+```
+
+The report already carries the build and device state, the AOT proof (`aot_percent`, `aot_fallbacks`), the renderer path, the frame-cap/fast-forward/render-scale settings, per-phase frame timings and both app logs. From 0.1.1 on it also counts stutter (`>33 ms` frames) and severe stutter (`>100 ms`), with the worst frame, per-phase attribution and the most recent spike events. For a stutter report ("mostly 57-60 fps but it hitches now and then") also say when and where it happens (title + scene/menu), whether a second run is better, and which launcher path and settings you used - that plus the diagnostics file is usually all the data needed.
+
+Testers with a Mac and an iPhone/iPad are especially useful: the [macOS acceptance form](.github/ISSUE_TEMPLATE/macos-acceptance.yml) walks through the checklist in [launcher/macos/README.md](launcher/macos/README.md#real-device-acceptance) (Xcode signing, `devicectl` install, `devpush` push) and records the result.
+
 ## Contributing and release
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) - contribution rules, issue reports and the release policy.
+- [Issue templates](.github/ISSUE_TEMPLATE) - compatibility reports and the macOS real-device acceptance checklist.
 - [LICENSE](LICENSE) - Apache-2.0.
 - [THIRD_PARTY.md](THIRD_PARTY.md) and [NOTICE](NOTICE) - third-party components and legal notices.
 
@@ -134,4 +151,4 @@ licenses/          third-party license texts (Impactor MIT, apple-codesign MPL-2
 
 3ds2apple is licensed under **Apache-2.0** (see [LICENSE](LICENSE)). It ships no Nintendo ROMs, decryption keys, BIOS, system files, game assets or gameplay screenshots, and provides no ROM download or piracy support. Only use games that you legally own and dump yourself.
 
-Third-party components and licenses are listed in [THIRD_PARTY.md](THIRD_PARTY.md) and [NOTICE](NOTICE). The launchers bundle the official Impactor v2.7.2 + plumesign release files unmodified (MIT; the embedded apple-codesign 0.29.0 is MPL-2.0) and keep the license texts in [licenses/impactor](licenses/impactor). GPL projects are read as architecture references only - no GPL code or text is copied into this repository.
+Third-party components and licenses are listed in [THIRD_PARTY.md](THIRD_PARTY.md) and [NOTICE](NOTICE). The Windows launcher bundles the official Impactor v2.7.2 + plumesign release files unmodified (MIT; the embedded apple-codesign 0.29.0 is MPL-2.0) and keeps the license texts in [licenses/impactor](licenses/impactor); the macOS launcher signs through Xcode instead and does not bundle Impactor. The iOS shell template and the macOS launcher embed the unmodified MoltenVK 1.4.2 framework (Apache-2.0). GPL projects are read as architecture references only - no GPL code or text is copied into this repository or packaged with it.

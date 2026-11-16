@@ -1,0 +1,154 @@
+name: 兼容性报告 / Compatibility report
+description: 某款游戏无法启动、渲染异常或卡顿。/ A game fails to boot, renders wrong or stutters.
+title: "[兼容性 / Compatibility] "
+labels: ["compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## ⚠️ 禁止上传 / Never attach
+
+        **禁传 / Never attach:** ROM、解密密钥/keys、BIOS/固件、生成的 C、含游戏画面的截图或录像、签名 IPA/pack、Apple ID 凭据或设备 UDID。
+        *ROMs, decryption keys, BIOS/firmware, generated C, screenshots or recordings containing game art, signed IPAs/packs, Apple credentials or device UDIDs.*
+
+        只接受你自己合法拥有并自行导出的已解密 ROM 的反馈；本表单不提供 ROM 下载或获取途径。
+        *Only reports about your own legally dumped, decrypted ROMs; this form never provides ROM download or acquisition help.*
+
+        诊断文件（.txt）是纯文本、可安全粘贴或附加。**/ The diagnostics report is plain text and safe to paste or attach.**
+
+  - type: input
+    id: game
+    attributes:
+      label: 游戏名 / Game title
+      description: App/启动器里显示的名称，或常见名称。/ The title shown by the app or launcher, or the common name.
+      placeholder: "Pokémon Y"
+    validations:
+      required: true
+
+  - type: input
+    id: title-id
+    attributes:
+      label: Title ID
+      description: 16 位十六进制，例如 0004000000055E00；启动器卡片或 App 诊断报告里都有。/ 16 hex digits, e.g. 0004000000055E00; shown on the launcher card and in the app diagnostics.
+      placeholder: "0004000000055E00"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: region
+    attributes:
+      label: 区域 / Region
+      options:
+        - 日本 / Japan
+        - 美国 / USA
+        - 欧洲 / Europe
+        - 韩国 / Korea
+        - 台湾/香港 / Taiwan/HK
+        - 中国 / China
+        - 其他 / Other
+        - 不确定 / Unknown
+    validations:
+      required: true
+
+  - type: input
+    id: game-version
+    attributes:
+      label: 游戏版本 / Game version
+      description: 基础版 / 更新 / DLC，以及已知版本号。/ Base / update / DLC and the version if known.
+      placeholder: "base v1.0"
+
+  - type: input
+    id: device
+    attributes:
+      label: 设备 / Device
+      description: iPhone 或 iPad 型号。/ iPhone or iPad model.
+      placeholder: "iPhone 15"
+    validations:
+      required: true
+
+  - type: input
+    id: ios
+    attributes:
+      label: iOS 版本 / iOS version
+      placeholder: "iOS 26.1"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 3ds2apple 版本或 commit / 3ds2apple version or commit
+      description: 启动器版本 + shell 版本，或 git commit。/ Launcher version + shell version, or the git commit.
+      placeholder: "0.1.0 / build 1 (Windows launcher)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: launcher
+    attributes:
+      label: 安装链路 / Launcher path
+      options:
+        - Windows 启动器 / Windows launcher
+        - macOS 启动器 / macOS launcher
+        - 自行构建 / Self-built
+        - 其他 / Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: aot
+    attributes:
+      label: AOT 状态 / AOT state
+      description: 游戏内 HUD 或 About 页显示的 AOT 行。/ The AOT line shown in the in-game HUD or the About page.
+      options:
+        - AOT · linked / package（运行中 / active）
+        - AOT not loaded
+        - AOT 已载入但非 100% / AOT loaded but not 100%
+        - "红字错误：runtime 拒绝解释执行 / Red error - interpreter refused"
+        - 不确定 / Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptoms
+    attributes:
+      label: 现象 / What happens
+      description: 黑屏、崩溃、花屏、声音异常、卡顿的节奏与频率等。/ Black screen, crash, broken rendering, audio problems, stutter pattern and frequency.
+      placeholder: |
+        例如：进游戏约 2 分钟后开始偶发卡顿，约每 10-20 秒一次，每次 100-200 ms；
+        菜单里不卡；第二次运行同样存在。
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      placeholder: |
+        1. 用 Windows 启动器导入并部署；
+        2. 打开 App，进入游戏；
+        3. 进入某场景并等待……
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: 诊断文件 / Diagnostics
+      description: 用游戏内菜单的 Export logs / 导出日志 导出（主页 Settings -> More -> Export logs 也可，但卸载游戏后卡顿计数会清零），粘贴内容或拖入 .txt；0.1.1 起也可在 App 的 Documents/Diagnostics/ 找到，或用 devpush get 拉取。/ Export with Export logs in the in-game menu (the home page Settings -> More -> Export logs also works, but unloading a game resets the stutter counters) and paste/drop the .txt; from 0.1.1 it is also in Documents/Diagnostics/ and can be pulled with devpush get.
+      render: text
+      placeholder: |
+        拖入 3ds2apple-diagnostics-*.txt，或粘贴报告开头 40 行。报告已含 AOT 证明、渲染路径与帧耗时，无需另外跑基准。
+        Drop the .txt here or paste the first 40 lines; it already contains the AOT proof, renderer path and frame timings.
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认 / Checklist
+      options:
+        - label: 我使用的是自己合法拥有并自行导出的已解密 ROM。/ I use a decrypted ROM that I legally own and dumped myself.
+          required: true
+        - label: 我没有也不会在本 issue 中上传 ROM、密钥、BIOS、生成的 C、含游戏画面的截图/录像、IPA/pack、Apple 凭据或 UDID。/ I did not and will not attach a ROM, keys, BIOS, generated C, game-art screenshots/recordings, an IPA/pack, Apple credentials or a UDID.
+          required: true
+        - label: 我已阅读 README 与 CONTRIBUTING 中的反馈规则。/ I have read the reporting rules in README and CONTRIBUTING.
+          required: true

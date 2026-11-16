@@ -70,12 +70,12 @@ Windows 与 macOS 各有一个启动器。导入你自有的已解密 `.3ds`/`.c
 
 ## 下载
 
-公开发布只走 [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases)。每次发布附两个平台包：
+公开发布只走 [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases)。每次发布只附两个平台包：
 
-- `3ds2apple-<version>-windows-x64.zip` —— Windows 10/11 启动器（单个自包含可执行文件）。
-- `3ds2apple-<version>-macos-universal.zip` —— macOS 13+ 启动器（`.app`，Intel + Apple 芯片）。
+- `3ds2apple-<version>-windows-x64.zip` —— Windows 10/11 启动器：自包含的 `3ds2apple-launcher.exe`，外加 `LICENSE`、`NOTICE`、`THIRD_PARTY.md`。
+- `3ds2apple-<version>-macos-universal.zip` —— macOS 13+ 启动器：`3ds2apple-launcher.app`（Intel + Apple 芯片），外加 `LICENSE`、`NOTICE`、`THIRD_PARTY.md`。
 
-不含 ROM 的壳模板已内嵌在两个启动器中，无需单独下载。GitHub 会显示每个发布资产的 SHA-256 digest；发布中不含任何游戏数据。
+从 0.1.1 起，两个 zip 根级都带这三份许可文本，与仓库根文件逐字节一致，下载的包因此自包含；它们不作为单独的 Release 资产发布。[THIRD_PARTY.md](THIRD_PARTY.md) 里列出的 GPL 项目仍然只是只读参考——不打包任何 GPL 代码或文本。0.1.0 的包早于此项，依赖仓库内的副本。不含 ROM 的壳模板已内嵌在两个启动器中，无需单独下载。GitHub 会显示每个发布资产的 SHA-256 digest；发布中不含任何游戏数据。
 
 ## 从源码构建
 
@@ -102,6 +102,7 @@ bash scripts/tests/desktop-aot-selfcheck.sh
 
 ```text
 assets/            本 README 使用的 App 图标
+.github/           问题报告与 PR 模板
 ios/app/           iOS App：游戏库、游戏内菜单、触摸控制、即时存档
 ios/zakuro-ios/    Zakuro iOS C ABI：GamePack 加载器、Metal presenter、性能计数
 launcher/windows/  Windows 启动器（C#/Avalonia）与单文件打包
@@ -115,14 +116,30 @@ licenses/          第三方许可文本（Impactor MIT、apple-codesign MPL-2.0
 
 ## 实话实说的边界
 
-- **兼容性因游戏而异。** 部分游戏可能无法启动或渲染异常；欢迎带上 title ID 反馈。
+- **兼容性因游戏而异。** 部分游戏可能无法启动或渲染异常；欢迎带上 title ID 反馈——见[问题反馈与性能数据](#问题反馈与性能数据)。
 - **macOS 包是开发者预览。** 尚不自包含，真机安装也还未由维护者验证；Windows 包是已验证路径。
 - **不提供 ROM、密钥或 BIOS。** 只支持你合法拥有并自行导出的已解密 ROM。
 - **设计上没有 CPU JIT。** 正式路径是 AOT 代码 + Zakuro HLE 运行时，没有解释器兜底。
 
+## 问题反馈与性能数据
+
+欢迎提交 bug 与兼容性报告：从[兼容性报告模板](.github/ISSUE_TEMPLATE/compatibility-report.yml)开始（GitHub 会在 **New issue** 里提供）。请附上游戏名、16 位 title ID、区域与版本（base/update/DLC）、设备型号与 iOS 版本、使用的 3ds2apple 版本或 commit、AOT 状态、现象与复现步骤。**禁止**上传 ROM、解密密钥、BIOS/固件、生成的 C、含游戏画面的截图或录像、签名 IPA/pack、Apple 凭据或设备 UDID。
+
+每个版本都能导出诊断报告：打开游戏内菜单点 **Export logs / 导出日志**（菜单会暂停帧循环，点下的瞬间卡顿计数就冻结），再用系统分享面板分享 `.txt`。主页齿轮的 **设置 -> 更多 -> 导出日志** 也能导出，但卸载游戏会把帧率/卡顿计数清零——需要这些数字时请用游戏内菜单；设置页导出的那份仍包含完整会话日志。0.1.1 起每次导出还会写入 App 容器的 `Documents/Diagnostics/<时间戳>.txt`（保留最近 5 份）；同一目录可在「文件」App 的「我的 iPhone -> 3ds2apple -> Diagnostics」里看到，也可以用设备桥通过 USB 拉取：
+
+```bash
+devpush ls  --bundle-id com.kratos.3ds2apple --remote Documents/Diagnostics
+devpush get --bundle-id com.kratos.3ds2apple --remote Documents/Diagnostics/<时间戳>.txt --local diagnostics.txt
+```
+
+报告里已包含构建与设备状态、AOT 证明（`aot_percent`、`aot_fallbacks`）、渲染路径、帧率上限/快进/渲染分辨率设置、各阶段帧耗时以及两次会话的 App 日志。0.1.1 起还会记录卡顿（`>33 ms` 帧）与严重卡顿（`>100 ms`）计数、最差帧、按阶段归因和最近的尖峰事件。如果是卡顿反馈（例如「大部分时间 57–60 fps 但偶发卡顿」），再说明发生的时机与场景（游戏 + 场景/菜单）、第二次运行是否更顺，以及使用的启动器链路与设置——加上诊断文件通常就够了。
+
+有 Mac + iPhone/iPad 的验证者尤其欢迎：[macOS 真机验收模板](.github/ISSUE_TEMPLATE/macos-acceptance.yml)会按 [launcher/macos/README.md](launcher/macos/README.md#real-device-acceptance) 的清单逐项收集结果（Xcode 签名、`devicectl` 安装、`devpush` 推送）。
+
 ## 贡献与发布
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) —— 贡献规则、问题反馈与发布规范。
+- [问题模板](.github/ISSUE_TEMPLATE) —— 兼容性报告与 macOS 真机验收清单。
 - [LICENSE](LICENSE) —— Apache-2.0。
 - [THIRD_PARTY.md](THIRD_PARTY.md) 与 [NOTICE](NOTICE) —— 第三方组件与法律声明。
 
@@ -134,4 +151,4 @@ licenses/          第三方许可文本（Impactor MIT、apple-codesign MPL-2.0
 
 3ds2apple 使用 **Apache-2.0** 许可（见 [LICENSE](LICENSE)）。本仓库不含任何 Nintendo ROM、解密密钥、BIOS、系统文件、游戏资源或游戏画面截图，也不提供 ROM 下载或盗版支持。请只使用你合法拥有并自行导出的游戏。
 
-第三方组件及许可见 [THIRD_PARTY.md](THIRD_PARTY.md) 与 [NOTICE](NOTICE)。启动器原样内置官方 Impactor v2.7.2 + plumesign 发布文件（MIT；其中内嵌的 apple-codesign 0.29.0 为 MPL-2.0），许可文本保存在 [licenses/impactor](licenses/impactor)。GPL 项目仅作为架构参考阅读，不复制其代码或文本。
+第三方组件及许可见 [THIRD_PARTY.md](THIRD_PARTY.md) 与 [NOTICE](NOTICE)。Windows 启动器原样内置官方 Impactor v2.7.2 + plumesign 发布文件（MIT；其中内嵌的 apple-codesign 0.29.0 为 MPL-2.0），许可文本保存在 [licenses/impactor](licenses/impactor)；macOS 启动器改用 Xcode 签名，不内置 Impactor。iOS 壳模板与 macOS 启动器内嵌未修改的 MoltenVK 1.4.2 框架（Apache-2.0）。GPL 项目仅作为架构参考阅读，不复制其代码或文本，也不会随包分发。

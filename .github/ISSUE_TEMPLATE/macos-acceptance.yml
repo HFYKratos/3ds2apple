@@ -1,0 +1,153 @@
+name: macOS 真机验收 / macOS real-device acceptance
+description: "有 Mac + iPhone/iPad 的验证者，按清单跑一遍真机流程并登记结果。/ For testers with a Mac and an iPhone/iPad, run the real-device checklist and record the result."
+title: "[真机验收 / Acceptance] "
+labels: ["acceptance", "macos"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 这是给谁的 / Who this is for
+
+        维护者没有 Mac + iPhone 真机组合，macOS 启动器的真机签名安装与游戏数据推送尚未验证。请在一台 **Mac（Xcode 已登录你自己的 Apple ID）** 和一台 **iOS 16+ iPhone/iPad（已开开发者模式）** 上按下面清单跑一遍。
+        *The maintainers have no Mac + iPhone pair, so macOS-launcher device install and game-data push are unverified. Please run the checklist on a Mac with Xcode signed in to your own Apple ID and an iOS 16+ iPhone/iPad with Developer Mode on.*
+
+        Windows 启动器路径的真机结果同样欢迎登记（在下面注明即可）。
+        *Windows-launcher results are welcome too - just say so below.*
+
+        **禁止上传 / Never attach:** ROM、解密密钥、BIOS/固件、生成的 C、含游戏画面的截图/录像、签名 IPA/pack、Apple ID 密码/会话令牌/证书、设备 UDID（贴日志前请先打码）。
+        *ROMs, decryption keys, BIOS/firmware, generated C, game-art screenshots/recordings, signed IPAs/packs, Apple ID passwords/session tokens/certificates or device UDIDs (redact logs first).*
+
+        ｜清单来源：`launcher/macos/README.md` 的 **Real-device acceptance** 章节。/ *Checklist source: the Real-device acceptance section of launcher/macos/README.md.*
+
+  - type: input
+    id: mac
+    attributes:
+      label: Mac 型号与芯片 / Mac model and chip
+      placeholder: "MacBook Air (M2)"
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS 版本 / macOS version
+      placeholder: "macOS 15.2"
+    validations:
+      required: true
+
+  - type: input
+    id: xcode
+    attributes:
+      label: Xcode 版本 / Xcode version
+      description: 请注明 Xcode 是否已用你自己的 Apple ID 登录。/ Say whether Xcode is signed in with your own Apple ID.
+      placeholder: "Xcode 16.2（已登录 Apple ID / signed in）"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: iPhone/iPad 型号与 iOS / Device and iOS
+      placeholder: "iPhone 15 · iOS 26.1（开发者模式已开 / Developer Mode on）"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 3ds2apple 版本或 commit / 3ds2apple version or commit
+      description: 启动器与 shell 版本，以及 checkout 的 commit。/ Launcher and shell versions plus the checkout commit.
+      placeholder: "0.1.0 / build 1（checkout ff545bf）"
+    validations:
+      required: true
+
+  - type: input
+    id: games
+    attributes:
+      label: 测试的游戏 / Games tested
+      description: 数量与类型（不要贴 ROM 或游戏内容截图）。/ How many and which kind (no ROMs or game-art captures).
+      placeholder: "2 款 / 2 games"
+
+  - type: dropdown
+    id: launcher
+    attributes:
+      label: 验收的启动器 / Launcher tested
+      options:
+        - macOS 启动器 / macOS launcher
+        - Windows 启动器 / Windows launcher
+        - 两个都测 / Both
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: steps
+    attributes:
+      label: 真机流程清单（逐项勾选）/ Real-device checklist
+      description: 勾选已通过的步骤；失败或未测的步骤请在下方的说明里写清楚。/ Tick the steps that passed; describe failed or skipped steps in the notes field.
+      options:
+        - label: "1. Library -> Import：卡片显示 ROM 的 SMDH 图标、当前语言的本地化标题与发行商（无改名功能）。/ Import shows the SMDH cover, localized title and publisher (remove only)."
+        - label: "2. Deploy -> 选择 1–2 款游戏 -> 按唯一的「一键部署 / Deploy selected」。/ Select one or two games and press the single deploy button."
+        - label: "3. Deploy 页显示检测到的硬件行（逻辑核数 · 内存 · 3dsrecomp 自动并行）。/ The hardware line shows cores · RAM · automatic 3dsrecomp parallelism."
+        - label: "4. 预检显示检测到的 Team ID 与设备。/ Preflight shows the detected Team ID and device."
+        - label: "5. 步骤 2 成功编译 GamePack。/ Step 2 compiles the GamePacks."
+        - label: "6. 步骤 3 在 <portable-data>/ipa 下合成一个 IPA。/ Step 3 composes one IPA under <portable-data>/ipa."
+        - label: "7. 步骤 4 校验 IPA：N pack(s)、schema-2 catalogue、no ROM。/ Step 4 verifies the IPA: N pack(s), schema-2 catalogue, no ROM."
+        - label: "8. 步骤 5 安装完成并显示实际安装的 bundle ID。/ Step 5 installs and shows the actual installed bundle ID."
+        - label: "9. 步骤 6 每款游戏推送 GameRom + GameInfo，并通过大小/SHA 校验。/ Step 6 pushes GameRom + GameInfo per game and verifies size/SHA."
+        - label: "10. 步骤 7 显示「可以打开手机 App 游玩 / Ready to play」。/ Step 7 shows Ready to play."
+        - label: "11. 手机上打开 App，游戏正常运行（HUD 显示 AOT 与 Metal 路径）。/ The app opens on the phone and the game runs (HUD shows AOT and the Metal path)."
+        - label: "12. Settings -> About 显示解析后的数据目录与编译硬件。/ Settings -> About shows the resolved data folder and compile hardware."
+        - label: "13. 换一个选择重新部署会重新合成 IPA，已推送的 Documents 数据仍保留。/ Re-deploying with a different selection re-composes the IPA and keeps pushed Documents data."
+        - label: "14. 彻底卸载后重新部署能再次推送游戏数据。/ After a clean uninstall, a re-deploy pushes the game data again."
+
+  - type: dropdown
+    id: overall
+    attributes:
+      label: 总体结果 / Overall result
+      options:
+        - 全部通过 / All passed
+        - 部分通过 / Partly passed
+        - 失败 / Failed
+    validations:
+      required: true
+
+  - type: dropdown
+    id: triage
+    attributes:
+      label: 遇到的签名/设备错误 / Signing or device errors
+      description: 若遇到多项，在说明里补充。/ If more than one, list them in the notes.
+      options:
+        - 无 / None
+        - "9120：重新登录 Xcode 账号 / re-sign-in Xcode Accounts"
+        - "9401：信任/开发者模式/免费账号上限 / trust, Developer Mode, free-account limit"
+        - "no signing assets：Xcode 未登录 Apple ID / Xcode has no Apple ID"
+        - 找不到设备 / device not found
+        - 推送卡住 / push stall
+        - 其他 / Other
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: 说明与日志 / Notes and logs
+      description: 失败步骤、错误原文、重试结果；请去掉 UDID、Apple ID、邮箱等个人信息。/ Failed steps, exact errors and retries; remove UDID, Apple ID, e-mail and other personal data.
+      render: shell
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: 游戏内诊断（可选）/ In-game diagnostics (optional)
+      description: App 能跑起来时，附上游戏内菜单 Export logs / 导出日志 导出的诊断 .txt（主页 Settings -> More -> Export logs 也可）。/ If the app runs, attach the diagnostics .txt exported with Export logs in the in-game menu (home page Settings -> More -> Export logs also works).
+      render: text
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认 / Checklist
+      options:
+        - label: 以上结果来自真实的 Mac + iPhone/iPad 运行，不是模拟器或推测。/ The result comes from a real Mac + iPhone/iPad run, not a simulator or guess.
+          required: true
+        - label: 我使用的是自己合法拥有并自行导出的已解密 ROM。/ I use a decrypted ROM that I legally own and dumped myself.
+          required: true
+        - label: 本 issue 不含 ROM、密钥、BIOS、生成的 C、含游戏画面的截图/录像、IPA/pack、Apple 凭据或 UDID。/ This issue contains no ROM, keys, BIOS, generated C, game-art screenshots/recordings, IPA/pack, Apple credentials or UDID.
+          required: true
+        - label: 我愿意在需要时回答维护者的追问。/ I am available for follow-up questions from the maintainers.
