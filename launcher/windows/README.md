@@ -26,9 +26,21 @@ exact pre-reset 0.2.5 build and the Impactor signing/phone flows were the remain
 Architecture correction (Lead, 2026-11-14): iOS cannot dlopen a loose unsigned
 dylib from Documents. The **GamePack.dylib lives inside the signed app IPA**
 (Frameworks/GamePack-<TITLEID>.dylib + bundle GameCatalog.json); Documents only
-receives the user's **GameRom.cci + GameInfo.json**. Adding/removing a game
+receives the user's **GameRom.cci + optional cover.png + GameInfo.json** (the
+manifest is pushed last). Adding/removing a game
 recomposes and reinstalls the IPA; pushed ROM data is expected to survive an
 overwrite install/update (a clean uninstall clears app data; verify on device).
+
+The pushed `GameInfo.json` now also carries the base metadata the launcher
+already read from the ROM's SMDH at import time, so the iOS library card needs no
+ROM parsing at all: `displayName` (the SMDH title for the launcher's current UI
+language, English fallback), `displayNames` (every localized SMDH title, the
+original languages preserved), `publisher`, optional `region` (from the SMDH
+region-lockout bits, e.g. `EU` / `US` / `EU+AU` / `region-free`; omitted when
+unknown), optional `cover` (the pushed `cover.png` file name; the icon is local
+user data and is never committed), `rom.size`/`rom.sha256` (the real pushed data,
+re-checked by the shell), `launcherVersion` and `pushedAt`. `schemaVersion` stays
+1, every added field is optional, and older manifests keep parsing.
 
 Shell-template identity is validated before signing: version >= 0.1.0, build >= 1
 (manifest and Info.plist), bundle catalogue schema 2 + empty for the template, no
@@ -52,9 +64,9 @@ with the app. Device UDIDs are redacted in all UI/log output.
      a schema-2 GameCatalog.json, and **verify the packs + catalogue before signing**.
    - sign and install the whole IPA with the bundled official Impactor v2.7.2 + plumesign
      (unmodified, SHA-256 pinned, MIT + MPL-2.0 licences preserved).
-   - push each selected GameRom.cci + GameInfo.json into Documents/Games/<TITLEID>/ via the
-     device bridge (devpush contract v1) using the **actual installed bundle id**, with
-     size/SHA verification and read-back.
+   - push each selected GameRom.cci + optional cover.png + GameInfo.json (last) into
+     Documents/Games/<TITLEID>/ via the device bridge (devpush contract v1) using the
+     **actual installed bundle id**, with size/SHA verification and read-back.
    - mark done ("可以在手机上玩了") only after every selected game verified.
 3. **Settings** (gear): language, Apple ID / Open Impactor, device status/refresh, logs
    (show/export/open/self-test), about. Build mode, tool paths, UDID and bundle-id
@@ -217,7 +229,7 @@ launcher error catalog (9120 / 9401 / 1100 / anisette / 2FA).
 - **task-16/20 device bridge**: devpush/1 contract v1 is implemented by
   Core/Device/DevPushClient.cs and checked against the real binary + mock backend;
   [tools/devpush/README.md](../../tools/devpush/README.md) is authoritative. The
-  launcher pushes exactly GameRom.cci + GameInfo.json directly via devpush.
+  launcher pushes GameRom.cci + cover.png (optional) + GameInfo.json directly via devpush.
 - **task-17 shell**: the shell loads the pack from the bundle GameCatalog and the
   ROM from Documents; the GameInfo.json split was agreed (pack metadata is
   informational/bundle-relative, ROM is verified when present). The ROM-free shell

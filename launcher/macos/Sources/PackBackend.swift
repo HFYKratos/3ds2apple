@@ -139,6 +139,7 @@ enum PackJSON {
             romBytes: romBytes,
             displayNames: stringMap(root["displayNames"]),
             publisher: root["publisher"] as? String ?? "",
+            region: root["region"] as? String ?? "",
             coverPath: root["coverPath"] as? String,
             romPath: romPath
         )

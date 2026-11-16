@@ -96,6 +96,11 @@ pub struct RomInfo {
     /// Publisher from the SMDH; empty when unknown.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub publisher: String,
+    /// Regions the SMDH region lock allows (for example `EU`, `US`, `JP+US`,
+    /// `region-free`); omitted when the ROM has no readable region lockout or
+    /// only unknown bits. Purely informational: the runtime does not enforce it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
     /// Size of the ROM file on disk.
     pub bytes: u64,
     /// Size of the NCCH content in bytes (content-size field * 512).
@@ -295,9 +300,13 @@ fn rom_info_from_ncch(
         .and_then(smdh::SmdhMetadata::english_title)
         .map(str::to_string)
         .unwrap_or(fallback_display_name);
-    let (display_names, publisher) = match metadata {
-        Some(metadata) => (metadata.display_names, metadata.publisher),
-        None => (BTreeMap::new(), String::new()),
+    let (display_names, publisher, region) = match metadata {
+        Some(metadata) => (
+            metadata.display_names,
+            metadata.publisher,
+            smdh::region_codes(metadata.region_lockout),
+        ),
+        None => (BTreeMap::new(), String::new(), None),
     };
     Ok(RomInfo {
         path: path.to_path_buf(),
@@ -307,6 +316,7 @@ fn rom_info_from_ncch(
         display_name,
         display_names,
         publisher,
+        region,
         bytes: len,
         content_bytes: ncch.content_bytes,
         title_version: ncch.title_version,
@@ -763,9 +773,24 @@ mod tests {
             Some("テスト")
         );
         assert_eq!(info.publisher, "Example");
+        assert_eq!(info.region, None);
         let bytes = read_smdh_bytes(&path).unwrap().expect("SMDH bytes");
         assert_eq!(bytes.len(), smdh.len());
         assert!(smdh::large_icon(&bytes).is_some());
+    }
+
+    #[test]
+    fn reads_the_smdh_region_lockout() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("game.cci");
+        let mut smdh = test_smdh();
+        crate::smdh::test_support::set_region_lockout(&mut smdh, 0x0C);
+        write_rom(
+            &path,
+            &synthetic_ncsd_with_smdh(POKEMON_Y, "CTR-P-EK2A", &smdh),
+        );
+        let info = detect_rom(&path).unwrap();
+        assert_eq!(info.region.as_deref(), Some("EU+AU"));
     }
 
     #[test]

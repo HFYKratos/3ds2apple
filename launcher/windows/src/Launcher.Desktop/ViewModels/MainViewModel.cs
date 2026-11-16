@@ -565,6 +565,7 @@ public sealed class MainViewModel : ObservableObject
                     : new Dictionary<string, string>(imported.DisplayNames, StringComparer.OrdinalIgnoreCase);
                 entry.Publisher = GameNames.ResolvePublisher(imported.Publisher);
                 entry.ProductCode = imported.ProductCode;
+                entry.Region = string.IsNullOrWhiteSpace(imported.Region) ? entry.Region : imported.Region.Trim();
                 entry.RomPath = path;
                 entry.PackageDir = imported.PackageDir;
                 entry.CoverPath = GameNames.ResolveCoverPath(imported.PackageDir, imported.CoverPath);
@@ -615,6 +616,10 @@ public sealed class MainViewModel : ObservableObject
                 if (!string.IsNullOrWhiteSpace(info.Publisher))
                 {
                     entry.Publisher = GameNames.ResolvePublisher(info.Publisher);
+                }
+                if (!string.IsNullOrWhiteSpace(info.Region))
+                {
+                    entry.Region = info.Region.Trim();
                 }
                 entry.ProductCode = info.ProductCode;
                 entry.State = info.State;

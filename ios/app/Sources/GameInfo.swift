@@ -25,6 +25,9 @@
 //    "titleID": "0004000000055E00",                 // 16 upper-case hex digits
 //    "displayName": "Pokémon Y",
 //    "productCode": "CTR-P-EK2A",                   // optional
+//    "displayNames": { "en": "Pokémon Y", "ja": "…" }, // optional SMDH titles
+//    "publisher": "Nintendo",                      // optional SMDH publisher
+//    "region": "EU",                               // optional SMDH region lockout
 //    "aot": true,                                    // optional, default true
 //    "aotVersion": 1,                                // optional, informational
 //    "packABIVersion": 1,                            // optional, default 1
@@ -90,6 +93,15 @@ struct GameInfo: Codable, Hashable {
     /// Name shown on the library card; falls back to the title ID.
     let displayName: String?
     let productCode: String?
+    /// Localized short titles from the ROM SMDH, keyed by language (`en`,
+    /// `ja`, `zh-Hans`, ...). Additive optional field: older launchers omit it
+    /// and the card falls back to `displayName` / the catalog name.
+    let displayNames: [String: String]?
+    /// Publisher from the ROM SMDH; optional additive field.
+    let publisher: String?
+    /// Regions from the ROM SMDH region lockout (`EU`, `US`, `JP+US`,
+    /// `region-free`); optional additive field.
+    let region: String?
     /// Whether the launcher built AOT code for this game. Default true.
     let aot: Bool?
     let aotVersion: Int?
@@ -116,6 +128,9 @@ struct GameInfo: Codable, Hashable {
         case titleID
         case displayName
         case productCode
+        case displayNames
+        case publisher
+        case region
         case aot
         case aotVersion
         case packABIVersion
@@ -133,6 +148,9 @@ struct GameInfo: Codable, Hashable {
          titleID: String? = nil,
          displayName: String? = nil,
          productCode: String? = nil,
+         displayNames: [String: String]? = nil,
+         publisher: String? = nil,
+         region: String? = nil,
          aot: Bool? = true,
          aotVersion: Int? = nil,
          packABIVersion: Int? = nil,
@@ -148,6 +166,9 @@ struct GameInfo: Codable, Hashable {
         self.titleID = titleID
         self.displayName = displayName
         self.productCode = productCode
+        self.displayNames = displayNames
+        self.publisher = publisher
+        self.region = region
         self.aot = aot
         self.aotVersion = aotVersion
         self.packABIVersion = packABIVersion
@@ -184,9 +205,43 @@ struct GameInfo: Codable, Hashable {
     }
 
     /// Trimmed display name as the launcher wrote it, nil when empty.
-    var trimmedDisplayName: String? {
-        guard let displayName else { return nil }
-        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    var trimmedDisplayName: String? { Self.trimmed(displayName) }
+
+    /// Trimmed publisher, nil when the launcher did not record one.
+    var trimmedPublisher: String? { Self.trimmed(publisher) }
+
+    /// Trimmed region codes, nil when the launcher did not record any.
+    var regionCodes: String? { Self.trimmed(region) }
+
+    /// Title to show on the library card. The SMDH name for the app's own
+    /// language wins (the launcher records every language), then English, then
+    /// the launcher's displayName; the catalog name is the caller's fallback.
+    func preferredDisplayName(languageTag: String? = L10n.currentLanguage.rawValue) -> String? {
+        let language = Self.normalizeLanguage(languageTag)
+        let preferred = language == "zh-Hans" ? ["zh-Hans", "en"] : ["en"]
+        for key in preferred {
+            if let name = Self.trimmed(displayNames?[key]) { return name }
+        }
+        return trimmedDisplayName
+    }
+
+    /// The two languages the app ships: Simplified Chinese or English.
+    static func normalizeLanguage(_ tag: String?) -> String {
+        guard let raw = tag?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return "en"
+        }
+        let normalized = raw.replacingOccurrences(of: "_", with: "-").lowercased()
+        guard normalized.hasPrefix("zh") else { return "en" }
+        if normalized.contains("hant") || normalized.contains("-tw")
+            || normalized.contains("-hk") || normalized.contains("-mo") {
+            return "en"
+        }
+        return "zh-Hans"
+    }
+
+    private static func trimmed(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
 }

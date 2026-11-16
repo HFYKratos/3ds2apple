@@ -358,6 +358,10 @@ public sealed class DeployFlowTests
                 1,
                 entry.PackPath,
                 entry.RomPath,
+                entry.DisplayNames,
+                entry.Publisher,
+                entry.Region,
+                entry.CoverPath,
                 log,
                 cancellationToken);
 

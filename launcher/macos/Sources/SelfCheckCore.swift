@@ -78,7 +78,7 @@ enum SelfCheckCore {
 
         // 5. Package manifest parsing
         let manifestJSON = """
-        {"schemaVersion":1,"titleID":"0004000000055E00","displayName":"Pokemon Y","productCode":"CTR-P-EK2A","aotVersion":1,"saveNamespace":"0004000000055E00","packFile":"GamePack.dylib","pack":{"sha256":"aa","bytes":1000,"format":"macho"},"rom":{"path":"/Users/you/ROM/x.cci","fileName":"x.cci","bytes":2000},"romFile":"GameRom.cci","romSha256":"bb","romBytes":2000}
+        {"schemaVersion":1,"titleID":"0004000000055E00","displayName":"Pokemon Y","productCode":"CTR-P-EK2A","aotVersion":1,"saveNamespace":"0004000000055E00","packFile":"GamePack.dylib","pack":{"sha256":"aa","bytes":1000,"format":"macho"},"rom":{"path":"/Users/you/ROM/x.cci","fileName":"x.cci","bytes":2000},"romFile":"GameRom.cci","romSha256":"bb","romBytes":2000,"displayNames":{"en":"Pokemon Y","zh-Hans":"宝可梦 Y"},"publisher":"Nintendo","region":"EU","coverPath":"cover.png"}
         """
         let manifest = PackJSON.parseManifest(Data(manifestJSON.utf8), fallbackTitleID: "fallback")
         expect("pack JSON: manifest parses pack and bundled ROM", manifest?.packSha256 == "aa" && manifest?.romBytes == 2000 && manifest?.romFile == "GameRom.cci")
@@ -91,6 +91,8 @@ enum SelfCheckCore {
                 romFile: "GameRom.cci",
                 romBytes: 2000,
                 romSha256: "bb",
+                coverFile: "cover.png",
+                uiLanguageTag: "en",
                 date: fixedDate
             )
             let object = PackJSON.object(output.data) ?? [:]
@@ -105,11 +107,19 @@ enum SelfCheckCore {
             expect("shell GameInfo: pushedAt ISO-8601", (object["pushedAt"] as? String)?.contains("T") == true)
             expect("shell GameInfo: packInBundle flag", object["packInBundle"] as? Bool == true)
             expect("shell GameInfo: file sharing hint", object["requiresFileSharing"] as? Bool == true)
+            expect("shell GameInfo: SMDH displayNames keep the original languages",
+                   (object["displayNames"] as? [String: Any])?["zh-Hans"] as? String == "宝可梦 Y"
+                   && (object["displayNames"] as? [String: Any])?["en"] as? String == "Pokemon Y")
+            expect("shell GameInfo: publisher from the SMDH", object["publisher"] as? String == "Nintendo")
+            expect("shell GameInfo: optional region is recorded", object["region"] as? String == "EU")
+            expect("shell GameInfo: cover file name is recorded (never a path)", object["cover"] as? String == "cover.png")
             expect("shell GameInfo: deterministic output", GameInfoWriter.makeManifest(
                 package: manifest,
                 romFile: "GameRom.cci",
                 romBytes: 2000,
                 romSha256: "bb",
+                coverFile: "cover.png",
+                uiLanguageTag: "en",
                 date: fixedDate
             ).data == output.data)
         } else {
@@ -129,8 +139,9 @@ enum SelfCheckCore {
                     device: MockFixtures.devices.first,
                     stagingDirectory: MockFixtures.stagingRoot
                 )
-                expect("push plan: 2 files (GameRom.cci + GameInfo.json)", plan.files.count == 2, plan.files.map { $0.name }.joined(separator: ","))
+                expect("push plan: 3 files (GameRom.cci + cover.png + GameInfo.json)", plan.files.count == 3, plan.files.map { $0.name }.joined(separator: ","))
                 expect("push plan: no dylib in Documents", plan.files.allSatisfy { !$0.name.hasSuffix(".dylib") })
+                expect("push plan: cover.png is pushed before the manifest", plan.files.count == 3 && plan.files[1].name == "cover.png", plan.files.map { $0.name }.joined(separator: ","))
                 expect("push plan: GameInfo.json is last", plan.files.last?.name == "GameInfo.json", plan.files.last?.name ?? "nil")
                 expect("push plan: remote path uses Documents/Games/TITLEID", plan.files.allSatisfy { $0.remotePath.hasPrefix("Documents/Games/0004000000055E00/") })
                 expect("push plan: uses the passed installed bundle id", plan.bundleID == actualInstalledBundleID)

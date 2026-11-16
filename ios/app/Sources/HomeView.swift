@@ -8,7 +8,9 @@
 //  desktop launcher into Documents/Games/<TITLEID>/. Each card shows the title,
 //  when it was last played and the state: AOT (ready), Checking (verifying the
 //  pushed ROM hash), Data missing (launcher push not done yet) or Error (a
-//  broken push). Tapping a card starts it or explains exactly what is wrong.
+//  broken push). When the launcher pushed the ROM's SMDH metadata the card
+//  also shows the real cover icon, the publisher and the game-data size.
+//  Tapping a card starts it or explains exactly what is wrong.
 //
 //  A fresh shell with an empty catalog shows the empty state: the AOT packs and
 //  the game data both come from the 3ds2apple desktop launcher, not from
@@ -152,10 +154,18 @@ struct HomeView: View {
                     .lineLimit(2, reservesSpace: true)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
-                Text(lastPlayedText(for: entry))
+                if let publisher = entry.publisher {
+                    Text(publisher)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .accessibilityIdentifier("game-card-publisher")
+                }
+                Text(cardMetaText(for: entry))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .accessibilityIdentifier("game-card-meta")
                 if entry.isLegacyBundled {
                     Text(L10n.tr("From the previous build"))
                         .font(.caption2)
@@ -222,8 +232,9 @@ struct HomeView: View {
 
     // MARK: - Card contents
 
-    /// Cover placeholder: deterministic gradient keyed by the title id plus a
-    /// controller glyph and the state badge. No game art ships in the app.
+    /// Card cover: the launcher-pushed SMDH icon (`cover.png`), else the
+    /// build's bundle cover, else the deterministic gradient placeholder with a
+    /// controller glyph. No game art ships in the app.
     private func cover(for entry: GameEntry, state: (label: String, tint: Color)) -> some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(
@@ -234,16 +245,32 @@ struct HomeView: View {
                 )
             )
             .aspectRatio(16.0 / 9.0, contentMode: .fit)
-            .overlay(
-                Image(systemName: "gamecontroller.fill")
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
-            )
+            .overlay { coverArt(for: entry) }
             .overlay(alignment: .topTrailing) {
                 badge(label: state.label, tint: state.tint)
                     .padding(6)
             }
             .accessibilityHidden(true)
+    }
+
+    /// Real ROM icon when one is available; the 48x48 SMDH PNG is tiny and
+    /// read synchronously. A missing or unreadable cover keeps the placeholder,
+    /// so a push without `cover.png` still renders a usable card.
+    @ViewBuilder
+    private func coverArt(for entry: GameEntry) -> some View {
+        if let url = entry.coverURL, let image = UIImage(contentsOfFile: url.path) {
+            Image(uiImage: image)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(6)
+                .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+        } else {
+            Image(systemName: "gamecontroller.fill")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.9))
+        }
     }
 
     private func coverColors(for entry: GameEntry) -> [Color] {
@@ -257,6 +284,18 @@ struct HomeView: View {
             Color(hue: hue, saturation: 0.55, brightness: 0.85),
             Color(hue: secondHue, saturation: 0.75, brightness: 0.45),
         ]
+    }
+
+    /// Card meta line: the pushed game-data size (GameInfo `rom.size`, else
+    /// the real file size) and the last-played date. Missing data is omitted
+    /// rather than replaced with "0 KB".
+    private func cardMetaText(for entry: GameEntry) -> String {
+        var parts: [String] = []
+        if let bytes = entry.romBytes, bytes > 0 {
+            parts.append(StorageFormat.size(bytes))
+        }
+        parts.append(lastPlayedText(for: entry))
+        return parts.joined(separator: " · ")
     }
 
     private func lastPlayedText(for entry: GameEntry) -> String {

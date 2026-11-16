@@ -9,7 +9,7 @@
 
 | Path | What it is | Verified by |
 |---|---|---|
-| `builder/pack` (`3ds2apple-pack`) | Desktop AOT-first pipeline: ROM header detection (NCSD/NCCH), SMDH title/publisher/icon metadata (localized `displayNames`, `publisher`, 48x48 `cover.png`), import queue, per-game package manifests, self-contained packages with a bundled user ROM (`--include-rom`), deterministic schema-v2 catalogue allocation, macOS script plan, fake/preview packs + preview multi-game IPA | `cargo test -p builder-pack` (unit + CLI integration on Linux); `scripts/tests/desktop-aot-selfcheck.sh` |
+| `builder/pack` (`3ds2apple-pack`) | Desktop AOT-first pipeline: ROM header detection (NCSD/NCCH), SMDH title/publisher/icon/region metadata (localized `displayNames`, `publisher`, `region` from the region lockout, 48x48 `cover.png`), import queue, per-game package manifests, self-contained packages with a bundled user ROM (`--include-rom`), deterministic schema-v2 catalogue allocation, macOS script plan, fake/preview packs + preview multi-game IPA | `cargo test -p builder-pack` (unit + CLI integration on Linux); `scripts/tests/desktop-aot-selfcheck.sh` |
 | `builder/core` (`builder-core`) | Tiny shared library: streaming SHA-256 helpers (`sha256_file` / `sha256_hex`) used by the pack pipeline. | `cargo test -p builder-core` |
 
 ## Build and test
@@ -52,13 +52,15 @@ target/debug/3ds2apple-pack packages verify
 
 Import also reads the game metadata from the NCCH ExeFS: the SMDH title table
 gives localized names (BCP-47 keys `ja`/`en`/`fr`/`de`/`it`/`es`/`zh-Hans`/
-`ko`/`nl`/`pt`/`ru`/`zh-Hant`), the publisher and the 48x48 icon, which is
-written to the package as `cover.png`. `GameInfo.json` gains additive optional
-`displayNames`, `publisher` and `coverPath` fields (schema version stays 1;
-`displayName` remains the English/default title), and the same fields plus the
-absolute `coverPath` are exposed by `packages add --json` / `packages list
---json` for launchers. Only ~14 KiB of the ROM is read and the extracted cover
-stays in the gitignored output tree.
+`ko`/`nl`/`pt`/`ru`/`zh-Hant`), the publisher, the region-lockout bits
+(application settings 0x2018 -> `JP`/`US`/`EU`/`AU`/`CN`/`KR`/`TW`,
+`region-free`, joined with `+`; omitted when unknown) and the 48x48 icon, which
+is written to the package as `cover.png`. `GameInfo.json` gains additive
+optional `displayNames`, `publisher`, `region` and `coverPath` fields (schema
+version stays 1; `displayName` remains the English/default title), and the same
+fields plus the absolute `coverPath` are exposed by `packages add --json` /
+`packages list --json` for launchers. Only ~14 KiB of the ROM is read and the
+extracted cover stays in the gitignored output tree.
 
 ## Packages, `GameInfo.json` and `GameCatalog.json`
 
@@ -73,8 +75,8 @@ cover.png                   SMDH cover extracted from the ROM (or a user-supplie
 ```
 
 `GameInfo.json` carries the title ID, display name plus the localized
-`displayNames` map, publisher, product code, AOT version, the pack file/size/
-SHA-256 and (when the ROM is bundled) the ROM file/size/SHA-256. Launchers read
+`displayNames` map, publisher, region, product code, AOT version, the pack
+file/size/SHA-256 and (when the ROM is bundled) the ROM file/size/SHA-256. Launchers read
 it after `packages add` and copy the fields they need. `GameCatalog.json`
 (schema 2) is what the shell reads from the app bundle:
 
@@ -100,7 +102,7 @@ The shipped product is launcher-first: the Windows launcher
 `3ds2apple-pack`, compiles the GamePack locally on the PC (3dsrecomp + the
 official LLVM 21.1.8 clang/ld64.lld toolchain plus the hand-written Darwin
 stubs in [tools/winbuild/](../tools/winbuild/)), composes the ROM-free IPA and
-pushes only `GameRom.cci` + `GameInfo.json` to the phone. The macOS launcher
+pushes only `GameRom.cci` + optional `cover.png` + `GameInfo.json` to the phone. The macOS launcher
 compiles with Apple's toolchain on the Mac. `3ds2apple-pack` stays a pure
 desktop library/CLI: it never signs, installs or contacts a project server.
 

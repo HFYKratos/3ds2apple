@@ -63,6 +63,25 @@ pub const APPLICATION_SETTINGS_OFFSET: usize = TITLE_TABLE_END;
 pub const APPLICATION_SETTINGS_SIZE: usize = 0x30;
 /// Reserved bytes between the application settings and the icon graphics.
 pub const APPLICATION_SETTINGS_RESERVED_SIZE: usize = 0x8;
+/// Region-lockout bitmask inside the application settings block (3dbrew SMDH:
+/// application settings + 0x10, i.e. absolute 0x2018).
+pub const REGION_LOCKOUT_OFFSET: usize = APPLICATION_SETTINGS_OFFSET + 0x10;
+/// Size of the region-lockout bitmask in bytes.
+pub const REGION_LOCKOUT_SIZE: usize = 0x4;
+/// Region codes and their region-lockout bits, in bit order (3dbrew SMDH).
+pub const SMDH_REGIONS: [(&str, u32); 7] = [
+    ("JP", 0x01),
+    ("US", 0x02),
+    ("EU", 0x04),
+    ("AU", 0x08),
+    ("CN", 0x10),
+    ("KR", 0x20),
+    ("TW", 0x40),
+];
+/// The mask Nintendo uses for a region-free title.
+pub const REGION_FREE: u32 = 0x7FFF_FFFF;
+/// Bits that name a known region in the region-lockout field.
+pub const KNOWN_REGION_BITS: u32 = 0x7F;
 /// Start of the icon graphics block. The small icon comes first.
 pub const ICON_GRAPHICS_OFFSET: usize =
     APPLICATION_SETTINGS_OFFSET + APPLICATION_SETTINGS_SIZE + APPLICATION_SETTINGS_RESERVED_SIZE;
@@ -98,13 +117,15 @@ pub const LANGUAGES: [&str; TITLE_BLOCK_COUNT] = [
     "",
 ];
 
-/// Localized titles and publisher parsed from one SMDH.
+/// Localized titles, publisher and region-lockout parsed from one SMDH.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SmdhMetadata {
     /// Localized short titles keyed by language, sorted by key.
     pub display_names: BTreeMap<String, String>,
     /// Publisher (English slot first, else the first non-empty slot).
     pub publisher: String,
+    /// Region-lockout bitmask from the application settings (0 when unset).
+    pub region_lockout: u32,
 }
 
 impl SmdhMetadata {
@@ -153,7 +174,45 @@ pub fn parse(bytes: &[u8]) -> Option<SmdhMetadata> {
     Some(SmdhMetadata {
         display_names,
         publisher,
+        region_lockout: read_region_lockout(bytes),
     })
+}
+
+/// Region-lockout bitmask from the SMDH application settings.
+///
+/// The field is part of the application settings block (absolute 0x2018); a
+/// truncated SMDH yields 0 so metadata detection never fails on it.
+pub fn read_region_lockout(bytes: &[u8]) -> u32 {
+    bytes
+        .get(REGION_LOCKOUT_OFFSET..REGION_LOCKOUT_OFFSET + REGION_LOCKOUT_SIZE)
+        .map(|raw| u32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]))
+        .unwrap_or(0)
+}
+
+/// Human-readable region codes for an SMDH region-lockout bitmask.
+///
+/// The lockout mask names the regions a title may run in: 0x01 Japan,
+/// 0x02 North America, 0x04 Europe, 0x08 Australia, 0x10 China, 0x20 Korea,
+/// 0x40 Taiwan. Nintendo's region-free mask (0x7FFFFFFF) maps to
+/// region-free; Europe is normally stored as Europe+Australia. Returns None
+/// for an unset mask or one without a known region bit, so a manifest can
+/// omit a region it does not actually know.
+pub fn region_codes(lockout: u32) -> Option<String> {
+    if lockout == 0 {
+        return None;
+    }
+    if lockout == REGION_FREE {
+        return Some("region-free".to_string());
+    }
+    if lockout & KNOWN_REGION_BITS == 0 {
+        return None;
+    }
+    let codes: Vec<&str> = SMDH_REGIONS
+        .iter()
+        .filter(|(_, bit)| lockout & bit != 0)
+        .map(|(code, _)| *code)
+        .collect();
+    (!codes.is_empty()).then(|| codes.join("+"))
 }
 
 /// The 48x48 RGB565 icon bytes, or `None` when the SMDH is too short.
@@ -359,6 +418,9 @@ pub(crate) mod test_support {
         // pixels. The small icon (0x2040) is flat green and the large icon
         // (0x24C0) is a deterministic gradient encoded through the tile layout.
         bytes[APPLICATION_SETTINGS_OFFSET..ICON_GRAPHICS_OFFSET].fill(0x5A);
+        // The region-lockout field is meaningful metadata: a fixture without a
+        // region stays 0 (tests set it explicitly when they need one).
+        set_region_lockout(&mut bytes, 0);
         for pixel in
             bytes[SMALL_ICON_OFFSET..SMALL_ICON_OFFSET + SMALL_ICON_SIZE].chunks_exact_mut(2)
         {
@@ -391,6 +453,12 @@ pub(crate) mod test_support {
     ) {
         let offset = base + tiled_icon_index(side, x, y) * 2;
         icon[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
+    }
+
+    /// Record a region-lockout mask in an existing synthetic SMDH.
+    pub fn set_region_lockout(bytes: &mut [u8], mask: u32) {
+        bytes[REGION_LOCKOUT_OFFSET..REGION_LOCKOUT_OFFSET + REGION_LOCKOUT_SIZE]
+            .copy_from_slice(&mask.to_le_bytes());
     }
 
     fn put_utf16(bytes: &mut [u8], offset: usize, size: usize, text: &str) {
@@ -450,6 +518,15 @@ mod tests {
         assert_eq!(SMALL_ICON_OFFSET + SMALL_ICON_SIZE, LARGE_ICON_OFFSET);
         assert_eq!(LARGE_ICON_END, FULL_SMDH_SIZE);
         assert_eq!(ICON_TILE_SIDE, 8);
+        // The region-lockout bitmask sits at application settings + 0x10.
+        assert_eq!(REGION_LOCKOUT_OFFSET, 0x2018);
+        assert_eq!(REGION_LOCKOUT_SIZE, 4);
+        assert!(REGION_LOCKOUT_OFFSET >= APPLICATION_SETTINGS_OFFSET);
+        assert!(
+            REGION_LOCKOUT_OFFSET + REGION_LOCKOUT_SIZE
+                <= APPLICATION_SETTINGS_OFFSET + APPLICATION_SETTINGS_SIZE
+        );
+        assert_eq!(KNOWN_REGION_BITS, 0x7F);
     }
 
     #[test]
@@ -568,6 +645,27 @@ mod tests {
         let metadata = parse(&smdh).unwrap();
         assert_eq!(metadata.display_names.len(), 1);
         assert!(metadata.display_names.contains_key("en"));
+    }
+
+    #[test]
+    fn parses_the_region_lockout_and_maps_region_codes() {
+        use super::test_support::set_region_lockout;
+        let mut smdh = synthetic_smdh(&[(1, "Test Game", "Example")]);
+        assert_eq!(parse(&smdh).unwrap().region_lockout, 0);
+        assert_eq!(region_codes(0), None);
+
+        set_region_lockout(&mut smdh, 0x04);
+        assert_eq!(parse(&smdh).unwrap().region_lockout, 0x04);
+        assert_eq!(region_codes(0x04).as_deref(), Some("EU"));
+        assert_eq!(region_codes(0x02).as_deref(), Some("US"));
+        assert_eq!(region_codes(0x01).as_deref(), Some("JP"));
+        // Nintendo groups the Australian market with Europe.
+        assert_eq!(region_codes(0x0C).as_deref(), Some("EU+AU"));
+        assert_eq!(region_codes(0x7FFF_FFFF).as_deref(), Some("region-free"));
+        // Only unknown bits: no usable region name.
+        assert_eq!(region_codes(0x80), None);
+        // A truncated SMDH (title table only) still parses and reports no region.
+        assert_eq!(parse(&smdh[..TITLE_TABLE_END]).unwrap().region_lockout, 0);
     }
 
     #[test]

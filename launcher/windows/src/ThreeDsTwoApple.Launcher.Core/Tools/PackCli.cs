@@ -23,7 +23,8 @@ public sealed record ImportedPackage(
     string Status,
     IReadOnlyDictionary<string, string>? DisplayNames = null,
     string? Publisher = null,
-    string? CoverPath = null);
+    string? CoverPath = null,
+    string? Region = null);
 
 /// <summary>Result of <c>packages add --json</c>.</summary>
 public sealed record PackageAddResult(
@@ -111,7 +112,8 @@ public sealed class PackCli
                     Json.String(element, "displayName") ?? Path.GetFileNameWithoutExtension(romPath),
                     Json.Long(element, "bytes") ?? 0,
                     Json.Long(element, "contentBytes"),
-                    (int?)Json.Long(element, "titleVersion")));
+                    (int?)Json.Long(element, "titleVersion"),
+                    Json.String(element, "region")));
             }
             foreach (var element in Json.Array(document.RootElement, "errors"))
             {
@@ -182,7 +184,8 @@ public sealed class PackCli
                     Json.Array(element, "issues").Select(i => i.GetString() ?? i.GetRawText()).ToList(),
                     ParseDisplayNames(element),
                     Json.String(element, "publisher"),
-                    Json.String(element, "coverPath")));
+                    Json.String(element, "coverPath"),
+                    Json.String(element, "region")));
             }
             foreach (var element in Json.Array(document.RootElement, "errors"))
             {
@@ -283,7 +286,8 @@ public sealed class PackCli
                     Json.String(element, "status") ?? "imported",
                     ParseDisplayNames(element),
                     Json.String(element, "publisher"),
-                    Json.String(element, "coverPath")));
+                    Json.String(element, "coverPath"),
+                    Json.String(element, "region")));
             }
             foreach (var element in Json.Array(document.RootElement, "errors"))
             {

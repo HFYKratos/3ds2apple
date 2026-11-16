@@ -100,6 +100,9 @@ fn synthetic_smdh() -> Vec<u8> {
     for (index, pixel) in bytes[0x2008..0x3208].chunks_exact_mut(2).enumerate() {
         pixel.copy_from_slice(&(((index * 977) & 0xFFFF) as u16).to_le_bytes());
     }
+    // Region lockout: Europe. The application-settings fill above would make
+    // this meaningful field noise, so write the explicit test mask.
+    bytes[0x2018..0x201C].copy_from_slice(&0x04_u32.to_le_bytes());
     bytes
 }
 
@@ -704,6 +707,7 @@ fn smdh_metadata_and_cover_flow_through_cli_json() {
     assert_eq!(inspected["roms"][0]["displayNames"]["en"], "Test Game");
     assert_eq!(inspected["roms"][0]["displayNames"]["ja"], "テストゲーム");
     assert_eq!(inspected["roms"][0]["publisher"], "Example Publisher");
+    assert_eq!(inspected["roms"][0]["region"], "EU");
 
     // packages add --json: displayNames/publisher/coverPath (absolute).
     let add = run(&[
@@ -723,6 +727,7 @@ fn smdh_metadata_and_cover_flow_through_cli_json() {
     assert_eq!(package["displayNames"]["en"], "Test Game");
     assert_eq!(package["displayNames"]["ja"], "テストゲーム");
     assert_eq!(package["publisher"], "Example Publisher");
+    assert_eq!(package["region"], "EU");
     let cover = Path::new(package["coverPath"].as_str().expect("coverPath"));
     assert!(
         cover.is_absolute(),
@@ -743,6 +748,7 @@ fn smdh_metadata_and_cover_flow_through_cli_json() {
     assert_eq!(manifest["displayName"], "Test Game");
     assert_eq!(manifest["displayNames"]["en"], "Test Game");
     assert_eq!(manifest["publisher"], "Example Publisher");
+    assert_eq!(manifest["region"], "EU");
     assert_eq!(manifest["coverPath"], "cover.png");
 
     // packages list --json exposes the same contract for launchers.
@@ -759,6 +765,7 @@ fn smdh_metadata_and_cover_flow_through_cli_json() {
     assert_eq!(package["displayName"], "Test Game");
     assert_eq!(package["displayNames"]["ja"], "テストゲーム");
     assert_eq!(package["publisher"], "Example Publisher");
+    assert_eq!(package["region"], "EU");
     assert!(package["coverPath"]
         .as_str()
         .expect("coverPath")

@@ -6,8 +6,12 @@
 //  the app container; the AOT pack lives in the signed IPA:
 //
 //      Documents/Games/<TITLEID>/GameRom.cci     (the player's ROM data)
+//      Documents/Games/<TITLEID>/cover.png       (optional SMDH/user cover)
 //      Documents/Games/<TITLEID>/GameInfo.json   (ROM manifest, pushed LAST)
-//      Documents/Games/<TITLEID>/cover.png       (optional)
+//
+//  cover.png is the icon the desktop launcher already extracted for its own
+//  Library; it is local user data, pushed next to the ROM and referenced by the
+//  manifest (never committed, never decoded on the phone).
 //
 //  The ROM data source is the launcher's gitignored copy in
 //  out/launcher-roms/<TITLEID>.<ext>; the desktop package stays ROM-free.
@@ -28,7 +32,8 @@ struct PushPlanner {
         game: GameEntry,
         manifest: PackageManifest,
         device: DeviceInfo?,
-        stagingDirectory: URL
+        stagingDirectory: URL,
+        uiLanguageTag: String? = nil
     ) throws -> PushPlan {
         let remoteDirectory = "Documents/Games/" + game.titleID.uppercased()
 
@@ -55,11 +60,24 @@ struct PushPlanner {
             progress: 0
         ))
 
+        // The cover is the package's SMDH icon (or a user cover). Resolve it
+        // against the package directory first, then use the absolute path the
+        // Library card already resolved; a missing cover is not an error.
+        let packageDirectory = outRoot
+            .appendingPathComponent("packages/" + game.titleID.uppercased()).path
+        let coverPath = GameNames.resolveCoverPath(
+            packageDirectory: packageDirectory,
+            coverPath: manifest.coverPath
+        ) ?? game.coverPath.flatMap { FileProbe.exists($0) ? $0 : nil }
+        let coverName = coverPath == nil ? nil : PushPlanner.coverFileName
+
         let manifestOutput = GameInfoWriter.makeManifest(
             package: manifest,
             romFile: romFile,
             romBytes: romBytes,
-            romSha256: romSha
+            romSha256: romSha,
+            coverFile: coverName,
+            uiLanguageTag: uiLanguageTag
         )
         let staging = stagingDirectory.appendingPathComponent(game.titleID)
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
@@ -74,6 +92,17 @@ struct PushPlanner {
                 detail: error.localizedDescription,
                 exitCode: nil
             )
+        }
+        if let coverPath, let coverBytes = FileProbe.size(coverPath), coverBytes > 0 {
+            files.append(PushFile(
+                name: PushPlanner.coverFileName,
+                localPath: coverPath,
+                remotePath: remoteDirectory + "/" + PushPlanner.coverFileName,
+                bytes: coverBytes,
+                sha256: FileProbe.sha256(ofFile: coverPath) ?? "",
+                state: .pending,
+                progress: 0
+            ))
         }
         files.append(PushFile(
             name: PushPlanner.gameInfoFileName,

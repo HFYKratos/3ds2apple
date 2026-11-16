@@ -34,6 +34,13 @@ struct GameEntry: Identifiable, Hashable {
     let title: String
     /// 3DS product code ("CTR-P-EK2A"), nil when neither side recorded it.
     let productCode: String?
+    /// Publisher from the pushed SMDH metadata, nil when unknown.
+    let publisher: String?
+    /// Size of the pushed game data in bytes, nil until the launcher pushes it.
+    let romBytes: UInt64?
+    /// Cover image for the card: the launcher-pushed `cover.png` first, then
+    /// the build's bundle cover; nil draws the deterministic placeholder.
+    let coverURL: URL?
     /// Whether the build has AOT code for this game.
     let aot: Bool
     /// Version of the AOT artifact (informational).
@@ -63,6 +70,15 @@ struct GameEntry: Identifiable, Hashable {
 
     var id: String { titleID }
 
+    /// A cover image inside the signed app bundle (`GameCatalog.json`
+    /// `coverFile`), validated as a bundle-relative path and only used when the
+    /// file really exists; the shell never trusts an absolute path here.
+    static func bundleCoverURL(coverFile: String?) -> URL? {
+        guard let coverFile, AOTPackageLoader.isValidRelativePath(coverFile) else { return nil }
+        let url = Bundle.main.bundleURL.appendingPathComponent(coverFile, isDirectory: false)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     /// Save-data / save-state folder name: the manifest's namespace, else the
     /// title ID. Two games can never share a folder.
     var saveNamespace: String { pushedData?.saveNamespace ?? titleID }
@@ -81,6 +97,9 @@ struct GameEntry: Identifiable, Hashable {
     init(titleID: String,
          title: String,
          productCode: String? = nil,
+         publisher: String? = nil,
+         romBytes: UInt64? = nil,
+         coverURL: URL? = nil,
          aot: Bool,
          aotVersion: Int? = nil,
          packFile: String? = nil,
@@ -96,6 +115,9 @@ struct GameEntry: Identifiable, Hashable {
         self.titleID = titleID.uppercased()
         self.title = title
         self.productCode = productCode
+        self.publisher = publisher
+        self.romBytes = romBytes
+        self.coverURL = coverURL
         self.aot = aot
         self.aotVersion = aotVersion
         self.packFile = packFile
@@ -126,8 +148,19 @@ struct GameEntry: Identifiable, Hashable {
         }
         self.init(
             titleID: game.titleID,
-            title: manifest?.trimmedDisplayName ?? game.displayName,
+            // The pushed manifest is authoritative; `preferredDisplayName`
+            // picks the SMDH name for this app's language. Without a push the
+            // catalog's displayName is the graceful fallback.
+            title: pushedData?.localizedDisplayName
+                ?? manifest?.trimmedDisplayName
+                ?? game.displayName,
             productCode: manifest?.productCode ?? game.productCode,
+            publisher: pushedData?.publisher,
+            // Prefer the size the launcher recorded in GameInfo.json
+            // (`rom.size`, already validated against the file on scan); fall
+            // back to the real file size of the push.
+            romBytes: pushedData?.declaredROMSize ?? pushedData?.romBytes,
+            coverURL: pushedData?.coverURL ?? GameEntry.bundleCoverURL(coverFile: game.coverFile),
             aot: game.aot,
             aotVersion: game.aotVersion,
             packFile: game.packFile,

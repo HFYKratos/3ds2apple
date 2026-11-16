@@ -12,8 +12,8 @@ public sealed record PushFile(string RemoteName, string LocalPath, string Sha256
 }
 
 /// <summary>
-/// Everything pushed for one game: the user's ROM and the informational
-/// GameInfo.json, in that order. The GamePack.dylib is NOT pushed — it lives in
+/// Everything pushed for one game: the user's ROM, the optional SMDH/user
+/// cover.png and the informational GameInfo.json last. The GamePack.dylib is NOT pushed — it lives in
 /// the signed app bundle (Frameworks/GamePack-&lt;TITLEID&gt;.dylib) and is loaded
 /// through the bundle GameCatalog.json, because iOS cannot dlopen a loose unsigned
 /// dylib from Documents. Pushed ROM data survives an overwrite install/update (a clean uninstall clears app data; verify on device)s/updates.
@@ -54,6 +54,10 @@ public sealed class GamePushPlan
         int aotVersion,
         string? packPath,
         string romPath,
+        IReadOnlyDictionary<string, string>? displayNames = null,
+        string? publisher = null,
+        string? region = null,
+        string? coverPath = null,
         Action<string>? log = null,
         CancellationToken cancellationToken = default)
     {
@@ -76,6 +80,26 @@ public sealed class GamePushPlan
         log?.Invoke("Hashing " + Path.GetFileName(romPath) + " (this reads the whole ROM once)…");
         var romHash = await HashFileAsync(romPath, cancellationToken).ConfigureAwait(false);
 
+        // The SMDH icon is local user data: it is pushed next to the ROM and
+        // referenced from GameInfo.json (cover: "cover.png"), never committed.
+        string? coverName = null;
+        long coverBytes = 0;
+        string? coverSha256 = null;
+        if (!string.IsNullOrWhiteSpace(coverPath))
+        {
+            if (File.Exists(coverPath))
+            {
+                var coverHash = await HashFileAsync(coverPath, cancellationToken).ConfigureAwait(false);
+                coverName = GameInfoWriter.CoverFileName;
+                coverBytes = coverHash.Bytes;
+                coverSha256 = coverHash.Sha256;
+            }
+            else
+            {
+                log?.Invoke("The cover image is missing at " + coverPath + "; pushing without a cover.");
+            }
+        }
+
         var document = GameInfoWriter.Build(
             normalizedTitle,
             displayName,
@@ -85,7 +109,12 @@ public sealed class GamePushPlan
             packBytes,
             romHash.Sha256,
             romHash.Bytes,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            notes: null,
+            displayNames: displayNames,
+            publisher: publisher,
+            region: region,
+            cover: coverName);
         var stage = Path.Combine(stagingDirectory, normalizedTitle);
         Directory.CreateDirectory(stage);
         var gameInfoPath = Path.Combine(stage, GameInfoWriter.GameInfoFileName);
@@ -96,8 +125,12 @@ public sealed class GamePushPlan
         var files = new List<PushFile>
         {
             new(GameInfoWriter.GameRomFileName, romPath, romHash.Sha256, romHash.Bytes),
-            new(GameInfoWriter.GameInfoFileName, gameInfoPath, gameInfoHash.Sha256, gameInfoHash.Bytes),
         };
+        if (coverName is not null && coverSha256 is not null)
+        {
+            files.Add(new PushFile(coverName, coverPath!, coverSha256, coverBytes));
+        }
+        files.Add(new PushFile(GameInfoWriter.GameInfoFileName, gameInfoPath, gameInfoHash.Sha256, gameInfoHash.Bytes));
         return new GamePushPlan(normalizedTitle, displayName, productCode, aotVersion, files, gameInfoPath);
     }
 

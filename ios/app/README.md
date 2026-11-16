@@ -22,7 +22,7 @@ views do not carry duplicated strings.
 
 | Page | Contents |
 |---|---|
-| **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`; last-played state and a per-card state badge (**AOT** / **Checking** / **Data missing** / **Error**). Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Refresh button and pull-to-refresh rescan Documents. The empty state explains the desktop launcher. No on-phone import. Settings entry. |
+| **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`; each card shows the game's own SMDH cover icon (launcher-pushed `cover.png`, else the build's bundled cover, else a placeholder), the title for the app language, the publisher and the pushed game size, plus last-played state and a per-card state badge (**AOT** / **Checking** / **Data missing** / **Error**). Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Refresh button and pull-to-refresh rescan Documents. The empty state explains the desktop launcher. No on-phone import. Settings entry. |
 | **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), on-screen controls, the optional FPS counter and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. The FPS counter sits in the portrait title bar or in a slim landscape strip in the top safe area, outside the 3DS picture and clear of every control. |
 | **Settings** | Display, Audio, Controls, Performance (fast-forward, system Metal HUD, FPS counter), Storage and About sections. |
 | **Save Manager** | The battery save files of the current game (size, date, export as ZIP, import, delete), the three instant save-state slots (save, load, delete) and the container usage. |
@@ -112,7 +112,7 @@ A game on the phone has two halves:
 | Half | Lives in | How it gets there |
 |---|---|---|
 | AOT pack + catalog entry (`GamePack-<TITLEID>.dylib`, `GameCatalog.json`) | the signed app bundle (`Frameworks/`, `Resources/`) | the desktop launcher builds the app with the pack and installs it — adding a game rebuilds/reinstalls the shell |
-| Game data (the user's decrypted ROM + `GameInfo.json`) | `Documents/Games/<TITLEID>/` in the app container | the launcher pushes it through the device bridge over USB/Wi-Fi; it survives app reinstalls and updates |
+| Game data (the user's decrypted ROM + `GameInfo.json` + optional `cover.png`) | `Documents/Games/<TITLEID>/` in the app container | the launcher pushes it through the device bridge over USB/Wi-Fi; it survives app reinstalls and updates |
 
 The split is deliberate: iOS refuses to `dlopen` unsigned code copied into
 Documents, so the AOT pack must be part of the signed IPA, while the large
@@ -128,7 +128,7 @@ Documents/
   Games/<TITLEID>/            16 upper-case hex digits, e.g. 0004000000055E00
     GameInfo.json             launcher manifest (written last)
     GameRom.cci               user's decrypted game data
-    cover.png                 optional
+    cover.png                 launcher-pushed SMDH icon (optional; local user data)
   Library/playHistory.json    last-played times (written by the shell)
   data/<save namespace>/      battery saves (written by the runtime)
   states/<save namespace>/    instant save-state slots
@@ -141,6 +141,20 @@ optional `cover`, `launcherVersion`, `pushedAt` and `notes`. The `pack` object i
 informational metadata about the pack the launcher embedded in the IPA (the shell
 never loads a pack from Documents). Unknown fields are ignored; the game data
 defaults to `GameRom.cci` / `GameRom.3ds`.
+
+Base library metadata comes from the launcher too — the phone never parses the
+ROM: the launcher already read the SMDH icon/titles/publisher/region at import
+time and pushes them in the same manifest. `displayName` is the title for the
+launcher's UI language; the additive `displayNames` object keeps every original
+localized title and the app re-picks for its own language (`zh-Hans`/`en`) before
+falling back to `displayName`, then the catalog name, then the title ID.
+`publisher` and `region` (SMDH region lockout: `EU`, `US`, `EU+AU`,
+`region-free`) are optional and simply omitted when unknown; `cover` is
+`"cover.png"` when the icon was pushed. `rom.size` is cross-checked against the
+real file during the scan and the card shows that size (formatted MB/GB).
+Older launchers that push none of these fields stay fully compatible: the card
+falls back to the catalog `displayName`, hides the publisher row and draws the
+gradient placeholder instead of an icon.
 
 The shell validates the pushed game data in two passes:
 
@@ -474,10 +488,10 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `ROMSession.swift` | Runtime handle, AOT-only game launch gate, frame loop, presenter lifecycle, input/audio plumbing, pause/resume/reset and the settings that change runtime behaviour. |
 | `MetalScreenView.swift` | `UIView` with a `CAMetalLayer` the presenter draws into (A1); drawable size for the chosen layout/rotation and the render scale (1×–4×), plus the integer-scaling magnification filter. |
 | `ScreenGeometry.swift` | The drawable size of each layout/rotation and the box the screens occupy for the aspect/integer-scale settings. |
-| `GameInfo.swift` | The launcher's `Documents/Games/<TITLEID>/GameInfo.json` manifest (schema 1): authoritative display title, save namespace and pushed game-data size/SHA-256; the pack fields are informational metadata about the pack embedded in the IPA. |
-| `InstalledGame.swift` | Scans `Documents/Games` for pushed game data, validates it (folder/title ID, manifest, ROM presence/size/path containment) and verifies the recorded SHA-256 in the background. |
+| `GameInfo.swift` | The launcher's `Documents/Games/<TITLEID>/GameInfo.json` manifest (schema 1): authoritative display title, localized `displayNames`/`publisher`/`region` (optional SMDH base info), save namespace and pushed game-data size/SHA-256; the pack fields are informational metadata about the pack embedded in the IPA. |
+| `InstalledGame.swift` | Scans `Documents/Games` for pushed game data, validates it (folder/title ID, manifest, ROM presence/size/path containment), resolves the pushed `cover.png` and verifies the recorded SHA-256 in the background. |
 | `GameCatalog.swift` | The bundle `GameCatalog.json` schema (v2, v1 compatible): the build's game list plus per-game `packFile`/ABI/`registrationSymbol`. A base shell may ship an empty catalog. |
-| `GameLibrary.swift` | The library: bundle catalog joined with the pushed `Documents/Games` data, per-card states (AOT / Checking / Data missing / Error), background SHA-256 checks and `Documents/Library/playHistory.json`. No ROM importing. |
+| `GameLibrary.swift` | The library: bundle catalog joined with the pushed `Documents/Games` data, per-card title/publisher/size/cover (catalog fallback + placeholder), per-card states (AOT / Checking / Data missing / Error), background SHA-256 checks and `Documents/Library/playHistory.json`. No ROM importing. |
 | `AOTPackageLoader.swift` | Resolves/loads the per-game `GamePack.dylib` from the signed app bundle, validates title/ABI/registration symbols before use, hands the launch the pushed (or legacy bundled) ROM, documents the C ABI, and falls back to the statically linked single-game build. |
 | `DebugLaunch.swift` | Headless launch hooks: `-openAOTTitleID` (start a library game) and `-gamesRoot` (scan a Simulator fixture folder instead of Documents/Games). |
 | `LegacyGameData.swift` | One-time migration for apps updated from 0.1.x: cartridge lookup for the statically linked title, play times, and renaming ROM-named save folders to the title-id namespace. |

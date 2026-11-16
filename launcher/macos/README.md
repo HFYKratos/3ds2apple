@@ -16,13 +16,24 @@ aligned with the Windows launcher (current product version **0.1.1 build 1**;
       -> verify that IPA (real packs + catalogue, no ROM) before anything is installed
       -> sign with your own Apple ID via Xcode automatic signing + devicectl install,
          reading back the bundle ID of the app that was actually installed
-      -> push ONLY Documents/Games/<TITLEID>/GameRom.cci + GameInfo.json for each
-         selected game with the actual installed bundle ID, verify size/sha + listing
+      -> push ONLY Documents/Games/<TITLEID>/GameRom.cci + cover.png (optional)
+         + GameInfo.json (last) for each selected game with the actual installed
+         bundle ID, verify size/sha + listing
       -> Done ("可以打开手机 App 游玩" / "Ready to play")
 
 iOS will not dlopen unsigned code from the app container, so the AOT code lives
 inside the signed IPA and Documents only receives game data. Deploying a new
 selection re-composes the IPA; pushed ROM data persists across re-installs.
+
+The pushed `GameInfo.json` also carries the base metadata the launcher already
+read from the ROM's SMDH at import time, so the iOS library card needs no ROM
+parsing: `displayName` is the SMDH title for the launcher's current UI language
+(English fallback), `displayNames` keeps every original localized title, plus
+optional `publisher`, optional `region` (SMDH region lockout: `EU`, `US`,
+`EU+AU`, `region-free`; omitted when unknown), optional `cover` (`cover.png`, the
+pushed SMDH icon; local user data, never committed), `rom.size`/`rom.sha256` of
+the real pushed data, `launcherVersion` and `pushedAt`. `schemaVersion` stays 1
+and every added field is optional, so older manifests keep parsing.
 
 Nothing in the launcher implements signing or USB/AFC itself: it orchestrates
 Xcode/devicectl and the device bridge, and it never stores an Apple ID, password,
@@ -134,7 +145,7 @@ it from a source tree).
       Toolchain.swift          auto-detected tools + readiness probe + Team ID detection
       PackBackend.swift        typed 3ds2apple-pack CLI wrapper + JSON parsing (incl. SMDH displayNames/publisher/coverPath)
       GameInfoWriter.swift     launcher -> shell GameInfo.json (push layout)
-      PushPlanner.swift        Documents/Games/TITLEID plan, GameInfo.json last
+      PushPlanner.swift        Documents/Games/TITLEID plan: ROM, cover.png, GameInfo.json last
       InstallBackend.swift     signed shell build, IPA inspection, codesign + devicectl, Apple error mapper
       ShellRuntime.swift       pinned MoltenVK.framework source + embedding / Metal-HUD readiness verification
       DeviceBridge.swift       devpush contract v1 client (NDJSON) + mock bridge

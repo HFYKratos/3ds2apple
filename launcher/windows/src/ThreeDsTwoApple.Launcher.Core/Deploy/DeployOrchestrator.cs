@@ -1,5 +1,6 @@
 using ThreeDsTwoApple.Launcher.Core.BuildPipeline;
 using ThreeDsTwoApple.Launcher.Core.LauncherState;
+using ThreeDsTwoApple.Launcher.Core.Localization;
 using ThreeDsTwoApple.Launcher.Core.Models;
 using ThreeDsTwoApple.Launcher.Core.Signing;
 
@@ -129,6 +130,10 @@ public sealed class LauncherGameDataPusher : IGameDataPusher
             LauncherInfo.GamePackAbiVersion,
             entry.PackPath,
             entry.RomPath,
+            entry.DisplayNames,
+            entry.Publisher,
+            entry.Region,
+            entry.CoverPath,
             log,
             cancellationToken);
 
@@ -145,8 +150,14 @@ public sealed class LauncherGameDataPusher : IGameDataPusher
     public Task<IReadOnlyList<string>> VerifyAsync(GamePushPlan plan, string bundleId, string? deviceUdid, CancellationToken cancellationToken) =>
         _pushService.VerifyAsync(plan, bundleId, deviceUdid, cancellationToken);
 
-    internal static string DisplayName(LibraryEntry entry) =>
-        string.IsNullOrWhiteSpace(entry.DisplayNameOverride) ? entry.DisplayName : entry.DisplayNameOverride;
+    internal static string DisplayName(LibraryEntry entry)
+    {
+        var fallback = string.IsNullOrWhiteSpace(entry.DisplayNameOverride) ? entry.DisplayName : entry.DisplayNameOverride;
+        // The pushed displayName is the title for the launcher's current UI
+        // language; displayNames carries every original SMDH language so the
+        // phone can pick for its own language.
+        return GameNames.Resolve(entry.DisplayNames, fallback, Loc.CurrentTag);
+    }
 }
 
 /// <summary>

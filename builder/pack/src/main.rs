@@ -282,6 +282,9 @@ fn cmd_rom_inspect(roms: &[PathBuf], json: bool) -> Result<i32> {
                     if !info.publisher.is_empty() {
                         println!("  publisher: {}", info.publisher);
                     }
+                    if let Some(region) = &info.region {
+                        println!("  region: {region}");
+                    }
                     if !info.display_names.is_empty() {
                         let titles: Vec<String> = info
                             .display_names
@@ -339,6 +342,7 @@ fn cmd_packages_add(out: &Path, args: PackagesAddArgs, json: bool) -> Result<i32
                         "productCode": result.game_info.product_code,
                         "displayNames": result.display_names,
                         "publisher": result.publisher,
+                        "region": (!result.region.is_empty()).then(|| result.region.clone()),
                         "coverPath": result
                             .cover_path
                             .as_ref()
@@ -468,6 +472,7 @@ fn package_json(package: &PackageSummary) -> Result<Value> {
         "productCode": package.product_code,
         "displayNames": package.display_names,
         "publisher": package.publisher,
+        "region": (!package.region.is_empty()).then(|| package.region.clone()),
         "coverPath": package
             .cover_path
             .as_ref()

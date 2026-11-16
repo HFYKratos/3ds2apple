@@ -1076,7 +1076,13 @@ final class AppModel: ObservableObject {
         let manifest = try await pack.readManifest(titleID: titleID)
         let planner = PushPlanner(outRoot: pack.outRoot, bundleID: bundleID)
         guard let current = game(id: titleID) else { return }
-        var plan = try planner.plan(game: current, manifest: manifest, device: device, stagingDirectory: stagingRoot)
+        var plan = try planner.plan(
+            game: current,
+            manifest: manifest,
+            device: device,
+            stagingDirectory: stagingRoot,
+            uiLanguageTag: strings.language.localeIdentifier
+        )
         pushPlans[titleID] = plan
         for file in plan.files {
             guard FileProbe.exists(file.localPath) else {

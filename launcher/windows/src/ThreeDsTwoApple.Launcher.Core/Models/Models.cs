@@ -11,7 +11,8 @@ public sealed record RomInfo(
     string DisplayName,
     long Bytes,
     long? ContentBytes,
-    int? TitleVersion);
+    int? TitleVersion,
+    string? Region = null);
 
 /// <summary>A built <c>GamePack.dylib</c> record from a package manifest.</summary>
 public sealed record PackRecord(string Sha256, long Bytes, string Format)
@@ -31,7 +32,8 @@ public sealed record PackageInfo(
     IReadOnlyList<string> Issues,
     IReadOnlyDictionary<string, string>? DisplayNames = null,
     string? Publisher = null,
-    string? CoverPath = null)
+    string? CoverPath = null,
+    string? Region = null)
 {
     public bool HasPack => Pack is { } pack && !pack.IsPlaceholder;
 
@@ -53,6 +55,10 @@ public sealed class LibraryEntry
 
     /// <summary>Publisher from the ROM SMDH (empty when unknown).</summary>
     public string Publisher { get; set; } = string.Empty;
+
+    /// <summary>Region codes from the ROM SMDH region lockout (e.g. "EU", "US",
+    /// "EU+AU", "region-free"; empty when unknown). Pushed in GameInfo.json.</summary>
+    public string Region { get; set; } = string.Empty;
 
     /// <summary>Absolute path of the package's cover.png (ROM icon), null when the ROM has no icon.</summary>
     public string? CoverPath { get; set; }

@@ -144,6 +144,12 @@ pub struct GameInfo {
     /// unknown. Additive optional field.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub publisher: String,
+    /// Region codes from the SMDH region lockout (for example `EU`, `US`,
+    /// `JP+US`, `region-free`); omitted for regions this pipeline cannot read.
+    /// Additive optional field: manifests written before it existed parse with
+    /// an empty region and stay valid.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub region: String,
     /// Version of the AOT pack; matches the catalogue's `aotVersion`.
     #[serde(rename = "aotVersion")]
     pub aot_version: u32,
@@ -203,6 +209,7 @@ impl GameInfo {
             Self::new_without_rom(&rom.title_id, display_name, product_code, aot_version)?;
         info.display_names = rom.display_names.clone();
         info.publisher = rom.publisher.clone();
+        info.region = rom.region.clone().unwrap_or_default();
         info.rom = Some(RomSource::from_rom(rom));
         Ok(info)
     }
@@ -232,6 +239,7 @@ impl GameInfo {
             product_code,
             display_names: BTreeMap::new(),
             publisher: String::new(),
+            region: String::new(),
             aot_version,
             save_namespace: title_id,
             pack_file: GAME_PACK_FILE.to_string(),
@@ -267,6 +275,7 @@ impl GameInfo {
         validate_product_code(&self.product_code)?;
         validate_display_names(&self.title_id, &self.display_names)?;
         validate_publisher(&self.title_id, &self.publisher)?;
+        validate_region(&self.title_id, &self.region)?;
         validate_cover_path(&self.title_id, &self.cover_path)?;
         validate_cover_source(&self.title_id, &self.cover_path, self.cover_source)?;
         if self.aot_version < 1 {
@@ -434,6 +443,23 @@ fn validate_publisher(title_id: &str, publisher: &str) -> Result<()> {
     if publisher.chars().count() > 120 {
         return Err(PackError::invalid(format!(
             "{title_id}: publisher must be at most 120 characters"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_region(title_id: &str, region: &str) -> Result<()> {
+    if region.is_empty() {
+        return Ok(());
+    }
+    if region.chars().any(|c| c.is_control()) || region.contains('\n') || region.contains('\r') {
+        return Err(PackError::invalid(format!(
+            "{title_id}: region must be a single line without control characters"
+        )));
+    }
+    if region.chars().count() > 40 {
+        return Err(PackError::invalid(format!(
+            "{title_id}: region must be at most 40 characters"
         )));
     }
     Ok(())
@@ -853,6 +879,9 @@ pub struct PackageSummary {
     /// Publisher from the manifest (may be empty).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub publisher: String,
+    /// Region codes from the manifest (may be empty).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub region: String,
     /// Absolute path of `cover.png` when the package has a cover.
     #[serde(rename = "coverPath", default, skip_serializing_if = "Option::is_none")]
     pub cover_path: Option<PathBuf>,
@@ -913,6 +942,7 @@ pub fn summarize_package(dir: &Path) -> Result<PackageSummary> {
         product_code: info.product_code,
         display_names: info.display_names,
         publisher: info.publisher,
+        region: info.region,
         cover_path,
         aot_version: info.aot_version,
         state,
@@ -1411,6 +1441,28 @@ mod tests {
             "{:?}",
             report.issues
         );
+    }
+
+    #[test]
+    #[test]
+    fn records_and_validates_the_region() {
+        let info = GameInfo::new_without_rom("0004000000055E00", "Game", "", 1).unwrap();
+        assert!(info.region.is_empty());
+        let json = info.to_json().unwrap();
+        assert!(!json.contains("region"), "{json}");
+        // Old manifests without the additive field keep parsing.
+        assert!(GameInfo::from_json(&json, std::path::Path::new("GameInfo.json")).is_ok());
+
+        let mut info = info;
+        info.region = "EU+AU".to_string();
+        assert!(info.validate().is_ok());
+        let json = info.to_json().unwrap();
+        assert!(json.contains("\"region\": \"EU+AU\""), "{json}");
+
+        info.region = "two\nlines".to_string();
+        assert!(info.validate().is_err());
+        info.region = "x".repeat(41);
+        assert!(info.validate().is_err());
     }
 
     #[test]

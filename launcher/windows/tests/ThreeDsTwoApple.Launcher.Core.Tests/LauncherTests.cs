@@ -192,6 +192,45 @@ public sealed class GameInfoWriterTests
     }
 
     [Fact]
+    public void WritesSmdhMetadataAndCover()
+    {
+        var names = new Dictionary<string, string>
+        {
+            ["en"] = "Pokémon Y",
+            ["zh-Hans"] = "宝可梦 Y",
+            ["ja"] = "ポケットモンスターY",
+        };
+        var document = GameInfoWriter.Build("0004000000055e00", "宝可梦 Y", "CTR-P-EK2A", 1, null, null, Sha, 5678, DateTimeOffset.UnixEpoch.AddSeconds(1700000000), null, names, "Nintendo", "EU", "cover.png");
+        var json = JsonSerializer.Serialize(document, ThreeDsTwoApple.Launcher.Core.Util.Json.WriteOptions);
+        using var parsed = JsonDocument.Parse(json);
+        var root = parsed.RootElement;
+        Assert.Equal("宝可梦 Y", root.GetProperty("displayName").GetString());
+        Assert.Equal("宝可梦 Y", root.GetProperty("displayNames").GetProperty("zh-Hans").GetString());
+        Assert.Equal("Pokémon Y", root.GetProperty("displayNames").GetProperty("en").GetString());
+        Assert.Equal("Nintendo", root.GetProperty("publisher").GetString());
+        Assert.Equal("EU", root.GetProperty("region").GetString());
+        Assert.Equal("cover.png", root.GetProperty("cover").GetString());
+        Assert.Equal(5678, root.GetProperty("rom").GetProperty("size").GetInt64());
+
+        // The added fields are optional: a manifest without them stays byte-compatible.
+        var legacy = GameInfoWriter.Build("0004000000055E00", "Pokémon Y", null, 1, null, null, Sha, 5678, DateTimeOffset.UtcNow);
+        var legacyJson = JsonSerializer.Serialize(legacy, ThreeDsTwoApple.Launcher.Core.Util.Json.WriteOptions);
+        Assert.DoesNotContain("displayNames", legacyJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"publisher\"", legacyJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"region\"", legacyJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"cover\"", legacyJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RejectsUnsafeMetadata()
+    {
+        Assert.Throws<ArgumentException>(() => GameInfoWriter.Build("0004000000055E00", "n", null, 1, null, null, Sha, 1, DateTimeOffset.UtcNow, null, null, null, null, "../cover.png"));
+        Assert.Throws<ArgumentException>(() => GameInfoWriter.Build("0004000000055E00", "n", null, 1, null, null, Sha, 1, DateTimeOffset.UtcNow, null, null, null, "two\nlines", null));
+        var badNames = new Dictionary<string, string> { ["en"] = "bad\nname" };
+        Assert.Throws<ArgumentException>(() => GameInfoWriter.Build("0004000000055E00", "n", null, 1, null, null, Sha, 1, DateTimeOffset.UtcNow, null, badNames, null, null, null));
+    }
+
+    [Fact]
     public void RejectsInvalidIdentity()
     {
         Assert.Throws<ArgumentException>(() => GameInfoWriter.Build("XYZ", "n", null, 1, Sha, 1, Sha, 1, DateTimeOffset.UtcNow));
@@ -509,6 +548,30 @@ public sealed class PushPlanAndSlugTests
         Assert.True(manifest.PackBundled);
         Assert.NotEqual(Sha, manifest.Pack.Sha256);
         Assert.DoesNotContain(plan.Files, file => file.RemoteName.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task PushPlanIncludesCoverAndSmdhMetadata()
+    {
+        using var temp = new TempDir();
+        var pack = temp.Bytes("GamePack.dylib", new byte[] { 0xCF, 0xFA, 0xED, 0xFE });
+        var rom = temp.Bytes("game.cci", new byte[] { 1, 2, 3, 4, 5 });
+        var cover = temp.Bytes("cover.png", new byte[] { 0x89, 0x50, 0x4E, 0x47, 0, 0, 0, 0 });
+        var names = new Dictionary<string, string> { ["en"] = "Pokémon Y", ["zh-Hans"] = "宝可梦 Y" };
+
+        var plan = await GamePushPlan.CreateAsync(temp.Path, "0004000000055e00", "宝可梦 Y", "CTR-P-EK2A", 1, pack, rom, names, "Nintendo", "EU", cover);
+
+        Assert.Equal("Documents/Games/0004000000055E00", plan.RemoteDirectory);
+        Assert.Equal(new[] { "GameRom.cci", "cover.png", "GameInfo.json" }, plan.Files.Select(file => file.RemoteName));
+        var manifest = await GameInfoWriter.ReadAsync(plan.GameInfoPath);
+        Assert.NotNull(manifest);
+        Assert.Equal("宝可梦 Y", manifest!.DisplayName);
+        Assert.Equal("宝可梦 Y", manifest.DisplayNames!["zh-Hans"]);
+        Assert.Equal("Pokémon Y", manifest.DisplayNames!["en"]);
+        Assert.Equal("Nintendo", manifest.Publisher);
+        Assert.Equal("EU", manifest.Region);
+        Assert.Equal("cover.png", manifest.Cover);
+        Assert.Equal(5, manifest.Rom.Size);
     }
 
     [Fact]

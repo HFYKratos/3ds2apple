@@ -155,6 +155,18 @@ struct InstalledGame: Hashable {
 
     var issues: [GameValidationIssue] { validation.issues }
     var hasDeclaredHashes: Bool { declaredROMSHA256 != nil }
+
+    /// Launcher-written title for the app's language: the SMDH `displayNames`
+    /// map first, then the manifest's `displayName`. nil when the manifest is
+    /// missing/unreadable (the caller then uses the catalog name).
+    var localizedDisplayName: String? { manifest?.preferredDisplayName() }
+
+    /// Publisher recorded in the pushed manifest, nil when the launcher did not
+    /// record one (older launchers, ROMs without SMDH metadata).
+    var publisher: String? { manifest?.trimmedPublisher }
+
+    /// Region codes recorded in the pushed manifest, nil when unknown.
+    var regionCodes: String? { manifest?.regionCodes }
     var storageBytes: UInt64 { romBytes }
     var issueSummary: String { issues.map { $0.localizedMessage }.joined(separator: " ") }
 

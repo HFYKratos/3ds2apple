@@ -148,6 +148,9 @@ struct PackageManifest: Equatable {
     // MARK: ROM SMDH metadata (additive; packs from older CLIs omit it)
     var displayNames: [String: String] = [:]
     var publisher: String = ""
+    /// Region codes from the ROM SMDH region lockout (`EU`, `US`, `EU+AU`,
+    /// `region-free`; empty when the CLI/ROM has none). Additive optional field.
+    var region: String = ""
     /// Package-relative "cover.png" recorded in GameInfo.json (resolved against
     /// out/<workspace>/packages/<TITLEID>/ before use).
     var coverPath: String? = nil

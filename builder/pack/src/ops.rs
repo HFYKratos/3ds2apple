@@ -60,6 +60,8 @@ pub struct ImportResult {
     pub display_names: BTreeMap<String, String>,
     /// Publisher recorded for the package (from the ROM SMDH).
     pub publisher: String,
+    /// Region codes recorded for the package (from the SMDH region lockout).
+    pub region: String,
     /// Absolute path of `<package>/cover.png` when the package has a cover.
     pub cover_path: Option<PathBuf>,
     /// What happened.
@@ -140,6 +142,7 @@ pub fn import_rom(root: &Path, rom_path: &Path, options: &ImportOptions) -> Resu
         package_dir: dir,
         display_names: info.display_names.clone(),
         publisher: info.publisher.clone(),
+        region: info.region.clone(),
         cover_path: cover_absolute,
         game_info: info,
         status,

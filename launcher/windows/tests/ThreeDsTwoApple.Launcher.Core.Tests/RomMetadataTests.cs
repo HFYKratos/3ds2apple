@@ -20,6 +20,7 @@ public sealed class RomMetadataParsingTests
               "state": "queued",
               "displayNames": { "en": "Pokemon Y", "zh-Hans": "宝可梦 Y", "ja": "ポケットモンスターY" },
               "publisher": "Nintendo",
+              "region": "EU",
               "coverPath": "/out/packages/0004000000055E00/cover.png"
             }
           ]
@@ -39,6 +40,7 @@ public sealed class RomMetadataParsingTests
               "status": "imported",
               "displayNames": { "en": "Pokemon Y", "zh-Hans": "宝可梦 Y" },
               "publisher": "Nintendo",
+              "region": "US",
               "coverPath": "/out/packages/0004000000055E00/cover.png"
             }
           ]
@@ -58,6 +60,7 @@ public sealed class RomMetadataParsingTests
         Assert.NotNull(package.DisplayNames);
         Assert.Equal("宝可梦 Y", package.DisplayNames!["zh-Hans"]);
         Assert.Equal("Nintendo", package.Publisher);
+        Assert.Equal("EU", package.Region);
         Assert.EndsWith("cover.png", package.CoverPath);
     }
 
@@ -74,6 +77,7 @@ public sealed class RomMetadataParsingTests
         Assert.NotNull(package.DisplayNames);
         Assert.Equal("Pokemon Y", package.DisplayNames!["en"]);
         Assert.Equal("Nintendo", package.Publisher);
+        Assert.Equal("US", package.Region);
         Assert.EndsWith("cover.png", package.CoverPath);
     }
 
@@ -116,6 +120,7 @@ public sealed class RomMetadataParsingTests
         Assert.Null(package.DisplayNames);
         Assert.Null(package.Publisher);
         Assert.Null(package.CoverPath);
+        Assert.Null(package.Region);
     }
 
     [Fact]
