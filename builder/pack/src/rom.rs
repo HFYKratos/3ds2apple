@@ -9,7 +9,7 @@
 //! A CIA is **not** parsed by this MVP: the title ID lives in the ticket and
 //! the executable is encrypted; the desktop flow requires the decrypted
 //! `.3ds`/`.cci` the existing AOT build scripts already consume. See
-//! docs/desktop-aot.md.
+//! builder/README.md.
 //!
 //! Only the headers are read (a few KiB), never the whole ROM: a 3DS ROM is
 //! several gigabytes and importing must stay instant and leave no copy behind.
@@ -158,7 +158,7 @@ pub fn detect_rom(path: &Path) -> Result<RomInfo> {
         Err(PackError::invalid(format!(
             "{}: not a decrypted 3DS ROM this pipeline can read (no NCSD magic at 0x100 and no NCCH magic). \
              Expected a decrypted .3ds/.cci (NCSD) or a raw NCCH (.ncch/.cxi/.app). \
-             CIA/encrypted containers are not supported by this MVP; see docs/desktop-aot.md.",
+             CIA/encrypted containers are not supported by this MVP; see builder/README.md.",
             path.display()
         )))
     }

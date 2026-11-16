@@ -528,7 +528,7 @@ public sealed class ShellManifestTests
         using var temp = new TempDir();
         var ipa = temp.Bytes("shell.ipa", new byte[] { 1, 2, 3 });
         var sha = ImpactorBundle.Sha256File(ipa);
-        var manifest = new ShellManifest(1, "shell.ipa", "0.2.0", "com.example.shell", sha, 3);
+        var manifest = new ShellManifest(1, "shell.ipa", "0.1.0", "com.example.shell", sha, 3);
         var ok = manifest.Verify(temp.Path);
         Assert.True(ok.Ok);
         var bad = manifest with { Sha256 = new string('0', 64) };

@@ -1,20 +1,16 @@
 # 3ds2apple desktop pack pipeline (`builder/`)
 
-> **Status 2026-11-16: only the pack pipeline remains.** The Rust Build Agent
-> front ends that used to live in this directory (macOS agent daemon, `zkb`
-> client, CLI-first Windows/Linux front ends and their wire protocol) were
-> deleted after the v2 Windows launcher started compiling GamePacks locally with
-> 3dsrecomp + open-source LLVM/LLD: no Mac is required any more, so the remote
-> build-agent path had no remaining customer. Their sources, protocol and UX
-> docs are preserved in git history (last full revision: commit 6421e58).
+> **Status:** `builder/` contains only the pack pipeline. The Rust Build Agent
+> front ends that used to live here were deleted after the Windows launcher
+> started compiling GamePacks locally with 3dsrecomp + open-source LLVM/LLD; that
+> design record is preserved in git history.
 
-## Remaining components
+## Components
 
 | Path | What it is | Verified by |
 |---|---|---|
 | `builder/pack` (`3ds2apple-pack`) | Desktop AOT-first pipeline: ROM header detection (NCSD/NCCH), SMDH title/publisher/icon metadata (localized `displayNames`, `publisher`, 48x48 `cover.png`), import queue, per-game package manifests, self-contained packages with a bundled user ROM (`--include-rom`), deterministic schema-v2 catalogue allocation, macOS script plan, fake/preview packs + preview multi-game IPA | `cargo test -p builder-pack` (unit + CLI integration on Linux); `scripts/tests/desktop-aot-selfcheck.sh` |
 | `builder/core` (`builder-core`) | Tiny shared library: streaming SHA-256 helpers (`sha256_file` / `sha256_hex`) used by the pack pipeline. | `cargo test -p builder-core` |
-| `builder/device` | Optional Python device-bridge wrapper (devpush/Impactor helpers) used by scripts; not part of the Cargo workspace. | `python3 builder/device/tests/test_device.py -v` |
 
 ## Build and test
 
@@ -25,7 +21,7 @@ cargo test --workspace
 target/debug/3ds2apple-pack --help
 ```
 
-## Desktop AOT-first pipeline (`builder/pack`, preview)
+## Desktop AOT-first pipeline (`builder/pack`)
 
 The AOT-first route builds one package per game and one shell IPA that carries
 several packages, instead of one IPA per game. `3ds2apple-pack` owns the pure
@@ -64,6 +60,39 @@ absolute `coverPath` are exposed by `packages add --json` / `packages list
 --json` for launchers. Only ~14 KiB of the ROM is read and the extracted cover
 stays in the gitignored output tree.
 
+## Packages, `GameInfo.json` and `GameCatalog.json`
+
+A package is one directory per title (`out/packages/<TITLE_ID>/`):
+
+```text
+GameInfo.json               manifest + provenance (schemaVersion 1)
+GamePack-<TITLE_ID>.dylib   per-game AOT GamePack (or GamePack.dylib before it is
+                            embedded; the launcher records the app-bundle path)
+GameRom.<ext>               optional copy of the user's ROM (--include-rom); never committed
+cover.png                   SMDH cover extracted from the ROM (or a user-supplied one)
+```
+
+`GameInfo.json` carries the title ID, display name plus the localized
+`displayNames` map, publisher, product code, AOT version, the pack file/size/
+SHA-256 and (when the ROM is bundled) the ROM file/size/SHA-256. Launchers read
+it after `packages add` and copy the fields they need. `GameCatalog.json`
+(schema 2) is what the shell reads from the app bundle:
+
+```json
+{"schemaVersion":2,"games":[
+  {"titleID":"0004000000055E00","displayName":"Pokémon Y",
+   "productCode":"CTR-P-EK2A","aot":true,"aotVersion":1,
+   "packFile":"Frameworks/GamePack-0004000000055E00.dylib",
+   "packABIVersion":1}]}
+```
+
+`packFile` is app-bundle-relative, games are sorted by title ID and unique (the
+allocation is deterministic), and schema-1 (legacy static-link) catalogues are
+still accepted. The GamePack C ABI is versioned by `GAMEPACK_ABI_VERSION`
+(currently 1), declared by `ios/zakuro-ios/include/zakuro_gamepack.h` and
+implemented by the runtime in `ios/zakuro-ios`; a pack registers itself with
+`zk_gamepack_register` when the shell `dlopen()`s it.
+
 ## Where the compile really runs
 
 The shipped product is launcher-first: the Windows launcher
@@ -77,8 +106,13 @@ desktop library/CLI: it never signs, installs or contacts a project server.
 
 ## Related documentation
 
-- [../docs/desktop-aot.md](../docs/desktop-aot.md) — package layout, catalogue schema v2, GamePack ABI hand-off.
-- [../docs/windows-build.md](../docs/windows-build.md) — Windows local compile/link design and toolchain.
-- [../docs/windows-launcher.md](../docs/windows-launcher.md) — end-to-end Windows launcher flow.
-- [../launcher/windows/README.md](../launcher/windows/README.md) — Windows launcher developer guide.
-- [STACK.md](STACK.md) — current workspace stack; the retired Build Agent design is in git history.
+- [../docs/windows-launcher.md](../docs/windows-launcher.md) — end-to-end Windows
+  launcher flow, errors and the device acceptance plan.
+- [../docs/macos-launcher.md](../docs/macos-launcher.md) — macOS launcher flow.
+- [../docs/device-bridge.md](../docs/device-bridge.md) — devpush contract and the
+  Documents data layout.
+- [../launcher/windows/README.md](../launcher/windows/README.md) — Windows launcher
+  developer guide.
+- [../tools/winbuild/README.md](../tools/winbuild/README.md) — Apple-SDK-free
+  LLVM/LLD GamePack build.
+- [STACK.md](STACK.md) — workspace stack and test gates.

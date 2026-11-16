@@ -296,9 +296,9 @@ fi
 if [[ "$(uname -s)" != "Darwin" ]]; then
   die "this script must run on macOS with Xcode (iOS SDK clang) installed.
        Detected $(uname -s); run it on the macOS VM.
-       (On Linux only scripts/tests/aot-selfcheck.sh and the simulated harness
-       scripts/tests/aot-sim-harness.sh can run; they use fake toolchains in a
-       temp dir, see AOT_BUILD.md §11.)"
+       (On Linux only scripts/tests/aot-selfcheck.sh and the other host-side
+       self-checks can run; they use fake toolchains in a temp directory, see
+       AOT_BUILD.md.)"
 fi
 
 need_tool xcrun "Install Xcode and run: sudo xcode-select -s \"\$HOME/Applications/Xcode-16.4.0.app\""

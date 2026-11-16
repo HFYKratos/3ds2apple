@@ -28,7 +28,7 @@
 //                -openAOTTitleID 0004000000055E00
 //
 //        so a test never has to touch the real Documents/Games library. See
-//        ios/app/README.md ("Simulator fixture") and docs/build-simulator.md.
+//        ios/app/README.md ("Simulator fixture").
 //
 //  The arguments are inert in normal launches (a person never passes them).
 //

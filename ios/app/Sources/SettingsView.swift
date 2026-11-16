@@ -210,10 +210,10 @@ struct SettingsView: View {
             return L10n.tr("This build does not enable the Metal HUD (MetalHudEnabled is missing from Info.plist), so the switch cannot show it. Rebuild the shell with scripts/build-ios-app.sh.")
         }
         if settings.systemMetalHUD && model.isRuntimeLoaded && !model.displayPath.usesMetalLayer {
-            return L10n.tr("The game is showing the CPU readback path, so the HUD has no Metal layer to attach to. This happens when the app has no MoltenVK.framework; deploy the launcher's 0.2.2+ shell template.")
+            return L10n.tr("The game is showing the CPU readback path, so the HUD has no Metal layer to attach to. This happens when the app has no MoltenVK.framework; deploy the launcher's 0.1.0+ shell template.")
         }
         if settings.systemMetalHUD {
-            return L10n.tr("On by default since 0.2.2. The HUD appears over a running game on the Metal layer; a Metal device that already existed at launch picks the switch up on the next launch.")
+            return L10n.tr("On by default since 0.1.0. The HUD appears over a running game on the Metal layer; a Metal device that already existed at launch picks the switch up on the next launch.")
         }
         return L10n.tr("Turn on to show Apple's FPS / GPU HUD over a running game.")
     }

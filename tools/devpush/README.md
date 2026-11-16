@@ -9,8 +9,8 @@ A small CLI that talks to an iPhone/iPad through Apple usbmuxd (USB or Wi-Fi):
   put / get / ls / stat / mkdir / rm / put-tar, with progress events and a
   90-second stall watchdog
 
-It is the device side of the launcher-first architecture; the signing/install
-wrapper (`builder/device/`) drives official Impactor/plumesign or Xcode and calls this
+It is the device side of the launcher-first architecture; the Windows and macOS
+launchers sign/install with official Impactor/plumesign or Xcode and call this
 binary for container pushes. Full launcher contract: `docs/device-bridge.md`.
 
 ## Data-only policy (3ds2apple flow)
@@ -19,8 +19,8 @@ The bridge can move any container file, but the launcher flow only pushes user
 data: `Documents/Games/<TITLEID>/{GameRom.cci, GameInfo.json}`. Per-game
 executable code (`GamePack.dylib`) and `GameCatalog.json` are embedded in the
 signed shell IPA by the launcher/build step and must never be copied into
-Documents - iOS dyld refuses unsigned code. The wrapper's push-game enforces
-ROM-first, GameInfo.json-last ordering; executable code is out of scope here.
+Documents - iOS dyld refuses unsigned code. Launchers push ROM first and GameInfo.json last; executable code is out of
+scope here.
 
 ## Build and test (host-side; no device required)
 

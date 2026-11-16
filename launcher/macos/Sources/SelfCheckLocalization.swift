@@ -2,8 +2,8 @@
 //  SelfCheckLocalization.swift
 //  3ds2apple macOS launcher
 //
-//  Self-check part 3: the two-language UI (docs/launcher-ui.md +
-//  docs/launcher-flow-v2.md). Everything is headless: language resolution from
+//  Self-check part 3: the two-language UI (docs/macos-launcher.md +
+//  docs/macos-launcher.md). Everything is headless: language resolution from
 //  the macOS preferred-language list, the Settings override, both string tables
 //  being complete, the two-section v2 terminology and the persisted preference.
 //

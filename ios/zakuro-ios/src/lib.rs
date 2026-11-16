@@ -836,7 +836,7 @@ pub(crate) fn create_system(
     eprintln!("zk_create: interpreter-only build, no linked code is compiled in");
 
     // A per-game AOT GamePack dylib may have registered its tables at run time
-    // (AOT-first shell, docs/desktop-aot.md section 6). This is the AOT source
+    // (AOT-first shell, builder/README.md section 6). This is the AOT source
     // of the interpreter-only shell; a statically linked build keeps precedence
     // because its compile-time title check is stricter.
     if config.linked.is_none() {

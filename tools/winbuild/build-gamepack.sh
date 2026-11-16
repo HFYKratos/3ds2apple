@@ -21,7 +21,7 @@
 #   clang -dynamiclib -target arm64-apple-ios16.0 -isysroot <iphoneos.sdk> \
 #         shim.o librecomp.a -Wl,-undefined,dynamic_lookup ...
 # This script replaces the SDK with stubs + dynamic_lookup and Apple's ld64 with
-# ld64.lld. See tools/winbuild/README.md and docs/windows-build.md.
+# ld64.lld. See tools/winbuild/README.md.
 #
 # Usage:
 #   tools/winbuild/build-gamepack.sh <name> --code-dir <dir> --title-id <id> [options]

@@ -1,5 +1,8 @@
 # Windows launcher UI evidence
 
+> These renders are from the pre-reset 0.2.4 launcher (0.2.x numbering); the
+> current product version is 0.1.0 build 1 and ships the same UI.
+
 ## v4 polish (task-39, 2026-11-16)
 
 Local Linux/Xvfb renders of the 0.2.4 launcher (Avalonia 12, x64). **The games,

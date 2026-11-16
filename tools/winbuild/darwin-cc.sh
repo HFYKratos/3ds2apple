@@ -7,7 +7,7 @@
 # -fno-math-errno -w -fPIC -fvisibility=hidden -c ...), and this wrapper adds the
 # arm64-apple-ios16.0 target plus the hand-written ISO C stubs. Windows does not
 # need this wrapper: the launcher sets CC="clang.exe --target=arm64-apple-ios16.0"
-# and CPATH=<stubs> (3dsrecomp splits CC on spaces), see docs/windows-build.md.
+# and CPATH=<stubs> (3dsrecomp splits CC on spaces), see tools/winbuild/README.md.
 #
 # Environment:
 #   WINBUILD_LLVM_DIR   LLVM bin directory (default: clang found on PATH)

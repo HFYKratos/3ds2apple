@@ -234,7 +234,7 @@ public static class SelfTest
                 localMissing.Count == 0
                     ? $"resolved: {localTools.RecompilerPath} + {localTools.LlvmBinDirectory}"
                     : "not complete: " + string.Join("; ", localMissing)
-                      + " — Deploy shows one actionable error and Retry; install LLVM 21.1.8 + 3dsrecomp (docs/windows-build.md)");
+                      + " — Deploy shows one actionable error and Retry; install LLVM 21.1.8 + 3dsrecomp (tools/winbuild/README.md)");
 
             // 5. Workspace + persisted state round-trip.
             var workspace = LauncherState.LauncherWorkspace.Open(temporaryRoot);

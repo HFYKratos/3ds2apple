@@ -1,6 +1,6 @@
 //! `3ds2apple-pack`: the desktop AOT-first command line.
 //!
-//! Flow (see docs/desktop-aot.md):
+//! Flow (see builder/README.md):
 //!
 //! ```text
 //! # 1. import the user's own decrypted ROMs (headers only, no copy/hash)

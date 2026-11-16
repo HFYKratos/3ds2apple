@@ -2,7 +2,7 @@
 //!
 //! Schema (schemaVersion 2, what this pipeline writes and the AOT shell reads;
 //! schemaVersion 1 legacy static-link catalogs are still accepted; see
-//! docs/desktop-aot.md):
+//! builder/README.md):
 //!
 //! ```json
 //! {"schemaVersion":2,"games":[
@@ -23,7 +23,7 @@
 //! The `packFile` field is the new, additive part that the AOT shell task must
 //! read to load several packs; the current shell ignores unknown keys, so a
 //! multi-game IPA is only meaningful once that task lands (see the gaps section
-//! in docs/desktop-aot.md).
+//! in builder/README.md).
 
 use std::path::{Path, PathBuf};
 
@@ -37,7 +37,7 @@ pub const FRAMEWORKS_DIR: &str = "Frameworks";
 /// Directory inside the app bundle that carries the packaged game data (ROMs).
 pub const ROMS_DIR: &str = "Roms";
 
-/// One game entry in `GameCatalog.json` (schema 2; see docs/aot-first.md §7.1
+/// One game entry in `GameCatalog.json` (schema 2; see builder/README.md
 /// and `ios/app/Sources/GameCatalog.swift`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CatalogGame {

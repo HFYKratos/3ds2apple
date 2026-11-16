@@ -105,7 +105,7 @@ else
   fail "docs/performance.md does not cite any3ds"
 fi
 
-section 'Shell artifact (0.2.2+ carries MoltenVK and the HUD gate)'
+section 'Shell artifact (0.1.0+ carries MoltenVK and the HUD gate)'
 IPA="out/shell/3ds2apple-shell.ipa"
 if [[ -f "${IPA}" ]]; then
   check "shell IPA contains MoltenVK.framework" \

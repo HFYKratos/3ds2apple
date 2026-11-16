@@ -210,7 +210,7 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
         if (missing.Count > 0)
         {
             return PackBuildOutcome.Failure(MissingToolsCode,
-                "The local build needs: " + string.Join("; ", missing) + ". See docs/windows-build.md (Windows local build) and tools/winbuild/README.md.");
+                "The local build needs: " + string.Join("; ", missing) + ". See tools/winbuild/README.md (Windows local build) and docs/windows-launcher.md.");
         }
         if (string.IsNullOrWhiteSpace(request.RomPath) || !_fileExists(request.RomPath))
         {

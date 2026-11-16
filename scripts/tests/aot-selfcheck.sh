@@ -18,8 +18,7 @@
 # Usage:
 #   scripts/tests/aot-selfcheck.sh
 #
-# Exit status: 0 when every check passes, 1 otherwise. The simulated end-to-end
-# split/incremental run lives in scripts/tests/aot-sim-harness.sh.
+# Exit status: 0 when every check passes, 1 otherwise.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -8,7 +8,7 @@
 # On Windows the launcher does not need this shell script: it sets
 # CC="clang.exe --target=arm64-apple-ios16.0" and CPATH=<stubs> (3dsrecomp splits
 # CC on spaces, and its compiler program is found on PATH) and runs the same
-# "3dsrecomp port" command - see docs/windows-build.md.
+# "3dsrecomp port" command - see tools/winbuild/README.md.
 #
 # Usage:
 #   tools/winbuild/recomp-port.sh <rom> <out-dir> [--name NAME] [--recomp-bin PATH]

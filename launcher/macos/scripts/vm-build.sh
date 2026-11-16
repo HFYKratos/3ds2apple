@@ -2,7 +2,7 @@
 # vm-build.sh - build the macOS launcher (Release, universal), run its
 # self-checks, render the localized non-game UI screenshots and assemble the
 # user-facing app-only ZIP under the project's own out/launchers/ directory
-# (gitignored), per docs/launcher-flow-v2.md.
+# (gitignored), per docs/macos-launcher.md.
 #
 #   cd ~/3ds2apple/launcher/macos && bash scripts/vm-build.sh
 #
@@ -25,9 +25,9 @@ export PATH=/usr/local/bin:$PATH
 CONFIG="${CONFIG:-Release}"
 LOG=/tmp/zl-launcher-build.log
 VERSION="$(sed -n 's/^        MARKETING_VERSION: "\(.*\)"/\1/p' project.yml | head -1)"
-[ -n "$VERSION" ] || VERSION="0.2.4"
+[ -n "$VERSION" ] || VERSION="0.1.0"
 BUILD_NUMBER="$(sed -n 's/^        CURRENT_PROJECT_VERSION: "\(.*\)"/\1/p' project.yml | head -1)"
-[ -n "$BUILD_NUMBER" ] || BUILD_NUMBER="7"
+[ -n "$BUILD_NUMBER" ] || BUILD_NUMBER="1"
 OUT_DIR="$ROOT/out/launchers"
 PACKAGE_NAME="3ds2apple-launcher-${VERSION}-macos-app"
 STATUS=0

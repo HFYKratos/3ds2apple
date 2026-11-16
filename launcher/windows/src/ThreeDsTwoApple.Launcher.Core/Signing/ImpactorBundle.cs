@@ -17,7 +17,7 @@ public sealed record PinnedBinary(string FileName, string Sha256, long Bytes);
 /// apple-codesign, which is MPL-2.0. Licence texts and source links live in
 /// <c>vendor/impactor/</c> and are copied next to the binaries by the
 /// bundling script. Pins match the official release asset digests (checked
-/// against the GitHub API; see docs/windows-build.md).
+/// against the GitHub API; see tools/winbuild/README.md).
 /// </remarks>
 public static class ImpactorPins
 {

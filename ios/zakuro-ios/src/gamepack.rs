@@ -26,7 +26,7 @@
 //! this game").
 //!
 //! See `ios/zakuro-ios/include/zakuro_gamepack.h` for the C contract and
-//! `docs/desktop-aot.md` section 6 for the desktop pipeline's side.
+//! `builder/README.md` section 6 for the desktop pipeline's side.
 
 use std::ffi::c_void;
 use std::sync::Mutex;

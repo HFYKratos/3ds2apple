@@ -73,7 +73,7 @@ public sealed class DeployFlowTests
     }
 
     private static ShellManifest Shell() =>
-        new(1, "3ds2apple-shell.ipa", "0.2.0-beta1", TemplateBundleId, new string('0', 64), 0, Build: 9);
+        new(1, "3ds2apple-shell.ipa", "0.1.0", TemplateBundleId, new string('0', 64), 0, Build: 1);
 
     private sealed record Pipeline(
         DeployOrchestrator Orchestrator,

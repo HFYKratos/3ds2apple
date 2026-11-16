@@ -1,8 +1,9 @@
-# macOS launcher (Library -> Deploy v2, launcher 0.2.4)
+# macOS launcher (Library -> Deploy v2, launcher 0.1.0)
 
-> Status: launcher 0.2.4 build 7 (2026-11-16) · owner: macos-launcher ·
-> uncommitted on purpose (Lead review). This revision syncs the macOS launcher
-> with the Windows launcher 0.2.4: a portable data folder beside the .app (with
+> Status: launcher **0.1.0 build 1** (2026-11-16 product version reset) · owner: macos-launcher ·
+> uncommitted on purpose (Lead review). The 0.2.x numbers later in this document are
+> the pre-reset history (git retains it); the current launcher line syncs with the
+> Windows launcher 0.1.0: a portable data folder beside the .app (with
 > Application Support fallback and one-time migration from <checkout>/out), ROM
 > SMDH metadata on the Library cards (pack-CLI cover.png icon, 12-language
 > displayNames following the app language, publisher; no editable name input),
@@ -12,11 +13,10 @@
 > copied into the shell .app before signing: hardware PICA200 renderer + system
 > Metal HUD) and keeps the v2 install->push chain and backend contracts.
 >
-> Code: [launcher/macos](../launcher/macos) · flow spec:
-> [launcher-flow-v2.md](launcher-flow-v2.md) · desktop pipeline:
-> [desktop-aot.md](desktop-aot.md) · device bridge:
-> [device-bridge.md](device-bridge.md) · architecture:
-> [launcher-architecture.md](launcher-architecture.md)
+> Code: [launcher/macos](../launcher/macos) · desktop pipeline:
+> [builder/README.md](../builder/README.md) · device bridge:
+> [device-bridge.md](device-bridge.md) · Windows counterpart:
+> [windows-launcher.md](windows-launcher.md)
 
 The macOS launcher is the product front-end for the AOT-first model: the player
 imports their own decrypted 3DS ROM into the **Library**, then on the **Deploy**
@@ -280,7 +280,7 @@ GameInfo.json (schemaVersion 1) example:
      "registrationSymbol":"zk_gamepack_register",
      "packInBundle":true,
      "saveNamespace":"0004000000055E00",
-     "launcherVersion":"0.2.2",
+     "launcherVersion":"0.1.0",
      "pushedAt":"...Z",
      "rom":{"file":"GameRom.cci","size":1446201088,"sha256":"..."},
      "pack":{"file":"Frameworks/GamePack-0004000000055E00.dylib","size":...,"sha256":"...","inBundle":true,"sourceFile":"GamePack.dylib"},
@@ -291,7 +291,7 @@ informational) and the ROM from Documents; it verifies the ROM size/sha256 and
 shows a per-game "Data missing" state until the push verifies. ROM data is never
 put into the IPA.
 
-### 4.6 Launcher 0.2.4 additions (Windows launcher parity)
+### 4.6 Launcher 0.2.4 additions (Windows launcher parity; pre-reset history)
 
 **Portable data folder.** Every writable path derives from one root
 (PortableData.swift):
@@ -368,11 +368,12 @@ it fails on a bundle version/build mismatch. The headless self-check/screenshot
 runs with `THREEDS2APPLE_DATA_DIR=/tmp/zl-launcher-data-vm` so the VM tree stays
 clean; the live app resolves its own portable root beside the .app.
 
-For launcher 0.2.4 (build 7) the script needs the pinned ROM-free shell template
-`out/shell/3ds2apple-shell.ipa` 0.2.3 build 11 (5,487,675 bytes, sha256
-831357db…) to embed the pinned Frameworks/MoltenVK.framework. Only the template's
-framework bytes are hash-pinned again (MoltenVK 1.4.2, 4,822,128 bytes,
-sha256 6cd58884…).
+For launcher 0.1.0 (build 1) the script needs the pinned ROM-free shell template
+`out/shell/3ds2apple-shell.ipa` **0.1.0 build 1**, rebuilt together with the app
+version (the pre-reset template was 0.2.3 build 11: 5,487,675 bytes, sha256
+831357db…); the template bytes/SHA-256 constants in `ShellRuntime.swift` are
+refreshed with the rebuilt shell. Only the template's framework bytes are
+hash-pinned again (MoltenVK 1.4.2, 4,822,128 bytes, sha256 6cd58884…).
 
 ## 7. Manual device test (not executable on the shared VM)
 
@@ -460,7 +461,7 @@ build/ios/libzakuro_ios.a built; decrypted ROMs the player owns.
    build/third_party/MoltenVK.framework or the pinned out/shell template in the
    checkout, and the deploy is refused if neither is present.
 
-## 10. Build and test evidence (launcher 0.2.4 + task-35 MoltenVK + task-34, 2026-11-16)
+## 10. Build and test evidence (pre-reset 0.2.4 + task-35 MoltenVK + task-34, 2026-11-16 — historical)
 
 Environment: macOS 26.7.3 VM (8 vCPU / 12 GB, QEMU on the CachyOS host), Xcode
 26.6 (17F113), xcodegen 2.46.0, no Aqua GUI session, no Apple ID signing assets,

@@ -9,15 +9,15 @@ namespace ThreeDsTwoApple.Launcher.Core.Tests;
 public sealed class ShellTemplateRulesTests
 {
     [Theory]
+    [InlineData("0.1.0", true)]
+    [InlineData("0.1.1", true)]
     [InlineData("0.2.0-beta1", true)]
-    [InlineData("0.2.0-beta2", true)]
-    [InlineData("0.2.0-rc1", true)]
     [InlineData("0.2.0", true)]
-    [InlineData("0.2.1", true)]
     [InlineData("0.10.0", true)]
-    [InlineData("0.2.0-alpha1", false)]
-    [InlineData("0.1.9", false)]
     [InlineData("1.0.0-beta1", true)]
+    [InlineData("0.1.0-beta1", false)]
+    [InlineData("0.1.0-alpha1", false)]
+    [InlineData("0.0.9", false)]
     [InlineData("garbage", false)]
     [InlineData("", false)]
     public void VersionComparisonMatchesMinimum(string version, bool expected)
@@ -28,27 +28,30 @@ public sealed class ShellTemplateRulesTests
     [Fact]
     public void AcceptsCurrentTemplateIdentity()
     {
-        var ok = ShellTemplateRules.Validate("0.2.0-beta1", 9, "manifest");
+        var ok = ShellTemplateRules.Validate("0.1.0", 1, "manifest");
         Assert.True(ok.Ok);
-        Assert.True(ShellTemplateRules.Validate("0.2.0", 12, "Info.plist").Ok);
+        Assert.True(ShellTemplateRules.Validate("0.1.0", 12, "Info.plist").Ok);
+        Assert.True(ShellTemplateRules.Validate("0.2.0", 1, "Info.plist").Ok);
     }
 
     [Fact]
     public void RejectsOldOrMissingIdentity()
     {
-        Assert.False(ShellTemplateRules.Validate("0.1.9", 9, "manifest").Ok);
-        Assert.False(ShellTemplateRules.Validate("0.2.0-beta1", 8, "manifest").Ok);
-        Assert.False(ShellTemplateRules.Validate(null, 9, "manifest").Ok);
-        Assert.False(ShellTemplateRules.Validate("0.2.0", 0, "manifest").Ok);
+        Assert.False(ShellTemplateRules.Validate("0.0.9", 1, "manifest").Ok);
+        Assert.False(ShellTemplateRules.Validate("0.1.0", 0, "manifest").Ok);
+        Assert.False(ShellTemplateRules.Validate(null, 1, "manifest").Ok);
+        Assert.False(ShellTemplateRules.Validate("0.1.0", null, "manifest").Ok);
     }
 
     [Fact]
     public void ManifestValidationUsesBuildField()
     {
-        var good = new ShellManifest(1, "3ds2apple-shell.ipa", "0.2.0", "com.example.shell", new string('a', 64), 1, Build: 9);
+        var good = new ShellManifest(1, "3ds2apple-shell.ipa", "0.1.0", "com.example.shell", new string('a', 64), 1, Build: 1);
         Assert.True(ShellTemplateRules.ValidateManifest(good).Ok);
-        var bad = good with { Build = 8 };
-        Assert.False(ShellTemplateRules.ValidateManifest(bad).Ok);
+        var old = good with { Version = "0.0.9" };
+        Assert.False(ShellTemplateRules.ValidateManifest(old).Ok);
+        var noBuild = good with { Build = 0 };
+        Assert.False(ShellTemplateRules.ValidateManifest(noBuild).Ok);
     }
 }
 
@@ -59,18 +62,17 @@ public sealed class IpaTemplateInspectorTests
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>CFBundleIdentifier</key><string>com.kratos.3ds2apple</string>
-  <key>CFBundleShortVersionString</key><string>0.2.0</string>
-  <key>CFBundleVersion</key><string>12</string>
+  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
 </dict></plist>
 """;
 
     private static readonly string OldXmlPlist = ValidXmlPlist
-        .Replace("<string>0.2.0</string>", "<string>0.1.9</string>")
-        .Replace("<string>12</string>", "<string>7</string>");
+        .Replace("<string>0.1.0</string>", "<string>0.0.9</string>");
 
     private const string EmptyCatalog = """{"schemaVersion":2,"games":[]}""";
     private const string LoadedCatalog = """{"schemaVersion":2,"games":[{"titleID":"0004000000055E00","displayName":"Demo","packFile":"Frameworks/GamePack-0004000000055E00.dylib"}]}""";
-    private const string BinaryPlistBase64 = "YnBsaXN0MDDTAQIDBAUGXxASQ0ZCdW5kbGVJZGVudGlmaWVyXxAaQ0ZCdW5kbGVTaG9ydFZlcnNpb25TdHJpbmdfEA9DRkJ1bmRsZVZlcnNpb25fEBRjb20ua3JhdG9zLjNkczJhcHBsZVUwLjIuMFIxMggPJEFTanAAAAAAAAABAQAAAAAAAAAHAAAAAAAAAAAAAAAAAAAAcw==";
+    private const string BinaryPlistBase64 = "YnBsaXN0MDDTAQIDBAUGXxASQ0ZCdW5kbGVJZGVudGlmaWVyXxAaQ0ZCdW5kbGVTaG9ydFZlcnNpb25TdHJpbmdfEA9DRkJ1bmRsZVZlcnNpb25fEBRjb20ua3JhdG9zLjNkczJhcHBsZVUwLjEuMFExCA8kQVNqcAAAAAAAAAEBAAAAAAAAAAcAAAAAAAAAAAAAAAAAAABy";
 
     private static string BuildTemplate(TempDir temp, string plist, string catalog, bool withRoms = false, bool binaryPlist = false)
     {
@@ -110,8 +112,8 @@ public sealed class IpaTemplateInspectorTests
         var ipa = BuildTemplate(temp, ValidXmlPlist, EmptyCatalog);
         var result = IpaTemplateInspector.Inspect(ipa, requireEmptyCatalog: true);
         Assert.True(result.Ok, result.Error);
-        Assert.Equal("0.2.0", result.Identity!.Version);
-        Assert.Equal(12, result.Identity.Build);
+        Assert.Equal("0.1.0", result.Identity!.Version);
+        Assert.Equal(1, result.Identity.Build);
         Assert.Equal(2, result.Identity.CatalogSchemaVersion);
         Assert.Equal(0, result.Identity.GameCount);
     }
@@ -123,8 +125,8 @@ public sealed class IpaTemplateInspectorTests
         var ipa = BuildTemplate(temp, ValidXmlPlist, EmptyCatalog, binaryPlist: true);
         var result = IpaTemplateInspector.Inspect(ipa, requireEmptyCatalog: true);
         Assert.True(result.Ok, result.Error);
-        Assert.Equal("0.2.0", result.Identity!.Version);
-        Assert.Equal(12, result.Identity.Build);
+        Assert.Equal("0.1.0", result.Identity!.Version);
+        Assert.Equal(1, result.Identity.Build);
     }
 
     [Fact]

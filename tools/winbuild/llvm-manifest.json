@@ -52,7 +52,7 @@
     "ubuntu_packages_prototype": {
       "distro": "Ubuntu 26.04 (resolute), llvm-toolchain-21 21.1.8-6ubuntu1",
       "install": "tools/winbuild/fetch-llvm-ubuntu.sh (apt-get download + dpkg-deb -x, no root; every .deb verified against apt's published SHA512)",
-      "verified_on": "2026-11-14, x86_64 WSL2, used for the prototype builds in docs/windows-build.md",
+      "verified_on": "2026-11-14, x86_64 WSL2, used for the prototype builds in tools/winbuild/README.md",
       "packages": [
         {
           "package": "clang-21",
@@ -126,6 +126,6 @@
   "validation": {
     "script": "tools/winbuild/check-gamepack.py",
     "checks": "thin 64-bit Mach-O dylib; arch matches target; LC_BUILD_VERSION platform ios/iossimulator minos >= 16.0; install name @rpath/GamePack-<TITLE>.dylib; exports zk_gamepack_title_id/abi_version/register + the seven recomp tables; keeps zk_register_gamepack undefined; defines no Zakuro runtime symbol; reports unexpected undefined imports",
-    "evidence": "see docs/windows-build.md section 'Phase-2 prototype (task-22)'"
+    "evidence": "see tools/winbuild/README.md (Phase-2 prototype evidence)"
   }
 }

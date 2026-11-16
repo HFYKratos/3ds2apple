@@ -15,8 +15,7 @@
 # The macOS/Xcode path stays authoritative for shipping builds; this path lets a
 # Windows or Linux launcher produce the same GamePack.dylib locally without an
 # Apple SDK, using tools/winbuild/darwin-stubs/include + -undefined dynamic_lookup
-# instead of the iPhoneOS SDK. See docs/windows-build.md and
-# tools/winbuild/README.md.
+# instead of the iPhoneOS SDK. See tools/winbuild/README.md.
 #
 # Usage:
 #   scripts/build-game-pack-llvm.sh pokemon-y --title-id 0004000000055E00

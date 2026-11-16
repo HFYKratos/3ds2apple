@@ -179,7 +179,7 @@ plus a unit-tested command construction, not a claimed Windows run.
   (270,093,816 B, sha256 `61a1d89bafb7c92cb7fa59033821d0ca5e51d2ba5cc42217ca665d22617ae943`; the
   task-22 sim pack differs only in ld64.lld's 8-byte `LC_UUID`). That fresh pack ran in the real
   iOS Simulator shell and harness with **AOT active and 0.00% interpreted of 19,294,073
-  instructions (0 fallbacks)** — see docs/windows-build.md section 8.3.
+  instructions (0 fallbacks)** — see [docs/windows-launcher.md](../../docs/windows-launcher.md) section 13.
 
 ## Native Windows command lines (for the C#/.NET launcher)
 

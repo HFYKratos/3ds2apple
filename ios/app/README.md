@@ -72,7 +72,7 @@ on-screen controls, so no input or audio advances behind it.
   `Frameworks/MoltenVK.framework`. When a presenter cannot be made the app falls
   back to the `zk_read_screen` + `CGImage` path and logs a performance warning.
 - System Metal Performance HUD (FPS / GPU time / memory): **on by default since
-  0.2.2**; a Settings switch shows or hides it on the presented layer
+  0.1.0**; a Settings switch shows or hides it on the presented layer
   (`CAMetalLayer.developerHUDProperties`, iOS 16) and old installs are migrated
   to on once. See "System Metal HUD" below.
 - Always-visible runtime badge while a game is on screen: AOT state, presented
@@ -187,34 +187,16 @@ The shell can be driven headlessly without tapping:
 - `-openAOTTitleID <TITLEID>` starts that library game 0.5 s after the home
   page appears, through the same path a card tap uses.
 
-A Simulator fixture never has to touch the real library. Build a Simulator shell
-that already contains the game's pack + catalog entry, then push only game data:
-
-```bash
-UDID=3CBF5A62-AE12-47E8-803D-1D77BED85A66
-scripts/build-ios-app-sim.sh --app shell \
-    --game-pack build/sim/game/packages/0004000000055E00 \
-    --game-title-id 0004000000055E00 --game-display-name "Pokemon Y"
-APP=build/sim/shell/out/Release-iphonesimulator/3ds2apple.app
-xcrun simctl install "$UDID" "$APP"
-CONTAINER=$(xcrun simctl get_app_container "$UDID" com.kratos.3ds2apple data)
-GAME="$CONTAINER/Documents/GamesFixtures/0004000000055E00"
-mkdir -p "$GAME"
-cp "/path/to/your/game.cci" "$GAME/GameRom.cci"
-cat > "$GAME/GameInfo.json" <<'JSON'
-{"schemaVersion":1,"titleID":"0004000000055E00","displayName":"Pokemon Y",
- "rom":{"file":"GameRom.cci"}}
-JSON
-xcrun simctl launch "$UDID" com.kratos.3ds2apple \
-    -gamesRoot Documents/GamesFixtures -openAOTTitleID 0004000000055E00
-```
+A Simulator fixture never has to touch the real library: install a Simulator
+build of the shell that already contains the game's pack + catalog entry, then
+copy only the game data into a separate fixture folder inside the app container
+and launch with the arguments above (`xcrun simctl launch ... -gamesRoot
+Documents/GamesFixtures -openAOTTitleID <TITLEID>`).
 
 Omit the game-data fixture (or use an empty `-gamesRoot` folder) to see the
 **Data missing** state of a catalog game; record a wrong `rom.size`/`sha256` to
 exercise the per-game error state. The fixture files are user-owned local test
 data: never commit them, and remove the fixture from the container when done.
-[docs/build-simulator.md](../../docs/build-simulator.md) covers building the
-x86_64 Simulator shell and its runtime.
 
 ## Display settings
 
@@ -253,7 +235,7 @@ mapping is documented in the input section below.
 |---|---|---|
 | Frame cap | 60 / 30 fps | Immediately; the free-run loop never starts presented frames closer than 1/60 s (or 1/30 s). It is a cap, not a target. |
 | Fast-forward | 1× / 2× / 4× | Immediately (also from the in-game menu); the next presented frame uses the new value. |
-| System Metal HUD | On / off, **default on** | Immediately on the presented `CAMetalLayer`; remembered across launches and also written as `MTL_HUD_ENABLED` / `MetalHUDForceEnabled` for the next Metal device. The 0.2.2 build migrates a pre-0.2.2 install to on once. |
+| System Metal HUD | On / off, **default on** | Immediately on the presented `CAMetalLayer`; remembered across launches and also written as `MTL_HUD_ENABLED` / `MetalHUDForceEnabled` for the next Metal device. The 0.1.0 build migrates a pre-0.1.0 install to on once. |
 | First-load graphics warm-up (optional) | On / off, default off | Read when the next ROM load starts. The runtime's pipeline-cache persistence is unaffected. |
 
 ## Fast-forward
@@ -306,7 +288,7 @@ re-applied whenever the layer is reused, so it survives page navigation and ROM
 reloads. The app keeps the system HUD's device logging off; the app log and the
 diagnostics report carry the frame timings instead.
 
-**On by default since 0.2.2.** The switch default was off before 0.2.2 and any
+**On by default since 0.1.0.** The switch default was off before 0.1.0 and any
 Settings change persisted that false, so the app enables the HUD once for an
 install that predates the migration marker
 (`UI.systemMetalHUDDefaultMigrated`) and respects the stored choice afterwards.
@@ -412,7 +394,7 @@ localized.
 ## Build
 
 Requires macOS, Xcode, Rust with `aarch64-apple-ios`, and `xcodegen`.
-See [docs/build.md](../../docs/build.md).
+See [scripts/AOT_BUILD.md](../../scripts/AOT_BUILD.md).
 
 ```bash
 scripts/build-zakuro-ios.sh      # libzakuro_ios.a
@@ -569,7 +551,7 @@ The app has one presentation path and one fallback:
   layer, so the HUD does not appear. The readback fallback is also logged as a
   performance warning, because it means the 3D is drawing in software.
 - The presenter needs `Frameworks/MoltenVK.framework` in the app bundle (loaded
-  at run time, never linked into the static library). The launcher's 0.2.2+ shell
+  at run time, never linked into the static library). The launcher's 0.1.0+ shell
   template embeds it; a plain build without it still runs, but on the CPU
   readback path.
 

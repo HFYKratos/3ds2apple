@@ -33,7 +33,7 @@ public sealed class IpaComposerTests
     {
         var ipaPath = Path.Combine(temp.Path, "template.ipa");
         using var archive = ZipFile.Open(ipaPath, ZipArchiveMode.Create);
-        AddEntry(archive, "Payload/demo.app/Info.plist", "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict><key>CFBundleShortVersionString</key><string>0.2.0</string><key>CFBundleVersion</key><string>12</string></dict></plist>", 0x81A4);
+        AddEntry(archive, "Payload/demo.app/Info.plist", "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict><key>CFBundleShortVersionString</key><string>0.1.0</string><key>CFBundleVersion</key><string>1</string></dict></plist>", 0x81A4);
         AddEntry(archive, "Payload/demo.app/GameCatalog.json", """{"schemaVersion":2,"games":[]}""", 0x81A4);
         AddBytes(archive, "Payload/demo.app/demo", new byte[] { 0xCF, 0xFA, 0xED, 0xFE }, 0x81ED);
         if (withRoms)

@@ -1,11 +1,12 @@
 # 3ds2apple launcher for Windows (MVP)
 
-Status: **launcher 0.2.5 (2026-11-16)** — portable data folder beside the exe
-(LocalAppData only when read-only, with one-time migration), hardware-aware compile line
-(cores/RAM + 3dsrecomp auto-parallelism), ROM metadata UI from the pack CLI (SMDH
-`cover.png` icon, localized `displayNames`, `publisher`; no editable name box), and the
-0.2.5 SMDH icon fix: the pack CLI now decodes the large icon at SMDH `0x24C0` with the
-8x8-tile/Morton pixel layout, so Library covers are the real game icons. Re-importing a
+Status: **launcher 0.1.0 (build 1, 2026-11-16 product version reset)** — portable data
+folder beside the exe (LocalAppData only when read-only, with one-time migration),
+hardware-aware compile line (cores/RAM + 3dsrecomp auto-parallelism), ROM metadata UI
+from the pack CLI (SMDH `cover.png` icon, localized `displayNames`, `publisher`; no
+editable name box), and the 0.2.5 (pre-reset numbering) SMDH icon fix: the pack CLI now
+decodes the large icon at SMDH `0x24C0` with the 8x8-tile/Morton pixel layout, so
+Library covers are the real game icons. Re-importing a
 game that is already in the library passes `--force`, which re-extracts a stale extracted
 cover and keeps an existing built GamePack (a user-supplied cover is never overwritten).
 The legacy Build Agent path (`builder/{agent,cli,linux,windows}`, `MacAgent*` providers)
@@ -16,9 +17,10 @@ unit/integration tests pass**. The packaged single-file exe runs its clean-folde
 `--self-test` on Linux/WSL with the embedded payload (32 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a minimal Settings gear; it is
 localized (English / 简体中文) and uses the iOS app icon. The user-facing package is a ZIP
-with exactly one self-contained exe (0.2.5: 148,817,314 B, SHA-256 `b9b2a0b0…52f0d7`).
+with exactly one self-contained exe (pre-reset 0.2.5 package: 148,817,314 B,
+SHA-256 `b9b2a0b0…52f0d7`; the 0.1.0 package is rebuilt by the packaging task).
 Synthetic (non-game) UI captures are in `docs/ui/v4-*.png`; a real Windows 11 run of this
-exact 0.2.5 build and the Impactor signing/phone flows are the remaining acceptance step
+exact pre-reset 0.2.5 build and the Impactor signing/phone flows were the remaining acceptance step
 (see [docs/windows-launcher.md](../../docs/windows-launcher.md) section 17.5).
 
 Architecture correction (Lead, 2026-11-14): iOS cannot dlopen a loose unsigned
@@ -28,10 +30,11 @@ receives the user's **GameRom.cci + GameInfo.json**. Adding/removing a game
 recomposes and reinstalls the IPA; pushed ROM data is expected to survive an
 overwrite install/update (a clean uninstall clears app data; verify on device).
 
-Shell-template identity is validated before signing: version >= 0.2.0-beta1,
-build >= 9 (manifest and Info.plist), bundle catalogue schema 2 + empty for the
-template, no Roms/. The shipped template is **0.2.2 / build 10** and additionally
-contains `Frameworks/MoltenVK.framework` (GPU renderer + Metal HUD); `IpaComposer` copies
+Shell-template identity is validated before signing: version >= 0.1.0, build >= 1
+(manifest and Info.plist), bundle catalogue schema 2 + empty for the template, no
+Roms/. The shipped template is **0.1.0 / build 1** (rebuilt from the 0.1.0 shell task;
+the pre-reset template was 0.2.2 build 10) and additionally contains
+`Frameworks/MoltenVK.framework` (GPU renderer + Metal HUD); `IpaComposer` copies
 every non-GamePack template entry, so the framework survives composition and is signed
 with the app. Device UDIDs are redacted in all UI/log output.
 
@@ -128,7 +131,7 @@ Developer: .NET 10 SDK (NuGet once); optional Rust for 3ds2apple-pack /
 devpush; PowerShell 5.1+ for the packaging scripts.
 
 Real AOT builds run locally: 3dsrecomp + the official LLVM 21.1.8 toolchain and
-the hand-written Darwin stubs in tools/winbuild (docs/windows-build.md). No Mac,
+the hand-written Darwin stubs in tools/winbuild (see tools/winbuild/README.md). No Mac,
 no Xcode and no Build Agent are required; the old remote macOS Build Agent stack
 was deleted on 2026-11-16.
 

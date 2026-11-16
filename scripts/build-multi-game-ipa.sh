@@ -2,7 +2,7 @@
 # build-multi-game-ipa.sh — allocate several per-game AOT packages into ONE
 # unsigned shell IPA, with a generated GameCatalog.json.
 #
-# Desktop AOT-first model (docs/desktop-aot.md):
+# Desktop AOT-first model (builder/README.md):
 #
 #   out/packages/<TITLE_ID>/GameInfo.json + GamePack.dylib      (built on macOS)
 #   out/packages/<TITLE_ID>/GameRom.<ext>       (optional bundled user ROM)

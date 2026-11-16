@@ -14,8 +14,6 @@
 - Dependencies are deliberately small: `serde`/`serde_json`/`clap`/`thiserror`
   for the CLI and `sha2`/`hex` for hashing. No async runtime, no network and no
   process execution in the library; the launchers run the compilers.
-- `builder/device` is an optional Python bridge used by scripts; it is not a
-  Cargo member.
 - Distribution: `3ds2apple-pack.exe` is bundled by the launcher packaging
   scripts (`launcher/windows/tools/prepare-dist*.ps1`,
   `tools/prepare-dist-singlefile.sh`); no builder binary other than the pack CLI

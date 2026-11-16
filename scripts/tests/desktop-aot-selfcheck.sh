@@ -531,19 +531,6 @@ PY
       fail "--include-rom without --rom is rejected (stderr: $(tail -1 "${WORK}/norom.err"))"
     fi
   fi
-  # S4 wiring (the simulator app builder only runs on macOS): --game-rom alone
-  # is refused and an explicit ROM is cross-checked against GameInfo.json.
-  if grep -Fq -- '--game-rom requires --game-pack' "${SCRIPTS_DIR}/build-ios-app-sim.sh"; then
-    pass "build-ios-app-sim.sh rejects --game-rom without a pack"
-  else
-    fail "build-ios-app-sim.sh rejects --game-rom without a pack"
-  fi
-  if grep -Fq -- '--game-rom SHA256 mismatch' "${SCRIPTS_DIR}/build-ios-app-sim.sh"; then
-    pass "build-ios-app-sim.sh cross-checks the ROM against GameInfo.json"
-  else
-    fail "build-ios-app-sim.sh cross-checks the ROM against GameInfo.json"
-  fi
-
   if command -v git >/dev/null 2>&1 && [[ -e "${ROOT}/.git" ]]; then
     if git -C "$ROOT" check-ignore -q "out/packages/0004000000055E00/GamePack.dylib"; then
       pass "git ignores package output (out/)"

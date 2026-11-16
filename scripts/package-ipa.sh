@@ -18,6 +18,8 @@
 #   scripts/package-ipa.sh ios/app/build/Release-iphoneos/3ds2apple.app
 #   scripts/package-ipa.sh <path/to/App.app> 3ds2apple-I1
 #   scripts/package-ipa.sh <path/to/App.app> --name 3ds2apple-I1 --out-dir IPA
+#   scripts/package-ipa.sh ios/app/build/Release-iphoneos/3ds2apple.app 3ds2apple-shell \
+#       --out-dir out/shell --manifest out/shell/manifest.json --require-moltenvk
 #
 # Relative paths are resolved from the repository root. Re-running overwrites
 # the target .ipa.
@@ -34,6 +36,7 @@ NAME_ARG=""
 OUT_DIR="IPA"
 REQUIRE_MOLTENVK=0
 MOLTENVK_REPORT="not checked"
+MANIFEST_PATH=""
 
 usage() {
   cat <<'EOF'
@@ -50,6 +53,10 @@ Arguments:
 Options:
   --name NAME        Output file name (alternative to the second argument)
   --out-dir DIR      Output directory (default: IPA/, gitignored)
+  --manifest FILE    Write a shell manifest.json for this IPA (schemaVersion 1:
+                     version/build read from the app Info.plist, plus bundle id,
+                     bytes and SHA-256). Use it for the ROM-free shell template
+                     so the launchers can pin version/build/sha256/bytes.
   --require-moltenvk Fail when the packaged app has no
                      Frameworks/MoltenVK.framework/MoltenVK. Use it for the
                      launcher shell template: without MoltenVK the presented
@@ -95,6 +102,11 @@ while [[ $# -gt 0 ]]; do
     --out-dir)
       [[ $# -ge 2 ]] || die "--out-dir requires a value"
       OUT_DIR="$2"
+      shift 2
+      ;;
+    --manifest)
+      [[ $# -ge 2 ]] || die "--manifest requires a value"
+      MANIFEST_PATH="$2"
       shift 2
       ;;
     --require-moltenvk)
@@ -325,6 +337,48 @@ sha256_of() {
 SHA256="$(sha256_of "$OUT_IPA")"
 SIZE="$(du -h "$OUT_IPA" | awk '{print $1}')"
 
+# --- optional shell manifest (launcher shell-template pinning) ---------------
+# The Windows/macOS launchers pin the ROM-free shell template by version,
+# build, byte size and SHA-256. Read the identity from the packaged app's own
+# Info.plist so it always matches the app that was just built (MARKETING_VERSION/
+# CURRENT_PROJECT_VERSION in ios/app/project.yml).
+if [[ -n "$MANIFEST_PATH" ]]; then
+  MANIFEST_PATH="$(resolve_path "$MANIFEST_PATH")"
+  MANIFEST_DIR="$(dirname "$MANIFEST_PATH")"
+  mkdir -p "$MANIFEST_DIR"
+  MANIFEST_PATH="$(cd "$MANIFEST_DIR" && pwd)/$(basename "$MANIFEST_PATH")"
+  if command -v git >/dev/null 2>&1 && [[ -e "$ROOT/.git" ]]; then
+    if git -C "$ROOT" ls-files --error-unmatch -- "$MANIFEST_PATH" >/dev/null 2>&1; then
+      die "refusing to write $MANIFEST_PATH: it is tracked by git."
+    fi
+  fi
+  if [[ ! -x /usr/libexec/PlistBuddy ]]; then
+    die "--manifest needs /usr/libexec/PlistBuddy to read the app Info.plist (run it on macOS)"
+  fi
+  MANIFEST_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PLIST" 2>/dev/null || true)"
+  MANIFEST_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PLIST" 2>/dev/null || true)"
+  MANIFEST_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PLIST" 2>/dev/null || true)"
+  MANIFEST_MIN_IOS="$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP_PLIST" 2>/dev/null || true)"
+  [[ -n "$MANIFEST_VERSION" ]] || die "cannot read CFBundleShortVersionString from $APP_PLIST"
+  [[ -n "$MANIFEST_BUNDLE_ID" ]] || die "cannot read CFBundleIdentifier from $APP_PLIST"
+  [[ "$MANIFEST_BUILD" =~ ^[0-9]+$ ]] || die "CFBundleVersion is not an integer in $APP_PLIST (got '$MANIFEST_BUILD')"
+  [[ -n "$MANIFEST_MIN_IOS" ]] || MANIFEST_MIN_IOS="16.0"
+  MANIFEST_BYTES="$(wc -c < "$OUT_IPA" | tr -d '[:space:]')"
+  cat > "$MANIFEST_PATH" <<EOF
+{
+  "schemaVersion": 1,
+  "fileName": "$(basename "$OUT_IPA")",
+  "version": "$MANIFEST_VERSION",
+  "bundleId": "$MANIFEST_BUNDLE_ID",
+  "sha256": "$SHA256",
+  "bytes": $MANIFEST_BYTES,
+  "build": $MANIFEST_BUILD,
+  "minIosVersion": "$MANIFEST_MIN_IOS"
+}
+EOF
+  log "manifest: $MANIFEST_PATH (version $MANIFEST_VERSION build $MANIFEST_BUILD, $MANIFEST_BYTES bytes)"
+fi
+
 if [[ "$OUT_IPA" == "$ROOT"/* ]] && command -v git >/dev/null 2>&1 && [[ -e "$ROOT/.git" ]]; then
   if git -C "$ROOT" check-ignore -q -- "$OUT_IPA" 2>/dev/null; then
     log "artifact is gitignored: $OUT_IPA"
@@ -338,6 +392,7 @@ printf '\n'
 log "IPA:    $OUT_IPA"
 printf 'CATALOG: %s\n' "$CATALOG_REPORT"
 printf 'MOLTENVK: %s\n' "$MOLTENVK_REPORT"
+[[ -n "$MANIFEST_PATH" ]] && printf 'MANIFEST: %s\n' "$MANIFEST_PATH"
 printf 'SHA256: %s\n' "$SHA256"
 printf 'SIZE:   %s\n' "$SIZE"
 printf 'NOTE:   unsigned IPA — sign with Sideloadly/AltStore on Windows using your own Apple ID.\n'

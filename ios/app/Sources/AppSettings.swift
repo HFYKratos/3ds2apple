@@ -372,9 +372,9 @@ final class AppSettings: ObservableObject {
     @Published var frameCap: FrameRateCap
 
     /// Show the system Metal Performance HUD (FPS / GPU time / memory) over the
-    /// presented CAMetalLayer. ON by default since 0.2.2; applied to the layer
+    /// presented CAMetalLayer. ON by default since 0.1.0; applied to the layer
     /// at run time and remembered across launches. The Settings switch can turn
-    /// it off, and a pre-0.2.2 install is migrated to on once (see init).
+    /// it off, and a pre-0.1.0 install is migrated to on once (see init).
     @Published var systemMetalHUD: Bool
     /// Optional first-load graphics warm-up behind the "Preparing graphics"
     /// overlay. Off by default: the pipeline cache is still written, so a later
@@ -438,7 +438,7 @@ final class AppSettings: ObservableObject {
         frameCap = .sixty
 
         // System Metal HUD: ON for every new install and for an install that
-        // predates the migration marker. Before 0.2.2 the fallback was off, and
+        // predates the migration marker. Before 0.1.0 the fallback was off, and
         // any Settings change wrote that false to disk, so an old install cannot
         // be told apart from a user who deliberately chose off. The migration
         // below enables it exactly once per install; after the marker exists the
@@ -447,7 +447,7 @@ final class AppSettings: ObservableObject {
             systemMetalHUD = true
             defaults.set(true, forKey: Keys.systemMetalHUD)
             defaults.set(true, forKey: Keys.systemMetalHUDDefaultMigrated)
-            AppLog.log("[3ds2apple] system Metal HUD: enabled by the 0.2.2 default migration")
+            AppLog.log("[3ds2apple] system Metal HUD: enabled by the 0.1.0 default migration")
         } else if defaults.object(forKey: Keys.systemMetalHUD) != nil {
             systemMetalHUD = defaults.bool(forKey: Keys.systemMetalHUD)
         } else {
@@ -516,7 +516,7 @@ final class AppSettings: ObservableObject {
         static let haptics = "UI.haptics"
         static let frameCap = "UI.frameCap"
         static let systemMetalHUD = "UI.systemMetalHUD"
-        /// One-time marker: the 0.2.2 default switched the Metal HUD to on.
+        /// One-time marker: the 0.1.0 default switched the Metal HUD to on.
         static let systemMetalHUDDefaultMigrated = "UI.systemMetalHUDDefaultMigrated"
         static let graphicsWarmUpEnabled = "UI.graphicsWarmUpEnabled"
         static let playbackSpeed = "UI.playbackSpeed"

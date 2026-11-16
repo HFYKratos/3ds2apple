@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build-game-pack.sh - build or adopt one per-game AOT GamePack package.
 #
-# Desktop AOT-first flow (docs/desktop-aot.md):
+# Desktop AOT-first flow (builder/README.md):
 #
 #   scripts/build-recomp-ios.sh <rom> <name>     # 3dsrecomp -> generated C
 #   scripts/build-game-pack.sh <name> --code-dir build/game/<name> \
@@ -16,7 +16,7 @@
 # records the package through the Rust desktop CLI (the single schema writer).
 #
 # --target sim builds the same pack for the iOS Simulator (x86_64 on this build
-# VM, docs/build-simulator.md), leaving the runtime host API for the app to
+# VM), leaving the runtime host API for the app to
 # resolve at dlopen time; --no-record skips the desktop CLI and writes
 # GamePack.dylib only (the simulator shell builder writes its own catalogue).
 #
@@ -478,7 +478,7 @@ link_game_pack() { # libgame-archive out-dylib
     -Wl,-undefined,dynamic_lookup \
     -Wl,-install_name,"@rpath/GamePack-$TITLE_ID.dylib" \
     -Wl,-dead_strip >>"$LOG_FILE" 2>&1 \
-    || { tail -n 40 "$LOG_FILE" >&2; die "clang could not link GamePack.dylib (see docs/desktop-aot.md)"; }
+    || { tail -n 40 "$LOG_FILE" >&2; die "clang could not link GamePack.dylib (see builder/README.md)"; }
   desktop_aot_pack_is_macho "$out" || die "clang produced a non-Mach-O file: $out"
 }
 
@@ -569,7 +569,7 @@ fi
 
 if [[ "$NO_RECORD" -eq 1 ]]; then
   # Simulator proof build: the catalogue and the app bundle are assembled by
-  # scripts/build-ios-app-sim.sh; no GameInfo.json is written here.
+  # the caller's Simulator app build; no GameInfo.json is written here.
   source_dylib="$TMP_DYLIB"
   if [[ -n "$DYLIB_ARG" ]]; then source_dylib="$(resolve_path "$DYLIB_ARG")"; fi
   mkdir -p "$PACKAGE_DIR"

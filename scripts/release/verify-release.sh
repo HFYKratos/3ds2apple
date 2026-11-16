@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # verify-release.sh — read-only release gate for the launcher-first distribution.
 #
-# Checks the GitHub Release assets described in docs/release-launcher-first.md and
+# Checks the GitHub Release assets described in docs/release.md and
 # never publishes or modifies anything: zips/IPAs are unpacked into a private
 # mktemp directory that is removed on exit. The builds it inspects are ROM-free:
 #
@@ -15,7 +15,7 @@
 #   release dir  no ROM / key / BIOS / GamePack-looking files, no extra IPA
 #
 # Usage:
-#   scripts/release/verify-release.sh --release-dir out/release/v0.3.0-beta.1
+#   scripts/release/verify-release.sh --release-dir out/release/v0.1.0
 #   scripts/release/verify-release.sh --windows-zip A.zip --macos-zip B.zip --shell-ipa C.ipa
 #   scripts/release/verify-release.sh --shell-ipa out/shell/3ds2apple-shell.ipa
 #
@@ -392,13 +392,13 @@ main() {
     fi
     release_dir="$(resolve_path "$release_dir")"
     [ -d "$release_dir" ] || die "release dir not found: $release_dir"
-    if discover_dir_asset "$release_dir" "3ds2apple-windows-single-" ".zip" "release dir windows zip"; then
+    if discover_dir_asset "$release_dir" "3ds2apple-" "-windows-x64.zip" "release dir windows zip"; then
       windows_zip="$DISCOVERED"
     fi
-    if discover_dir_asset "$release_dir" "3ds2apple-launcher-" "-macos-app.zip" "release dir macOS zip"; then
+    if discover_dir_asset "$release_dir" "3ds2apple-" "-macos-universal.zip" "release dir macOS zip"; then
       macos_zip="$DISCOVERED"
     fi
-    if discover_dir_asset "$release_dir" "3ds2apple-shell-" ".ipa" "release dir shell IPA"; then
+    if discover_dir_asset "$release_dir" "3ds2apple-" "-shell.ipa" "release dir shell IPA"; then
       shell_ipa="$DISCOVERED"
     fi
     [ -n "$sums_file" ] || sums_file="$release_dir/SHA256SUMS.txt"

@@ -1211,6 +1211,6 @@ path, the system Metal HUD, resize/rotation and the fallback runs).
   <https://github.com/ammaarreshi/Generals-Mac-iOS-iPad/blob/master/Patches/dxvk-ios.patch>
 - Pocket Native (PICA→GLES semantics reference for Plan B, MIT):
   <https://github.com/whovian64/pocket-native>
-- Project docs: [README.md](README.md), [docs/architecture.md](../../docs/architecture.md),
-  [docs/build.md](../../docs/build.md), [scripts/AOT_BUILD.md](../../scripts/AOT_BUILD.md),
-  [ios/app/README.md](../app/README.md), [THIRD_PARTY.md](../../THIRD_PARTY.md)
+- Project docs: [README.md](README.md), [docs/README.md](../../docs/README.md),
+  [scripts/AOT_BUILD.md](../../scripts/AOT_BUILD.md), [ios/app/README.md](../app/README.md),
+  [THIRD_PARTY.md](../../THIRD_PARTY.md)

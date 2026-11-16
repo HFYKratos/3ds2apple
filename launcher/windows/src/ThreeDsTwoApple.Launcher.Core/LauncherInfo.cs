@@ -29,7 +29,7 @@ public static class LauncherInfo
     /// <summary>Schema version of the pushed <c>GameInfo.json</c> the shell decodes.</summary>
     public const int GameInfoSchemaVersion = 1;
 
-    /// <summary>GamePack host ABI version the shell expects (see docs/aot-first.md).</summary>
+    /// <summary>GamePack host ABI version the shell expects (see builder/README.md).</summary>
     public const int GamePackAbiVersion = 1;
 
     public const string RegistrationSymbol = "zk_gamepack_register";

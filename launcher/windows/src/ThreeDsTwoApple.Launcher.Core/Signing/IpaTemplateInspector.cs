@@ -19,8 +19,11 @@ public sealed record TemplateInspection(bool Ok, TemplateIdentity? Identity, str
 /// </summary>
 public static class ShellTemplateRules
 {
-    public const string MinimumVersion = "0.2.0-beta1";
-    public const int MinimumBuild = 9;
+    // Product version 0.1.0 / build 1 is the launcher-first baseline: the shell
+    // template is rebuilt with these values before the 0.1.0 launcher packages
+    // are shipped. Byte/SHA pins still come from Shell/manifest.json.
+    public const string MinimumVersion = "0.1.0";
+    public const int MinimumBuild = 1;
     public const int RequiredCatalogSchemaVersion = 2;
 
     public static (bool Ok, string? Error, string? Fix) ValidateManifest(ShellManifest manifest) =>

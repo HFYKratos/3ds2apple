@@ -1,10 +1,9 @@
 # Windows launcher (MVP) — architecture, contracts and test plan
 
-> Status: launcher **0.2.5** (2026-11-16, section 17: SMDH icon fix, re-import heal,
-> legacy Build Agent removal). Sections 1-16 are the historical record. Companion to
-> [windows-build.md](windows-build.md),
-> [launcher-architecture.md](launcher-architecture.md),
-> [device-bridge.md](device-bridge.md) (task-16/20) and [aot-first.md](aot-first.md).
+> Status: launcher **0.1.0** (build 1; product version reset 2026-11-16). Sections 1-17
+> are the pre-reset historical record (section 17 documents the 0.2.5 SMDH icon fix).
+> Companion to [device-bridge.md](device-bridge.md), [macos-launcher.md](macos-launcher.md) and
+> [builder/README.md](../builder/README.md) (package layout and catalogue schema).
 > Code lives in [launcher/windows](../launcher/windows/README.md).
 >
 > **Architecture correction (Lead, 2026-11-14):** iOS cannot dlopen a loose,
@@ -167,8 +166,7 @@ lower-case build name. A missing toolchain is one actionable error with Retry �
 no silent fallback to a remote host or a placeholder.
 
 The old remote path (a macOS agent over SSH, per-game IPA extraction) was deleted on
-2026-11-16 together with its Rust front ends; see [windows-build.md](windows-build.md)
-§4 for the historical record.
+2026-11-16 together with its Rust front ends; its design record stays in git history.
 
 ### 5.3 App IPA composition (new, on Windows)
 
@@ -290,16 +288,16 @@ zk_gamepack_abi_version (=1) / zk_gamepack_register(uint32)->0.
     {
       "schemaVersion": 1,
       "fileName": "3ds2apple-shell.ipa",
-      "version": "0.2.0",
+      "version": "0.1.0",
       "bundleId": "com.kratos.3ds2apple",
       "sha256": "<64 hex>",
       "bytes": 12345678,
-      "build": 9,
+      "build": 1,
       "minIosVersion": "16.0"
     }
 
 Identity is validated twice before anything is signed (QA S1):
-- Shell/manifest.json must have version >= 0.2.0-beta1 and build >= 9
+- Shell/manifest.json must have version >= 0.1.0 and build >= 1
   (missing/older values are rejected with shell_template_incompatible);
 - the actual IPA must carry matching Info.plist CFBundleShortVersionString /
   CFBundleVersion (binary or XML plist), a bundle GameCatalog.json with schema 2
@@ -326,7 +324,7 @@ artifact (ROM-free, empty catalogue) and is not committed.
 | device_not_found | no device / disconnected | USB cable, unlock, Trust, Apple Devices running |
 | device_install_failed | install failure text | Keep phone unlocked, retry; expired certificate -> sign in again |
 | impactor_missing | pinned bundle missing/modified | Reinstall the package or run tools/fetch-impactor.ps1 |
-| shell_template_incompatible | template version/build below 0.2.0-beta1/build 9, mismatched Info.plist, empty-schema-2 catalogue missing, catalogue not empty, or Roms/ present | Rebuild the ROM-free template on macOS with the current shell task and repack |
+| shell_template_incompatible | template version/build below 0.1.0/build 1, mismatched Info.plist, empty-schema-2 catalogue missing, catalogue not empty, or Roms/ present | Rebuild the ROM-free template on macOS with the current shell task and repack |
 | shell_invalid | template manifest/hash/zip invalid | Rebuild the ROM-free shell template on macOS and repack the distribution |
 | base_shell_not_rom_free | template contains a Roms/ entry | The template is not the launcher build; use the ROM-free shell template |
 | pack_missing / pack_duplicate / pack_placeholder | no/invalid/duplicate pack | Build the game with the local build (preview placeholders are rejected) |
@@ -362,7 +360,7 @@ generic fallback.
 - Avalonia (MIT), .NET (MIT): package dependencies.
 - Impactor (MIT) + apple-codesign (MPL-2.0, embedded): bundled unmodified official
   binaries, SHA-256 pinned, licence texts in vendor/impactor/ (byte-identical
-  to the canonical task-16 copies under scripts/impactor/licenses/).
+  to the canonical copies under licenses/impactor/).
 - S2Arm (Apache-2.0) studied as a reference; no code copied.
 - 3dsrecomp has no LICENSE: only invoked as a build tool on the macOS host, never
   vendored/redistributed; its generated C is never committed.
@@ -406,14 +404,15 @@ no iPhone, no Apple ID, no macOS host session.
                                                     -> begin/progress/done{remotePath,bytes,sha256}
     devpush --mock-dir ... put to missing bundle    -> type=error, code=app_missing, exitCode 5
 
-    # task-20 wrapper mock smoke test for the ROM+GameInfo split (host-side; no phone)
+    # ROM+GameInfo push split, mock dry run (host-side; no phone)
     devpush --mock-dir /tmp/dp-mock --json install --ipa /tmp/Shell.ipa --bundle-id com.kratos.3ds2apple
-    DEVPUSH_EXE=... DEVPUSH_MOCK_DIR=/tmp/dp-mock python3 builder/device/device_cli.py push-game --json \
-        --bundle-id com.kratos.3ds2apple --title-id 0004000000055D00 \
-        --game-info /tmp/game/GameInfo.json --rom /tmp/game/GameRom.cci --pack /tmp/game/GamePack.dylib
-    -> steps "1/2 GameRom.cci", "2/2 GameInfo.json"; done ok:true verified:true files.length=2;
-       packLocation:"ipa"; mock container Documents/Games/0004000000055D00/ contains exactly
-       GameInfo.json + GameRom.cci (verified in this checkout 2026-11-14)
+    devpush --mock-dir /tmp/dp-mock --json put --bundle-id com.kratos.3ds2apple \
+        --local /tmp/game/GameRom.cci --remote Documents/Games/0004000000055D00/GameRom.cci
+    devpush --mock-dir /tmp/dp-mock --json put --bundle-id com.kratos.3ds2apple \
+        --local /tmp/game/GameInfo.json --remote Documents/Games/0004000000055D00/GameInfo.json
+    -> one begin/progress/done per file (done carries remotePath/bytes/sha256); the mock
+       container Documents/Games/0004000000055D00/ contains exactly GameInfo.json +
+       GameRom.cci (verified in this checkout 2026-11-14)
 
     # pinned Impactor hashes vs official release metadata (GitHub API, 2026-11-14)
     Impactor-windows-x86_64-portable.exe f493cd99...e88ef 18,213,888 B match
@@ -444,8 +443,8 @@ runtime state was added to the repository.
   real binary's mock backend; a real USB/Wi-Fi AFC transfer remains for QA.
 - No shell template IPA artifact in this checkout; install is intentionally disabled
   without Shell/manifest.json + IPA (shell/README.md).
-- The remote macOS Build Agent path (historical design proposal in windows-build.md
-  section 5) was deleted on 2026-11-16; the local LLVM/LLD build is the only real path.
+- The remote macOS Build Agent path (historical design proposal, kept in git history)
+  was deleted on 2026-11-16; the local LLVM/LLD build is the only real path.
 - Avalonia UI only smoke-started under Xvfb.
 - No macOS launcher work here (task-18).
 
@@ -497,25 +496,27 @@ with Developer Mode/Trust, and the bundled Impactor/plumesign (tools/fetch-impac
 
         tools/devpush/target/release/devpush --mock-dir /tmp/dp-mock --json install \
             --ipa /tmp/Shell.ipa --bundle-id com.kratos.3ds2apple
-        DEVPUSH_EXE=$PWD/tools/devpush/target/release/devpush DEVPUSH_MOCK_DIR=/tmp/dp-mock \
-          python3 builder/device/device_cli.py push-game --json \
-            --bundle-id com.kratos.3ds2apple --title-id 0004000000055D00 \
-            --game-info /tmp/game/GameInfo.json --rom /tmp/game/GameRom.cci \
-            --pack /tmp/game/GamePack.dylib
+        tools/devpush/target/release/devpush --mock-dir /tmp/dp-mock --json put \
+            --bundle-id com.kratos.3ds2apple \
+            --local /tmp/game/GameRom.cci \
+            --remote Documents/Games/0004000000055D00/GameRom.cci
+        tools/devpush/target/release/devpush --mock-dir /tmp/dp-mock --json put \
+            --bundle-id com.kratos.3ds2apple \
+            --local /tmp/game/GameInfo.json \
+            --remote Documents/Games/0004000000055D00/GameInfo.json
 
-    Expected: steps "1/2 GameRom.cci", "2/2 GameInfo.json"; done verified:true with
-    files.length==2 and packLocation:"ipa"; Documents/Games/<TITLEID>/ holds exactly
-    GameInfo.json + GameRom.cci. (The wrapper writes pack.file as the local dylib name plus
-    packLocation:"ipa"; this launcher writes a bundle-relative Frameworks path plus
-    packBundled:true. Both are informational per the shell contract — the bundle
-    GameCatalog remains authoritative. Do not fail a push because of that difference.)
+    Expected: one begin/progress/done per file; done carries remotePath/bytes/sha256 with
+    the ROM first and GameInfo.json last. Documents/Games/<TITLEID>/ holds exactly
+    GameInfo.json + GameRom.cci. The launcher writes the pack path as a bundle-relative
+    Frameworks path plus packBundled:true; that is informational per the shell contract —
+    the bundle GameCatalog remains authoritative.
 
 ## 12. Coordination and follow-ups for Lead
 
 - task-20 device-bridge: contract v1 + ROM-only push-game implemented; our client
   was checked against the real binary/mock; docs/device-bridge.md authoritative.
-  The Python wrapper (device-install/1) is an optional consolidation point for
-  signing/Apple-error-catalog; the launcher currently stays Python-free.
+  The former Python wrapper (device-install/1) was removed in the product cleanup;
+  the launchers call devpush directly.
 - task-17 shell: template/bundle-catalog/Documents split agreed; base shell template
   IPA must still be produced on macOS (shell/README.md) and handed to the Windows
   distribution. Shell must load the pack from the bundle and the ROM from Documents.
@@ -531,7 +532,7 @@ with Developer Mode/Trust, and the bundled Impactor/plumesign (tools/fetch-impac
 > This section documents what is wired and what was actually proven.
 
 The launcher can now build a per-game GamePack **on the Windows PC itself**, with no Mac and no
-Apple SDK, using the open-source toolchain proven in [windows-build.md](windows-build.md) §7-8:
+Apple SDK, using the open-source toolchain proven in [tools/winbuild/README.md](../tools/winbuild/README.md):
 
 1. **ROM → generated C → arm64 objects** — `3dsrecomp.exe port <rom> <work>/recomp --name <slug>`.
    The launcher sets the child environment so 3dsrecomp's compile step targets iOS with the
@@ -574,7 +575,7 @@ of a non-Mach-O link output before recording, and the feature flag gating provid
 suite: **63/63 passing** (`dotnet test`, .NET 10); `dotnet build` of the Core + Avalonia Desktop
 projects: 0 warnings / 0 errors.
 
-**Proven outside the launcher (see windows-build.md §8):** 3dsrecomp ran on a Linux host with the
+**Proven outside the launcher (see [tools/winbuild/README.md](../tools/winbuild/README.md)):** 3dsrecomp ran on a Linux host with the
 same CC/CPATH trick, generated C identical (combined SHA-256) to the macOS-VM-generated tree, and
 the LLVM/LLD device GamePack built from that fresh C is byte-identical (same SHA-256) to the
 task-22 pack. The LLVM-built x86_64 simulator pack also ran in the real iOS Simulator shell/harness
@@ -595,7 +596,7 @@ with AOT active and 0.00% interpreted instructions.
 
 ## 14. Two-section UI, localization and icon (task-28, 2026-11-15)
 
-The Windows launcher now matches [launcher-ui.md](launcher-ui.md): **Library** and **Import** are
+The Windows launcher uses the two-section launcher shell: **Library** and **Import** are
 the only top-level sections, and Settings is a gear button (not a tab). The old Build / App & Device
 / Push / Settings tabs are gone; their essential actions live on each game card (one primary action
 plus an overflow menu for build / install / push / verify / remove) and inside Settings.
@@ -808,7 +809,7 @@ clean-folder self-test (Linux host, extracted payload)   -> SELF-TEST OK with 1 
   base shell template build (bundle id is part of the signed template).
 
 
-## 17. Launcher 0.2.5 (2026-11-16): SMDH icon fix, re-import heal, legacy cleanup
+## 17. Launcher 0.2.5 (pre-reset, 2026-11-16): SMDH icon fix, re-import heal, legacy cleanup
 
 > Status: packaged and host-verified (WSL clean-folder self-test 32 PASS / 0 FAIL / 0 WARN).
 > A real Windows 11 + iPhone run of this exact build is still the user/QA acceptance step (17.5).

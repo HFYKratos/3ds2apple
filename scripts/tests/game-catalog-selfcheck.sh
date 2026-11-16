@@ -67,7 +67,7 @@ HELPER=${SCRIPTS_DIR}/lib/game-catalog.sh
 # 1. syntax
 # ---------------------------------------------------------------------------
 printf '[1/5] syntax (bash -n)\n'
-for script in "$CATALOG_SH" "$GAME_IPA_SH" "$PACKAGE_SH" "$HELPER" "${SCRIPTS_DIR}/tests/aot-sim-harness.sh"; do
+for script in "$CATALOG_SH" "$GAME_IPA_SH" "$PACKAGE_SH" "$HELPER"; do
   if [[ -f "$script" ]] && bash -n "$script" 2>/dev/null; then
     pass "bash -n ${script#"$ROOT"/}"
   else
@@ -371,10 +371,10 @@ if grep -Fq -- '- path: Resources' "${ROOT}/ios/app/project.yml" \
 else
   fail "project.yml bundles Resources/ (catalog ships in the .app)"
 fi
-if [[ -s "${ROOT}/docs/build.md" ]] && grep -Fq 'GameCatalog.json' "${ROOT}/docs/build.md"; then
-  pass "docs/build.md documents GameCatalog.json"
+if [[ -s "${ROOT}/docs/windows-launcher.md" ]] && grep -Fq 'GameCatalog.json' "${ROOT}/docs/windows-launcher.md"; then
+  pass "docs/windows-launcher.md documents GameCatalog.json"
 else
-  fail "docs/build.md documents GameCatalog.json"
+  fail "docs/windows-launcher.md documents GameCatalog.json"
 fi
 if [[ -s "${ROOT}/scripts/AOT_BUILD.md" ]] && grep -Fq 'GameCatalog.json' "${ROOT}/scripts/AOT_BUILD.md"; then
   pass "scripts/AOT_BUILD.md documents the catalog asset step"

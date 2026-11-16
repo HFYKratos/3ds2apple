@@ -1,7 +1,8 @@
 # 3ds2apple macOS launcher
 
 A SwiftUI macOS app for the AOT-first product flow (v2: Library -> Deploy),
-aligned with the Windows launcher 0.2.4:
+aligned with the Windows launcher (current product version **0.1.0 build 1**;
+0.2.x numbers below are the pre-reset history):
 
     Library: import your own decrypted .3ds/.cci; cards show the ROM's own SMDH
              cover.png icon, the localized title for the app language and the
@@ -145,9 +146,11 @@ it from a source tree).
 
 ## Evidence / QA
 
-The Windows-0.2.4-sync revision (launcher 0.2.4, **build 7** with the
-task-8 forced re-import self-heal) on the macOS VM (Xcode 26.6, headless),
-2026-11-16:
+The evidence below is the pre-reset 0.2.4 build 7 record (0.2.x numbering,
+kept for history); the 0.1.0 build 1 package is rebuilt and re-verified on the
+VM by the 0.1.0 packaging task. Original record: the Windows-0.2.4-sync
+revision (launcher 0.2.4, **build 7** with the task-8 forced re-import
+self-heal) on the macOS VM (Xcode 26.6, headless), 2026-11-16:
 
 - xcodebuild: BUILD SUCCEEDED (Release), 0 errors; universal binary
   (x86_64 + arm64, 7,120,032-byte executable), bundle
@@ -169,7 +172,8 @@ task-8 forced re-import self-heal) on the macOS VM (Xcode 26.6, headless),
   The migration self-check adopts a synthetic old `<checkout>/out` tree without
   touching it (packages + cover.png adopted, `work/` scratch skipped, marker
   written once).
-- shell template pin updated to the current ROM-free shell
+- shell template pin updated to the ROM-free shell (pre-reset values below;
+  the 0.1.0 build 1 rebuild is pinned by `ShellRuntime.swift`/task-13)
   `out/shell/3ds2apple-shell.ipa` 0.2.3 build 11 (5,487,675 bytes, sha256
   831357db…); the embedded Frameworks/MoltenVK.framework is still the pinned
   4,822,128-byte MoltenVK 1.4.2 (sha256 6cd58884…).

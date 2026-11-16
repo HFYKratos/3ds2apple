@@ -21,7 +21,7 @@
 # path ("romFile": "Roms/<TITLE_ID>.<cci|3ds|ncch|cxi>").
 #
 # Writing uses printf only; validation uses python3 (listed as a prerequisite in
-# docs/build.md), so no JSON library is needed by the build itself.
+# scripts/AOT_BUILD.md), so no JSON library is needed by the build itself.
 #
 # Compatibility: macOS system bash 3.2. No bash-4 features (no mapfile, no
 # ${var,,}, no associative arrays).
@@ -134,7 +134,7 @@ game_catalog_validate() {
     return 1
   fi
   if ! command -v python3 >/dev/null 2>&1; then
-    GAME_CATALOG_ERROR="python3 not found in PATH; it is required to validate GameCatalog.json (see docs/build.md requirements)"
+    GAME_CATALOG_ERROR="python3 not found in PATH; it is required to validate GameCatalog.json (see scripts/AOT_BUILD.md requirements)"
     return 1
   fi
 

@@ -646,7 +646,7 @@ struct ToolStatusRow: View {
 
 enum LauncherInfo {
     static var version: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.0"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
     }
 
     static var build: String {

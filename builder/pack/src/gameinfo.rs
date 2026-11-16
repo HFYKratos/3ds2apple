@@ -147,7 +147,7 @@ pub struct GameInfo {
     /// Version of the AOT pack; matches the catalogue's `aotVersion`.
     #[serde(rename = "aotVersion")]
     pub aot_version: u32,
-    /// Save namespace allocated to this game (the title ID; see docs/desktop-aot.md).
+    /// Save namespace allocated to this game (the title ID; see builder/README.md).
     #[serde(rename = "saveNamespace")]
     pub save_namespace: String,
     /// Pack file name inside the package directory (`GamePack.dylib`).

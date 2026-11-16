@@ -14,8 +14,8 @@ is not vendored here.
 | [MoltenVK](https://github.com/KhronosGroup/MoltenVK) | Apache-2.0 | Planned Vulkan → Metal compatibility layer for the renderer |
 | [idevice](https://github.com/jkcoxson/idevice) | MIT | Rust usbmuxd/lockdownd/AFC/installation_proxy client used by tools/devpush (pinned to commit 5171e34e3a236842af1160a84d955d037ddca3af) |
 | [LLVM/Clang/LLD](https://llvm.org) 21.1.8 | Apache-2.0 WITH LLVM-exception | Optional local Windows/Linux GamePack cross-builder (tools/winbuild); official binaries SHA-256 pinned in tools/winbuild/llvm-manifest.json; no Apple SDK used |
-| [Impactor](https://github.com/claration/impactor) v2.7.2 + plumesign | MIT (Copyright 2025 Samara M) | Official signing/install tool bundled unmodified by the launchers; SHA-256 pinned in builder/device/impactor.py |
-| [apple-codesign](https://github.com/claration/impactor/tree/v2.7.2/3rdparty/apple-codesign-0.29.0) 0.29.0 | MPL-2.0 | Code-signing engine embedded inside the official Impactor binary; MPL text kept in scripts/impactor/licenses/ |
+| [Impactor](https://github.com/claration/impactor) v2.7.2 + plumesign | MIT (Copyright 2025 Samara M) | Official signing/install tool bundled unmodified by the launchers; SHA-256 pinned in launcher/windows/vendor/impactor/PINS.json |
+| [apple-codesign](https://github.com/claration/impactor/tree/v2.7.2/3rdparty/apple-codesign-0.29.0) 0.29.0 | MPL-2.0 | Code-signing engine embedded inside the official Impactor binary; MPL text kept in licenses/impactor/ |
 | [Avalonia](https://github.com/AvaloniaUI/Avalonia) 12.1.5 | MIT | .NET desktop UI framework used by the Windows launcher (launcher/windows, shipped self-contained) |
 | [.NET](https://github.com/dotnet/runtime) 10 | MIT | Runtime/SDK used by the Windows launcher and its self-contained Windows publish |
 
@@ -23,7 +23,7 @@ The official Impactor/plumesign release files are downloaded from
 <https://github.com/claration/impactor/releases/tag/v2.7.2> at launcher
 packaging time (download-or-bundled mode, SHA-256 verified), are shipped
 unmodified, and are not committed to this repository. The MIT and MPL-2.0
-license texts are committed under scripts/impactor/licenses/ together with the
+license texts are committed under licenses/impactor/ together with the
 pinned SHA-256 list and source links.
 
 The optional Windows/Linux local GamePack build (tools/winbuild, the Windows

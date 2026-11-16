@@ -37,13 +37,13 @@ targets:
         PRODUCT_NAME: "3ds2apple"
         EXECUTABLE_NAME: "3ds2apple"
         PRODUCT_BUNDLE_IDENTIFIER: "com.kratos.3ds2apple"
-        MARKETING_VERSION: "0.2.3"
-        CURRENT_PROJECT_VERSION: "11"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_CFBundleDisplayName: "3ds2apple"
         INFOPLIST_KEY_MetalHudEnabled: "YES"
-        INFOPLIST_KEY_CFBundleShortVersionString: "0.2.3"
-        INFOPLIST_KEY_CFBundleVersion: "11"
+        INFOPLIST_KEY_CFBundleShortVersionString: "0.1.0"
+        INFOPLIST_KEY_CFBundleVersion: "1"
         # Let iTunes/Finder and the Files app see Documents/ (ROM transfer).
         INFOPLIST_KEY_UIFileSharingEnabled: "YES"
         INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: "YES"
@@ -74,9 +74,9 @@ targets:
         # scripts/build-zakuro-ios.sh (repo-root build/, gitignored).
         # SRCROOT is ios/app, so ../../build/ios is <repo>/build/ios.
         OTHER_LDFLAGS: ["-L$(SRCROOT)/../../build/ios", "-lzakuro_ios"]
-    # Info.plist rooted at a gitignored path so both this project and the
-    # simulator build (scripts/build-ios-app-sim.sh copies this spec into
-    # build/sim/shell) resolve it as <project>/build/Info.plist.
+    # Info.plist rooted at a gitignored path so any build (including custom
+    # iOS Simulator builds that reuse this spec) resolves it as
+    # <project>/build/Info.plist.
     info:
       path: build/Info.plist
       properties:

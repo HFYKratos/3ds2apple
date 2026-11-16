@@ -13,17 +13,21 @@
 #   - no file is ever deleted, moved or modified, including in out/;
 #   - the release directory must stay clean: verify-release.sh rejects extra files.
 #
-# Asset set (see docs/release-launcher-first.md):
-#   3ds2apple-windows-single-<ver>.zip      Windows single-file launcher
-#   3ds2apple-launcher-<ver>-macos-app.zip  macOS launcher (one .app)
-#   3ds2apple-shell-<ver>-build<n>.ipa      ROM-free base shell IPA template
+# Asset set (see docs/release.md; canonical product-level asset names):
+#   3ds2apple-<ver>-windows-x64.zip         Windows single-file launcher
+#   3ds2apple-<ver>-macos-universal.zip     macOS launcher (one .app)
+#   3ds2apple-<ver>-shell.ipa               ROM-free base shell IPA template
 #   SHA256SUMS.txt                          SHA-256 of every file in the directory
 #   LICENSE, NOTICE, THIRD_PARTY.md         project + bundled third-party notices
 #
+# Inputs keep their build names (out/launchers/3ds2apple-windows-single-*.zip,
+# out/launchers/3ds2apple-launcher-*-macos-app.zip, out/shell/3ds2apple-shell.ipa);
+# only the copies in the release directory get the canonical names above.
+#
 # Usage:
-#   scripts/release/assemble-release.sh --version v0.3.0-beta.1
-#   scripts/release/assemble-release.sh --version v0.3.0-beta.1 --dry-run
-#   scripts/release/assemble-release.sh --version v0.3.0-beta.1 \
+#   scripts/release/assemble-release.sh --version v0.1.0
+#   scripts/release/assemble-release.sh --version v0.1.0 --dry-run
+#   scripts/release/assemble-release.sh --version v0.1.0 \
 #       --out-dir /tmp/release --windows-zip out/launchers/foo.zip
 #
 # Exit codes: 0 = release directory ready, 1 = build/verification error,
@@ -52,7 +56,7 @@ Usage:
 
 Required:
   --version TAG        Release tag used for the directory name and release notes
-                       (form: v<major>.<minor>.<patch>[-suffix], e.g. v0.3.0-beta.1).
+                       (form: v<major>.<minor>.<patch>[-suffix], e.g. v0.1.0).
 
 Options:
   --out-dir DIR        Release directory (default: out/release/<tag>, git-ignored).
@@ -113,7 +117,7 @@ find_unique_dir_asset() {
   done
   shopt -u nullglob
   if [ "$count" -eq 0 ]; then
-    build_error "$label: no file matching $dir/$prefix*$suffix; build it first (see docs/release-launcher-first.md)"
+    build_error "$label: no file matching $dir/$prefix*$suffix; build it first (see docs/release.md)"
   fi
   if [ "$count" -gt 1 ]; then
     build_error "$label: multiple candidates in $dir; pass the exact path with --windows-zip/--macos-zip/--shell-ipa"
@@ -184,7 +188,7 @@ main() {
     esac
   done
 
-  [ -n "$VERSION" ] || die "--version is required (e.g. v0.3.0-beta.1)"
+  [ -n "$VERSION" ] || die "--version is required (e.g. v0.1.0)"
   if ! printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
     die "invalid release tag: $VERSION (expected v<major>.<minor>.<patch>[-suffix])"
   fi
@@ -216,14 +220,18 @@ main() {
     [ -f "$f" ] || build_error "required notice file not found: $f"
   done
 
+  # Canonical product-level names: build artifacts keep their out/ names, only
+  # the release copies are renamed to 3ds2apple-<ver>-{windows-x64,macos-universal}.zip
+  # and 3ds2apple-<ver>-shell.ipa.
+  local release_version="${VERSION#v}"
   w_src="$WINDOWS_ZIP"
-  w_name="$(basename "$WINDOWS_ZIP")"
+  w_name="3ds2apple-$release_version-windows-x64.zip"
   m_src="$MACOS_ZIP"
-  m_name="$(basename "$MACOS_ZIP")"
+  m_name="3ds2apple-$release_version-macos-universal.zip"
   shell_src="$SHELL_IPA"
-  shell_name="$(basename "$SHELL_IPA")"
+  shell_name="3ds2apple-$release_version-shell.ipa"
 
-  # Canonical, versioned name for the shell template IPA + manifest cross-check.
+  # Shell template IPA: cross-check the launcher manifest (version/build/sha/bytes).
   shell_manifest="$(dirname "$SHELL_IPA")/manifest.json"
   if [ -f "$shell_manifest" ]; then
     shell_version="$(read_manifest_field "$shell_manifest" version)"
@@ -232,6 +240,9 @@ main() {
     manifest_bytes="$(read_manifest_field "$shell_manifest" bytes)"
     [ -n "$shell_version" ] || build_error "shell manifest has no version: $shell_manifest"
     [ -n "$shell_build" ] || build_error "shell manifest has no build: $shell_manifest"
+    if [ "$shell_version" != "$release_version" ]; then
+      build_error "shell manifest version $shell_version does not match release $release_version ($shell_manifest); rebuild the shell template for this release"
+    fi
     if ! printf '%s' "$shell_version$shell_build" | grep -Eq '^[0-9A-Za-z._-]+$'; then
       build_error "shell manifest version/build contains unexpected characters: $shell_version / $shell_build"
     fi
@@ -241,9 +252,8 @@ main() {
     if [ -n "$manifest_bytes" ] && [ "$manifest_bytes" != "$(file_bytes "$SHELL_IPA")" ]; then
       build_error "shell IPA does not match its manifest bytes ($shell_manifest); rebuild the template"
     fi
-    shell_name="3ds2apple-shell-$shell_version-build$shell_build.ipa"
   else
-    warn "$shell_manifest not found; keeping the source base name $shell_name"
+    warn "$shell_manifest not found; cannot cross-check the shell template pin"
   fi
 
   total_bytes=$(( $(file_bytes "$w_src") + $(file_bytes "$m_src") + $(file_bytes "$shell_src") ))
@@ -334,7 +344,7 @@ main() {
   printf '  files:      6 (%d added, %d replaced, %d unchanged)\n' "$added" "$changed" "$unchanged"
   printf '  size:       %d bytes\n' "$total_bytes"
   printf '  checksums:  %s\n' "$OUT_DIR/SHA256SUMS.txt"
-  printf 'next: gh release create %s --prerelease --title "<title>" --notes-file <notes.md> %s/*\n' "$VERSION" "$OUT_DIR"
+  printf 'next: gh release create %s [--prerelease] --title "<title>" --notes-file <notes.md> %s/*\n' "$VERSION" "$OUT_DIR"
 }
 
 main "$@"

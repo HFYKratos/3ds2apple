@@ -58,7 +58,7 @@ struct ThreeDS2AppleApp: App {
         if !MetalBackend.isMoltenVKEmbedded {
             // The single most useful line for a "slow game / no HUD" device log:
             // without MoltenVK the presented GPU path cannot start at all.
-            AppLog.log("[3ds2apple] PERFORMANCE WARNING: MoltenVK.framework is not in this app; the 3D draws in software (PICA200 on the CPU), the CAMetalLayer path is unavailable and the Metal HUD cannot appear. Deploy the launcher's 0.2.2+ shell template, which embeds MoltenVK.")
+            AppLog.log("[3ds2apple] PERFORMANCE WARNING: MoltenVK.framework is not in this app; the 3D draws in software (PICA200 on the CPU), the CAMetalLayer path is unavailable and the Metal HUD cannot appear. Deploy the launcher's 0.1.0+ shell template, which embeds MoltenVK.")
         }
         if let directory = PipelineCacheStats.directoryURL {
             AppLog.log("pipeline cache dir: %@", directory.path)

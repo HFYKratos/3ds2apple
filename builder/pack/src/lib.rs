@@ -1,6 +1,6 @@
 //! Desktop AOT-first pipeline for 3ds2apple.
 //!
-//! The desktop side of the AOT-first model ([docs/desktop-aot.md]): import the
+//! The desktop side of the AOT-first model ([builder/README.md]): import the
 //! user's own decrypted ROMs, detect their title IDs from the container
 //! headers, queue AOT builds, keep one deterministic per-game package directory
 //! per title, and allocate the selected packages into a single shell IPA with a
@@ -21,7 +21,7 @@
 //!   itself is NOT claimed reproducible: packaging uses the system `zip` and
 //!   embeds archive timestamps (only its contents/catalogue are verified).
 //!
-//! See `docs/desktop-aot.md` for the flow, the package layout and the
+//! See `builder/README.md` for the flow, the package layout and the
 //! catalogue schema.
 #![forbid(unsafe_code)]
 #![warn(missing_debug_implementations)]
@@ -54,7 +54,7 @@ pub const CATALOG_SCHEMA_VERSION: u32 = 2;
 
 /// GamePack dylib contract version ("host ABI") the desktop pipeline writes into
 /// `packABIVersion`. Must match `AOTPackageLoader.hostABIVersion` (1) and the
-/// runtime's GamePack C ABI. See docs/desktop-aot.md and docs/aot-first.md §7.4.
+/// runtime's GamePack C ABI. See builder/README.md for the package layout, catalogue schema and GamePack ABI.
 pub const GAMEPACK_ABI_VERSION: u32 = 1;
 
 /// Registration hook the shell looks up by default on a GamePack dylib.

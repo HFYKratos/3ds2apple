@@ -3,7 +3,7 @@
 //  3ds2apple macOS launcher
 //
 //  The launcher's own persisted state, deliberately small after the v2 flow
-//  revision (docs/launcher-flow-v2.md): language, detected checkout, the
+//  revision (docs/macos-launcher.md): language, detected checkout, the
 //  portable data root and the installed-library facts. Build modes, install
 //  strategies, tool paths, Team ID, device UDID and bundle-ID overrides are
 //  gone from the user-facing UI; tools are auto-detected and the installed

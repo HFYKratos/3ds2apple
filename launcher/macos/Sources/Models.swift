@@ -238,7 +238,7 @@ struct TaskRecord: Identifiable, Equatable {
 
 /// Kept as a backend-level switch: the Deploy flow always uses a real local AOT
 /// build in the live app and the labelled fake packs in mock/self-check mode.
-/// It is not user-visible any more (docs/launcher-flow-v2.md).
+/// It is not user-visible any more (docs/macos-launcher.md).
 enum BuildMode: String, Codable, CaseIterable {
     case dryRun
     case fake
@@ -269,7 +269,7 @@ struct AppleReadiness: Equatable {
     var provisioningProfileCount: Int
     /// Team ID detected from the local provisioning profiles / certificate
     /// subject. The launcher never asks the user to type it: Xcode owns the
-    /// account and this is read-only (docs/launcher-flow-v2.md §Settings).
+    /// account and this is read-only (docs/macos-launcher.md §Settings).
     var teamID: String
     var checkedAt: Date
 
@@ -417,7 +417,7 @@ struct InstallResult: Equatable {
 
 /// Read-only facts about a composed ROM-free library IPA, used to prove the
 /// selected real GamePacks and the schema-2 GameCatalog are inside the signed
-/// payload before anything is installed (docs/launcher-flow-v2.md).
+/// payload before anything is installed (docs/macos-launcher.md).
 struct IPAInspection: Equatable {
     var ipaPath: String
     var appPath: String
@@ -591,7 +591,7 @@ extension Error {
 
 // MARK: - Navigation
 
-/// The launcher has exactly two top-level sections (docs/launcher-flow-v2.md):
+/// The launcher has exactly two top-level sections (docs/macos-launcher.md):
 /// Library (import/add/list/remove) and Deploy (select games -> one-click batch
 /// deploy). Import is a sheet of the Library; Settings is a modal panel.
 enum LauncherScreen: String, CaseIterable, Identifiable {

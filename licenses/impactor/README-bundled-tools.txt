@@ -10,7 +10,8 @@ Files bundled at launcher packaging time (NOT committed to git; see .gitignore)
   Windows x64: Impactor-windows-x86_64-portable.exe  and plumesign-windows-x86_64.exe
   Windows arm64: Impactor-windows-arm64-portable.exe and plumesign-windows-arm64.exe
   macOS universal: Impactor-macos-universal.dmg      and plumesign-macos-universal
-  Fetch them with: python3 scripts/impactor/fetch_impactor.py --dest <dir>
+  Fetch them with: launcher/windows/tools/fetch-impactor.sh --fetch (or
+  launcher/windows/tools/fetch-impactor.ps1 on Windows).
 
 Pinned SHA-256 (official GitHub release digests, verified 2026-11-14)
   Impactor-windows-x86_64-portable.exe  f493cd99081370dca7c677676e119d8808418ebccab49e1f219744b3b71e88ef
@@ -37,6 +38,6 @@ Source links
 
 Rules (see THIRD_PARTY.md and NOTICE)
   - Do not modify, patch, rename into a fork, or re-sign these official binaries.
-  - Keep the SHA-256 pins; the wrapper refuses a bundled copy whose hash differs.
+  - Keep the SHA-256 pins; the launchers refuse a bundled copy whose hash differs.
   - Do not commit the downloaded binaries; only the licenses and this notice are tracked.
   - Apple ID credentials never pass through 3ds2apple; login happens in Impactor/Xcode.
