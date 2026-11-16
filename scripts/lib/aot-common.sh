@@ -398,3 +398,51 @@ NM
   printf 'aot-common self-check: %s checks, %s failure(s)\n' "$checks" "$failures"
   [[ "$failures" -eq 0 ]]
 }
+
+# ---------------------------------------------------------------------------
+# AOT codegen flags (performance experiments; docs/performance.md §5.1)
+# ---------------------------------------------------------------------------
+# Default is the documented baseline: -O2 with strict IEEE float behaviour
+# (-ffp-contract=off -fno-math-errno). Recompiled guest float code must round
+# like the console, so fast-math is never on by default and the default build
+# command is byte-for-byte what it was before these helpers existed.
+#
+# Opt-in A/B overrides (environment only, so launchers and CI keep the default):
+#   THREEDS2APPLE_AOT_OPT=O1|O2|O3|Oz  codegen level (default O2)
+#   THREEDS2APPLE_AOT_LTO=1            add -flto to the compile (link too)
+#   THREEDS2APPLE_AOT_FAST_MATH=1      add -ffast-math (CHANGES guest float
+#                                      results: measurement builds only)
+# Try a level on one game, measure, and keep the default unless the device A/B
+# in docs/performance.md §6 says otherwise.
+AOT_DEFAULT_OPT_LEVEL="O2"
+
+aot_codegen_flags() {
+  local opt flags
+  opt="${THREEDS2APPLE_AOT_OPT:-${AOT_DEFAULT_OPT_LEVEL}}"
+  case "$opt" in
+    O1|O2|O3|Oz) : ;;
+    *)
+      aot_warn "THREEDS2APPLE_AOT_OPT='$opt' is not one of O1/O2/O3/Oz; using ${AOT_DEFAULT_OPT_LEVEL}"
+      opt="${AOT_DEFAULT_OPT_LEVEL}"
+      ;;
+  esac
+  flags="-${opt} -ffp-contract=off -fno-math-errno"
+  case "${THREEDS2APPLE_AOT_LTO:-0}" in
+    1|true|TRUE|yes|on) flags="$flags -flto" ;;
+  esac
+  case "${THREEDS2APPLE_AOT_FAST_MATH:-0}" in
+    1|true|TRUE|yes|on)
+      aot_warn "THREEDS2APPLE_AOT_FAST_MATH=1 changes guest float results; measurement builds only"
+      flags="$flags -ffast-math"
+      ;;
+  esac
+  printf '%s' "$flags"
+}
+
+# Link-time counterpart: the final link needs -flto when the objects were built
+# with it. Empty by default, so the link command is unchanged.
+aot_codegen_link_flags() {
+  case "${THREEDS2APPLE_AOT_LTO:-0}" in
+    1|true|TRUE|yes|on) printf '%s' '-flto' ;;
+  esac
+}

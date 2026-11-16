@@ -19,6 +19,13 @@ struct ThreeDS2AppleApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
+        // MoltenVK's MVK_CONFIG_* performance parameters are environment
+        // variables read when its first Vulkan instance/device is created.
+        // Apply the developer A/B overrides before anything can create one; a
+        // normal launch sets no THREEDS2APPLE_MVK_CONFIG and keeps the
+        // framework defaults (see MoltenVKTuning.swift and docs/performance.md
+        // §5.3).
+        MoltenVKTuning.applyFromEnvironment()
         // Metal Performance HUD: the Metal device reads MTL_HUD_ENABLED once,
         // when it is created. The device here is MoltenVK's, created by the
         // first zk_create()/load, so the persisted Settings switch has to
@@ -47,6 +54,7 @@ struct ThreeDS2AppleApp: App {
         // setting, environment variable and the Info.plist build gate.
         AppLog.log("[3ds2apple] metal hud: %@", MetalHUD.diagnosticsLine)
         AppLog.log("[3ds2apple] metal backend: %@", MetalBackend.diagnosticsLine)
+        AppLog.log("[3ds2apple] %@", MoltenVKTuning.diagnosticsLine)
         if !MetalBackend.isMoltenVKEmbedded {
             // The single most useful line for a "slow game / no HUD" device log:
             // without MoltenVK the presented GPU path cannot start at all.

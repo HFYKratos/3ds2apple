@@ -490,6 +490,9 @@
 "HUD build off" = "HUD build off";
 "HUD needs Metal" = "HUD needs Metal";
 "Runtime status: %@, %@, %@, %@" = "Runtime status: %@, %@, %@, %@";
+"AOT %@" = "AOT %@";
+"CPU %@ ms · present %@ ms · read %@ ms" = "CPU %@ ms · present %@ ms · read %@ ms";
+"Runtime status: %@, %@, %@, %@, %@" = "Runtime status: %@, %@, %@, %@, %@";
 "Metal backend" = "Metal backend";
 "MoltenVK embedded" = "MoltenVK embedded";
 "Software renderer (no MoltenVK)" = "Software renderer (no MoltenVK)";

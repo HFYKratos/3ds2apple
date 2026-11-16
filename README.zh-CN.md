@@ -18,7 +18,7 @@
 
 构建产物在 `out/launchers/`（git 忽略，不在仓库中）：
 
-- `3ds2apple-windows-single-0.2.2.zip` —— 单文件 Windows 启动器；内嵌 ROM-free 基础壳、
+- `3ds2apple-windows-single-0.2.3.zip` —— 单文件 Windows 启动器；内嵌 ROM-free 基础壳、
   Impactor、本地 3dsrecomp + LLVM 工具链和 CLI 工具。
 - `3ds2apple-launcher-0.2.3-macos-app.zip` —— macOS universal App（Xcode 签名）。
 

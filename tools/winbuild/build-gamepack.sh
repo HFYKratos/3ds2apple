@@ -35,6 +35,13 @@
 #   --out DIR           Output root (default: out); writes
 #                       DIR/packages/<TITLE_ID>/GamePack-<TITLE_ID>.dylib
 #   --jobs N            Parallel compiles (default: CPU count, capped at 16)
+#   --opt-level LEVEL   Codegen level O1|O2|O3|Oz (default O2). Performance
+#                       experiment; see docs/performance.md §5.1 and measure
+#                       before changing a release build.
+#   --lto               Add -flto to the compile and the link (A/B experiment;
+#                       default off). Needs a matching final app link.
+#   --fast-math         Add -ffast-math. CHANGES guest float results: A/B
+#                       measurement only, never a shipping default.
 #   --llvm-dir DIR      LLVM bin directory (default: WINBUILD_LLVM_DIR, llvm-config,
 #                       clang on PATH, then the official Windows install paths)
 #   --shim FILE         GamePack shim source
@@ -78,6 +85,10 @@ NO_RECORD=0
 DRY_RUN=0
 SELFCHECK=0
 NO_CHECK=0
+# Performance-experiment overrides (defaults keep the documented -O2 build).
+OPT_LEVEL_ARG=""
+LTO=0
+FAST_MATH=0
 WORK=""
 TMP_ROOT=${TMPDIR:-/tmp}
 [[ -d "${TMP_ROOT}" ]] || TMP_ROOT=/tmp
@@ -105,6 +116,9 @@ while [[ $# -gt 0 ]]; do
     --obj-dir)     [[ $# -ge 2 ]] || die "--obj-dir requires a value"; OBJ_DIR_ARG="$2"; shift 2 ;;
     --pack-bin)    [[ $# -ge 2 ]] || die "--pack-bin requires a value"; PACK_BIN_ARG="$2"; shift 2 ;;
     --force)       FORCE=1; shift ;;
+    --opt-level)   [[ $# -ge 2 ]] || die "--opt-level requires a value"; OPT_LEVEL_ARG="$2"; shift 2 ;;
+    --lto)         LTO=1; shift ;;
+    --fast-math)   FAST_MATH=1; shift ;;
     --no-record)   NO_RECORD=1; shift ;;
     --dry-run)     DRY_RUN=1; shift ;;
     --selfcheck)   SELFCHECK=1; shift ;;
@@ -216,14 +230,30 @@ case "${JOBS}" in ''|*[!0-9]*) die "--jobs must be a positive integer" ;; esac
 
 # --- compile/link flags ------------------------------------------------------
 # Same codegen flags as scripts/build-game-pack.sh, minus -isysroot: no Apple SDK.
-COMMON_CFLAGS=(-target "${TRIPLE}" -O2 -ffp-contract=off -fno-math-errno -w
+# Default -O2 with strict IEEE float behaviour; the opt-level/LTO/fast-math
+# flags are opt-in experiments (docs/performance.md §5.1), so a default build
+# command is unchanged.
+case "${OPT_LEVEL_ARG:-O2}" in
+  O1|O2|O3|Oz) OPT_LEVEL="${OPT_LEVEL_ARG:-O2}" ;;
+  *) die "--opt-level must be O1, O2, O3 or Oz (default O2)" ;;
+esac
+LTO_FLAGS=()
+[[ "${LTO}" -eq 1 ]] && LTO_FLAGS=(-flto)
+FAST_MATH_FLAGS=()
+if [[ "${FAST_MATH}" -eq 1 ]]; then
+  FAST_MATH_FLAGS=(-ffast-math)
+  warn "--fast-math changes guest float results; measurement build only"
+fi
+CODEGEN_CFLAGS=("-"${OPT_LEVEL} -ffp-contract=off -fno-math-errno \
+  ${FAST_MATH_FLAGS[@]+"${FAST_MATH_FLAGS[@]}"} ${LTO_FLAGS[@]+"${LTO_FLAGS[@]}"})
+COMMON_CFLAGS=(-target "${TRIPLE}" "${CODEGEN_CFLAGS[@]}" -w
                -fPIC -nostdinc -isystem "${RESOURCE_DIR}/include" -isystem "${STUBS_DIR}")
 SHIM_CFLAGS=("${COMMON_CFLAGS[@]}")
-LINK_FLAGS=(-target "${TRIPLE}" -dynamiclib -nostdlib -fuse-ld=lld
+LINK_FLAGS=(-target "${TRIPLE}" ${LTO_FLAGS[@]+"${LTO_FLAGS[@]}"} -dynamiclib -nostdlib -fuse-ld=lld
             -Wl,-undefined,dynamic_lookup -Wl,-dead_strip)
 # ld64.lld fallback (used when the clang driver cannot find its lld):
 LD64_FLAGS=(-arch "${ARCH}" -platform_version "${PLATFORM}" "${MINOS}" "${MINOS}"
-            -dylib -undefined dynamic_lookup -dead_strip)
+            ${LTO_FLAGS[@]+"${LTO_FLAGS[@]}"} -dylib -undefined dynamic_lookup -dead_strip)
 
 # --- selfcheck ---------------------------------------------------------------
 write_selfcheck_sources() { # dir
@@ -265,20 +295,20 @@ run_selfcheck() {
     IFS='|' read -r label triple platform arch <<<"${spec}" || true
     dylib="${SELF_WORK}/GamePack-selfcheck-${label}.dylib"
     log "selfcheck: compiling stand-in pack for ${label} (${triple})"
-    if ! "${CC}" -target "${triple}" -O2 -fPIC -fvisibility=hidden -nostdinc \
+    if ! "${CC}" -target "${triple}" "${CODEGEN_CFLAGS[@]}" -fPIC -fvisibility=hidden -nostdinc \
           -isystem "${RESOURCE_DIR}/include" -isystem "${STUBS_DIR}" -I "${SELF_WORK}/src" \
           -c "${SELF_WORK}/src/tables.c" -o "${SELF_WORK}/tables-${label}.o" 2>"${SELF_WORK}/compile-${label}.log"; then
       cat "${SELF_WORK}/compile-${label}.log" >&2
       failures=$((failures + 1)); warn "selfcheck ${label}: stand-in tables compile"; continue
     fi
-    if ! "${CC}" -target "${triple}" -O2 -fPIC -fvisibility=hidden -nostdinc \
+    if ! "${CC}" -target "${triple}" "${CODEGEN_CFLAGS[@]}" -fPIC -fvisibility=hidden -nostdinc \
           -isystem "${RESOURCE_DIR}/include" -isystem "${STUBS_DIR}" -I "${SELF_WORK}/src" \
           -c "${SELF_WORK}/src/game.c" -o "${SELF_WORK}/game-${label}.o" 2>>"${SELF_WORK}/compile-${label}.log"; then
       cat "${SELF_WORK}/compile-${label}.log" >&2
       failures=$((failures + 1)); warn "selfcheck ${label}: stand-in game code compiles"; continue
     fi
     checks=$((checks + 1))
-    if ! "${CC}" -target "${triple}" -O2 -fPIC -nostdinc \
+    if ! "${CC}" -target "${triple}" "${CODEGEN_CFLAGS[@]}" -fPIC -nostdinc \
           -isystem "${RESOURCE_DIR}/include" -isystem "${STUBS_DIR}" \
           -I "${INCLUDE_DIR}" -DZK_GAMEPACK_TITLE_ID=0x0004000000055E00ULL \
           -c "${SHIM_SRC}" -o "${SELF_WORK}/shim-${label}.o" 2>"${SELF_WORK}/shim-${label}.log"; then
@@ -416,6 +446,8 @@ if [[ "${DRY_RUN}" -eq 1 ]]; then
   printf 'target=%s\nplatform=%s\nminos=%s\narch=%s\n' "${TRIPLE}" "${PLATFORM}" "${MINOS}" "${ARCH}"
   printf 'dylib=%s\ninstall_name=@rpath/GamePack-%s.dylib\n' "${DYLIB}" "${TITLE_ID}"
   printf 'cc=%s\nld64=%s\nstubs=%s\n' "${CC}" "${LD64:-clang-driver}" "${STUBS_DIR}"
+printf 'opt=%s lto=%s fast_math=%s\n' "${OPT_LEVEL}" "${LTO}" "${FAST_MATH}"
+printf 'codegen=%s\n' "${CODEGEN_CFLAGS[*]}"
   printf 'jobs=%s\nfiles=%s\n' "${JOBS}" "${#C_FILES[@]}"
   exit 0
 fi
@@ -430,13 +462,13 @@ LOG_FILE="${OUT_ROOT}/build-gamepack-${NAME_ARG}-${CHECK_TARGET}.log"
 cat > "${WORK}/compile-one.sh" <<'SH'
 #!/usr/bin/env bash
 set -eu
-cc="$1"; triple="$2"; code_dir="$3"; obj_dir="$4"; log="$5"; force="$6"; res="$7"; stubs="$8"; src="$9"
+cc="$1"; triple="$2"; code_dir="$3"; obj_dir="$4"; log="$5"; force="$6"; res="$7"; stubs="$8"; flags="$9"; src="${10}"
 base="$(basename "$src" .c)"
 obj="$obj_dir/$base.o"
 if [ "$force" -eq 0 ] && [ -f "$obj" ] && [ "$obj" -nt "$src" ]; then
   exit 0
 fi
-"$cc" -target "$triple" -O2 -ffp-contract=off -fno-math-errno -w -fPIC -fvisibility=hidden \
+"$cc" -target "$triple" $flags -w -fPIC -fvisibility=hidden \
   -nostdinc -isystem "$res/include" -isystem "$stubs" -I "$code_dir" \
   -c "$src" -o "$obj" >>"$log" 2>&1 || {
     printf 'compile failed: %s\n' "$base" >&2
@@ -445,9 +477,10 @@ fi
   }
 SH
 chmod +x "${WORK}/compile-one.sh"
+log "codegen flags: ${CODEGEN_CFLAGS[*]}"
 log "compiling generated C for ${TRIPLE} into ${OBJ_DIR} (incremental)"
 printf '%s\n' "${C_FILES[@]}" | \
-  xargs -P "${JOBS}" -n 1 "${WORK}/compile-one.sh" "${CC}" "${TRIPLE}" "${CODE_DIR}" "${OBJ_DIR}" "${LOG_FILE}" "${FORCE}" "${RESOURCE_DIR}" "${STUBS_DIR}" \
+  xargs -P "${JOBS}" -n 1 "${WORK}/compile-one.sh" "${CC}" "${TRIPLE}" "${CODE_DIR}" "${OBJ_DIR}" "${LOG_FILE}" "${FORCE}" "${RESOURCE_DIR}" "${STUBS_DIR}" "${CODEGEN_CFLAGS[*]}" \
   || { tail -n 40 "${LOG_FILE}" >&2; die "generated C did not compile; full log: ${LOG_FILE}"; }
 OBJ_FILES=()
 for c_file in "${C_FILES[@]}"; do

@@ -128,6 +128,33 @@ struct AOTDiagnostics: Equatable {
     /// zk_registered_gamepack_title_id(): title in the runtime's pack slot.
     var registeredTitleID: UInt64 = 0
 
+    /// Interpreted share of executed instructions the runtime reported in
+    /// `status` ("interpreted 0.21% of N instructions"). Nil when the text does
+    /// not carry the figure (refusal reason, interpreter-only runtime, ...), so
+    /// the badge and diagnostics can say "unknown" instead of inventing 0%.
+    var interpretedPercent: Double? {
+        guard let range = status.range(of: "interpreted ") else { return nil }
+        let rest = status[range.upperBound...]
+        guard let end = rest.firstIndex(of: "%") else { return nil }
+        return Double(String(rest[..<end]).trimmingCharacters(in: .whitespaces))
+    }
+
+    /// Share of executed guest instructions that ran as AOT code
+    /// (100 - interpreted), nil when the runtime text has no percentage.
+    var aotPercent: Double? {
+        interpretedPercent.map { min(100, max(0, 100 - $0)) }
+    }
+
+    /// Instruction fallbacks the runtime reported ("N instruction fallbacks"),
+    /// nil when the text has no count. This is the interpreter work inside the
+    /// linked code; the AOT percentage already includes it.
+    var instructionFallbacks: Int? {
+        guard let range = status.range(of: " instruction fallbacks") else { return nil }
+        let head = status[..<range.lowerBound]
+        guard let space = head.lastIndex(of: " ") else { return nil }
+        return Int(head[head.index(after: space)...])
+    }
+
     /// Stable English line for the device log and diagnostics.
     var label: String {
         "linked_code=\(linkedCode ? 1 : 0)"
@@ -150,6 +177,10 @@ struct RuntimeBadgeState {
     var displayIsSoftware: Bool
     var hudText: String
     var hudNeedsAttention: Bool
+    /// Compact per-frame timing row under the badge: CPU (zk_run_frame), the
+    /// presented frame (zk_present) and, on the CGImage path, the screen read.
+    /// Empty when no frame has been measured yet.
+    var perfText: String
 }
 
 /// A1: how the frame loop reaches the display.
@@ -849,8 +880,14 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             aotText = L10n.tr("AOT …")
         case .preparing, .loaded:
             switch aotStatus {
-            case .package: aotText = L10n.tr("AOT pack")
-            case .staticLinked: aotText = L10n.tr("AOT linked")
+            case .package, .staticLinked:
+                // Show the measured AOT share when the runtime reported it;
+                // a 99.9% badge says more than the static "AOT pack" label.
+                if let percent = aotDiagnostics.aotPercent {
+                    aotText = L10n.format("AOT %@", String(format: "%.1f", percent))
+                } else {
+                    aotText = aotStatus == .package ? L10n.tr("AOT pack") : L10n.tr("AOT linked")
+                }
             case .notLoaded:
                 aotText = L10n.tr("AOT missing")
                 aotIsError = true
@@ -882,6 +919,32 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             }
         }
 
+        // Per-frame breakdown behind the same APIs the diagnostics report uses:
+        // CPU = zk_run_frame, presented = zk_present, read = zk_read_screen
+        // (CGImage path only; the presented Metal path has no readback phase).
+        let perfText: String
+        if loaded {
+            func averageText(_ stats: FramePhaseStats) -> String {
+                stats.isAvailable ? String(format: "%.1f", stats.average) : "—"
+            }
+            let readback = FramePhaseStats(
+                last: frameStats.timing.topScreenRead.last + frameStats.timing.bottomScreenRead.last,
+                average: frameStats.timing.topScreenRead.average + frameStats.timing.bottomScreenRead.average,
+                maximum: 0,
+                samples: displayPath == .readback
+                    ? max(frameStats.timing.topScreenRead.samples, frameStats.timing.bottomScreenRead.samples)
+                    : 0
+            )
+            perfText = L10n.format(
+                "CPU %@ ms · present %@ ms · read %@ ms",
+                averageText(frameStats.timing.runFrame),
+                averageText(frameStats.timing.present),
+                averageText(readback)
+            )
+        } else {
+            perfText = ""
+        }
+
         let hudText: String
         var hudNeedsAttention = false
         if !buildEnablesSystemMetalHUD {
@@ -903,7 +966,8 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             displayText: displayText,
             displayIsSoftware: displayIsSoftware,
             hudText: hudText,
-            hudNeedsAttention: hudNeedsAttention
+            hudNeedsAttention: hudNeedsAttention,
+            perfText: perfText
         )
     }
 

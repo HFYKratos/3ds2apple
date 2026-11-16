@@ -18,7 +18,7 @@ into `Documents/Games/<TITLEID>/` by the launcher.
 
 Build outputs are kept in `out/launchers/` (git-ignored, not in the repository):
 
-- `3ds2apple-windows-single-0.2.2.zip` — one Windows executable; ROM-free shell, Impactor,
+- `3ds2apple-windows-single-0.2.3.zip` — one Windows executable; ROM-free shell, Impactor,
   local 3dsrecomp + LLVM toolchain and the CLI tools are embedded.
 - `3ds2apple-launcher-0.2.3-macos-app.zip` — macOS universal app (Xcode-based signing).
 

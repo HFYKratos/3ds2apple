@@ -433,12 +433,14 @@ compile_game_code() { # dir -> prints archive path
   # path (2026-11-14: did exactly that and clang tried to link a log line).
   printf '[build-game-pack] compiling %s generated C files for %s with %s jobs\n' \
     "$FILE_COUNT" "$TRIPLE" "$JOB_COUNT" >&2
+  # codegen flags: default -O2; env overrides documented in docs/performance.md
+  printf '[build-game-pack] codegen flags: %s\n' "$(aot_codegen_flags)" >&2
   wrapper="$WORK/compile-one.sh"
   cat > "$wrapper" <<'SH'
 #!/bin/sh
-# args: cc target sdk dir log src
+# args: cc target sdk dir log flags src (xargs appends the C file last)
 set -eu
-cc="$1"; target="$2"; sdk="$3"; dir="$4"; log="$5"; src="$6"
+cc="$1"; target="$2"; sdk="$3"; dir="$4"; log="$5"; flags="$6"; src="$7"
 cd "$dir"
 obj="$(echo "$src" | sed 's/\.c$/.o/')"
 # Incremental like build-recomp-ios.sh: an object newer than its source is reused,
@@ -446,12 +448,14 @@ obj="$(echo "$src" | sed 's/\.c$/.o/')"
 if [ -f "$obj" ] && [ "$obj" -nt "$src" ]; then
   exit 0
 fi
-"$cc" -target "$target" -isysroot "$sdk" -O2 -ffp-contract=off -fno-math-errno -w \
+# $flags is the codegen flag string from aot_codegen_flags() (default -O2 with
+# strict IEEE float behaviour); word splitting is intended.
+"$cc" -target "$target" -isysroot "$sdk" $flags -w \
   -fPIC -fvisibility=hidden -I. -c "$src" -o "$obj" >>"$log" 2>&1
 SH
   chmod +x "$wrapper"
   ( cd "$dir" && ls *.c | xargs -P "$JOB_COUNT" -n 1 \
-      "$wrapper" "$CC_BIN" "$TRIPLE" "$SDK_PATH" "$dir" "$LOG_FILE" ) \
+      "$wrapper" "$CC_BIN" "$TRIPLE" "$SDK_PATH" "$dir" "$LOG_FILE" "$(aot_codegen_flags)" ) \
     || { tail -n 40 "$LOG_FILE" >&2; die "generated C did not compile; full log: $LOG_FILE"; }
   printf '[build-game-pack] archiving objects\n' >&2
   ( cd "$dir" && rm -f librecomp.a && ar rcs librecomp.a ./*.o ) >>"$LOG_FILE" 2>&1 \
@@ -469,7 +473,7 @@ link_game_pack() { # libgame-archive out-dylib
     -c "$SHIM_SRC" -o "$shim_obj" >>"$LOG_FILE" 2>&1 \
     || { tail -n 40 "$LOG_FILE" >&2; die "the GamePack shim did not compile"; }
   log "linking GamePack.dylib from $(basename "$libgame")"
-  clang -dynamiclib -target "$TRIPLE" -isysroot "$SDK_PATH" -o "$out" \
+  clang -dynamiclib -target "$TRIPLE" -isysroot "$SDK_PATH" $(aot_codegen_link_flags) -o "$out" \
     "$shim_obj" "$libgame" \
     -Wl,-undefined,dynamic_lookup \
     -Wl,-install_name,"@rpath/GamePack-$TITLE_ID.dylib" \

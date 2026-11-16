@@ -691,14 +691,23 @@ struct GameView: View {
     /// of "feels slow / HUD missing".
     private var runtimeStatusBadge: some View {
         let state = model.runtimeBadgeState
-        return HStack(spacing: 5) {
-            badgeSegment(state.aotText, attention: state.aotIsError)
-            badgeDot
-            badgeSegment(state.fpsText, attention: false)
-            badgeDot
-            badgeSegment(state.displayText, attention: state.displayIsSoftware)
-            badgeDot
-            badgeSegment(state.hudText, attention: state.hudNeedsAttention)
+        return VStack(spacing: 2) {
+            HStack(spacing: 5) {
+                badgeSegment(state.aotText, attention: state.aotIsError)
+                badgeDot
+                badgeSegment(state.fpsText, attention: false)
+                badgeDot
+                badgeSegment(state.displayText, attention: state.displayIsSoftware)
+                badgeDot
+                badgeSegment(state.hudText, attention: state.hudNeedsAttention)
+            }
+            if !state.perfText.isEmpty {
+                Text(state.perfText)
+                    .font(.system(size: 9, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundColor(.white.opacity(0.72))
+                    .accessibilityHidden(true)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
@@ -708,11 +717,12 @@ struct GameView: View {
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("runtime-status-badge")
         .accessibilityLabel(L10n.format(
-            "Runtime status: %@, %@, %@, %@",
+            "Runtime status: %@, %@, %@, %@, %@",
             state.aotText,
             state.fpsText,
             state.displayText,
-            state.hudText
+            state.hudText,
+            state.perfText
         ))
     }
 

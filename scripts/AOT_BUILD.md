@@ -93,6 +93,24 @@ ios/app/Resources/GameCatalog.json          only during the build (generated,
 | `--ipa-version VER` | Override the version in the default `3ds2apple-<name>-<version>` name |
 | `--clean-project` | Delete the generated Xcode project afterwards (default: keep; it is gitignored) |
 
+## Performance experiments (opt-in; defaults unchanged)
+
+A game pack is normally built at `-O2 -ffp-contract=off -fno-math-errno`. For an
+A/B on one title only, the flags can be overridden without touching a script
+default (see `docs/performance.md` §5.1 and §6.2; keep `-O2` unless a device
+measurement with identical frames says otherwise):
+
+| Where | Knob | Effect |
+|---|---|---|
+| `scripts/build-recomp-ios.sh` / `scripts/build-game-pack.sh` | `THREEDS2APPLE_AOT_OPT=O1|O2|O3|Oz` | codegen level (default `O2`) |
+| same | `THREEDS2APPLE_AOT_LTO=1` | add `-flto` to compile and link |
+| same | `THREEDS2APPLE_AOT_FAST_MATH=1` | add `-ffast-math`; **changes guest float results**, measurement only |
+| `tools/winbuild/build-gamepack.sh` (Windows/Linux LLVM path) | `--opt-level O1|O2|O3|Oz`, `--lto`, `--fast-math` | same flags, printed in the plan/log |
+| shell | `THREEDS2APPLE_MVK_CONFIG="NAME=value,..."` | allow-listed `MVK_CONFIG_*` values applied before the first Vulkan device (see `docs/performance.md` §5.3) |
+
+The default commands are unchanged; a default build is byte-for-byte the same
+command line as before these options existed.
+
 ## GameCatalog and the per-game IPA (S2ARM-style distribution)
 
 A game IPA is self-describing. `build-game-ipa.sh` generates

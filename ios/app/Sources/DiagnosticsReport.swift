@@ -84,6 +84,24 @@ enum DiagnosticsExporter {
         let timing = model.frameStats.timing
         let warmUp = model.warmUp
         let cache = model.pipelineCacheStats
+        let aot = model.aotDiagnostics
+        let aotPercentText = aot.aotPercent.map { String(format: "%.2f", $0) } ?? "-"
+        let interpretedPercentText = aot.interpretedPercent.map { String(format: "%.2f", $0) } ?? "-"
+        let fallbacksText = aot.instructionFallbacks.map(String.init) ?? "-"
+        // Frame budget of a 60 Hz presentation, and each measured phase as a
+        // share of the whole render work item. A single glance at the report
+        // then says whether the frame is CPU-bound (run), presentation-bound
+        // (present/read) or stalled on a pipeline compile (the max columns).
+        let frameBudgetMs = 1000.0 / 60.0
+        let renderTotalAvg = timing.renderTotal.average
+        func share(_ milliseconds: Double) -> String {
+            guard renderTotalAvg > 0 else { return "-" }
+            return String(format: "%.1f", min(100, max(0, milliseconds / renderTotalAvg * 100)))
+        }
+        let screenReadAvg = timing.topScreenRead.average + timing.bottomScreenRead.average
+        let budgetUsedText = renderTotalAvg > 0
+            ? String(format: "%.1f", renderTotalAvg / frameBudgetMs * 100)
+            : "-"
         var header = """
         3ds2apple diagnostics
         date=\(Date())
@@ -98,6 +116,9 @@ enum DiagnosticsExporter {
         aot_linked_code=\(model.aotDiagnostics.linkedCode ? 1 : 0)
         aot_recompiled=\(model.aotDiagnostics.recompiled ? 1 : 0)
         aot_recompiled_status=\(model.aotDiagnostics.status.isEmpty ? "-" : model.aotDiagnostics.status)
+        aot_percent=\(aotPercentText)
+        aot_interpreted_percent=\(interpretedPercentText)
+        aot_fallbacks=\(fallbacksText)
         aot_pack=\(model.aotDiagnostics.packPath.isEmpty ? "none" : model.aotDiagnostics.packPath)
         metal_moltenvk_embedded=\(MetalBackend.isMoltenVKEmbedded ? 1 : 0)
         metal_hud_enabled=\(model.isSystemMetalHUDEnabled ? 1 : 0)
@@ -156,6 +177,14 @@ enum DiagnosticsExporter {
         timing_ms_read_bottom=\(String(format: "%.2f/%.2f/%.2f", timing.bottomScreenRead.average, timing.bottomScreenRead.maximum, timing.bottomScreenRead.last))
         timing_ms_cgimage=\(String(format: "%.2f/%.2f/%.2f", timing.cgImage.average, timing.cgImage.maximum, timing.cgImage.last))
         timing_ms_audio=\(String(format: "%.2f/%.2f/%.2f", timing.audioPump.average, timing.audioPump.maximum, timing.audioPump.last))
+        timing_share_run_pct=\(share(timing.runFrame.average))
+        timing_share_present_pct=\(share(timing.present.average))
+        timing_share_read_pct=\(share(screenReadAvg))
+        timing_share_audio_pct=\(share(timing.audioPump.average))
+        frame_budget_ms=\(String(format: "%.2f", frameBudgetMs))
+        frame_budget_used_pct=\(budgetUsedText)
+        perf_log=zk_perf window every 60 frames on stderr (ios/zakuro-ios/README.md)
+        metal_moltenvk_env=\(MoltenVKTuning.diagnosticsLine)
         """
         header += "\n\n"
         return AppLog.shared.exportReport(header: header)

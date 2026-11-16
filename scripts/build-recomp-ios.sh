@@ -135,6 +135,14 @@ Options:
   --verbose          Stream 3dsrecomp/cargo output to the terminal as well
   -h, --help         Show this help and exit
 
+Performance experiments (environment; the default build is unchanged, see
+docs/performance.md §5.1):
+  THREEDS2APPLE_AOT_OPT=O1|O2|O3|Oz  codegen level for --serial-compile
+                                      (default O2)
+  THREEDS2APPLE_AOT_LTO=1            add -flto (if the final link uses it too)
+  THREEDS2APPLE_AOT_FAST_MATH=1      add -ffast-math; CHANGES guest float
+                                      results, measurement builds only
+
 Outputs (all gitignored):
   build/game/<name>/code/librecomp.a    arm64 iOS archive of the recompiled C
   build/game/<name>/src/main.rs         desktop project written by `port`
@@ -572,6 +580,7 @@ serial_compile() {
   total="${#c_files[@]}"
 
   log "serial compile: ${total} C files with $(basename "$CC_BIN") (incremental unless --force)"
+  log "serial compile: codegen flags: $(aot_codegen_flags)"
   for c_file in "${c_files[@]}"; do
     base="$(basename "$c_file")"
     obj="${base%.c}.o"
@@ -589,7 +598,7 @@ serial_compile() {
     fi
     if ! ( cd "$CODE_DIR" && "$CC_BIN" \
         -target "$IOS_TARGET" -isysroot "$SDK_PATH" \
-        -O2 -ffp-contract=off -fno-math-errno -w \
+        $(aot_codegen_flags) -w \
         -fPIC -fvisibility=hidden -I. \
         -c "$base" -o "$obj" ) >>"$LOG_FILE" 2>&1; then
       printf '\n--- serial compile failed: last 40 lines of %s ---\n' "$LOG_FILE" >&2

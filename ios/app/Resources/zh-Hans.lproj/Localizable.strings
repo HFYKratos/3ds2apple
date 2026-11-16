@@ -494,6 +494,9 @@
 "HUD build off" = "HUD 构建未启用";
 "HUD needs Metal" = "HUD 需要 Metal";
 "Runtime status: %@, %@, %@, %@" = "运行状态：%@，%@，%@，%@";
+"AOT %@" = "AOT %@";
+"CPU %@ ms · present %@ ms · read %@ ms" = "CPU %@ ms · 呈现 %@ ms · 回读 %@ ms";
+"Runtime status: %@, %@, %@, %@, %@" = "运行状态：%@，%@，%@，%@，%@";
 "Metal backend" = "Metal 后端";
 "MoltenVK embedded" = "已内嵌 MoltenVK";
 "Software renderer (no MoltenVK)" = "软件渲染（无 MoltenVK）";
