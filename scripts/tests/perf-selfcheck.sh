@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # perf-selfcheck.sh - static/behaviour checks for the performance work
-# (task-36: the scripts/README.md performance contract, badge/diagnostics, AOT
-# flags, MoltenVK hook).
+# (task-36: the scripts/README.md performance contract, FPS readout/diagnostics,
+# AOT flags, MoltenVK hook).
 #
 # Runs on a plain Linux host: no Xcode, no clang, no ROM. It checks the
 # contracts this change introduced and the shell artifact it builds on.
@@ -56,19 +56,41 @@ check "winbuild threads CODEGEN_CFLAGS into the compile" \
   contains tools/winbuild/build-gamepack.sh 'CODEGEN_CFLAGS'
 check "winbuild default opt level is O2" grep -Fq -- 'OPT_LEVEL="${OPT_LEVEL_ARG:-O2}"' tools/winbuild/build-gamepack.sh
 
-section 'Shell badge and diagnostics'
+section 'Shell FPS readout and diagnostics'
 check "AOTDiagnostics parses interpreted %" contains ios/app/Sources/ROMSession.swift 'interpretedPercent'
 check "AOTDiagnostics exposes AOT %" contains ios/app/Sources/ROMSession.swift 'aotPercent'
 check "AOTDiagnostics counts instruction fallbacks" contains ios/app/Sources/ROMSession.swift 'instructionFallbacks'
-check "badge state carries the per-frame row" contains ios/app/Sources/ROMSession.swift 'perfText'
-check "GameView renders the per-frame row" contains ios/app/Sources/GameView.swift 'state.perfText'
+check "session exposes the FPS readout" contains ios/app/Sources/ROMSession.swift 'var fpsText'
+check "GameView draws the FPS readout" contains ios/app/Sources/GameView.swift 'model.fpsText'
+check "GameView tags the FPS readout for UI smoke" contains ios/app/Sources/GameView.swift 'fps-hud'
+check "FPS readout is a persisted setting" contains ios/app/Sources/AppSettings.swift 'showFPS'
+check "Settings exposes the FPS switch" contains ios/app/Sources/SettingsView.swift 'settings-fps-hud'
+check "diagnostics report has the FPS counter state" contains ios/app/Sources/DiagnosticsReport.swift 'fps_counter='
 check "diagnostics report has aot_percent" contains ios/app/Sources/DiagnosticsReport.swift 'aot_percent='
 check "diagnostics report has timing shares" contains ios/app/Sources/DiagnosticsReport.swift 'timing_share_run_pct='
 check "diagnostics report has frame budget" contains ios/app/Sources/DiagnosticsReport.swift 'frame_budget_used_pct='
-check "en Localizable.strings has AOT %@" grep -Fq -- '"AOT %@"' ios/app/Resources/en.lproj/Localizable.strings
-check "zh-Hans Localizable.strings has AOT %@" grep -Fq -- '"AOT %@"' ios/app/Resources/zh-Hans.lproj/Localizable.strings
-check "en Localizable.strings has the CPU/present/read row" grep -Fq -- '"CPU %@ ms · present %@ ms · read %@ ms"' ios/app/Resources/en.lproj/Localizable.strings
-check "zh-Hans Localizable.strings has the CPU/present/read row" grep -Fq -- '"CPU %@ ms · present %@ ms · read %@ ms"' ios/app/Resources/zh-Hans.lproj/Localizable.strings
+check "diagnostics report records the removed warm-up" contains ios/app/Sources/DiagnosticsReport.swift 'warmup_note=removed-in-0.1.1'
+check "en Localizable.strings has the FPS counter label" grep -Fq -- '"Show FPS counter"' ios/app/Resources/en.lproj/Localizable.strings
+check "zh-Hans Localizable.strings has the FPS counter label" grep -Fq -- '"Show FPS counter"' ios/app/Resources/zh-Hans.lproj/Localizable.strings
+check "en Localizable.strings has the FPS accessibility label" grep -Fq -- '"Frames per second: %@"' ios/app/Resources/en.lproj/Localizable.strings
+check "zh-Hans Localizable.strings has the FPS accessibility label" grep -Fq -- '"Frames per second: %@"' ios/app/Resources/zh-Hans.lproj/Localizable.strings
+# The in-game HUD only shows FPS: the old multi-segment badge and the removed
+# first-load warm-up option must stay out of the UI sources.
+if grep -Fq -- 'Metal backend' ios/app/Sources/SettingsView.swift; then
+  fail "SettingsView still shows the Metal backend row"
+else
+  pass "SettingsView has no Metal backend row (About keeps it)"
+fi
+if grep -Fq -- 'First-load graphics warm-up' ios/app/Sources/SettingsView.swift ios/app/Sources/GameView.swift; then
+  fail "a first-load warm-up option/overlay string is still in the UI sources"
+else
+  pass "no first-load warm-up option/overlay in the UI sources"
+fi
+if grep -Fq -- 'runtime-status-badge' ios/app/Sources/GameView.swift; then
+  fail "GameView still carries the old runtime-status-badge"
+else
+  pass "the old multi-segment runtime badge is gone"
+fi
 
 section 'MoltenVK tuning hook (default off)'
 check "MoltenVKTuning exists" test -f ios/app/Sources/MoltenVKTuning.swift

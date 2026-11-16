@@ -376,11 +376,11 @@ final class AppSettings: ObservableObject {
     /// at run time and remembered across launches. The Settings switch can turn
     /// it off, and a pre-0.1.0 install is migrated to on once (see init).
     @Published var systemMetalHUD: Bool
-    /// Optional first-load graphics warm-up behind the "Preparing graphics"
-    /// overlay. Off by default: the pipeline cache is still written, so a later
-    /// per-scene compile can hitch anyway, and the overlay was judged not worth
-    /// the wait. The runtime's pipeline-cache persistence is not affected.
-    @Published var graphicsWarmUpEnabled: Bool
+    /// Show the presented frames per second in the game view. ON by default.
+    /// The FPS counter is the only in-game HUD; the diagnostic details (AOT
+    /// state, renderer path, CPU/present/read timings) stay in the log and the
+    /// diagnostics export.
+    @Published var showFPS: Bool
     /// Fast-forward target: 1×, 2× or 4× (see `PlaybackSpeed`).
     @Published var playbackSpeed: PlaybackSpeed
 
@@ -453,7 +453,7 @@ final class AppSettings: ObservableObject {
         } else {
             systemMetalHUD = true
         }
-        graphicsWarmUpEnabled = Self.bool(defaults, Keys.graphicsWarmUpEnabled, fallback: false)
+        showFPS = Self.bool(defaults, Keys.showFPS, fallback: true)
         playbackSpeed = PlaybackSpeed(
             rawValue: defaults.integer(forKey: Keys.playbackSpeed)
         ) ?? .normal
@@ -479,7 +479,7 @@ final class AppSettings: ObservableObject {
         // Metal device is created, so a change without a relaunch still applies
         // to the next device (the layer property switches the live layer).
         MetalHUD.apply(enabled: systemMetalHUD)
-        defaults.set(graphicsWarmUpEnabled, forKey: Keys.graphicsWarmUpEnabled)
+        defaults.set(showFPS, forKey: Keys.showFPS)
         defaults.set(playbackSpeed.rawValue, forKey: Keys.playbackSpeed)
     }
 
@@ -518,7 +518,9 @@ final class AppSettings: ObservableObject {
         static let systemMetalHUD = "UI.systemMetalHUD"
         /// One-time marker: the 0.1.0 default switched the Metal HUD to on.
         static let systemMetalHUDDefaultMigrated = "UI.systemMetalHUDDefaultMigrated"
-        static let graphicsWarmUpEnabled = "UI.graphicsWarmUpEnabled"
+        /// The removed first-load graphics warm-up wrote
+        /// "UI.graphicsWarmUpEnabled"; old values are ignored on purpose.
+        static let showFPS = "UI.showFPS"
         static let playbackSpeed = "UI.playbackSpeed"
         // Keys already used by earlier builds; kept so existing installs keep
         // their preference.

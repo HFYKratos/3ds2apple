@@ -23,8 +23,8 @@ views do not carry duplicated strings.
 | Page | Contents |
 |---|---|
 | **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`; last-played state and a per-card state badge (**AOT** / **Checking** / **Data missing** / **Error**). Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Refresh button and pull-to-refresh rescan Documents. The empty state explains the desktop launcher. No on-phone import. Settings entry. |
-| **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), on-screen controls, the optional "Preparing graphics" warm-up overlay and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. |
-| **Settings** | Display, Audio, Controls, Performance (frame cap, fast-forward, system Metal HUD, optional graphics warm-up), Storage and About sections. |
+| **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), on-screen controls, the optional FPS counter and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. The FPS counter sits in the portrait title bar or in a slim landscape strip in the top safe area, outside the 3DS picture and clear of every control. |
+| **Settings** | Display, Audio, Controls, Performance (fast-forward, system Metal HUD, FPS counter), Storage and About sections. |
 | **Save Manager** | The battery save files of the current game (size, date, export as ZIP, import, delete), the three instant save-state slots (save, load, delete) and the container usage. |
 | **About** | Version, runtime state, acknowledgements and licence. |
 | **In-game menu** | Opened from the pause button over the game: pause/resume, quick toggles (on-screen controls, mute, 1×/2×/4× fast-forward), Save State / Load State (slot 1), Reset, Display settings, Save Manager, Diagnostics, Exit. |
@@ -75,10 +75,12 @@ on-screen controls, so no input or audio advances behind it.
   0.1.0**; a Settings switch shows or hides it on the presented layer
   (`CAMetalLayer.developerHUDProperties`, iOS 16) and old installs are migrated
   to on once. See "System Metal HUD" below.
-- Always-visible runtime badge while a game is on screen: AOT state, presented
-  FPS, renderer path (Metal GPU / software upload / CPU readback) and Metal HUD
-  state, so a device tester can verify at a glance that the game runs AOT code on
-  the GPU. See "Runtime status badge and AOT proof" below.
+- Optional in-game FPS counter, **on by default**: the only performance readout
+  the game view draws. The switch lives in Settings → Performance; the counter
+  sits in the portrait title bar or in a slim landscape top strip, outside the
+  3DS screens and clear of the on-screen controls. Everything else (AOT state,
+  renderer path, CPU/present/read timings, Metal HUD state) stays in the device
+  log and the diagnostics export. See "In-game FPS counter" below.
 - Display settings: screen layout, screen rotation, aspect (fit / 4:3 / stretch),
   integer scaling, render resolution (1×–4×) and interface orientation. Layout,
   rotation, aspect and integer scaling apply immediately, also while a game
@@ -94,15 +96,10 @@ on-screen controls, so no input or audio advances behind it.
 - Storage page: save-data / legacy game-file / log / pipeline-cache usage and a
   "clear graphics pipeline cache" action (only while no game is running).
 - Settings are persisted in `UserDefaults` and restored at launch.
-- Optional first-load graphics warm-up, **off by default**: when enabled, the
-  first frames after a load run behind an opaque "Preparing graphics" overlay
-  until they are smooth (at least 2 s, then 90 consecutive frames without a
-  >50 ms spike, capped at 5 s), with a Skip button; a later load of the same ROM
-  uses a shorter run and a software renderer skips it. By default the game is
-  revealed as soon as the ROM is loaded, because pipelines first used later
-  still compile on a worker thread. In both modes the runtime keeps writing its
-  pipeline cache while you play (the cache is saved every ~5 s and on exit), so
-  later loads start warm.
+- Games are revealed as soon as they load: the runtime writes its pipeline cache
+  while you play (saved every ~5 s and on exit), so later loads start warm. A
+  pipeline first used later may compile on a worker thread and hitch briefly;
+  the optional first-load "Preparing graphics" warm-up was removed in 0.1.1.
 - Language: the app follows the system language (Simplified Chinese or English)
   and re-renders if iOS reports a locale change while it runs. See
   "Localization" below.
@@ -219,8 +216,7 @@ screens are fitted in the middle of the screen; side by side uses the width best
 Volume and mute are applied to the running mixer immediately. The buffer size
 preference (low latency 5 ms / balanced 10 ms / stable 20 ms) is passed to
 `AVAudioSession`; changing it while a game is running restarts the audio engine
-once. Audio runs during the optional graphics warm-up too, because the boot
-sounds belong to loading. Fast-forward is silent: see "Fast-forward" below.
+once. Fast-forward is silent: see "Fast-forward" below.
 
 ## Controls settings
 
@@ -236,7 +232,7 @@ mapping is documented in the input section below.
 | Frame cap | 60 / 30 fps | Immediately; the free-run loop never starts presented frames closer than 1/60 s (or 1/30 s). It is a cap, not a target. |
 | Fast-forward | 1× / 2× / 4× | Immediately (also from the in-game menu); the next presented frame uses the new value. |
 | System Metal HUD | On / off, **default on** | Immediately on the presented `CAMetalLayer`; remembered across launches and also written as `MTL_HUD_ENABLED` / `MetalHUDForceEnabled` for the next Metal device. The 0.1.0 build migrates a pre-0.1.0 install to on once. |
-| First-load graphics warm-up (optional) | On / off, default off | Read when the next ROM load starts. The runtime's pipeline-cache persistence is unaffected. |
+| Show FPS counter | On / off, **default on** | The in-game FPS readout: it sits in the portrait title bar or in a slim top strip in landscape. No other performance text is drawn over the game; the rest stays in the log and diagnostics. |
 
 ## Fast-forward
 
@@ -264,19 +260,22 @@ frames with `zk_run_frame` before the frame that is presented:
   stop the frame loop before touching the runtime, so a fast-forward group can
   never straddle a state change.
 
-## Graphics warm-up (optional)
+## In-game FPS counter
 
-A cold pipeline cache makes the driver compile pipelines while the game runs.
-The app can run the first frames after a load behind an opaque "Preparing
-graphics" screen until frame times stop spiking (at least 2 s, 90 consecutive
-frames without a >50 ms spike, at most 5 s; Skip ends it early). It is **off by
-default** because a pipeline first used later still compiles on a worker thread
-and can hitch, so the loading wait was judged not worth it. The 5-second
-pipeline-cache persistence in the runtime is independent of this setting and
-always runs: the cache is written while you play and on unload, so the second
-load of a title starts warm. Enable the toggle in Settings → Performance to use
-the overlay again; its result appears in the diagnostics (`warmup_*` fields) and
-in the status line after the load.
+Settings → Performance → **Show FPS counter** (on by default) is the only
+performance readout the game view draws. In portrait it sits in the title bar
+above the screens; in landscape it sits in a slim strip in the top safe area
+above the picture, so the bottom corners stay free for the analog sticks. It
+never covers the 3DS picture, the pause button or the on-screen controls.
+
+The counter shows the presented frames per second over the last 0.5 s window
+(`59 fps`, or `fps …` until the first frame is measured). The rest of the old
+status badge — AOT state, renderer path (`Metal GPU` / `Metal upload` / `CPU
+render`), Metal HUD state and the CPU/present/read timing breakdown — is still
+recorded and exported, but only in the device log and the diagnostics report.
+The optional first-load "Preparing graphics" warm-up was removed in 0.1.1; a
+load always reveals the game as soon as it is loaded, and the runtime's pipeline
+cache still warms later loads by itself.
 
 ## System Metal HUD
 
@@ -310,29 +309,14 @@ The HUD can only appear when all of these hold:
 - the Metal HUD preference is on (the default).
 
 The Settings row explains the exact reason when the HUD cannot appear (build gate
-missing, or the running game is on the CPU readback path), and the always-visible
-runtime badge shows `HUD on` / `HUD off` / `HUD build off` / `HUD needs Metal`
-with the same state.
+missing, or the running game is on the CPU readback path); the diagnostics report
+records the same state (`system_metal_hud*` fields).
 
-## Runtime status badge and AOT proof
+## AOT proof
 
-A small badge is always on top of the screens while a game is starting, preparing
-or loaded (removed on Unload/failure):
-
-```text
-AOT pack · 59 fps · Metal GPU · HUD on
-```
-
-The segments are:
-
-| Segment | Values | Meaning |
-|---|---|---|
-| AOT | `AOT pack` / `AOT linked` / `AOT ·…` / `AOT missing` | Which AOT code source is running; orange/red when the gate is not satisfied. |
-| FPS | `59 fps` / `fps …` | Presented frames per second over the last 0.5 s window. |
-| Renderer | `Metal GPU` / `Metal upload` / `CPU render` | `Metal GPU` = the 3D runs on the host GPU via MoltenVK; `Metal upload` = software renderer uploaded to the layer; `CPU render` = CGImage readback (slow). Orange for the software paths. |
-| Metal HUD | `HUD on` / `HUD off` / `HUD build off` / `HUD needs Metal` | Whether the system HUD can appear and why not. |
-
-Every load also writes the AOT proof to the device log and to the diagnostics
+The old multi-segment badge (AOT / FPS / renderer / Metal HUD) is gone: the
+in-game overlay only shows the FPS counter. Every load still writes the AOT
+proof to the device log and to the diagnostics
 report — never just "assume it is AOT":
 
 ```text
@@ -454,7 +438,7 @@ missing framework into a packaging error (the launcher shell template build uses
 it). The framework is the only piece that makes the CAMetalLayer/presented path
 and the Metal HUD possible. Without it the app still builds and runs, on the
 readback path — the device log then carries a `PERFORMANCE WARNING` line and the
-in-game badge shows `CPU render`.
+diagnostics record `display=CGImage readback` / `renderer_software=1`.
 ```bash
 # 1) download the iOS release (build/ is gitignored; the binary is never committed)
 curl -L -o build/third_party/MoltenVK-ios.tar \
@@ -475,12 +459,12 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `ApplicationDelegate.swift` | UIKit delegate used for the orientation preference. |
 | `ContentView.swift` | Root router: home page or game for the current session phase; applies settings to the session. |
 | `HomeView.swift` | Home page: the Documents/Games library grid, last-played dates, per-card state badge (AOT / Checking / Error), the exact per-game validation error on tap, the launcher empty state, refresh control, settings entry. |
-| `GameView.swift` | Running game: responsive portrait/landscape layout, screens, status line, on-screen controls, warm-up overlay, in-game menu. |
+| `GameView.swift` | Running game: responsive portrait/landscape layout, screens, status line, on-screen controls, the optional FPS counter, in-game menu. |
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, reset, display settings, save manager, diagnostics, exit) and quick toggles. |
 | `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. |
 | `SaveManagerView.swift` | Battery save list (export as ZIP, import, delete) and the instant save-state slots (save, load, delete), with progress and errors. |
 | `AboutView.swift` | Version, runtime state, acknowledgements, licence, language in use. |
-| `AppSettings.swift` | Persisted settings model (enums for layout, screen rotation, aspect, interface orientation, buffer size, frame cap, playback speed, Metal HUD and warm-up switches) and the UserDefaults keys. |
+| `AppSettings.swift` | Persisted settings model (enums for layout, screen rotation, aspect, interface orientation, buffer size, frame cap, playback speed, Metal HUD and FPS-counter switches) and the UserDefaults keys. |
 | `DiagnosticsReport.swift` | Diagnostics report text, the shared diagnostics file type and screen geometry helpers. |
 | `StorageInspector.swift` | Container folder sizes, save-data file list, pipeline-cache clearing, and `AtomicFileWriter` for temporary-file-then-rename writes. |
 | `SaveStateSupport.swift` | Instant save states: three slots per game, the runtime's size → copy → load protocol on the serial runtime queue, the pause/audio-drop around save and load, and the slot list. |
@@ -503,7 +487,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `GameControllerInput.swift` | GameController-to-3DS button mapping. |
 | `AudioOutput.swift` | Ring buffer and AVAudioEngine output (volume, mute, buffer duration). |
 | `FrameTiming.swift` | Per-phase frame timing for the diagnostics report and the fast-forward auto-fallback. |
-| `GraphicsWarmUp.swift` | Optional first-load graphics warm-up state/plan (off by default), its persisted "warmed" marker and pipeline-cache filesystem stats. |
+| `GraphicsWarmUp.swift` | Pipeline-cache filesystem stats used by Storage and the diagnostics report. The first-load warm-up types in this file are no longer reachable: the option was removed in 0.1.1. |
 | `Localization.swift` | `L10n` lookup/format helpers, the resolved display language, and the locale-change observer that rebuilds the UI. |
 | `AppLog.swift` | In-app log capture and the diagnostics report assembly. |
 | `ShareSheet.swift` | System share sheet for exported diagnostics. |
@@ -646,8 +630,8 @@ Instant save states:
 - The 3D can be drawn on the GPU through MoltenVK (the launcher's shell template
   embeds it); otherwise it is Zakuro's software PICA200 renderer. A device build
   that feels slow is almost always missing the framework: the log then says
-  `PERFORMANCE WARNING ... draws in software`, and the runtime badge shows
-  `CPU render`. The presented path is experimental and a presenter is reused for
+  `PERFORMANCE WARNING ... draws in software`, and the diagnostics show
+  `CPU render` (`renderer_software=1`). The presented path is experimental and a presenter is reused for
   the whole app run.
 - 3D stereo, frame interpolation and texture packs exist in the presenter but
   are not exposed by the app UI.
@@ -676,20 +660,18 @@ Instant save states:
 - Button remapping is not available in this build. Save states are not
   interchangeable between games or runtime versions, and only battery saves are
   exported and imported; instant states stay in the app container.
-- The "Preparing graphics" warm-up is off by default. A pipeline first used
-  during play compiles on a worker thread and draws through the generic fallback
-  meanwhile, so a title can hitch briefly on first use; enabling the optional
-  warm-up moves the first-load compiles behind a loading screen but cannot cover
-  pipelines first used later. Completing shader AOT is out of scope: it cannot
-  cover every runtime shader/pipeline combination, and a first run has no cache
-  to load.
+- A pipeline first used during play compiles on a worker thread and draws
+  through the generic fallback meanwhile, so a title can hitch briefly on first
+  use. The optional first-load "Preparing graphics" warm-up was removed in
+  0.1.1. Completing shader AOT is out of scope: it cannot cover every runtime
+  shader/pipeline combination, and a first run has no cache to load.
 - Fast-forward mutes the game audio while it is active, and the automatic
   fallback gives up extra frames when a scene is too slow (see
   "Fast-forward"). It cannot make a game that already runs below 20 fps
   faster.
 - The system Metal HUD is on by default, but it only works when the build
   enables it (`MetalHudEnabled`), and only on the presented `CAMetalLayer` path
-  (so not on a software/readback load). The Settings hint and the runtime badge
+  (so not on a software/readback load). The Settings hint and the diagnostics
   report which condition is missing instead of pretending the switch worked.
 - Only English and Simplified Chinese are included. Traditional Chinese and
   other languages use English.
@@ -697,29 +679,19 @@ Instant save states:
 
 ## Diagnostics
 
-The always-visible runtime badge in the game view shows the AOT source, the
-presented FPS, the renderer and the Metal HUD state, e.g.:
-
-```text
-AOT pack · 59 fps · Metal GPU · HUD on
-```
-
-A software renderer (the usual cause of a slow device build) turns the renderer
-segment orange (`CPU render`), and a Metal HUD that cannot appear turns the HUD
-segment orange as well. The in-game menu and diagnostics keep the fuller status
-line, including `fast-forward: 2×` and `(auto)` markers that appear only above 1×. The `warm-up …`
-line appears once an enabled warm-up finished (it replaces the "Preparing
-graphics…" overlay), or says it was not needed for a software renderer; it is
-absent by default because the optional warm-up setting is off. The device log
-carries one line per load
+The game view draws only the FPS counter (`59 fps`); the AOT source, the renderer
+and the Metal HUD state are no longer shown over the game. They remain in the
+in-game menu and the diagnostics report, which also keep the fuller status line,
+including `fast-forward: 2×` and `(auto)` markers that appear only above 1×. The
+device log carries one line per load
 (`zk_presenter_create`, `display:`, `hardware:`), an `AOT:` line per load with
 `linked_code` / `linked_program` / `recompiled` / `registered_pack` / `pack` /
 `status` (an `AOT REFUSED:` line plus a red home-page error when the gate stops
 the game), one `metal backend:` line at launch (whether MoltenVK is embedded),
 a `PERFORMANCE WARNING` line when the 3D falls back to software rendering, and
 the pipeline-cache state at
-launch/load/after `zk_destroy`, one `graphics warm-up:` line with the same
-timing, a `frame cap:` / `render scale:` line when those settings change (the
+launch/load/after `zk_destroy`, one line recording that the warm-up option is
+gone, a `frame cap:` / `render scale:` line when those settings change (the
 render-scale line notes that the internal 3D scale applies on the next load),
 one line per pause/resume/reset, one `save state:` line per save/load/delete,
 one `library:` line per scan (entry counts per source) with a `library entry:`
@@ -734,18 +706,17 @@ The exported diagnostics header adds the build, device, session phase
 `render_scale_applies=`, `orientation=`, `audio_volume=`, `audio_muted=`,
 `audio_buffer_ms=`, `touch_controls=`, `controls_opacity=`, `haptics=`,
 `playback_speed=`, `playback_speed_effective=`,
-`playback_speed_auto_reduced=`, `warmup_enabled=`, `system_metal_hud=`,
+`playback_speed_auto_reduced=`, `fps_counter=`, `system_metal_hud=`,
 `screen_rotation=`, `presented_native_pixels=`, `presented_drawable_pixels=`,
 `system_metal_hud_build_enabled=`, `aot_diagnostics=`, `aot_linked_code=`,
 `aot_recompiled=`, `aot_recompiled_status=`, `aot_pack=`,
 `metal_moltenvk_embedded=`, `metal_hud_enabled=`, `renderer_software=`,
-`app_language=`, `system_language=`), the
-`warmup_*` fields (`outcome`, duration, frames, max frame, spike count, plan
-limit, whether the pipelines were already cached) and the `pipeline_cache*`
-fields (directory, file count, size, newest file), followed by the previous and
-current session logs. These values make renderer, presentation, scheduler,
-settings, fast-forward, language and graphics warm-up changes measurable on
-device.
+`app_language=`, `system_language=`), `warmup_enabled=0` with the
+`warmup_note=removed-in-0.1.1` marker (the first-load warm-up is gone; pipeline
+cache persistence is unchanged) and the `pipeline_cache*` fields (directory,
+file count, size, newest file), followed by the previous and current session
+logs. These values make renderer, presentation, scheduler, settings,
+fast-forward, language and warm-up changes measurable on device.
 
 ## Performance data capture
 
@@ -771,9 +742,8 @@ log line as `| stutter=<count> (<n>/min, worst <ms>, <top phase>)`.
 ### Capture steps (2-3 minutes)
 
 1. Start the game and play the scene that hitches for 2-3 minutes. The first
-   seconds after a load are not representative when the optional graphics
-   warm-up is off (GPU pipelines still compile on first use), so drive past them
-   and, if possible, capture a second, warmed-up run as well.
+   seconds after a load are not representative (GPU pipelines still compile on
+   first use), so drive past them and, if possible, capture a second run as well.
 2. Open the in-game menu (pause button) and tap **Export logs** (Simplified
    Chinese UI: **导出日志**). Opening the menu pauses the frame loop, so the
    numbers stop changing at the moment you tap it.
@@ -811,13 +781,13 @@ log line as `| stutter=<count> (<n>/min, worst <ms>, <top phase>)`.
 - renderer path: `display=`, `hardware=`, `metal_moltenvk_embedded=`;
 - HUD state: `system_metal_hud=`, `system_metal_hud_build_enabled=`,
   `system_metal_hud_plist=`;
-- warm-up: `warmup_enabled=`, `warmup_outcome=`,
-  `warmup_from_cached_pipelines=`;
+- FPS counter / warm-up state: `fps_counter=`, `warmup_enabled=` (always 0 since
+  0.1.1, when the first-load warm-up was removed), `warmup_note=`;
 - the `stutter_*` block, plus the two `perf:` lines in the current-session log
   around the hitch;
 - whether the hitch appeared on the first run after install or on later runs,
   and which non-default settings (frame cap, render scale, fast-forward, Metal
-  HUD, warm-up) were active.
+  HUD, FPS counter) were active.
 
 The same export is also reachable from the home page's Settings page (More ->
 Export logs). The frame and stutter counters are cleared when a game is unloaded,

@@ -6,8 +6,7 @@
 //  session phase, and keeps the runtime in step with the persisted settings.
 //
 //  Phase-driven navigation: the home page is shown while nothing is loaded;
-//  from the moment a game starts loading, the game view owns the screen (it
-//  shows the optional warm-up overlay until the game is revealed). Unload /
+//  from the moment a game starts loading, the game view owns the screen. Unload /
 //  exit returns to the home page.
 //
 //  The persisted settings are pushed into the session here (a settings change
@@ -96,9 +95,6 @@ struct ContentView: View {
         .onChange(of: settings.playbackSpeed) { speed in
             model.setPlaybackSpeed(speed.rawValue)
         }
-        .onChange(of: settings.graphicsWarmUpEnabled) { enabled in
-            model.setGraphicsWarmUpEnabled(enabled)
-        }
         .onChange(of: settings.systemMetalHUD) { enabled in
             model.setSystemMetalHUD(enabled)
         }
@@ -126,7 +122,6 @@ struct ContentView: View {
         model.setIntegerScaling(settings.integerScale)
         model.applyRenderScale(CGFloat(settings.renderScale))
         model.setPlaybackSpeed(settings.playbackSpeed.rawValue)
-        model.setGraphicsWarmUpEnabled(settings.graphicsWarmUpEnabled)
         model.setSystemMetalHUD(settings.systemMetalHUD)
     }
 

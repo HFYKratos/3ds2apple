@@ -192,12 +192,10 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings-system-metal-hud")
                 hintText(hudStatusText)
             }
-            infoRow("Metal backend", MetalBackend.isMoltenVKEmbedded
-                ? L10n.tr("MoltenVK embedded")
-                : L10n.tr("Software renderer (no MoltenVK)"))
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("First-load graphics warm-up (optional)", isOn: persistedBinding(settings, \.graphicsWarmUpEnabled))
-                hintText(warmUpStatusText)
+                Toggle("Show FPS counter", isOn: persistedBinding(settings, \.showFPS))
+                    .accessibilityIdentifier("settings-fps-hud")
+                hintText(fpsStatusText)
             }
         } header: {
             Text("Performance")
@@ -335,12 +333,9 @@ struct SettingsView: View {
         )
     }
 
-    /// What the optional first-load graphics warm-up does.
-    private var warmUpStatusText: String {
-        if settings.graphicsWarmUpEnabled {
-            return L10n.tr("Shows a “Preparing graphics” screen while the first frames of each load compile their pipelines (at most 5 s).")
-        }
-        return L10n.tr("Off by default: the game appears as soon as it loads, and the pipeline cache is still written while you play.")
+    /// What the in-game FPS readout shows and where it sits.
+    private var fpsStatusText: String {
+        L10n.tr("Shows the presented frames per second while a game is running; it sits outside the 3DS screens (portrait title bar, landscape top strip) and never covers the on-screen controls.")
     }
 
     private var versionText: String {

@@ -132,11 +132,11 @@
 "Fast-forward applies when the game resumes." = "Fast-forward applies when the game resumes.";
 "Fast-forward runs extra console frames per presented frame." = "Fast-forward runs extra console frames per presented frame.";
 "Fills the whole area, stretching the picture if its shape differs. The 3DS aspect ratio is not kept." = "Fills the whole area, stretching the picture if its shape differs. The 3DS aspect ratio is not kept.";
-"First-load graphics warm-up (optional)" = "First-load graphics warm-up (optional)";
 "Fit" = "Fit";
 "Fits the picture inside a 4:3 area, the classic TV shape. The extra space becomes black bars." = "Fits the picture inside a 4:3 area, the classic TV shape. The extra space becomes black bars.";
 "Folder" = "Folder";
 "Frame loop" = "Frame loop";
+"Frames per second: %@" = "Frames per second: %@";
 "Game" = "Game";
 "Games are recompiled ahead of time on a Mac with your own game dump; the app runs the AOT code and never enables a CPU JIT." = "Games are recompiled ahead of time on a Mac with your own game dump; the app runs the AOT code and never enables a CPU JIT.";
 "Games run as native ARM64 code (AOT) — no CPU JIT. Your ROM and save data stay on this device." = "Games run as native ARM64 code (AOT) — no CPU JIT. Your ROM and save data stay on this device.";
@@ -195,7 +195,6 @@
 "Not affiliated with Nintendo Co., Ltd. Use only your own game dumps." = "Not affiliated with Nintendo Co., Ltd. Use only your own game dumps.";
 "Not available in this build" = "Not available in this build";
 "Not connected" = "Not connected";
-"Off by default: the game appears as soon as it loads, and the pipeline cache is still written while you play." = "Off by default: the game appears as soon as it loads, and the pipeline cache is still written while you play.";
 "Off by default: the game appears as soon as the ROM loads. The runtime still writes its pipeline cache while you play, so later loads start warm." = "Off by default: the game appears as soon as the ROM loads. The runtime still writes its pipeline cache while you play, so later loads start warm.";
 "Off: the HUD is hidden for this app even though the build enables it." = "Off: the HUD is hidden for this app even though the build enables it.";
 "Off: the build does not enable the system HUD." = "Off: the build does not enable the system HUD.";
@@ -246,7 +245,8 @@
 "Serializing the console…" = "Serializing the console…";
 "Settings" = "Settings";
 "Show on-screen controls" = "Show on-screen controls";
-"Shows a “Preparing graphics” screen while the first frames of each load compile their pipelines (at most 5 s)." = "Shows a “Preparing graphics” screen while the first frames of each load compile their pipelines (at most 5 s).";
+"Show FPS counter" = "Show FPS counter";
+"Shows the presented frames per second while a game is running; it sits outside the 3DS screens (portrait title bar, landscape top strip) and never covers the on-screen controls." = "Shows the presented frames per second while a game is running; it sits outside the 3DS screens (portrait title bar, landscape top strip) and never covers the on-screen controls.";
 "Side by side" = "Side by side";
 "Simplified Chinese (system language)" = "Simplified Chinese (system language)";
 "Skip" = "Skip";
@@ -289,7 +289,6 @@
 "The archive uses a compression method this app cannot read." = "The archive uses a compression method this app cannot read.";
 "The backup is ready to share." = "The backup is ready to share.";
 "The cache is rebuilt on the next load, so that first load is slower. Save data is not touched." = "The cache is rebuilt on the next load, so that first load is slower. Save data is not touched.";
-"The first frames compile and cache the GPU pipelines so gameplay starts smooth. This optional step is skipped on later loads when the cache is warm." = "The first frames compile and cache the GPU pipelines so gameplay starts smooth. This optional step is skipped on later loads when the cache is warm.";
 "The game requested exit (zk_run_frame = 1)." = "The game requested exit (zk_run_frame = 1).";
 "The game restarts from the beginning with the current ROM. Battery saves are kept." = "The game restarts from the beginning with the current ROM. Battery saves are kept.";
 "The game stopped before the state could be restored." = "The game stopped before the state could be restored.";
@@ -491,7 +490,6 @@
 "HUD needs Metal" = "HUD needs Metal";
 "Runtime status: %@, %@, %@, %@" = "Runtime status: %@, %@, %@, %@";
 "AOT %@" = "AOT %@";
-"CPU %@ ms · present %@ ms · read %@ ms" = "CPU %@ ms · present %@ ms · read %@ ms";
 "Runtime status: %@, %@, %@, %@, %@" = "Runtime status: %@, %@, %@, %@, %@";
 "Metal backend" = "Metal backend";
 "MoltenVK embedded" = "MoltenVK embedded";

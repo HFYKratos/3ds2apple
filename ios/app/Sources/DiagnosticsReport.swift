@@ -3,8 +3,8 @@
 //  3ds2apple
 //
 //  Diagnostics export: one text report with the build, device, runtime state,
-//  first-run warm-up, pipeline cache and frame timings, followed by the app log
-//  (previous and current session).
+//  pipeline cache and frame timings, followed by the app log (previous and
+//  current session).
 //
 //  The report is also the on-device record of the settings that change runtime
 //  behaviour (frame cap, render scale, screen layout, audio), so a device run
@@ -158,7 +158,6 @@ enum DiagnosticsExporter {
         let screen = UIScreen.main
         let timing = model.frameStats.timing
         let stutter = model.frameStats.stutter
-        let warmUp = model.warmUp
         let cache = model.pipelineCacheStats
         let aot = model.aotDiagnostics
         let aotPercentText = aot.aotPercent.map { String(format: "%.2f", $0) } ?? "-"
@@ -226,22 +225,15 @@ enum DiagnosticsExporter {
         playback_speed=\(settings.playbackSpeed.rawValue)
         playback_speed_effective=\(model.effectivePlaybackSpeed)
         playback_speed_auto_reduced=\(model.playbackSpeedAutoReduced ? 1 : 0)
-        warmup_enabled=\(model.graphicsWarmUpEnabled ? 1 : 0)
+        fps_counter=\(settings.showFPS ? 1 : 0)
+        warmup_enabled=0
+        warmup_note=removed-in-0.1.1 (the optional first-load graphics warm-up was removed; pipeline-cache persistence is unchanged)
         system_metal_hud=\(settings.systemMetalHUD ? 1 : 0)
         system_metal_hud_build_enabled=\(model.buildEnablesSystemMetalHUD ? 1 : 0)
         system_metal_hud_env=\(MetalHUD.isEnvironmentEnabled ? 1 : 0)
         system_metal_hud_plist=\(MetalHUD.buildGateEnabled ? 1 : 0)
         \(L10n.diagnosticsLine)
         controller=\(model.controllerName ?? "none")
-        warmup_outcome=\(warmUp.diagnosticsOutcome)
-        warmup_frames=\(warmUp.frames)
-        warmup_elapsed_s=\(String(format: "%.2f", warmUp.elapsedSeconds))
-        warmup_max_frame_ms=\(String(format: "%.1f", warmUp.maxFrameMilliseconds))
-        warmup_spike_frames=\(warmUp.spikeFrames)
-        warmup_quiet_frames=\(warmUp.quietFrames)/\(warmUp.plan.requiredQuietFrames)
-        warmup_limit_s=\(String(format: "%.0f", warmUp.plan.maximumSeconds))
-        warmup_from_cached_pipelines=\(warmUp.plan.fromWarmCache ? 1 : 0)
-        warmup_summary=\(warmUp.summary ?? "(not run)")
         pipeline_cache_dir=\(cache.directoryPath.isEmpty ? "unknown" : cache.directoryPath)
         pipeline_cache=\(cache.summary)
         pipeline_cache_files=\(cache.fileCount)

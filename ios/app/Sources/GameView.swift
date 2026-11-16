@@ -14,9 +14,11 @@
 //    layout (stacked / side by side / single screen), the rotation and how the
 //    picture fills its area; the CAMetalLayer presenter draws all of them.
 //
-//  The "Preparing graphics" overlay from the first-run warm-up stays on top of
-//  the screens while the initial GPU pipelines compile. Opening the in-game
-//  menu pauses emulation; the runtime and the last frame stay until resume.
+//  The only in-game performance readout is the FPS counter (Settings →
+//  Performance): it sits in the portrait top bar or in a slim strip in the
+//  landscape top safe area, never on the 3DS screens and clear of every
+//  on-screen control. Opening the in-game menu pauses emulation; the runtime
+//  and the last frame stay until resume.
 //
 
 import CoreGraphics
@@ -95,16 +97,6 @@ struct GameView: View {
                         diagnosticsHint: diagnosticsHint
                     )
                 }
-
-                // Always-visible verification strip: AOT state, FPS, renderer and
-                // Metal HUD state, so a device tester can see at a glance whether
-                // the game really runs AOT code and on which GPU path.
-                if shouldShowRuntimeBadge {
-                    runtimeStatusBadge
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(.horizontal, 10)
-                        .padding(.top, 6)
-                }
             }
             .onAppear { syncPresentedLayout(isLandscape) }
             .onChange(of: isLandscape) { newValue in syncPresentedLayout(newValue) }
@@ -168,8 +160,9 @@ struct GameView: View {
         .padding(.bottom, 10)
     }
 
-    /// Title + pause button above the screens in portrait. Kept on the black
-    /// background instead of over the picture, so nothing covers the 3DS image.
+    /// Title, FPS counter and pause button above the screens in portrait. Kept
+    /// on the black background instead of over the picture, so nothing covers
+    /// the 3DS image.
     private var portraitTopBar: some View {
         HStack(spacing: 10) {
             Text(romName)
@@ -177,13 +170,16 @@ struct GameView: View {
                 .foregroundColor(.white.opacity(0.62))
                 .lineLimit(1)
             Spacer(minLength: 8)
+            if settings.showFPS {
+                fpsHUD
+            }
             pauseButton(size: 36)
         }
         .frame(height: 36)
     }
 
     /// The picture area: rounded, subtly bordered black stage that centres the
-    /// scaled 3DS screens and carries the warm-up cover.
+    /// scaled 3DS screens.
     private func screenStage(layout: ScreenLayout) -> some View {
         GeometryReader { geometry in
             screenContent(available: geometry.size, layout: layout)
@@ -195,7 +191,6 @@ struct GameView: View {
                 .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.55), radius: 18, x: 0, y: 8)
-        .overlay { graphicsWarmUpOverlay }
         .accessibilityIdentifier("screens-area")
     }
 
@@ -252,12 +247,24 @@ struct GameView: View {
             if isLoaded && !isMenuPresented {
                 // Bottom centre: the top corners belong to L/R and the top middle
                 // to Select/Start, so the pause button stays clear of all of them.
+                // The bottom corners are reserved for the analog sticks, so the
+                // FPS counter lives in the top strip instead.
                 pauseButton(size: 36)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .padding(.bottom, 16)
             }
         }
         .ignoresSafeArea(edges: [.horizontal])
+        // Landscape FPS: a slim strip in the top safe area above the picture, so
+        // the counter never covers the screens, the pause button or the controls.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if isLoaded && settings.showFPS {
+                fpsHUD
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 3)
+            }
+        }
         .accessibilityIdentifier("screens")
     }
     // MARK: - Menu
@@ -491,43 +498,6 @@ struct GameView: View {
         }
     }
 
-    /// Opaque cover over the screens while the first GPU pipelines compile, so
-    /// the boot-time compiles happen on a loading screen instead of a visible
-    /// freeze. It disappears when the app reveals the game (phase `.loaded`).
-    @ViewBuilder
-    private var graphicsWarmUpOverlay: some View {
-        if isPreparingGraphics {
-            ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color.black.opacity(0.94))
-                VStack(spacing: 12) {
-                    ProgressView()
-                        .tint(.white)
-                    Text("Preparing graphics…")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    Text(model.warmUp.progressText)
-                        .font(.caption.monospacedDigit())
-                        .foregroundColor(.white.opacity(0.75))
-                    Text("The first frames compile and cache the GPU pipelines so gameplay starts smooth. This optional step is skipped on later loads when the cache is warm.")
-                        .font(.caption2)
-                        .foregroundColor(.white.opacity(0.55))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 12)
-                    Button("Skip") {
-                        model.skipGraphicsWarmUp()
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.white)
-                    .controlSize(.small)
-                    .accessibilityIdentifier("warmup-skip")
-                }
-                .padding()
-            }
-            .accessibilityIdentifier("preparing-graphics")
-        }
-    }
-
     // MARK: - Screen geometry
 
     /// Aspect of the area the screens occupy in portrait. Fit keeps the
@@ -650,7 +620,7 @@ struct GameView: View {
 
     /// Whether the on-screen controls are visible right now.
     private var showsTouchControls: Bool {
-        settings.showTouchControls && !isPreparingGraphics && !model.isPaused
+        settings.showTouchControls && !model.isPaused
     }
 
     /// Show the screens from the moment the runtime is loaded (placeholder
@@ -658,88 +628,40 @@ struct GameView: View {
     private var isShowingScreens: Bool {
         if model.topScreenImage != nil { return true }
         if isLoaded { return true }
-        if isPreparingGraphics { return true }
         if isRuntimeStarting { return true }
         if model.displayPath.usesMetalLayer, model.metalScreenView != nil { return true }
         return false
     }
 
     /// True while a ROM is being loaded: zk_create runs, or the first frames
-    /// run behind the "Preparing graphics" overlay.
+    /// arrive. The legacy `.preparing` phase is accepted too (unreachable since
+    /// the warm-up option was removed in 0.1.1).
     private var isRuntimeStarting: Bool {
         if case .starting = model.phase { return true }
         if case .preparing = model.phase { return true }
         return false
     }
 
-    /// True while the graphics warm-up overlay covers the screens.
-    private var isPreparingGraphics: Bool {
-        if case .preparing = model.phase { return true }
-        return false
-    }
+    // MARK: - FPS (the only in-game HUD)
 
-    // MARK: - Runtime status badge
-
-    /// True while the game view represents a starting/preparing/loaded session.
-    private var shouldShowRuntimeBadge: Bool {
-        switch model.phase {
-        case .starting, .preparing, .loaded: return true
-        case .idle, .failed, .finished: return false
-        }
-    }
-
-    /// AOT · fps · renderer · HUD, always on top of the screens while a game is
-    /// on screen. Colored orange when the AOT gate is not satisfied, the 3D draws
-    /// in software, or the Metal HUD cannot appear — the three device-side causes
-    /// of "feels slow / HUD missing".
-    private var runtimeStatusBadge: some View {
-        let state = model.runtimeBadgeState
-        return VStack(spacing: 2) {
-            HStack(spacing: 5) {
-                badgeSegment(state.aotText, attention: state.aotIsError)
-                badgeDot
-                badgeSegment(state.fpsText, attention: false)
-                badgeDot
-                badgeSegment(state.displayText, attention: state.displayIsSoftware)
-                badgeDot
-                badgeSegment(state.hudText, attention: state.hudNeedsAttention)
-            }
-            if !state.perfText.isEmpty {
-                Text(state.perfText)
-                    .font(.system(size: 9, weight: .medium))
-                    .monospacedDigit()
-                    .foregroundColor(.white.opacity(0.72))
-                    .accessibilityHidden(true)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(Capsule().fill(Color.black.opacity(0.58)))
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
-        .allowsHitTesting(false)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("runtime-status-badge")
-        .accessibilityLabel(L10n.format(
-            "Runtime status: %@, %@, %@, %@, %@",
-            state.aotText,
-            state.fpsText,
-            state.displayText,
-            state.hudText,
-            state.perfText
-        ))
-    }
-
-    private var badgeDot: some View {
-        Text("·")
-            .font(.caption2)
-            .foregroundColor(.white.opacity(0.35))
-    }
-
-    private func badgeSegment(_ text: String, attention: Bool) -> some View {
-        Text(text)
+    /// Presented frames per second, e.g. `59 fps`. The only performance readout
+    /// the game view draws: the portrait title bar or the landscape top strip,
+    /// always outside the 3DS picture. The AOT state, renderer path and the
+    /// CPU/present/read timing breakdown stay in the log and the diagnostics
+    /// export.
+    private var fpsHUD: some View {
+        Text(model.fpsText)
             .font(.caption2.weight(.semibold))
             .monospacedDigit()
-            .foregroundColor(attention ? .orange : .white.opacity(0.88))
+            .foregroundColor(.white.opacity(0.9))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(Color.black.opacity(0.5)))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .ignore)
+            .accessibilityIdentifier("fps-hud")
+            .accessibilityLabel(L10n.format("Frames per second: %@", model.fpsText))
     }
 
     // MARK: - Diagnostics

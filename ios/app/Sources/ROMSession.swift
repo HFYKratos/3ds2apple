@@ -169,23 +169,6 @@ struct AOTDiagnostics: Equatable {
     }
 }
 
-/// One compact row for the always-visible in-game runtime badge: AOT state,
-/// FPS, display/renderer path and Metal HUD state. Everything is localized here
-/// so the view is a dumb renderer and both languages come from one place.
-struct RuntimeBadgeState {
-    var aotText: String
-    var aotIsError: Bool
-    var fpsText: String
-    var displayText: String
-    var displayIsSoftware: Bool
-    var hudText: String
-    var hudNeedsAttention: Bool
-    /// Compact per-frame timing row under the badge: CPU (zk_run_frame), the
-    /// presented frame (zk_present) and, on the CGImage path, the screen read.
-    /// Empty when no frame has been measured yet.
-    var perfText: String
-}
-
 /// A1: how the frame loop reaches the display.
 enum Presentation: Equatable {
     /// No CAMetalLayer: `zk_read_screen` into a `CGImage` (pre-A1 path).
@@ -224,9 +207,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         case idle
         /// zk_create() is running on the runtime queue.
         case starting(name: String)
-        /// zk_create() succeeded and the first frames are running behind the
-        /// "Preparing graphics" overlay while the GPU pipelines compile/cache.
-        /// The game is not revealed (and input is not forwarded) yet.
+        /// Legacy warm-up phase: zk_create() succeeded while the first-load
+        /// warm-up ran. Unreachable since 0.1.1 (the warm-up option was
+        /// removed); kept so the phase plumbing stays compatible.
         case preparing(name: String)
         /// zk_create() succeeded and a handle is alive.
         case loaded(name: String)
@@ -273,8 +256,8 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// A1: how the loaded runtime reaches the display (status line + which
     /// screen surface the UI shows).
     @Published private(set) var displayPath: Presentation = .readback
-    /// First-run graphics warm-up: frames run behind the loading overlay while
-    /// the GPU compiles its first pipelines (GraphicsWarmUp.swift).
+    /// Removed first-run graphics warm-up state, kept for the unreachable
+    /// GraphicsWarmUp plumbing (diagnostics report it as disabled).
     @Published private(set) var warmUp = GraphicsWarmUpStatus()
     /// Latest `zk_hardware_status()` text: whether the 3D draws on the host GPU
     /// via Vulkan (MoltenVK) and how the screens are presented; shown in
@@ -318,9 +301,6 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// from the settings page on the main queue, read before every frame on the
     /// runtime queue; the automatic fallback lowers it from the runtime queue.
     private let playbackSpeedState = LockedIntState(initialValue: 1)
-    /// Optional first-load graphics warm-up (Settings, off by default). Read
-    /// when a load starts, so it can be toggled without re-loading the game.
-    private let graphicsWarmUpSetting = LockedIntState(initialValue: 0)
     /// A1: drawable size of `metalScreenView` in pixels. Main queue only.
     private(set) var presentedDrawableSize = CGSize.zero
     /// A1: presenter handle (`zk_presenter_*`). Created and destroyed on the
@@ -705,8 +685,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         }
     }
 
-    /// Ends the running graphics warm-up at the next frame. The overlay's Skip
-    /// button calls this; the game is revealed on the following frame.
+    /// Ends the running graphics warm-up at the next frame. Unreachable since
+    /// 0.1.1 (the warm-up option and its overlay were removed); kept with the
+    /// warm-up plumbing.
     func skipGraphicsWarmUp() {
         guard case .preparing = phase else { return }
         AppLog.log("[3ds2apple] graphics warm-up: skip requested by the user")
@@ -869,111 +850,17 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// view exists).
     var isSystemMetalHUDEnabled: Bool { systemMetalHUDEnabled }
 
-    /// One-line runtime state for the always-visible in-game badge: AOT code,
-    /// presented FPS, renderer path (Metal GPU / software upload / CPU readback)
-    /// and Metal HUD state. The HUD can only show on the presented Metal layer,
-    /// so a software/readback load is reported as the reason instead of
-    /// pretending the switch worked.
-    var runtimeBadgeState: RuntimeBadgeState {
+    /// Presented frames per second for the in-game FPS readout, e.g. `59 fps`.
+    /// This is the only performance text the game view draws; the AOT state, the
+    /// renderer path and the CPU/present/read timings stay in the log and the
+    /// diagnostics export.
+    var fpsText: String {
         let loaded: Bool
         if case .loaded = phase { loaded = true } else { loaded = false }
-
-        let aotText: String
-        var aotIsError = false
-        switch phase {
-        case .starting:
-            aotText = L10n.tr("AOT …")
-        case .preparing, .loaded:
-            switch aotStatus {
-            case .package, .staticLinked:
-                // Show the measured AOT share when the runtime reported it;
-                // a 99.9% badge says more than the static "AOT pack" label.
-                if let percent = aotDiagnostics.aotPercent {
-                    aotText = L10n.format("AOT %@", String(format: "%.1f", percent))
-                } else {
-                    aotText = aotStatus == .package ? L10n.tr("AOT pack") : L10n.tr("AOT linked")
-                }
-            case .notLoaded:
-                aotText = L10n.tr("AOT missing")
-                aotIsError = true
-            }
-        case .idle, .failed, .finished:
-            aotText = L10n.tr("AOT missing")
-            aotIsError = true
-        }
-
-        let fpsText: String
         if loaded, frameStats.frames > 0 {
-            fpsText = String(format: "%.0f fps", frameStats.fps)
-        } else {
-            fpsText = L10n.tr("fps …")
+            return String(format: "%.0f fps", frameStats.fps)
         }
-
-        var displayText = L10n.tr("GPU …")
-        var displayIsSoftware = false
-        if loaded {
-            switch displayPath {
-            case .metalDirect:
-                displayText = L10n.tr("Metal GPU")
-            case .metalUploaded:
-                displayText = L10n.tr("Metal upload")
-                displayIsSoftware = true
-            case .readback:
-                displayText = L10n.tr("CPU render")
-                displayIsSoftware = true
-            }
-        }
-
-        // Per-frame breakdown behind the same APIs the diagnostics report uses:
-        // CPU = zk_run_frame, presented = zk_present, read = zk_read_screen
-        // (CGImage path only; the presented Metal path has no readback phase).
-        let perfText: String
-        if loaded {
-            func averageText(_ stats: FramePhaseStats) -> String {
-                stats.isAvailable ? String(format: "%.1f", stats.average) : "—"
-            }
-            let readback = FramePhaseStats(
-                last: frameStats.timing.topScreenRead.last + frameStats.timing.bottomScreenRead.last,
-                average: frameStats.timing.topScreenRead.average + frameStats.timing.bottomScreenRead.average,
-                maximum: 0,
-                samples: displayPath == .readback
-                    ? max(frameStats.timing.topScreenRead.samples, frameStats.timing.bottomScreenRead.samples)
-                    : 0
-            )
-            perfText = L10n.format(
-                "CPU %@ ms · present %@ ms · read %@ ms",
-                averageText(frameStats.timing.runFrame),
-                averageText(frameStats.timing.present),
-                averageText(readback)
-            )
-        } else {
-            perfText = ""
-        }
-
-        let hudText: String
-        var hudNeedsAttention = false
-        if !buildEnablesSystemMetalHUD {
-            hudText = L10n.tr("HUD build off")
-            hudNeedsAttention = true
-        } else if !systemMetalHUDEnabled {
-            hudText = L10n.tr("HUD off")
-        } else if loaded && !displayPath.usesMetalLayer {
-            hudText = L10n.tr("HUD needs Metal")
-            hudNeedsAttention = true
-        } else {
-            hudText = L10n.tr("HUD on")
-        }
-
-        return RuntimeBadgeState(
-            aotText: aotText,
-            aotIsError: aotIsError,
-            fpsText: fpsText,
-            displayText: displayText,
-            displayIsSoftware: displayIsSoftware,
-            hudText: hudText,
-            hudNeedsAttention: hudNeedsAttention,
-            perfText: perfText
-        )
+        return L10n.tr("fps …")
     }
 
     /// Whether the build's Info.plist enables the system Metal HUD. The runtime
@@ -990,19 +877,6 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         }
         return false
     }
-
-    // MARK: - Graphics warm-up (main queue sets, runtimeQueue reads)
-
-    /// Turns the optional first-load graphics warm-up on or off. Off (the
-    /// default) reveals the game as soon as it is loaded; the runtime's
-    /// pipeline-cache persistence is not affected either way.
-    func setGraphicsWarmUpEnabled(_ enabled: Bool) {
-        graphicsWarmUpSetting.set(enabled ? 1 : 0)
-        AppLog.log("[3ds2apple] graphics warm-up: %@", enabled ? "on" : "off")
-    }
-
-    /// Whether the optional graphics warm-up is on, for diagnostics.
-    var graphicsWarmUpEnabled: Bool { graphicsWarmUpSetting.current == 1 }
 
     /// Render resolution factor (1...4). The Metal drawable and the presenter
     /// geometry use the new factor at once; the runtime's internal 3D render
@@ -1539,23 +1413,11 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         AppLog.log("[3ds2apple] zk_create OK after %.1f s: %@ (%@)",
               elapsed, launch.entry.title, romURL.lastPathComponent)
 
-        // A cold first run spends hundreds of milliseconds per new GPU pipeline
-        // inside a frame while the driver compiles it. The optional warm-up runs
-        // those frames behind a loading overlay; it is OFF by default because
-        // later pipelines still compile on first use, so the wait was judged
-        // not worth it. The runtime's pipeline-cache persistence runs
-        // regardless. A software renderer has no pipelines to warm.
-        let warmUpSettingOn = graphicsWarmUpSetting.current == 1
-        let plan = warmUpSettingOn
-            ? Self.graphicsWarmUpPlan(hardwareStatus: hardwareStatus, cache: cacheAtLoad, romKey: launch.entry.titleID)
-            : nil
-        if !warmUpSettingOn {
-            AppLog.log("[3ds2apple] graphics warm-up: off in Settings; revealing the game as soon as it loads")
-        } else if let plan {
-            AppLog.log("[3ds2apple] graphics warm-up: planned %@ (%@, max %.0f s, %ld quiet frames)",
-                  plan.fromWarmCache ? "short (pipelines cached)" : "full (cold cache)",
-                  cacheAtLoad.summary, plan.maximumSeconds, plan.requiredQuietFrames)
-        }
+        // The optional first-load warm-up was removed in 0.1.1: a load always
+        // reveals the game as soon as zk_create succeeds. The runtime still
+        // persists its pipeline cache while the game runs, so later loads start
+        // warm; a pipeline first used later compiles on a worker thread.
+        AppLog.log("[3ds2apple] graphics warm-up: removed; revealing the game as soon as it loads")
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -1567,18 +1429,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             self.displayPath = displayPath
             self.hardwareStatus = hardwareStatus
             self.pipelineCacheStats = cacheAtLoad
-            if let plan {
-                self.beginGraphicsWarmUp(plan: plan, launch: launch)
-            } else {
-                // Disabled by the setting, or a software renderer: reveal now.
-                self.warmUp = warmUpSettingOn
-                    ? GraphicsWarmUpStatus.skippedForSoftware()
-                    : GraphicsWarmUpStatus.skippedForDisabledSetting()
-                AppLog.log("[3ds2apple] graphics warm-up: %@", self.warmUp.logLine)
-                self.setPhase(.loaded(name: launch.entry.title))
-                self.startFrameLoop(warmUp: nil, romKey: launch.entry.titleID)
-                self.startAudio()
-            }
+            self.warmUp = GraphicsWarmUpStatus()
+            self.setPhase(.loaded(name: launch.entry.title))
+            self.startFrameLoop(warmUp: nil, romKey: launch.entry.titleID)
+            self.startAudio()
         }
     }
 

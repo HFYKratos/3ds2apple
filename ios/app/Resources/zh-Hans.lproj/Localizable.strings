@@ -134,11 +134,11 @@
 "Fast-forward applies when the game resumes." = "快进在恢复游戏后生效。";
 "Fast-forward runs extra console frames per presented frame." = "快进会在每个显示帧中额外运行若干主机帧。";
 "Fills the whole area, stretching the picture if its shape differs. The 3DS aspect ratio is not kept." = "填满整个区域；比例不同时画面会被拉伸，不再保持 3DS 原始比例。";
-"First-load graphics warm-up (optional)" = "首次载入图形预热（可选）";
 "Fit" = "适应";
 "Fits the picture inside a 4:3 area, the classic TV shape. The extra space becomes black bars." = "把画面放进 4:3（经典电视比例）区域，多出的空间留黑边。";
 "Folder" = "文件夹";
 "Frame loop" = "帧循环";
+"Frames per second: %@" = "帧率：%@";
 "Game" = "游戏";
 "Games are recompiled ahead of time on a Mac with your own game dump; the app runs the AOT code and never enables a CPU JIT." = "游戏在 Mac 上使用你自己的游戏数据提前重新编译；应用运行 AOT 代码，绝不启用 CPU JIT。";
 "Games run as native ARM64 code (AOT) — no CPU JIT. Your ROM and save data stay on this device." = "游戏以原生 ARM64 代码（AOT）运行 — 不使用 CPU JIT。你的 ROM 和存档数据只留在这台设备上。";
@@ -199,7 +199,6 @@
 "Not affiliated with Nintendo Co., Ltd. Use only your own game dumps." = "与任天堂株式会社（Nintendo Co., Ltd.）无关。请仅使用你自有的游戏转储。";
 "Not available in this build" = "此版本不可用";
 "Not connected" = "未连接";
-"Off by default: the game appears as soon as it loads, and the pipeline cache is still written while you play." = "默认关闭：游戏载入后立即显示，游玩时仍会写入管线缓存。";
 "Off by default: the game appears as soon as the ROM loads. The runtime still writes its pipeline cache while you play, so later loads start warm." = "默认关闭：ROM 载入完成后立即显示游戏。运行时仍会边玩边写入管线缓存，之后的载入会更快。";
 "Off: the HUD is hidden for this app even though the build enables it." = "关闭：即使构建启用了 HUD，本应用也会隐藏它。";
 "Off: the build does not enable the system HUD." = "关闭：当前构建未启用系统 HUD。";
@@ -251,7 +250,8 @@
 "Serializing the console…" = "正在序列化主机状态…";
 "Settings" = "设置";
 "Show on-screen controls" = "显示屏幕按键";
-"Shows a “Preparing graphics” screen while the first frames of each load compile their pipelines (at most 5 s)." = "每次载入后的最初几帧编译管线时显示“正在准备图形”画面（最多 5 秒）。";
+"Show FPS counter" = "显示帧率";
+"Shows the presented frames per second while a game is running; it sits outside the 3DS screens (portrait title bar, landscape top strip) and never covers the on-screen controls." = "在游戏运行时显示呈现帧率；它位于 3DS 画面之外（竖屏标题栏、横屏顶部条），不会遮挡屏幕按键。";
 "Side by side" = "左右并排";
 "Simplified Chinese (system language)" = "简体中文（跟随系统语言）";
 "Skip" = "跳过";
@@ -294,7 +294,6 @@
 "The archive uses a compression method this app cannot read." = "压缩包使用了本应用无法读取的压缩方式。";
 "The backup is ready to share." = "备份已准备好，可以分享。";
 "The cache is rebuilt on the next load, so that first load is slower. Save data is not touched." = "管线缓存会在下次载入时重建，因此那次载入会更慢。存档数据不受影响。";
-"The first frames compile and cache the GPU pipelines so gameplay starts smooth. This optional step is skipped on later loads when the cache is warm." = "最初的几帧会编译并缓存 GPU 管线，让游戏更顺畅地开始。缓存已热时，后续载入会跳过这个可选步骤。";
 "The game requested exit (zk_run_frame = 1)." = "游戏请求退出（zk_run_frame = 1）。";
 "The game restarts from the beginning with the current ROM. Battery saves are kept." = "游戏会用当前 ROM 从头重新开始。电池存档会保留。";
 "The game stopped before the state could be restored." = "游戏在状态恢复之前已停止。";
@@ -495,7 +494,6 @@
 "HUD needs Metal" = "HUD 需要 Metal";
 "Runtime status: %@, %@, %@, %@" = "运行状态：%@，%@，%@，%@";
 "AOT %@" = "AOT %@";
-"CPU %@ ms · present %@ ms · read %@ ms" = "CPU %@ ms · 呈现 %@ ms · 回读 %@ ms";
 "Runtime status: %@, %@, %@, %@, %@" = "运行状态：%@，%@，%@，%@，%@";
 "Metal backend" = "Metal 后端";
 "MoltenVK embedded" = "已内嵌 MoltenVK";
