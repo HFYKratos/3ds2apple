@@ -110,11 +110,14 @@ shape:
   *One-line English description of the change*
 ```
 
-- Write Chinese first, then the English line in italics.
+- Write Chinese first as a bold one-liner, then the English line in italics,
+  matching the layout used on the project's release pages.
 - Keep each item to one line; omit an empty section.
-- **The first public release only contains a short initial description**
-  (what the product is, what the two packages contain, pointer to the README) —
-  no changelog sections.
+- **The first public release uses the same section format:** put the initial
+  feature list under `新功能 / New features` and a short verification note under
+  `说明 / Notes`; leave out the fixes/changes sections.
+- Do not put rules, restrictions, asset checklists or installation walk-throughs
+  in the Release body; those belong in the repository README.
 - Note unverified platforms honestly (for example "macOS device install not yet
   verified by the maintainers").
 
