@@ -143,7 +143,7 @@ struct GameEntry: Identifiable, Hashable {
         )
     }
 
-    /// UI preview only (ios/preview/SnapshotRenderer.swift): an entry without a
+    /// UI preview only (UI test fixture): an entry without a
     /// launcher-written manifest or catalog file. The shipping app builds
     /// entries from the bundle catalog.
     init(titleID: String,
@@ -298,7 +298,7 @@ final class GameLibrary: ObservableObject {
 
     // MARK: - Preview
 
-    /// UI preview only (ios/preview/SnapshotRenderer.swift): illustrates the
+    /// UI preview only (UI test fixture): illustrates the
     /// library states with an in-memory catalog, without a generated
     /// GameCatalog.json or pushed game data.
     func installPreviewLibrary(_ catalog: GameCatalog, playTimes: [String: Date] = [:]) {

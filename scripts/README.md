@@ -19,11 +19,8 @@ generated C, dylib or IPA is committed.
 | `build-game-pack-llvm.sh` | Build a real GamePack dylib with **open-source LLVM/Clang + LLD, no Apple SDK/macOS** (Linux/WSL/Windows); wrapper over `tools/winbuild/build-gamepack.sh`, same output layout as `build-game-pack.sh`; see `tools/winbuild/README.md` and `docs/windows-build.md` §7 |
 | `build-ios-app-sim.sh` | Runtime-simulator workstream (not part of the AOT-first desktop pipeline): build the iOS Simulator app variant |
 | `build-zakuro-ios-sim.sh` | Runtime-simulator workstream: build the x86_64/Simulator Zakuro static library |
-| `ios-ui-preview.sh` | Build and screenshot the shell UI in the iOS Simulator on the macOS VM (auto-generated `zk_*` stubs; no device, no static library, no ROM) |
 | `lib/game-catalog.sh` | Shared `GameCatalog.json` writer/validator/installer used by the build and package scripts; validator accepts schema v1 (legacy static link) and v2 (multi-game packs) |
 | `lib/desktop-aot.sh` | Shared helpers for the desktop AOT scripts: locate `3ds2apple-pack`, Mach-O/placeholder pack checks, catalogue title extraction |
-| `dev-transfer.sh` | One-command, hash-verified dev artifact transfer (random-token VPS relay: push/fetch/side-load/list/clean, direct-LAN mode, doctor, speedtest); ops notes in [../docs/dev-transfer.md](../docs/dev-transfer.md) |
-| `tests/dev-transfer-selfcheck.sh` | Offline self-check for `dev-transfer.sh` (+ optional 16 MiB network round trip with `DT_NETWORK_TEST=1`) |
 | `tests/game-catalog-selfcheck.sh` | Self-check for the catalog helper (runs on Linux and macOS) |
 | `tests/desktop-aot-selfcheck.sh` | Self-check for the desktop AOT pipeline: synthetic ROM import, fake build, schema-v2 catalogue, preview IPA, script safety checks (no Xcode/ROM needed) |
 

@@ -146,7 +146,7 @@ Acceptance checklist for one game:
       `CATALOG: games=1; AOT: <title> (<titleID>)`.
 - [ ] On device the ROM shows `AOT: linked, active` (not
       `linked, interpreting`) and a 20-minute session is stable (evidence under
-      `docs/qa/`).
+      the internal QA evidence directory; root `docs/` only ships product documentation).
 - [ ] `git status` is clean; no ROM, generated C, catalog or IPA is tracked.
 
 ## Version matching

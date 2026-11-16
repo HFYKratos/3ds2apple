@@ -240,7 +240,7 @@ int32_t  zk_gamepack_register(uint32_t host_abi_version);  /* 可选注册钩子
   空态提示“在电脑上添加游戏并重新安装”。
 - 设置/关于/存档页文案改为 AOT-only 说法；诊断导出 `rom=` 改为 `game=<name> (<titleID>)`。
 - 新增/更新文案全部进 `en.lproj` 与 `zh-Hans.lproj`。
-- `ios/preview`（Catalyst 无头截图）新增三种状态：`home-empty`、catalog 填充的 `home`、
+- `旧 UI 预览（已删除）`（Catalyst 无头截图）新增三种状态：`home-empty`、catalog 填充的 `home`、
   `home-no-aot`（点击未构建的游戏后）。
 
 ### 7.8 Launcher-first 两段式库（task-17，2026-11-14）
@@ -315,7 +315,7 @@ int32_t  zk_gamepack_register(uint32_t host_abi_version);  /* 可选注册钩子
    壳刷新、约 1.7 GB ROM 的 SHA-256 校验耗时、以及重装壳后 Documents 数据仍保留。
 4. **公开文案**：`README.md` / `README.zh-CN.md` / `docs/architecture.md`、
    `docs/build.md` 仍描述旧的“手机端导入 ROM + 解释器兜底 / 单游戏 IPA”，随版本发布统一
-   改写；旧预览脚本 `scripts/ios-ui-preview.sh` 仍按旧 `library.json` 播种，需跟随
-   `ios/preview` 更新。
+   改写；旧预览脚本 `旧预览脚本（已删除）` 仍按旧 `library.json` 播种，需跟随
+   `旧 UI 预览（已删除）` 更新。
 5. **base shell IPA 发布物**：需要由 dist/Lead 固定版本（bundle id `com.kratos.3ds2apple`、
    sha256、version），供两个启动器内嵌分发；task-17 只负责壳代码与构建验证。

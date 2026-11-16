@@ -152,7 +152,7 @@ final class AOTPackageLoader {
     static let titleIDSymbol = "zk_gamepack_title_id"
     static let abiVersionSymbol = "zk_gamepack_abi_version"
 
-    /// UI preview only (ios/preview/SnapshotRenderer.swift): title IDs treated
+    /// UI preview only (UI test fixture): title IDs treated
     /// as statically linked. The shipping app never sets it.
     var previewStaticTitleIDs: Set<String> = []
 

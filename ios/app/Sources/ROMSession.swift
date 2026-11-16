@@ -2046,7 +2046,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     // MARK: - State (main queue)
 
     /// UI preview only: pretend a game is loaded so `GameView` can be rendered
-    /// headlessly by ios/preview. No console exists and no Zakuro call is made.
+    /// in the simulator shell. No console exists and no Zakuro call is made.
     func previewSetLoaded(name: String) {
         currentGame = GameEntry(titleID: "0004000000055E00", title: name, aot: true)
         aotStatus = .staticLinked
