@@ -155,7 +155,7 @@ v2.7.2/plumesign, the Bin tool CLIs, 3dsrecomp.exe and the official LLVM 21.1.8 
 (first-run extraction exercised with an isolated HOME) and on real Windows 11 (all checks
 PASS, no warnings, shell template v0.2.2). Real Windows window captures in English and
 Simplified Chinese, plus a headless render of the red not-ready status light, are under
-`docs/ui/v3-*.png`.
+`docs/ui/v4-*.png`.
 
 ## Assemble a distribution (release step)
 
