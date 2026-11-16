@@ -226,10 +226,6 @@ public static class SelfTest
                 Line(probe.Ready ? "PASS" : "FAIL", "devpush", probe.Describe());
             }
 
-            var builderPath = locator.FindBuilderCli();
-            var builderProbe = ToolLocator.ProbeAsync("builder-windows", builderPath, runner, new[] { "--version" }).GetAwaiter().GetResult();
-            Line("PASS", "macOS Build Agent not required (v2)", builderProbe.Ready ? "optional agent CLI present: " + builderProbe.Describe() : "the Windows local build is the only Deploy path; no Mac is required");
-
             // 4b. Windows local build (v2 default): report exactly what is missing; the
             //     Deploy page turns this into ONE actionable error and a Retry button.
             var localTools = LocalToolchainResolver.Resolve(locator);

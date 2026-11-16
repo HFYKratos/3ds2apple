@@ -63,7 +63,7 @@ if [ ! -f "$WINDOWS_ROOT/vendor/impactor/Impactor-windows-x86_64-portable.exe" ]
 fi
 
 # 3. Tool CLIs (cross-built Rust binaries).
-for tool in 3ds2apple-pack.exe builder-windows.exe devpush.exe; do
+for tool in 3ds2apple-pack.exe devpush.exe; do
   if [ ! -f "$WINDOWS_ROOT/Bin/$tool" ]; then
     echo "error: Bin/$tool is missing. Build it for x86_64-pc-windows-gnu first." >&2
     exit 2

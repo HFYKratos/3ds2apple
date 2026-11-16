@@ -56,7 +56,7 @@ public sealed class LocalWinbuildPackProviderTests
     }
 
     private static PackBuildRequest Request(TempDir temp, string romPath) =>
-        new(TitleId, "Pokemon Y", "CTR-P-EK2A", romPath, null, Path.Combine(temp.Path, "work"));
+        new(TitleId, "Pokemon Y", "CTR-P-EK2A", romPath, Path.Combine(temp.Path, "work"));
 
     private static string FirstLine(ProcessResult result) =>
         result.Combined.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').FirstOrDefault(line => !string.IsNullOrWhiteSpace(line))?.Trim() ?? string.Empty;

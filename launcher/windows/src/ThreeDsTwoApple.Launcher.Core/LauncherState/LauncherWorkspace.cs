@@ -10,7 +10,7 @@ public sealed class LauncherStateDocument
 {
     public int SchemaVersion { get; set; } = 1;
 
-    /// <summary>builder-windows / zkb host profile name used for macOS builds.</summary>
+    /// <summary>Legacy macOS Build Agent profile name; kept so old state files still load.</summary>
     public string? BuildHost { get; set; }
 
     /// <summary>Selected build mode (stored as a string so the file stays readable).</summary>
@@ -20,9 +20,9 @@ public sealed class LauncherStateDocument
     public string Language { get; set; } = "system";
 
     /// <summary>
-    /// Feature flag for the experimental local build (3dsrecomp + LLVM/LLD on
-    /// this PC, no macOS host). Off by default: the macOS Build Agent is the
-    /// supported path until the local pack passes the runtime end-to-end check.
+    /// Legacy feature flag for the local build (3dsrecomp + LLVM/LLD on this PC).
+    /// The local build is now the only Deploy path, so the flag is kept only for
+    /// state-file compatibility and is no longer read by the UI.
     /// </summary>
     public bool LocalBuildEnabled { get; set; }
 

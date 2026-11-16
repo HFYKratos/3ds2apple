@@ -1,7 +1,8 @@
 # Windows launcher (MVP) — architecture, contracts and test plan
 
-> Status: source-complete MVP skeleton, 2026-11-14 · task-21 (supersedes task-19
-> flow) · companion to [windows-build.md](windows-build.md),
+> Status: launcher **0.2.5** (2026-11-16, section 17: SMDH icon fix, re-import heal,
+> legacy Build Agent removal). Sections 1-16 are the historical record. Companion to
+> [windows-build.md](windows-build.md),
 > [launcher-architecture.md](launcher-architecture.md),
 > [device-bridge.md](device-bridge.md) (task-16/20) and [aot-first.md](aot-first.md).
 > Code lives in [launcher/windows](../launcher/windows/README.md).
@@ -27,11 +28,11 @@ reinstalling the app once; the game's ROM data is then pushed into Documents.
 1. **Import** — the user selects a decrypted .3ds/.cci they own. Only headers are
    read (title ID, product code, display name, sizes). The game is queued as a
    package.
-2. **Build** — a real GamePack needs Apple's iOS toolchain, so the launcher drives
-   the user's macOS Build Agent (existing builder-windows + builder/agent). It
-   shows log/progress, downloads the per-game result and adopts
-   Frameworks/GamePack-<TITLEID>.dylib through the pack CLI. A clearly-labelled
-   local preview build (placeholder; never installable) is also available.
+2. **Build** — the launcher compiles a real GamePack locally on the PC
+   (3dsrecomp + official LLVM/LLD + hand-written Darwin stubs), shows log/progress
+   and records Frameworks/GamePack-<TITLEID>.dylib through the pack CLI. A
+   clearly-labelled preview build (placeholder; never installable) also exists for
+   layout tests. The old remote macOS Build Agent path was deleted on 2026-11-16.
 3. **Install / update the app** — the launcher composes the installable IPA
    locally: pinned ROM-free shell template IPA + every built
    Frameworks/GamePack-<TITLEID>.dylib + generated GameCatalog.json (schema v2),
@@ -73,8 +74,9 @@ Pushing ROM: only the two Documents files per title.
   (usbmuxd_unavailable is reported when missing).
 - USB data cable; phone unlocked; "Trust This Computer?" accepted; Developer Mode
   enabled on the phone (iOS 16+).
-- For real AOT builds: a macOS host the user controls with Xcode + the project's
-  Build Agent paired (builder/README.md). No Apple SDK is downloaded by this project.
+- For real AOT builds: nothing extra — 3dsrecomp and the official LLVM 21.1.8
+  toolchain are bundled in the launcher payload (see §16.4). No Mac, no Xcode, no
+  Apple SDK and no Build Agent are required.
 - The user's own, legally acquired, decrypted ROMs.
 
 ## 4. Architecture
@@ -87,9 +89,9 @@ Pushing ROM: only the two Documents files per title.
         Tools/ProcessRunner.cs                 argv-only runner, UTF-8 lines, timeouts, kill-tree
         Tools/ToolLocator.cs                   env -> Settings -> distribution layout -> PATH
         Tools/PackCli.cs                       inspect/add/list/catalog/record/verify wrappers
-        Tools/BuilderCli.cs                    builder-windows build + NDJSON progress
-        BuildPipeline/BuildProviders.cs                Preview / MacAgentIpa / MacAgentPack (refuses)
-        BuildPipeline/IpaPackExtractor.cs              per-game IPA -> GamePack.dylib adoption (Mach-O checked)
+        BuildPipeline/BuildProviders.cs                Preview placeholder + LocalWinbuild provider
+        BuildPipeline/GamePackInspector.cs             Mach-O check for real AOT packs
+        BuildPipeline/BuildSlug.cs                     deterministic ASCII build slug
         BuildPipeline/IpaComposer.cs                   template + packs + GameCatalog -> installable IPA
         Signing/ImpactorBundle.cs              pinned Impactor/plumesign verify + launch Impactor
         Signing/AppleErrorCatalog.cs           error text -> stable code + actionable fix
@@ -148,24 +150,25 @@ packages add reports titleID/displayName/productCode/packageDir/romPath/status;
 packages list adds aotVersion/state/pack{sha256,bytes,format}/issues. Exit 0 ok,
 1 validation/errors (JSON errors[]), 2 usage. Tests use the real JSON shapes.
 
-### 5.2 builder-windows (macOS Build Agent, existing Rust frontend)
+### 5.2 Local build (3dsrecomp + LLVM/LLD, the only real build path)
 
-    builder-windows build --host <profile> --rom <ROM> --name <ascii-slug> \
-        --display-name <name> --out <download-dir> --json
+`Core/BuildPipeline/LocalWinbuildPackProvider.cs` runs, inside the launcher's workspace:
 
-Exit codes (shared with zkb): 0 ok, 1 build failed, 2 usage/config, 3 transport,
-4 canceled, 5 local I/O, 64+ internal. --json streams protocol events; the
-launcher maps stage/message/progress to UI progress/log and finds the downloaded
-.ipa in the output directory (or from event paths). Build slug =
-BuildSlug.From(displayName, titleID) -> ASCII lower-case + last 8 title-id digits.
+    Bin/3dsrecomp.exe port <ROM> <recomp-dir> --name <ascii-slug>     # ROM -> generated C
+    clang -target arm64-apple-ios16.0 ... + ld64.lld ...             # C -> GamePack.dylib
+    3ds2apple-pack packages record ...                               # single manifest writer
 
-The launcher extracts Payload/<app>/Frameworks/GamePack-<TITLEID>.dylib from that
-IPA, rejects a non-Mach-O payload (this catches --fake placeholders), and records
-it with packages record so the Rust CLI stays the single manifest writer. That
-per-game-IPA path is transitional: a dedicated Agent packbuild stage is designed in
-[windows-build.md](windows-build.md) section 5; the launcher has a provider that
-refuses explicitly until it exists (no fake success). Until task-22 proves a local
-LLVM/lld path, the macOS Build Agent is the only real build path.
+Tool paths come from the extracted payload (`Bin/3dsrecomp.exe`, `Bin/llvm/bin/clang.exe`,
+`llvm-ar`, `ld64.lld`, clang resource headers), the hand-written Darwin stubs in
+`tools/winbuild/darwin-stubs/` and the GamePack header/shim under `ios/zakuro-ios/`.
+Before recording, the thin arm64 Mach-O is checked by `GamePackInspector` (a `--fake`
+placeholder is rejected), and `BuildSlug.From(displayName, titleID)` produces the ASCII
+lower-case build name. A missing toolchain is one actionable error with Retry — there is
+no silent fallback to a remote host or a placeholder.
+
+The old remote path (a macOS agent over SSH, per-game IPA extraction) was deleted on
+2026-11-16 together with its Rust front ends; see [windows-build.md](windows-build.md)
+§4 for the historical record.
 
 ### 5.3 App IPA composition (new, on Windows)
 
@@ -326,7 +329,7 @@ artifact (ROM-free, empty catalogue) and is not committed.
 | shell_template_incompatible | template version/build below 0.2.0-beta1/build 9, mismatched Info.plist, empty-schema-2 catalogue missing, catalogue not empty, or Roms/ present | Rebuild the ROM-free template on macOS with the current shell task and repack |
 | shell_invalid | template manifest/hash/zip invalid | Rebuild the ROM-free shell template on macOS and repack the distribution |
 | base_shell_not_rom_free | template contains a Roms/ entry | The template is not the launcher build; use the ROM-free shell template |
-| pack_missing / pack_duplicate / pack_placeholder | no/invalid/duplicate pack | Build the game with the macOS Build Agent (preview placeholders are rejected) |
+| pack_missing / pack_duplicate / pack_placeholder | no/invalid/duplicate pack | Build the game with the local build (preview placeholders are rejected) |
 | catalog_failed | pack CLI catalogue missing/mismatched | Rebuild/record packages, update 3ds2apple-pack |
 | generic_signing_failure | unrecognised text | Read the log line; raw text stays visible, never swallowed |
 
@@ -342,9 +345,9 @@ generic fallback.
   Impactor. Device UDIDs are shown/logged only in redacted form (first 8…last 4,
   via Core/Util/Privacy.cs); the full value is passed only to device/signing
   commands and stored nowhere (QA S2).
-- The ROM is read locally (headers for import, full read for push SHA-256 and for
-  the Build Agent upload). The Build Agent upload is the existing builder behaviour:
-  the user's own host over SSH, deleted at job end by default.
+- The ROM is read locally (headers for import, full read for push SHA-256 and for the
+  local build). Nothing is uploaded anywhere: the retired remote-agent path sent it only
+  to the user's own host and was deleted on 2026-11-16.
 - The composed IPA contains code only (shell + packs + catalogue), never ROMs.
 - No telemetry, crash upload, signing service or project server.
 - Process calls are argv arrays, never shell strings; output is bounded, UTF-8.
@@ -375,21 +378,21 @@ no iPhone, no Apple ID, no macOS host session.
     dotnet build Launcher.slnx -c Debug
     -> Build succeeded. 0 Error(s)
 
-    # unit tests (57, incl. IpaComposer + template-identity/privacy tests)
+    # unit tests (historical count; current v2 counts are in §16.6)
     dotnet test tests/ThreeDsTwoApple.Launcher.Core.Tests/ThreeDsTwoApple.Launcher.Core.Tests.csproj
-    -> Passed! Failed: 0, Passed: 57, Skipped: 0
+    -> Passed! Failed: 0
 
     # host self-test, bare source tree
     dotnet launcher/windows/src/Launcher.Desktop/bin/Debug/net10.0/3ds2apple-launcher.dll --self-test
     -> PASS version, pinned Impactor digests, PINS.json cross-check, workspace state,
        GameInfo round-trip (pack informational/bundle-relative), GameInfo without pack,
-       devpush/1 parser, push layout, build slug
-       WARN 3ds2apple-pack/devpush/builder-windows/Impactor bundle absent (source tree)
-       SELF-TEST OK with 4 warnings
+       local build toolchain row, devpush/1 parser, push layout, build slug
+       WARN 3ds2apple-pack/devpush/Impactor bundle absent (source tree)
+       SELF-TEST OK with warnings
 
     # same self-test with the real Rust tool binaries
-    DEVPUSH_EXE=... THREEDS2APPLE_PACK=... THREEDS2APPLE_BUILDER=... dotnet ... --self-test
-    -> PASS for 3ds2apple-pack 0.1.0, devpush 0.1.0, builder-windows 0.1.0
+    DEVPUSH_EXE=... THREEDS2APPLE_PACK=... dotnet ... --self-test
+    -> PASS for 3ds2apple-pack 0.1.0, devpush 0.1.0
        SELF-TEST OK with 1 warning (only the not-downloaded Impactor bundle)
 
     # real desktop CLI (headers of the local ROM only)
@@ -441,17 +444,16 @@ runtime state was added to the repository.
   real binary's mock backend; a real USB/Wi-Fi AFC transfer remains for QA.
 - No shell template IPA artifact in this checkout; install is intentionally disabled
   without Shell/manifest.json + IPA (shell/README.md).
-- macOS Build Agent packbuild stage is a design proposal (windows-build.md section 5);
-  real builds use the existing per-game IPA extraction path. task-22's local
-  LLVM/lld investigation runs in parallel; the Agent path stays until it is proven.
+- The remote macOS Build Agent path (historical design proposal in windows-build.md
+  section 5) was deleted on 2026-11-16; the local LLVM/LLD build is the only real path.
 - Avalonia UI only smoke-started under Xvfb.
 - No macOS launcher work here (task-18).
 
 ## 11. Manual test plan (Windows PC + iPhone/iPad)
 
 Prepare: launcher package (or dotnet run from source), a local decrypted .3ds/.cci
-you own, a paired macOS Build Agent for real packs, the phone by USB with Developer
-Mode/Trust, and the bundled Impactor/plumesign (tools/fetch-impactor.ps1).
+you own, the bundled 3dsrecomp + LLVM 21.1.8 payload for real packs, the phone by USB
+with Developer Mode/Trust, and the bundled Impactor/plumesign (tools/fetch-impactor.ps1).
 
 1. Launcher starts, header shows the version; Settings -> Run self-test prints PASS
    for pinned digests and PINS.json; tool rows show ready/missing honestly.
@@ -461,11 +463,10 @@ Mode/Trust, and the bundled Impactor/plumesign (tools/fetch-impactor.ps1).
 3. Import: browse a ROM (drag-and-drop is not wired in this MVP). Expect title row
    with 16-hex title ID, display name, product code; a CIA/encrypted file is
    rejected with the CLI message. Restart: library restored from state.json.
-4. Preview build: Build tab -> Preview -> Build. Expect placeholder pack labelled
-   not installable; composing/installing must refuse it (Mach-O check / no real pack).
-5. Real build (needs macOS host): Build tab -> macOS Build Agent -> host profile ->
-   Build. Expect agent log/progress then "real GamePack" with a 64-hex SHA-256.
-   Confirm on the Mac that the job cleaned up the ROM.
+4. Preview build: the Preview provider writes a placeholder pack labelled not
+   installable; composing/installing must refuse it (Mach-O check / no real pack).
+5. Real build: Deploy page -> select a game -> Deploy. Expect the local build log
+   (3dsrecomp -> clang/ld64.lld -> record) then "real GamePack" with a 64-hex SHA-256.
 6. Device: connect phone, unlock, Trust. App & Device -> Refresh devices lists it.
 7. Sign-in: Open Impactor -> sign in with a free Apple ID -> close/minimise.
 8. First install: with one built game -> Install/update app. Expect compose log
@@ -518,17 +519,15 @@ Mode/Trust, and the bundled Impactor/plumesign (tools/fetch-impactor.ps1).
 - task-17 shell: template/bundle-catalog/Documents split agreed; base shell template
   IPA must still be produced on macOS (shell/README.md) and handed to the Windows
   distribution. Shell must load the pack from the bundle and the ROM from Documents.
-- task-22: keep macOS Build Agent as the real build path until the local LLVM/lld
-  GamePack build is proven; then the packbuild provider can be switched.
-- build-infra: implement the Agent packbuild stage (windows-build.md section 5) to
-  stop building a whole IPA per game.
+- task-22: done — the local LLVM/LLD GamePack build is the only real build path; the
+  remote agent and its packbuild proposal were deleted on 2026-11-16.
 - Lead/integration: review launcher/windows/.gitignore (bin/obj and downloaded
   binaries untracked); do not commit Shell/*.ipa, composed IPAs or .exe; update
   .internal/PROJECT_HANDOFF.md with the new architecture + evidence paths.
 ## 13. Experimental local build (task-26): 3dsrecomp + LLVM/LLD on the Windows PC
 
-> Status: implemented and unit-tested in `launcher/windows`; **off by default**. The mac build
-> Agent remains the supported path until a runtime end-to-end check on a real phone is signed off.
+> Status: implemented, unit-tested and now the default/only Deploy path in
+> `launcher/windows`. The old macOS Build Agent path was deleted on 2026-11-16.
 > This section documents what is wired and what was actually proven.
 
 The launcher can now build a per-game GamePack **on the Windows PC itself**, with no Mac and no
@@ -606,14 +605,13 @@ plus an overflow menu for build / install / push / verify / remove) and inside S
 - **Import**: pick a decrypted .3ds/.cci, optional display-name override, inline progress only while
   an import job runs, plus the "what happens next" steps.
 - **Settings** (gear): Apple ID/signing explanation + Open Impactor / Install app, device state and
-  prerequisites, build mode (preview / macOS Build Agent / experimental local) and build host, tool
-  paths, language override, logs + diagnostics + self-test + workspace, about/licences.
+  prerequisites, language override, logs + diagnostics + self-test + workspace, about/licences.
 - **Theme**: Fluent light/dark via ThemeDictionaries (no hard-coded dark window), one accent color,
   generous spacing; CJK-capable font stack (Segoe UI, Microsoft YaHei UI, Noto Sans CJK SC).
 
 **Localization** (`Core/Localization/Localization.cs`)
 
-- English + Simplified Chinese, 169 keys; en/zh-Hans key and placeholder parity is enforced by unit
+- English + Simplified Chinese, 234 keys; en/zh-Hans key and placeholder parity is enforced by unit
   tests and by `--self-test`.
 - OS language detection: `zh`/`zh-CN`/`zh-Hans`/`zh-SG` -> zh-Hans; Traditional Chinese and
   everything else -> English (documented fallback). The System / English / 简体中文 override is
@@ -644,7 +642,7 @@ single-file with `IncludeNativeLibrariesForSelfExtract` + compression.
 | `ThirdParty/Impactor/Impactor-windows-x86_64-portable.exe` | official v2.7.2, SHA-256 pinned |
 | `ThirdParty/Impactor/plumesign-windows-x86_64.exe` | official v2.7.2, SHA-256 pinned |
 | `ThirdParty/Impactor/LICENSE-Impactor-MIT.txt`, `LICENSE-apple-codesign-MPL-2.0.txt`, `README-source-and-licenses.txt`, `PINS.json` | licence/source notices |
-| `Bin/3ds2apple-pack.exe`, `Bin/builder-windows.exe`, `Bin/devpush.exe` | cross-built Rust CLIs (x86_64-pc-windows-gnu) |
+| `Bin/3ds2apple-pack.exe`, `Bin/devpush.exe` | cross-built Rust CLIs (x86_64-pc-windows-gnu) |
 | `licenses/LICENSE`, `licenses/NOTICE`, `licenses/THIRD_PARTY.md` | project licences/notices |
 
 - The Core project embeds these as `Payload/...` resources when `Configuration=Release` and the
@@ -701,9 +699,8 @@ Three independent defects combined into that one symptom:
    when at least one real pack existed. With zero real packs it logged
    "No real GamePacks are built yet; installing the bare shell template" and signed/installed
    `Shell/3ds2apple-shell.ipa` directly — an app with an **empty schema-2 catalogue and no
-   `Frameworks/GamePack-*.dylib`**. Because the old experimental local-build flag was off by
-   default and the macOS Build Agent was not configured, a normal library had no real pack, so
-   the install could never show a game. (`IpaComposer.ComposeAsync` already refused zero packs
+   `Frameworks/GamePack-*.dylib`**. Because there was no local build provider yet, a normal
+   library had no real pack, so the install could never show a game. (`IpaComposer.ComposeAsync` already refused zero packs
    with `pack_missing`; the UI fallback bypassed that contract by installing the template.)
 2. **Push/verify used the wrong bundle id.** `PushSelectedAsync`/`VerifyPushAsync` resolved
    the container as `BundleIdOverride ?? shell.BundleId` (the *template manifest* value) and
@@ -775,8 +772,8 @@ non-empty schema-2 catalogue gate), and `--self-test` line
   extraction into `%LOCALAPPDATA%` is exercised for real; on Windows the exe can be run directly
   from `out/launchers/clean-run-win/`.
 - Embedded payload inventory (23 files in this build): ROM-free shell IPA+manifest, pinned
-  Impactor/plumesign + licences + PINS.json, Bin tools (3ds2apple-pack/builder-windows/devpush/
-  3dsrecomp), Darwin stubs/shim/header, LICENSE/NOTICE/THIRD_PARTY + 3dsrecomp provenance note.
+  Impactor/plumesign + licences + PINS.json, Bin tools (3ds2apple-pack/devpush/3dsrecomp),
+  Darwin stubs/shim/header, LICENSE/NOTICE/THIRD_PARTY + 3dsrecomp provenance note.
 
 ### 16.6 Verification performed (2026-11-16, WSL + .NET 10.0.403, no Windows/phone)
 
@@ -810,3 +807,86 @@ clean-folder self-test (Linux host, extracted payload)   -> SELF-TEST OK with 1 
 - Bundle-id override was removed from Settings: an Apple 9401 app-id conflict now requires a new
   base shell template build (bundle id is part of the signed template).
 
+
+## 17. Launcher 0.2.5 (2026-11-16): SMDH icon fix, re-import heal, legacy cleanup
+
+> Status: packaged and host-verified (WSL clean-folder self-test 32 PASS / 0 FAIL / 0 WARN).
+> A real Windows 11 + iPhone run of this exact build is still the user/QA acceptance step (17.5).
+> Sections 1-16 are the historical record; section 17 supersedes the artifact/version facts.
+
+### 17.1 Root cause of the garbled Library icons (0.2.4)
+
+The ROM metadata was correct (localized names/publisher), only the extracted icon was rainbow
+noise. `builder/pack/src/smdh.rs` read the 48x48 icon at SMDH offset **0x2008** and decoded it
+as linear RGB565. Per the public SMDH layout (3dbrew) the real layout is:
+
+```text
+0x0008  16 x 0x200 application-title blocks
+0x2008  0x30 application settings + 0x08 reserved
+0x2040  small icon 24x24 RGB565 (0x480)
+0x24C0  large icon 48x48 RGB565 (0x1200; the cover)
+0x36C0  end of SMDH
+```
+
+Icons are also stored **tiled**: 8x8 tiles in row-major order, and inside a tile the 2x2
+pixel blocks are in Morton/Z order with row-major pixels inside each block. Decoding the
+application-settings bytes as linear RGB565 therefore produced the observed noise.
+
+### 17.2 Fix (builder/pack) and the re-import heal (both launchers)
+
+- `smdh.rs`: correct constants (`SMALL_ICON_OFFSET=0x2040`, `LARGE_ICON_OFFSET=0x24C0`),
+  a tiled-RGB565 decoder (`tile_pixel_offset` / `decode_tiled_rgb565`), and a deterministic
+  48x48 RGB PNG cover from the large icon. Unit tests pin the 3dbrew example table, tile
+  row-major order, the exact PNG pixels and the same tile transform for the small icon.
+- `gameinfo.rs`/`ops.rs`: `GameInfo.json` gains an optional `coverSource` (`smdh` for a cover
+  extracted from the ROM, `user` for a cover the user supplied). A re-import with
+  `3ds2apple-pack packages add --force` re-extracts a stale `smdh` cover, keeps an existing
+  built GamePack and never overwrites a `user` cover. Manifests without `coverSource` are
+  treated as `smdh` once so 0.2.4 libraries heal after one re-import.
+- Launchers: re-importing a game that is already in the library now passes `--force`
+  (Windows `PackCli.AddAsync(..., force:true)` from `MainViewModel.ImportAsync`; macOS
+  `PackBackend.importROM(..., force:)` from `AppModel`), first imports do not. So the user
+  re-imports a game once and the old garbled cover is replaced.
+
+### 17.3 Other 0.2.5 changes
+
+- The legacy Build Agent stack was deleted: `builder/{agent,cli,linux,windows}` and the
+  Windows launcher's `MacAgentIpa`/`MacAgentPack` providers, `BuilderCli`, the
+  `builder-windows.exe` payload pin and its tests. The local 3dsrecomp + LLVM/LLD path is the
+  only build path; the single-file exe is ~1.24 MB smaller because the old builder binary is
+  no longer embedded. `builder/core` now only holds the streaming SHA-256 helper used by pack.
+- `--force` on re-import is covered by new Windows tests (147/147 pass) and macOS self-check
+  assertions (207/207 pass).
+- `scripts/tests/game-catalog-selfcheck.sh` now expects the schema-2 empty catalog written by
+  `scripts/lib/game-catalog.sh` (the stale schema-1 expectation failed before this change).
+
+### 17.4 Artifact and host verification (2026-11-16, WSL + .NET 10.0.403)
+
+| Field | Value |
+|---|---|
+| User package | `out/launchers/3ds2apple-windows-single-0.2.5.zip` (git-ignored) |
+| ZIP | 148,817,314 B, SHA-256 `b9b2a0b079347a45953f40232735ca4162f6fdd9120df8427a9d14c7af52f0d7` |
+| ZIP entry | exactly one `3ds2apple-launcher.exe` (PE32+ GUI x86-64) |
+| EXE | 155,464,387 B, SHA-256 `8b921fb4365674bc6fba9d362a89f55da4678e974cce3d6348b6845ba854e57a` |
+| Embedded pack CLI | 1,566,720 B, SHA-256 `94ea8f79c9e467c2e99ad917320c275080c4cd794ce93d8d07b781b41f74dc4f` (fix included) |
+| Shell template | v0.2.3 / build 11, 5,487,675 B, SHA-256 `831357db…cfba21` (unchanged) |
+| Impactor/plumesign | official v2.7.2, SHA-256 pinned (unchanged) |
+| LLVM payload | official 21.1.8, staged under `Bin/llvm/**` (unchanged) |
+| Clean-folder self-test | 32 PASS / 0 FAIL / 0 WARN, `SELF-TEST OK` |
+| Payload inventory | 326 embedded files; 327 extracted files / 284 MB under portable data |
+| Portable layout | extraction to `<exe-dir>/3ds2apple-data/distribution/0.2.5` |
+
+The 0.2.4 package stays in `out/launchers/` as history and is not a release asset
+(150,057,689 B, SHA-256 `7d3f735f…296fa9`).
+
+### 17.5 Acceptance on a real Windows PC
+
+1. Verify the ZIP SHA-256, extract it to a writable folder, run `3ds2apple-launcher.exe`
+   (SmartScreen warning is expected: the exe is not code-signed).
+2. Expect `3ds2apple-data/` beside the exe; the readiness light must be green
+   (已完成准备 / Ready) and Settings -> Run self-test must print PASS.
+3. Import the ROM again (re-import is what heals the old cover): the card must show the ROM
+   SMDH icon, the localized SMDH name for the UI language and `发行商: Nintendo`.
+   Old libraries need exactly one re-import; built GamePacks are kept.
+4. Deploy the game; the phone must show AOT 100% / Metal GPU / HUD, and the in-game
+   diagnostics (`zk_perf`) should stay in the 57-60 fps class measured before.

@@ -5,7 +5,7 @@ namespace ThreeDsTwoApple.Launcher.Core.Util;
 
 /// <summary>JSON options shared by every launcher component.</summary>
 /// <remarks>
-/// The tool CLIs (3ds2apple-pack, devpush, builder-windows) emit camelCase with
+/// The tool CLIs (3ds2apple-pack, devpush) emit camelCase with
 /// a few deliberately odd keys (<c>titleID</c>, <c>udid</c>); everything here is
 /// read with case-insensitive name matching so a schema addition cannot break
 /// the launcher. Unknown fields are ignored on purpose.

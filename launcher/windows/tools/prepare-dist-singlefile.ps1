@@ -67,7 +67,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $windowsRoot 'vendor/impactor/Impact
 }
 
 # 3. Tool CLIs.
-foreach ($tool in @('3ds2apple-pack.exe', 'builder-windows.exe', 'devpush.exe')) {
+foreach ($tool in @('3ds2apple-pack.exe', 'devpush.exe')) {
     if (-not (Test-Path -LiteralPath (Join-Path $windowsRoot "Bin/$tool"))) {
         Write-Error "Bin/$tool is missing. Build it for x86_64-pc-windows-gnu first."
         exit 2

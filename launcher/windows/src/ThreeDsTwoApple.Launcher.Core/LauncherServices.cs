@@ -16,7 +16,6 @@ public sealed record ToolStatus(string Name, bool Ready, string State, string Me
 public sealed record HostReadiness(
     IReadOnlyList<ToolStatus> Tools,
     bool CanPreviewBuild,
-    bool CanAgentBuild,
     bool CanInstallShell,
     bool CanPush,
     bool CanLocalBuild,
@@ -76,8 +75,6 @@ public sealed class LauncherServices
 
     public DevPushClient? DevPush { get; private set; }
 
-    public BuilderCli? Builder { get; private set; }
-
     public PlumeSignRunner? PlumeSign { get; private set; }
 
     public ShellManifest? Shell { get; private set; }
@@ -103,7 +100,6 @@ public sealed class LauncherServices
     {
         Pack = PackCli.Create(_runner, _locator, _workspace.OutRoot);
         DevPush = BuildDevPush();
-        Builder = BuilderCli.Create(_runner, _locator);
         var plumeSignPath = _locator.FindPlumeSign();
         PlumeSign = plumeSignPath is null ? null : new PlumeSignRunner(_runner, plumeSignPath, _workspace.LogsDirectory);
         LocalTools = LocalToolchainResolver.Resolve(_locator);
@@ -140,12 +136,10 @@ public sealed class LauncherServices
     public IPackBuildProvider? CreateBuildProvider(PackBuildMode mode) => mode switch
     {
         PackBuildMode.Preview => Pack is null ? null : new PreviewBuildProvider(Pack),
-        PackBuildMode.MacAgentIpa => Builder is null || Pack is null ? null : new MacAgentIpaBuildProvider(Builder, Pack),
-        PackBuildMode.MacAgentPack => new MacAgentPackBuildProvider(),
         // v2: the Windows local LLVM/3dsrecomp build is the only build path the UI
         // offers. It is always created; a missing toolchain is reported by the provider
         // as ONE actionable build failure (Retry on the Deploy page), never as a silent
-        // fallback to a placeholder or the macOS Build Agent.
+        // fallback to a placeholder or a remote macOS host.
         PackBuildMode.LocalWinbuild => Pack is null ? null : new LocalWinbuildPackProvider(LocalTools, Pack, _runner),
         _ => null,
     };
@@ -237,10 +231,6 @@ public sealed class LauncherServices
             tools.Add(new ToolStatus("devpush", probe.Ready, probe.Ready ? "ready" : "failed", probe.Describe()));
         }
 
-        var builderPath = _locator.FindBuilderCli();
-        var builderProbe = await ToolLocator.ProbeAsync("builder-windows", builderPath, _runner, new[] { "--version" }, cancellationToken).ConfigureAwait(false);
-        tools.Add(new ToolStatus("builder-windows", builderProbe.Ready, builderProbe.Ready ? "ready" : "missing", builderProbe.Describe()));
-
         var localMissing = LocalTools?.MissingTools() ?? new[] { "local build toolchain not resolved" };
         tools.Add(new ToolStatus(
             "local build (3dsrecomp + LLVM/LLD)",
@@ -276,7 +266,6 @@ public sealed class LauncherServices
         return new HostReadiness(
             tools,
             CanPreviewBuild: false,
-            CanAgentBuild: false,
             CanInstallShell: installReady,
             CanPush: DevPush is not null,
             CanLocalBuild: localBuildReady,

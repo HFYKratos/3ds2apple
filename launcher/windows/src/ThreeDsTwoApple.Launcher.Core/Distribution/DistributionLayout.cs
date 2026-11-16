@@ -84,7 +84,6 @@ public static class DistributionLayout
         "ThirdParty/Impactor/README-source-and-licenses.txt",
         "ThirdParty/Impactor/PINS.json",
         "Bin/3ds2apple-pack.exe",
-        "Bin/builder-windows.exe",
         "Bin/devpush.exe",
         // v2 local build: 3dsrecomp + the hand-written Darwin stubs/shim/header are
         // always bundled so the packaged launcher can compile on the user's PC.

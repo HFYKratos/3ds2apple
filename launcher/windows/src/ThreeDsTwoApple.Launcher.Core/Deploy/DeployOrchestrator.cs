@@ -270,7 +270,7 @@ public sealed class DeployOrchestrator
                 }
                 var buildProgress = new BuildProgressAdapter(progress, entry.TitleID, displayName, index, selected.Count);
                 var outcome = await _buildProvider.BuildAsync(
-                    new PackBuildRequest(entry.TitleID, displayName, entry.ProductCode, entry.RomPath, BuildHost: null, _workspace.WorkDirectory),
+                    new PackBuildRequest(entry.TitleID, displayName, entry.ProductCode, entry.RomPath, _workspace.WorkDirectory),
                     buildProgress,
                     line => log?.Invoke("[build] " + line),
                     cancellationToken).ConfigureAwait(false);

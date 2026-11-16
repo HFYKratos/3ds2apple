@@ -5,7 +5,7 @@
 .DESCRIPTION
   Publishes the Avalonia launcher self-contained, copies the pinned official Impactor bundle
   (fetching it if needed, verified against PINS.json), the base shell IPA + manifest, the tool
-  CLIs (3ds2apple-pack, devpush, builder-windows) and the licence/notice files, then writes
+  CLIs (3ds2apple-pack, devpush) and the licence/notice files, then writes
   SHA256SUMS and build-info.txt.
 
   The importer only accepts real, verified files: a missing base shell or an unverified signer
@@ -17,7 +17,7 @@
 .PARAMETER Version
   Informational version written to build-info.txt (the exe version comes from the project).
 
-.PARAMETER PackCli / DevPush / BuilderCli
+.PARAMETER PackCli / DevPush
   Prebuilt tool executables to bundle. Default: build them with cargo from this checkout.
 
 .PARAMETER SkipShell
@@ -33,7 +33,6 @@ param(
     [string]$Configuration = 'Release',
     [string]$PackCli = '',
     [string]$DevPush = '',
-    [string]$BuilderCli = '',
     [switch]$SkipShell
 )
 
@@ -77,12 +76,7 @@ if ([string]::IsNullOrWhiteSpace($DevPush)) {
         Write-Warning 'tools/devpush is not present in this checkout; pushing will stay disabled in this package.'
     }
 }
-if ([string]::IsNullOrWhiteSpace($BuilderCli)) {
-    $candidate = Join-Path $repoRoot 'builder/target/release/builder-windows.exe'
-    if (Test-Path -LiteralPath $candidate) { $BuilderCli = $candidate }
-    else { Write-Warning 'builder-windows.exe not found; real macOS builds will need the path set in Settings.' }
-}
-foreach ($tool in @($PackCli, $DevPush, $BuilderCli)) {
+foreach ($tool in @($PackCli, $DevPush)) {
     if (-not [string]::IsNullOrWhiteSpace($tool)) {
         if (-not (Test-Path -LiteralPath $tool)) { Write-Error "tool not found: $tool"; exit 1 }
         Copy-Item -Force -LiteralPath $tool -Destination $bin

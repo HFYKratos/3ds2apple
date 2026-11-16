@@ -125,8 +125,13 @@ public sealed class PackCli
         return new RomInspectResult(roms, errors, process.StdOut);
     }
 
-    /// <summary>Import one or more ROMs: creates package dirs and queue entries (headers only).</summary>
-    public async Task<PackageAddResult> AddAsync(IReadOnlyList<string> romPaths, string? displayName, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Import one or more ROMs: creates package dirs and queue entries (headers only).
+    /// <paramref name="force"/> is set for a re-import of a game that is already in the
+    /// library: the CLI then refreshes the SMDH metadata and re-extracts an automatically
+    /// generated (coverSource=smdh) cover, while an existing built GamePack is kept.
+    /// </summary>
+    public async Task<PackageAddResult> AddAsync(IReadOnlyList<string> romPaths, string? displayName, bool force = false, CancellationToken cancellationToken = default)
     {
         var arguments = new List<string> { "packages", "add", "--roms" };
         arguments.AddRange(romPaths);
@@ -134,6 +139,10 @@ public sealed class PackCli
         {
             arguments.Add("--display-name");
             arguments.Add(displayName);
+        }
+        if (force)
+        {
+            arguments.Add("--force");
         }
         var process = await RunPackAsync(arguments, cancellationToken).ConfigureAwait(false);
         return ParseAdd(process);

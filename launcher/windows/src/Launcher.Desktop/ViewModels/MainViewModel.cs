@@ -542,7 +542,11 @@ public sealed class MainViewModel : ObservableObject
                     Log($"import failed: {path}: {error}");
                     continue;
                 }
-                var added = await pack.AddAsync(new[] { path }, null).ConfigureAwait(true);
+                // Re-importing an existing library game passes --force so the pack CLI
+                // refreshes SMDH metadata and re-extracts a stale (pre-0.2.5) cover.png;
+                // an existing built GamePack and the queue state are kept.
+                var alreadyImported = _services.Workspace.Find(inspect.Roms[0].TitleID) is not null;
+                var added = await pack.AddAsync(new[] { path }, null, force: alreadyImported).ConfigureAwait(true);
                 if (!added.Ok || added.Packages.Count == 0)
                 {
                     Log($"import failed: {path}: " + (added.Errors.Count > 0 ? string.Join("; ", added.Errors) : PackCli.FirstMeaningfulLine(added.Process)));
@@ -571,6 +575,7 @@ public sealed class MainViewModel : ObservableObject
                 Log($"imported {imported.TitleID}  {imported.DisplayName}  {imported.ProductCode}"
                     + (string.IsNullOrWhiteSpace(entry.Publisher) ? string.Empty : "  " + entry.Publisher)
                     + (entry.CoverPath is null ? "  (no SMDH icon)" : "  (SMDH icon + " + entry.DisplayNames.Count + " language name(s))")
+                    + (alreadyImported ? "  (re-import: SMDH metadata refreshed)" : string.Empty)
                     + "  (headers only; Deploy sends it later)");
             }
             await RefreshLibraryAsync().ConfigureAwait(true);

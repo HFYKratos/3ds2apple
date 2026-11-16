@@ -78,6 +78,19 @@ public sealed class RomMetadataParsingTests
     }
 
     [Fact]
+    public async Task AddAsyncPassesForceOnlyForReimports()
+    {
+        var runner = new FakeProcessRunner(_ => new ProcessResult(0, PackagesAddJson, string.Empty, false, true));
+        var cli = new PackCli(runner, "3ds2apple-pack.exe", "/out");
+
+        await cli.AddAsync(new[] { "/ROM/Pokemon Y.cci" }, null);
+        await cli.AddAsync(new[] { "/ROM/Pokemon Y.cci" }, null, force: true);
+
+        Assert.DoesNotContain("--force", runner.Requests[0].Arguments);
+        Assert.Contains("--force", runner.Requests[1].Arguments);
+    }
+
+    [Fact]
     public async Task OldCliJsonWithoutMetadataStillParses()
     {
         const string legacyJson = """

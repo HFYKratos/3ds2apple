@@ -75,7 +75,7 @@ public sealed class IpaComposer : IComposedIpaComposer
         }
         if (packs.Count == 0)
         {
-            throw new LauncherToolException("pack_missing", "No real GamePack is built yet; build at least one game with the macOS Build Agent before installing the app.", "Preview placeholders cannot be installed on a phone.");
+            throw new LauncherToolException("pack_missing", "No real GamePack is built yet; build at least one game with the Windows local build before installing the app.", "Preview placeholders cannot be installed on a phone.");
         }
 
         var titleIds = new List<string>();
@@ -88,9 +88,9 @@ public sealed class IpaComposer : IComposedIpaComposer
             }
             if (!File.Exists(pack.PackPath))
             {
-                throw new LauncherToolException("pack_missing", "GamePack.dylib for " + title + " is missing: " + pack.PackPath, "Rebuild that game with the macOS Build Agent.");
+                throw new LauncherToolException("pack_missing", "GamePack.dylib for " + title + " is missing: " + pack.PackPath, "Rebuild that game with the Windows local build.");
             }
-            IpaPackExtractor.VerifyMachO(pack.PackPath);
+            GamePackInspector.VerifyMachO(pack.PackPath);
             titleIds.Add(title);
         }
 

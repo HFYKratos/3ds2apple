@@ -38,7 +38,6 @@ public sealed class ToolLocator
 
     public const string PackCliTool = "pack";
     public const string DevPushTool = "devpush";
-    public const string BuilderTool = "builder";
     public const string ImpactorTool = "impactor";
     public const string PlumeSignTool = "plumesign";
     public const string RecompTool = "recomp";
@@ -49,9 +48,6 @@ public sealed class ToolLocator
 
     /// <summary>devpush (device bridge CLI from task-16).</summary>
     public string? FindDevPush() => Find(DevPushTool, "DEVPUSH_EXE", "devpush", "Bin");
-
-    /// <summary>builder-windows / zkb (drives the macOS Build Agent).</summary>
-    public string? FindBuilderCli() => Find(BuilderTool, "THREEDS2APPLE_BUILDER", "builder-windows", "Bin");
 
     /// <summary>3dsrecomp.exe (ROM -> generated C) for the experimental local build.</summary>
     public string? FindRecompiler() => Find(RecompTool, "THREEDS2APPLE_RECOMP", "3dsrecomp", "Bin");

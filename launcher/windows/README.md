@@ -1,21 +1,25 @@
 # 3ds2apple launcher for Windows (MVP)
 
-Status: **launcher v4 polish (task-39, 2026-11-16) — portable data folder beside the
-exe (LocalAppData only when read-only, with one-time migration), hardware-aware compile line
-(cores/RAM + 3dsrecomp auto-parallelism), and ROM metadata UI from the pack CLI (SMDH
-`cover.png` icon, localized `displayNames`, `publisher`; the editable name box is gone).
-Single-file package rebuilt around the 0.2.3/build-11 ROM-free shell template.**
-This checkout compiles cleanly (0 errors, warnings as errors) and its **146
-unit/integration tests pass**. The host self-test passes, including the new portable-root,
-read-only-fallback, workspace-migration, hardware and ROM-metadata checks; the packaged
-single-file exe runs its clean-folder `--self-test` on Linux/WSL with the embedded payload.
+Status: **launcher 0.2.5 (2026-11-16)** — portable data folder beside the exe
+(LocalAppData only when read-only, with one-time migration), hardware-aware compile line
+(cores/RAM + 3dsrecomp auto-parallelism), ROM metadata UI from the pack CLI (SMDH
+`cover.png` icon, localized `displayNames`, `publisher`; no editable name box), and the
+0.2.5 SMDH icon fix: the pack CLI now decodes the large icon at SMDH `0x24C0` with the
+8x8-tile/Morton pixel layout, so Library covers are the real game icons. Re-importing a
+game that is already in the library passes `--force`, which re-extracts a stale extracted
+cover and keeps an existing built GamePack (a user-supplied cover is never overwritten).
+The legacy Build Agent path (`builder/{agent,cli,linux,windows}`, `MacAgent*` providers)
+is deleted; the local 3dsrecomp + LLVM/LLD build is the only path and the single-file
+exe no longer embeds `builder-windows.exe` (~1.24 MB smaller).
+This checkout compiles cleanly (0 errors, warnings as errors) and its **147
+unit/integration tests pass**. The packaged single-file exe runs its clean-folder
+`--self-test` on Linux/WSL with the embedded payload (32 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a minimal Settings gear; it is
 localized (English / 简体中文) and uses the iOS app icon. The user-facing package is a ZIP
-with exactly one self-contained exe. Synthetic (non-game) UI captures of the v4 UI are in
-`docs/ui/v4-*.png`; a real Windows 11 run of this exact 0.2.4 build and the Impactor
-signing/phone flows still need verification; the artifact hash and remaining risks are
-tracked in [docs/windows-launcher.md](../../docs/windows-launcher.md) section 16
-(acceptance steps in section 11).
+with exactly one self-contained exe (0.2.5: 148,817,314 B, SHA-256 `b9b2a0b0…52f0d7`).
+Synthetic (non-game) UI captures are in `docs/ui/v4-*.png`; a real Windows 11 run of this
+exact 0.2.5 build and the Impactor signing/phone flows are the remaining acceptance step
+(see [docs/windows-launcher.md](../../docs/windows-launcher.md) section 17.5).
 
 Architecture correction (Lead, 2026-11-14): iOS cannot dlopen a loose unsigned
 dylib from Documents. The **GamePack.dylib lives inside the signed app IPA**
@@ -63,10 +67,10 @@ No ROM, key, IPA, generated C or Apple credential is stored in this repository.
   Deploy pipeline + composed-IPA verifier, IPA composition, signing, push, localization
   catalog, embedded single-file payload) /
   ThreeDsTwoApple.Launcher.Desktop (Avalonia shell) /
-  ThreeDsTwoApple.Launcher.Core.Tests (125 xUnit tests).
+  ThreeDsTwoApple.Launcher.Core.Tests (146 xUnit tests).
 - All external work goes through CLI tools passed as argument arrays (never a
-  shell string): 3ds2apple-pack, builder-windows, devpush, the official plumesign.
-  The launcher never re-implements ROM parsing, the Build Agent protocol,
+  shell string): 3ds2apple-pack, devpush, the official plumesign.
+  The launcher never re-implements ROM parsing, the AOT compile/link,
   AFC/house_arrest or signing.
 
 ## Layout
@@ -81,13 +85,14 @@ No ROM, key, IPA, generated C or Apple credential is stored in this repository.
         Localization/Localization.cs    English + zh-Hans UI catalogue, OS detection, override
         Distribution/DistributionLayout.cs  embedded payload inventory + first-run extraction
         Tools/                          ProcessRunner, PackCli (inspect/add/list/catalog/record/verify),
-                                        BuilderCli (macOS Build Agent), ToolLocator
+                                        ToolLocator
         Deploy/DeployOrchestrator.cs            one-click Build->Compose->Install->Push->Verify chain + injected interfaces
         Deploy/ComposedIpaVerifier.cs           hard gate: all real packs + non-empty schema-2 catalogue before signing
         BuildPipeline/IpaComposer.cs            shell template + packs + GameCatalog -> installable IPA
         BuildPipeline/LocalWinbuildPackProvider.cs  3dsrecomp + LLVM/LLD local build (the only Deploy path)
-        BuildPipeline/BuildProviders.cs         legacy Preview / MacAgentIpa / MacAgentPack (not offered by the v2 UI)
-        BuildPipeline/IpaPackExtractor.cs       transitional per-game IPA -> GamePack.dylib adoption
+        BuildPipeline/BuildProviders.cs         Preview placeholder provider (not offered by the v2 UI)
+        BuildPipeline/GamePackInspector.cs      Mach-O check so only real AOT packs are installed
+        BuildPipeline/BuildSlug.cs              deterministic ASCII build slug for the local build
         Signing/                        Impactor pins/verifier, plumesign runner, error catalog,
                                         shell template manifest + whole-IPA install service
         Device/                         devpush/1 JSON/NDJSON client + read-only usbmuxd ListDevices
@@ -98,7 +103,7 @@ No ROM, key, IPA, generated C or Apple credential is stored in this repository.
       Hardware/                           logical/physical cores + RAM probe for the compile line
       src/Launcher.Desktop/             Avalonia UI (Program, App, MainWindow, view model,
                                         Localization/LocalizedText, Assets/app.ico + placeholder)
-      tests/ThreeDsTwoApple.Launcher.Core.Tests/   125 xUnit tests (incl. DeployFlowTests + ComposedIpaVerifierTests)
+      tests/ThreeDsTwoApple.Launcher.Core.Tests/   146 xUnit tests (incl. DeployFlowTests + ComposedIpaVerifierTests)
       vendor/impactor/             PINS.json + MIT / MPL-2.0 licence texts + source note
       shell/                            shell template IPA placement + manifest example (unchanged):
                                         the template is ROM-free and pinned; packs are injected at install time
@@ -120,10 +125,12 @@ USB device service; USB data cable; iPhone/iPad with Developer Mode, trusted and
 unlocked during install/push; the user's own legally acquired decrypted ROMs.
 
 Developer: .NET 10 SDK (NuGet once); optional Rust for 3ds2apple-pack /
-builder-windows / devpush; PowerShell 5.1+ for the packaging scripts.
+devpush; PowerShell 5.1+ for the packaging scripts.
 
-Real AOT builds additionally need a macOS host the user controls with Xcode and
-the project's Build Agent (builder/README.md). The project never downloads Xcode.
+Real AOT builds run locally: 3dsrecomp + the official LLVM 21.1.8 toolchain and
+the hand-written Darwin stubs in tools/winbuild (docs/windows-build.md). No Mac,
+no Xcode and no Build Agent are required; the old remote macOS Build Agent stack
+was deleted on 2026-11-16.
 
 ## Build and test on Windows
 
@@ -165,7 +172,7 @@ Simplified Chinese, plus a headless render of the red not-ready status light, ar
 
 prepare-dist.ps1 publishes the launcher self-contained multi-file (developer mode:
 users install no .NET), builds/copies Bin/3ds2apple-pack.exe, Bin/devpush.exe,
-Bin/builder-windows.exe, adds the verified ThirdParty/Impactor bundle and the pinned
+adds the verified ThirdParty/Impactor bundle and the pinned
 shell template IPA + manifest, and writes SHA256SUMS.
 
 ## Single-file one-exe distribution (task-28)
@@ -173,7 +180,7 @@ shell template IPA + manifest, and writes SHA256SUMS.
 The shipped Windows package is a ZIP containing exactly one file,
 `3ds2apple-launcher.exe` (self-contained .NET single-file). Release builds embed the
 ROM-free shell IPA + manifest, the pinned official Impactor/plumesign + licence texts,
-`Bin/3ds2apple-pack.exe`, `Bin/builder-windows.exe`, `Bin/devpush.exe` and
+`Bin/3ds2apple-pack.exe`, `Bin/devpush.exe` and
 LICENSE/NOTICE/THIRD_PARTY as resources; on first run they are extracted to
 `%LOCALAPPDATA%\3ds2apple\distribution\<version>\` and every tool/service resolves from
 there. `THREEDS2APPLE_DIST` and the multi-file layout still work for development.
@@ -195,7 +202,7 @@ follow [shell/README.md](shell/README.md). It is deliberately absent from git.
 
 Run the Windows test plan in [docs/windows-launcher.md](../../docs/windows-launcher.md)
 (section 11). It covers --self-test, missing-tool messages, ROM import/detection,
-preview vs Build Agent build, app IPA composition (including a template-with-ROM
+the local build path, app IPA composition (including a template-with-ROM
 rejection), Impactor sign-in, signing error mapping (9120 / 9401 / 1100 / anisette /
 2FA), install/update of the app with one and then two games, ROM persistence across
 reinstall, ROM-only push, resume/stall handling and verify-after-push.
@@ -211,9 +218,9 @@ reinstall, ROM-only push, resume/stall handling and verify-after-push.
   ROM from Documents; the GameInfo.json split was agreed (pack metadata is
   informational/bundle-relative, ROM is verified when present). The ROM-free shell
   template IPA artifact must be built on macOS and handed to this distribution.
-- **task-22 local LLVM/lld**: parallel investigation into building GamePacks without
-  a macOS SDK; until it is proven, the macOS Build Agent remains the only real
-  build path and the launcher says so (no fake success).
+- **task-22 local LLVM/lld**: implemented and now the only build path: GamePacks
+  are compiled locally with 3dsrecomp + LLVM/LLD, so the launcher no longer needs
+  a macOS host (the old Build Agent path was deleted on 2026-11-16).
 - **Lead**: THIRD_PARTY/NOTICE were already updated by task-16 for Impactor (MIT),
   apple-codesign (MPL-2.0), idevice (MIT) and S2Arm (Apache-2.0 reference); the
   launcher's own licence texts live in vendor/impactor/.

@@ -421,44 +421,26 @@ public sealed class PlumeSignRunnerTests
     }
 }
 
-public sealed class IpaPackExtractorTests
+public sealed class GamePackInspectorTests
 {
     private static readonly byte[] MachOMagic = { 0xCF, 0xFA, 0xED, 0xFE, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-    private static string BuildIpa(TempDir temp, string titleId, byte[] packBytes)
-    {
-        var ipa = Path.Combine(temp.Path, "game.ipa");
-        using var archive = ZipFile.Open(ipa, ZipArchiveMode.Create);
-        var catalog = archive.CreateEntry("Payload/3ds2apple.app/GameCatalog.json");
-        using (var writer = new StreamWriter(catalog.Open(), new UTF8Encoding(false)))
-        {
-            writer.Write("""{"schemaVersion":2,"games":[{"titleID":"0004000000055E00","displayName":"Pokemon Y","productCode":"CTR-P-EK2A","aot":true,"aotVersion":1,"packFile":"Frameworks/GamePack-0004000000055E00.dylib","packABIVersion":1}]}""");
-        }
-        var pack = archive.CreateEntry($"Payload/3ds2apple.app/Frameworks/GamePack-{titleId}.dylib");
-        using var stream = pack.Open();
-        stream.Write(packBytes);
-        return ipa;
-    }
-
     [Fact]
-    public void ExtractsRealMachOPack()
+    public void AcceptsMachOPack()
     {
         using var temp = new TempDir();
-        var ipa = BuildIpa(temp, "0004000000055E00", MachOMagic);
-        var extracted = IpaPackExtractor.ExtractGamePack(ipa, Path.Combine(temp.Path, "out"));
-        Assert.Equal("0004000000055E00", extracted.TitleID);
-        Assert.Equal("Pokemon Y", extracted.DisplayName);
-        Assert.Equal("CTR-P-EK2A", extracted.ProductCode);
-        Assert.True(File.Exists(extracted.PackPath));
-        Assert.Equal(extracted.PackSha256, ImpactorBundle.Sha256File(extracted.PackPath));
+        var pack = Path.Combine(temp.Path, "GamePack.dylib");
+        File.WriteAllBytes(pack, MachOMagic);
+        GamePackInspector.VerifyMachO(pack);
     }
 
     [Fact]
     public void RejectsPlaceholderPack()
     {
         using var temp = new TempDir();
-        var ipa = BuildIpa(temp, "0004000000055E00", Encoding.ASCII.GetBytes("3DS2APPLE FAKE PACK"));
-        var exception = Assert.Throws<LauncherToolException>(() => IpaPackExtractor.ExtractGamePack(ipa, Path.Combine(temp.Path, "out")));
+        var pack = Path.Combine(temp.Path, "GamePack.dylib");
+        File.WriteAllBytes(pack, Encoding.ASCII.GetBytes("3DS2APPLE FAKE PACK"));
+        var exception = Assert.Throws<LauncherToolException>(() => GamePackInspector.VerifyMachO(pack));
         Assert.Equal("pack_placeholder", exception.Code);
     }
 }
