@@ -9,7 +9,7 @@
     <Deterministic>true</Deterministic>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <InvariantGlobalization>false</InvariantGlobalization>
-    <Version>0.2.3</Version>
+    <Version>0.2.4</Version>
     <Company>3ds2apple</Company>
     <Product>3ds2apple launcher (Windows)</Product>
     <RepositoryUrl>https://github.com/kratos/3ds2apple</RepositoryUrl>

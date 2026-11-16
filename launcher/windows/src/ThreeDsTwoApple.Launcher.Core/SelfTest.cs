@@ -3,7 +3,10 @@ using ThreeDsTwoApple.Launcher.Core.BuildPipeline;
 using ThreeDsTwoApple.Launcher.Core.Device;
 using ThreeDsTwoApple.Launcher.Core.Deploy;
 using ThreeDsTwoApple.Launcher.Core.Distribution;
+using ThreeDsTwoApple.Launcher.Core.Hardware;
 using ThreeDsTwoApple.Launcher.Core.Localization;
+using ThreeDsTwoApple.Launcher.Core.Models;
+using ThreeDsTwoApple.Launcher.Core.Portable;
 using ThreeDsTwoApple.Launcher.Core.Signing;
 using ThreeDsTwoApple.Launcher.Core.Tools;
 using ThreeDsTwoApple.Launcher.Core.Util;
@@ -48,6 +51,8 @@ public static class SelfTest
                 Line("WARN", "distribution payload", distribution.Warning);
             }
             output.WriteLine($"temporary workspace: {temporaryRoot}");
+            var layout = PortableLayout.Resolve();
+            output.WriteLine($"portable data root: {layout.DataRoot} ({layout.Kind}: {layout.Reason})");
             output.WriteLine();
 
             // 1. Version + shared identity constants.
@@ -102,6 +107,74 @@ public static class SelfTest
             {
                 Loc.ApplyPreference(UiLanguagePreference.System, originalTag == LanguageCatalog.ChineseSimplifiedTag ? "zh-CN" : "en-US");
             }
+
+            // 1c. Hardware-aware compile line (3dsrecomp auto-parallelizes; no jobs setting).
+            var hardware = HardwareProbe.Current;
+            var hardwareOk = hardware.LogicalCores >= 1
+                             && hardware.PhysicalCores >= 1
+                             && hardware.PhysicalCores <= hardware.LogicalCores
+                             && hardware.CompileJobs == hardware.LogicalCores
+                             && hardware.TotalMemoryBytes > 0;
+            Line(hardwareOk ? "PASS" : "FAIL", "hardware detection (compile parallelism)",
+                hardwareOk ? hardware.Describe() : "implausible values: " + hardware.Describe());
+
+            // 1d. Portable layout: data beside the executable, LocalAppData only as fallback.
+            var portableLayout = PortableLayout.Resolve();
+            var expectedPortable = Path.Combine(PortableLayout.ExeDirectory(), PortableLayout.DataDirectoryName, PortableLayout.WorkspaceDirectoryName);
+            var portableOk = portableLayout.Kind == DataRootKind.Portable
+                ? string.Equals(portableLayout.WorkspaceRoot, expectedPortable, StringComparison.OrdinalIgnoreCase)
+                : portableLayout.Kind is DataRootKind.LocalAppData or DataRootKind.Explicit or DataRootKind.TempFallback;
+            Line(portableOk ? "PASS" : "FAIL", "portable workspace root",
+                $"{(portableLayout.Kind == DataRootKind.Portable ? "beside the executable" : "fallback")}: {portableLayout.WorkspaceRoot} ({portableLayout.Reason})");
+            var probeLocalAppData = Path.Combine(temporaryRoot, "localappdata");
+            var readOnlyProbe = PortableLayout.Resolve(
+                exeDirectory: Path.Combine(temporaryRoot, "read-only-exe"),
+                localAppDataRoot: probeLocalAppData,
+                isWritable: path => path.StartsWith(probeLocalAppData, StringComparison.OrdinalIgnoreCase),
+                dataRootOverride: null);
+            Line(readOnlyProbe.Kind != DataRootKind.Portable && readOnlyProbe.WorkspaceRoot.EndsWith(PortableLayout.LegacyWorkspaceDirectoryName, StringComparison.OrdinalIgnoreCase)
+                    ? "PASS" : "FAIL", "read-only launcher folder fallback",
+                readOnlyProbe.Kind + ": " + readOnlyProbe.WorkspaceRoot);
+            var legacyWorkspace = Path.Combine(temporaryRoot, "legacy-workspace");
+            Directory.CreateDirectory(legacyWorkspace);
+            File.WriteAllText(Path.Combine(legacyWorkspace, "state.json"),
+                "{\"schemaVersion\":1,\"games\":[{\"titleID\":\"0004000000AAAA00\",\"displayName\":\"Migrated game\"}]}");
+            var legacyPackage = Path.Combine(legacyWorkspace, "out", "packages", "0004000000AAAA00");
+            Directory.CreateDirectory(legacyPackage);
+            File.WriteAllText(Path.Combine(legacyPackage, "GameInfo.json"), "{\"schemaVersion\":1}");
+            var portableWorkspaceRoot = Path.Combine(temporaryRoot, "portable-workspace");
+            var migration = PortableLayout.MigrateLegacyWorkspace(portableWorkspaceRoot, legacyWorkspace);
+            var migratedWorkspace = LauncherState.LauncherWorkspace.Open(portableWorkspaceRoot);
+            var migratedGame = migratedWorkspace.Find("0004000000AAAA00");
+            Line(migration.Migrated
+                     && migratedGame is { DisplayName: "Migrated game" }
+                     && File.Exists(Path.Combine(portableWorkspaceRoot, "state.json"))
+                     && File.Exists(migration.MarkerPath)
+                     && File.Exists(Path.Combine(legacyWorkspace, "state.json"))
+                     ? "PASS" : "FAIL", "workspace migration (state.json + packages, legacy kept)",
+                $"{migration.FilesCopied} file(s) copied; marker " + Path.GetFileName(migration.MarkerPath));
+
+            // 1e. ROM metadata: localized SMDH names + publisher + package cover.png.
+            var metadataNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Synthetic Game",
+                ["zh-Hans"] = "合成测试游戏",
+                ["ja"] = "テストゲーム",
+            };
+            var nameSelectionOk = GameNames.Resolve(metadataNames, "Synthetic Game", "zh-Hans") == "合成测试游戏"
+                                  && GameNames.Resolve(metadataNames, "Synthetic Game", "en") == "Synthetic Game"
+                                  && GameNames.Resolve(metadataNames, "Synthetic Game", "de") == "Synthetic Game"
+                                  && GameNames.Resolve(null, "Fallback Name", "zh-Hans") == "Fallback Name"
+                                  && GameNames.Resolve(new Dictionary<string, string> { ["ja"] = "テストゲーム" }, "Fallback Name", "en") == "Fallback Name";
+            Line(nameSelectionOk ? "PASS" : "FAIL", "localized ROM display names (SMDH)",
+                "zh-Hans -> 合成测试游戏; en/other -> English; missing -> default");
+            var coverPackage = Path.Combine(temporaryRoot, "cover-package");
+            Directory.CreateDirectory(coverPackage);
+            File.WriteAllBytes(Path.Combine(coverPackage, "cover.png"), new byte[] { 0x89, 0x50, 0x4E, 0x47 });
+            var coverPath = GameNames.ResolveCoverPath(coverPackage, "cover.png");
+            Line(coverPath is not null && File.Exists(coverPath) ? "PASS" : "FAIL", "ROM icon cover.png (package-relative)",
+                coverPath ?? "cover.png was not resolved");
+            Line(GameNames.ResolvePublisher("  Nintendo  ") == "Nintendo" ? "PASS" : "FAIL", "SMDH publisher normalization", "publisher trimmed");
 
             // 2. Pinned Impactor digests must be exactly the official v2.7.2 assets.
             var pinsOk =
@@ -285,8 +358,16 @@ public static class SelfTest
                     .ToList();
                 Line(missingOnDisk.Count == 0 ? "PASS" : "FAIL", "extracted distribution files",
                     missingOnDisk.Count == 0 ? "all payload files present under " + distribution.Root : "missing: " + string.Join(", ", missingOnDisk));
-                Line(distribution.Root == AppContext.BaseDirectory ? "FAIL" : "PASS", "single-file extraction target",
-                    distribution.Root == AppContext.BaseDirectory ? "payload was not extracted to LOCALAPPDATA" : "outside the executable folder (clean-folder launch)");
+                var extractionOutsideExe = !string.Equals(
+                    Path.TrimEndingDirectorySeparator(distribution.Root),
+                    Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory),
+                    StringComparison.OrdinalIgnoreCase);
+                var extractionKnownRoot = distribution.Root.StartsWith(PortableLayout.ExeDirectory(), StringComparison.OrdinalIgnoreCase)
+                                          || distribution.Root.StartsWith(PortableLayout.LocalAppDataRoot(), StringComparison.OrdinalIgnoreCase);
+                Line(extractionOutsideExe && extractionKnownRoot ? "PASS" : "FAIL", "single-file extraction target",
+                    (extractionOutsideExe && extractionKnownRoot
+                        ? (distribution.Portable ? "portable beside the launcher: " : "LocalAppData fallback: ")
+                        : "unexpected extraction folder: ") + distribution.Root + " (" + (distribution.Reason ?? "no reason") + ")");
 
                 var shellDirectory = Path.Combine(distribution.Root, "Shell");
                 var shell = ShellManifest.ReadAsync(shellDirectory).GetAwaiter().GetResult();

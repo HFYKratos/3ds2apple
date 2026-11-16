@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using ThreeDsTwoApple.Launcher.Core.Portable;
 
 namespace ThreeDsTwoApple.Launcher.Core.Distribution;
 
@@ -29,11 +30,17 @@ public sealed record DistributionPrepareResult(
     bool Extracted,
     bool HasEmbeddedPayload,
     string? Warning,
-    IReadOnlyList<EmbeddedFile> Payload)
+    IReadOnlyList<EmbeddedFile> Payload,
+    string? Reason = null,
+    bool Portable = false)
 {
-    public string Describe() => Extracted
-        ? "extracted the bundled payload to " + Root
-        : HasEmbeddedPayload ? "using the extracted payload at " + Root : "using the developer layout at " + Root;
+    public string Describe()
+    {
+        var action = Extracted
+            ? "extracted the bundled payload to " + Root
+            : HasEmbeddedPayload ? "using the extracted payload at " + Root : "using the developer layout at " + Root;
+        return Reason is null ? action : action + " (" + Reason + ")";
+    }
 }
 
 /// <summary>
@@ -124,22 +131,18 @@ public static class DistributionLayout
         }
     }
 
-    /// <summary>Default extraction root: %LOCALAPPDATA%\3ds2apple\distribution\&lt;launcher version&gt;.</summary>
-    public static string DefaultExtractionRoot() => Path.Combine(
-        LauncherDataRoot(),
-        ExtractionDirectoryName,
-        LauncherInfo.Version);
+    /// <summary>
+    /// Default extraction root: portable <c>&lt;exe-dir&gt;\3ds2apple-data\distribution\&lt;version&gt;</c>
+    /// when the launcher folder is writable, else the pre-portable
+    /// <c>%LOCALAPPDATA%\3ds2apple\distribution\&lt;version&gt;</c>.
+    /// </summary>
+    public static string DefaultExtractionRoot() => PortableLayout.Resolve().DistributionRoot(LauncherInfo.Version);
 
-    /// <summary>%LOCALAPPDATA%\3ds2apple (falls back to ~/.local/share on non-Windows hosts).</summary>
-    public static string LauncherDataRoot()
-    {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(localAppData))
-        {
-            localAppData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
-        }
-        return Path.Combine(localAppData, LauncherDataDirectoryName);
-    }
+    /// <summary>Resolved launcher data root (portable when writable, else %LOCALAPPDATA%\3ds2apple).</summary>
+    public static string LauncherDataRoot() => PortableLayout.Resolve().DataRoot;
+
+    /// <summary>Pre-portable extraction base used only as a fallback/migration source.</summary>
+    public static string LegacyExtractionRoot() => Path.Combine(PortableLayout.LegacyDistributionBase(), LauncherInfo.Version);
 
     /// <summary>True when a directory looks like a multi-file launcher distribution.</summary>
     public static bool IsDistributionRoot(string? directory)
@@ -329,7 +332,8 @@ public static class DistributionLayout
                 Warning: "this developer build has no embedded distribution payload; bundle the shell template, Impactor, Bin tools and licences before shipping",
                 payload);
         }
-        var root = DefaultExtractionRoot();
+        var decision = PortableLayout.Resolve();
+        var root = decision.DistributionRoot(LauncherInfo.Version);
         string? warning = null;
         var extractedNow = false;
         if (NeedsExtraction(root, payload))
@@ -342,9 +346,27 @@ public static class DistributionLayout
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
                 warning = "could not extract the bundled payload to " + root + ": " + exception.Message;
+                if (decision.IsPortable)
+                {
+                    // Read-only / antivirus-locked launcher folders must not stop the app:
+                    // fall back to the pre-portable LocalAppData extraction root.
+                    var fallbackRoot = LegacyExtractionRoot();
+                    try
+                    {
+                        Extract(payload, fallbackRoot);
+                        root = fallbackRoot;
+                        extractedNow = true;
+                        warning = "portable payload extraction failed (" + exception.Message + "); used " + fallbackRoot;
+                    }
+                    catch (Exception fallbackException) when (fallbackException is IOException or UnauthorizedAccessException)
+                    {
+                        warning += "; LocalAppData fallback also failed: " + fallbackException.Message;
+                    }
+                }
             }
         }
-        return new DistributionPrepareResult(root, extractedNow, HasEmbeddedPayload: true, warning, payload);
+        return new DistributionPrepareResult(root, extractedNow, HasEmbeddedPayload: true, warning, payload,
+            decision.Reason, decision.IsPortable && root.StartsWith(decision.DataRoot, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Lower-case SHA-256 of a file (shared with the Impactor verifier).</summary>

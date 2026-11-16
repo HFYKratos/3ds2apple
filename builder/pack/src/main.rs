@@ -279,6 +279,17 @@ fn cmd_rom_inspect(roms: &[PathBuf], json: bool) -> Result<i32> {
                             .unwrap_or_else(|| "?".to_string())
                     );
                     println!("  displayName: {}", info.display_name);
+                    if !info.publisher.is_empty() {
+                        println!("  publisher: {}", info.publisher);
+                    }
+                    if !info.display_names.is_empty() {
+                        let titles: Vec<String> = info
+                            .display_names
+                            .iter()
+                            .map(|(language, title)| format!("{language}={title}"))
+                            .collect();
+                        println!("  displayNames: {}", titles.join(", "));
+                    }
                 }
             }
             Err(error) => {
@@ -326,6 +337,12 @@ fn cmd_packages_add(out: &Path, args: PackagesAddArgs, json: bool) -> Result<i32
                         "titleID": result.game_info.title_id,
                         "displayName": result.game_info.display_name,
                         "productCode": result.game_info.product_code,
+                        "displayNames": result.display_names,
+                        "publisher": result.publisher,
+                        "coverPath": result
+                            .cover_path
+                            .as_ref()
+                            .map(|path| path.display().to_string()),
                         "packageDir": result.package_dir.display().to_string(),
                         "romPath": result.rom.path.display().to_string(),
                         "status": import_status(&result.status),
@@ -449,6 +466,12 @@ fn package_json(package: &PackageSummary) -> Result<Value> {
         "titleID": package.title_id,
         "displayName": package.display_name,
         "productCode": package.product_code,
+        "displayNames": package.display_names,
+        "publisher": package.publisher,
+        "coverPath": package
+            .cover_path
+            .as_ref()
+            .map(|path| path.display().to_string()),
         "aotVersion": package.aot_version,
         "state": package_state(&package.state),
         "pack": match &package.pack {

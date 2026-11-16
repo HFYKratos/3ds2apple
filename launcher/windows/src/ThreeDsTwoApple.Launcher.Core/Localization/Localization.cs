@@ -379,6 +379,14 @@ public static class LanguageCatalog
         ("settings.logsExported", "Log exported to {0}."),
         ("settings.exportFailed", "Could not export the log: {0}"),
         ("settings.bundleId", "Installed bundle id: {0}"),
+        ("library.card.publisher", "Publisher: {0}"),
+        ("deploy.hardware", "Hardware: {0} logical / {1} physical cores · {2} GB RAM ({3} GB free) · 3dsrecomp auto-parallelizes, no jobs setting"),
+        ("settings.workspaceInfo", "Games/state folder: {0} · {1}"),
+        ("settings.distributionInfo", "Bundled tools folder: {0} · {1}"),
+        ("layout.portable", "portable beside the launcher (writable folder)"),
+        ("layout.localAppData", "LocalAppData fallback (the launcher folder is read-only)"),
+        ("layout.explicit", "explicit override"),
+        ("layout.temp", "temporary fallback folder"),
     });
 
     public static IReadOnlyDictionary<string, string> ChineseSimplified { get; } = Build(new (string Key, string Text)[]
@@ -614,6 +622,14 @@ public static class LanguageCatalog
         ("settings.logsExported", "日志已导出到 {0}。"),
         ("settings.exportFailed", "导出日志失败：{0}"),
         ("settings.bundleId", "已安装 Bundle ID：{0}"),
+        ("library.card.publisher", "发行商：{0}"),
+        ("deploy.hardware", "硬件：{0} 逻辑 / {1} 物理核心 · {2} GB 内存（可用 {3} GB）· 3dsrecomp 自动并行编译，无需设置任务数"),
+        ("settings.workspaceInfo", "游戏/状态目录：{0} · {1}"),
+        ("settings.distributionInfo", "随包工具目录：{0} · {1}"),
+        ("layout.portable", "位于启动器旁（目录可写）"),
+        ("layout.localAppData", "回退到 LocalAppData（启动器目录不可写）"),
+        ("layout.explicit", "手动指定"),
+        ("layout.temp", "回退到临时目录"),
     });
 
     private static IReadOnlyDictionary<string, string> Build((string Key, string Text)[] entries)

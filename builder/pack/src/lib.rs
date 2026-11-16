@@ -33,6 +33,7 @@ pub mod ops;
 pub mod plan;
 pub mod queue;
 pub mod rom;
+pub mod smdh;
 
 pub use error::{PackError, Result};
 

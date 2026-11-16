@@ -6,8 +6,10 @@
   The exe embeds the ROM-free shell template, the pinned official Impactor/plumesign, the Bin/
   tool CLIs, 3dsrecomp.exe + the hand-written Darwin stubs/shim (Windows local build) and
   LICENSE/NOTICE/THIRD_PARTY. On first run it extracts them to
-  %LOCALAPPDATA%\3ds2apple\distribution\<version>. The user-facing ZIP contains exactly one
-  file: 3ds2apple-launcher.exe.
+  <exe-dir>\3ds2apple-data\distribution\<version> when that folder is writable, and falls
+  back to %LOCALAPPDATA%\3ds2apple\distribution\<version> for a read-only launcher folder
+  (the workspace follows the same portable/LocalAppData rule). The user-facing ZIP contains
+  exactly one file: 3ds2apple-launcher.exe.
 
   The official LLVM 21.1.8 toolchain is staged under Bin/llvm when present
   (THREEDS2APPLE_LLVM_DIR, default <repo>/build/win-toolchain/llvm). It is never faked: without
@@ -101,7 +103,8 @@ if ((Test-Path -LiteralPath (Join-Path $llvmSource 'bin/clang.exe')) -and (Test-
         $from = Join-Path $llvmSource "bin/$tool"
         if (Test-Path -LiteralPath $from) { Copy-Item -LiteralPath $from -Destination (Join-Path $llvmStage 'bin/') }
     }
-    Get-ChildItem -LiteralPath (Join-Path $llvmSource 'bin') -File -Filter '*.dll' | Copy-Item -Destination (Join-Path $llvmStage 'bin/')
+    # No runtime DLLs/PDBs: the official tools link only against system DLLs, and the
+    # release folder's LLVM-C/libclang/LTO/libLLDB DLLs would add ~300 MB to the payload.
     foreach ($clangDir in Get-ChildItem -LiteralPath (Join-Path $llvmSource 'lib/clang') -Directory) {
         $include = Join-Path $clangDir.FullName 'include'
         if (Test-Path -LiteralPath $include) {

@@ -9,8 +9,15 @@
 #
 # The official LLVM 21.1.8 toolchain (clang.exe / llvm-ar.exe / ld64.lld.exe +
 # lib/clang/21/include) is staged under Bin/llvm when available (THREEDS2APPLE_LLVM_DIR,
-# default build/win-toolchain/llvm or third_party/llvm-win). It is NOT faked: without it
-# the packaged launcher's Deploy page shows one actionable local-toolchain error + Retry.
+# default build/win-toolchain/llvm or third_party/llvm-win). Only the tool executables and
+# clang's resource headers are embedded; the release folder's LLVM-C/libclang/LTO/libLLDB
+# DLLs and PDBs are not needed (tools import system DLLs only). It is NOT faked: without
+# it the packaged launcher's Deploy page shows one actionable local-toolchain error + Retry.
+#
+# Data location (task-39): the packaged exe keeps its workspace and extracts the payload
+# into <exe-dir>/3ds2apple-data when that folder is writable, and falls back to
+# %LOCALAPPDATA%/3ds2apple only for a read-only launcher folder. The clean-folder self-test
+# below verifies the portable extraction on the Linux host.
 #
 # Output defaults to the repo's own git-ignored out/launchers/ (never temp_transfer).
 #
@@ -89,8 +96,9 @@ if [ -d "$LLVM_SOURCE/lib/clang" ] && [ -f "$LLVM_SOURCE/bin/clang.exe" ]; then
   for tool in clang.exe llvm-ar.exe ld64.lld.exe llvm-nm.exe llvm-objdump.exe; do
     if [ -f "$LLVM_SOURCE/bin/$tool" ]; then cp "$LLVM_SOURCE/bin/$tool" "$LLVM_STAGE/bin/"; fi
   done
-  # Runtime DLLs/CRT files shipped next to clang/lld (official Windows release).
-  find "$LLVM_SOURCE/bin" -maxdepth 1 -type f \( -name '*.dll' -o -name '*.pdb' -o -name 'clang.exe' \) -exec cp {} "$LLVM_STAGE/bin/" \;
+  # The official Windows tools link only against system DLLs (verified with objdump
+  # imports); the 300+ MB of LLVM-C/libclang/LTO/libLLDB DLLs and PDBs in the release
+  # folder are NOT needed by clang/ld64.lld/llvm-ar and are deliberately not embedded.
   # The clang resource headers 3dsrecomp's generated C needs (-isystem).
   for clang_dir in "$LLVM_SOURCE"/lib/clang/*/; do
     version="$(basename "$clang_dir")"

@@ -66,9 +66,15 @@
                 <Border Classes="card" Width="330" Margin="0,0,14,14">
                   <Grid RowDefinitions="Auto,*,Auto">
                     <Grid ColumnDefinitions="Auto,*">
-                      <Image Source="/Assets/game-placeholder.png" Width="44" Height="44" VerticalAlignment="Top" />
+                      <!-- ROM icon extracted from the SMDH (cover.png); placeholder when the ROM has no icon.
+                           The display name is read-only: it comes from the ROM's localized titles, never user input. -->
+                      <Panel Width="52" Height="52" VerticalAlignment="Top">
+                        <Image Source="/Assets/game-placeholder.png" Width="52" Height="52" IsVisible="{Binding !HasCover}" />
+                        <Image Source="{Binding CoverImage}" Width="52" Height="52" IsVisible="{Binding HasCover}" />
+                      </Panel>
                       <StackPanel Grid.Column="1" Margin="12,0,0,0" Spacing="3">
-                        <TextBox Text="{Binding DisplayName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" FontWeight="SemiBold" FontSize="14" PlaceholderText="{Binding DisplayName}" />
+                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding PublisherLine}" Classes="caption" IsVisible="{Binding HasPublisher}" TextTrimming="CharacterEllipsis" />
                         <Border Classes="badge" HorizontalAlignment="Left">
                           <TextBlock Text="{Binding StateLabel}" FontSize="11" />
                         </Border>
@@ -115,6 +121,8 @@
           </Border>
           <TextBlock Text="{Binding ToolchainStatus}" Classes="caption" IsVisible="{Binding IsToolchainReady}" />
           <TextBlock Text="{Binding DeviceStatus}" Classes="caption" />
+          <!-- Hardware-aware compile line: cores + RAM + 3dsrecomp's automatic parallelism. -->
+          <TextBlock Text="{Binding HardwareLine}" Classes="caption" TextWrapping="Wrap" />
           <TextBlock Text="{Binding InstalledBundleIdLine}" Classes="caption" />
 
           <Border Classes="card">
@@ -254,6 +262,9 @@
                 <StackPanel Spacing="8">
                   <TextBlock Text="{Binding L.SettingsLogsTitle}" Classes="h2" />
                   <TextBlock Text="{Binding CurrentLogPath}" Classes="caption" />
+                  <!-- Chosen portable (or fallback) folders and the reason, for bug reports. -->
+                  <TextBlock Text="{Binding WorkspaceInfoLine}" Classes="caption" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding DistributionInfoLine}" Classes="caption" TextWrapping="Wrap" />
                   <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button Content="{Binding L.SettingsLogsWorkspace}" Command="{Binding OpenWorkspaceCommand}" Classes="ghost" />
                     <Button Content="{Binding L.SettingsLogsExport}" Command="{Binding ExportLogCommand}" Classes="ghost" />
@@ -267,7 +278,6 @@
                 <StackPanel Spacing="8">
                   <TextBlock Text="{Binding L.SettingsAboutTitle}" Classes="h2" />
                   <TextBlock Text="{Binding L.SettingsAboutBody}" Classes="caption" />
-                  <TextBlock Text="{Binding DistributionLine}" Classes="caption" />
                   <TextBlock Text="{Binding L.ReadinessTitle}" Classes="caption" />
                   <ItemsControl ItemsSource="{Binding Tools}">
                     <ItemsControl.ItemTemplate>

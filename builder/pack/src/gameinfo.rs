@@ -7,7 +7,7 @@
 //!   GameInfo.json      metadata + provenance (this module)
 //!   GamePack.dylib     AOT game pack produced on macOS (built by the scripts)
 //!   GameRom.<ext>      optional user ROM copy, so the phone never imports data
-//!   cover.png          optional, user-supplied; never committed
+//!   cover.png          cover image (SMDH icon or user-supplied); never committed
 //! ```
 //!
 //! The manifest is deterministic: fixed field order, pretty JSON, no
@@ -15,6 +15,7 @@
 //! byte-identical files. The pack itself is hashed with the shared
 //! `builder-core` streaming SHA256 (never loaded into memory).
 
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -30,6 +31,8 @@ pub const PACKAGES_DIR: &str = "packages";
 pub const GAME_INFO_FILE: &str = "GameInfo.json";
 /// AOT game pack file name inside a package directory.
 pub const GAME_PACK_FILE: &str = "GamePack.dylib";
+/// Cover image file name inside a package directory.
+pub const COVER_FILE: &str = "cover.png";
 /// File name prefix of the user ROM bundled inside a self-contained package.
 pub const GAME_ROM_PREFIX: &str = "GameRom";
 /// ROM file extensions a self-contained package may bundle (Zakuro boots NCSD
@@ -108,6 +111,19 @@ pub struct GameInfo {
     /// 3DS product code (may be empty), e.g. `CTR-P-EK2A`.
     #[serde(rename = "productCode")]
     pub product_code: String,
+    /// Localized short titles from the ROM SMDH, keyed by language
+    /// (`en`, `ja`, `zh-Hans`, ...), sorted by key. Additive optional field;
+    /// `displayName` stays the English/default title.
+    #[serde(
+        rename = "displayNames",
+        default,
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub display_names: BTreeMap<String, String>,
+    /// Publisher from the ROM SMDH (for example `Nintendo`); omitted when
+    /// unknown. Additive optional field.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub publisher: String,
     /// Version of the AOT pack; matches the catalogue's `aotVersion`.
     #[serde(rename = "aotVersion")]
     pub aot_version: u32,
@@ -135,6 +151,11 @@ pub struct GameInfo {
     /// ROM provenance.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rom: Option<RomSource>,
+    /// Package-relative cover image (`cover.png`) when the package has one.
+    /// Additive optional field: the file is extracted from the ROM SMDH icon on
+    /// import, or supplied by the user; it is never committed.
+    #[serde(rename = "coverPath", default, skip_serializing_if = "Option::is_none")]
+    pub cover_path: Option<String>,
     /// Free-form note (kept short; shown in the catalogue).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub notes: String,
@@ -150,6 +171,8 @@ impl GameInfo {
     ) -> Result<Self> {
         let mut info =
             Self::new_without_rom(&rom.title_id, display_name, product_code, aot_version)?;
+        info.display_names = rom.display_names.clone();
+        info.publisher = rom.publisher.clone();
         info.rom = Some(RomSource::from_rom(rom));
         Ok(info)
     }
@@ -177,6 +200,8 @@ impl GameInfo {
             title_id: title_id.clone(),
             display_name,
             product_code,
+            display_names: BTreeMap::new(),
+            publisher: String::new(),
             aot_version,
             save_namespace: title_id,
             pack_file: GAME_PACK_FILE.to_string(),
@@ -185,6 +210,7 @@ impl GameInfo {
             rom_sha256: None,
             rom_bytes: None,
             rom: None,
+            cover_path: None,
             notes: String::new(),
         };
         Ok(info)
@@ -208,6 +234,9 @@ impl GameInfo {
         }
         validate_display_name(&self.display_name)?;
         validate_product_code(&self.product_code)?;
+        validate_display_names(&self.title_id, &self.display_names)?;
+        validate_publisher(&self.title_id, &self.publisher)?;
+        validate_cover_path(&self.title_id, &self.cover_path)?;
         if self.aot_version < 1 {
             return Err(PackError::invalid(format!(
                 "{}: aotVersion must be >= 1 (got {})",
@@ -310,6 +339,69 @@ fn validate_product_code(code: &str) -> Result<()> {
         return Err(PackError::invalid(format!(
             "productCode must be printable ASCII (got {code:?})"
         )));
+    }
+    Ok(())
+}
+
+fn validate_display_names(title_id: &str, names: &BTreeMap<String, String>) -> Result<()> {
+    for (language, name) in names {
+        if !crate::smdh::LANGUAGES.contains(&language.as_str()) {
+            let known = crate::smdh::LANGUAGES
+                .iter()
+                .filter(|language| !language.is_empty())
+                .copied()
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(PackError::invalid(format!(
+                "{title_id}: displayNames language '{language}' is not an SMDH language ({known})"
+            )));
+        }
+        if name.trim().is_empty() {
+            return Err(PackError::invalid(format!(
+                "{title_id}: displayNames[{language}] must not be empty"
+            )));
+        }
+        if name.chars().any(|c| c.is_control()) || name.contains('\n') || name.contains('\r') {
+            return Err(PackError::invalid(format!(
+                "{title_id}: displayNames[{language}] must be a single line without control characters"
+            )));
+        }
+        if name.chars().count() > 120 {
+            return Err(PackError::invalid(format!(
+                "{title_id}: displayNames[{language}] must be at most 120 characters"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_publisher(title_id: &str, publisher: &str) -> Result<()> {
+    if publisher.is_empty() {
+        return Ok(());
+    }
+    if publisher.chars().any(|c| c.is_control())
+        || publisher.contains('\n')
+        || publisher.contains('\r')
+    {
+        return Err(PackError::invalid(format!(
+            "{title_id}: publisher must be a single line without control characters"
+        )));
+    }
+    if publisher.chars().count() > 120 {
+        return Err(PackError::invalid(format!(
+            "{title_id}: publisher must be at most 120 characters"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_cover_path(title_id: &str, cover_path: &Option<String>) -> Result<()> {
+    if let Some(cover) = cover_path {
+        if cover != COVER_FILE {
+            return Err(PackError::invalid(format!(
+                "{title_id}: coverPath must be '{COVER_FILE}' (got '{cover}')"
+            )));
+        }
     }
     Ok(())
 }
@@ -492,6 +584,23 @@ pub fn install_rom(dir: &Path, source: &Path) -> Result<GameInfo> {
     Ok(info)
 }
 
+/// Extract the ROM SMDH icon into `<dir>/cover.png` when the package has no
+/// cover yet.
+///
+/// An existing `cover.png` (for example one the user added by hand) is never
+/// overwritten. Returns the package-relative cover path when a cover file
+/// exists afterwards.
+pub fn ensure_cover(dir: &Path, rom_path: &Path) -> Result<Option<String>> {
+    std::fs::create_dir_all(dir).map_err(|error| PackError::io(dir, error))?;
+    let cover = dir.join(COVER_FILE);
+    if !cover.is_file() {
+        if let Some(smdh) = rom::read_smdh_bytes(rom_path)? {
+            crate::smdh::write_cover_png(&smdh, &cover)?;
+        }
+    }
+    Ok(cover.is_file().then(|| COVER_FILE.to_string()))
+}
+
 /// Refuse a ROM whose size disagrees with the provenance record the package was
 /// imported with: a stale or wrong `--rom` must never be bundled silently.
 fn validate_rom_copy(info: &GameInfo, source: &Path, bytes: u64) -> Result<()> {
@@ -620,10 +729,23 @@ pub enum PackageState {
 pub struct PackageSummary {
     /// Title ID.
     pub title_id: String,
-    /// Display name from the manifest.
+    /// Display name from the manifest (English/default title).
     pub display_name: String,
     /// Product code from the manifest (may be empty).
     pub product_code: String,
+    /// Localized short titles from the manifest.
+    #[serde(
+        rename = "displayNames",
+        default,
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub display_names: BTreeMap<String, String>,
+    /// Publisher from the manifest (may be empty).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub publisher: String,
+    /// Absolute path of `cover.png` when the package has a cover.
+    #[serde(rename = "coverPath", default, skip_serializing_if = "Option::is_none")]
+    pub cover_path: Option<PathBuf>,
     /// AOT version from the manifest.
     pub aot_version: u32,
     /// Queued / built / broken.
@@ -667,10 +789,21 @@ pub fn summarize_package(dir: &Path) -> Result<PackageSummary> {
             PackageState::Broken
         }
     };
+    let cover_candidate = dir.join(COVER_FILE);
+    let cover_path = cover_candidate.is_file().then_some(cover_candidate);
+    if info.cover_path.is_some() && cover_path.is_none() {
+        issues.push(format!(
+            "cover {} is recorded in GameInfo.json but missing",
+            dir.join(COVER_FILE).display()
+        ));
+    }
     Ok(PackageSummary {
         title_id: info.title_id,
         display_name: info.display_name,
         product_code: info.product_code,
+        display_names: info.display_names,
+        publisher: info.publisher,
+        cover_path,
         aot_version: info.aot_version,
         state,
         pack: info.pack,
@@ -770,6 +903,12 @@ pub fn verify_package(dir: &Path) -> Result<VerifyReport> {
     }
     if !verify_bundled_rom(&info, dir, &mut issues) {
         state = PackageState::Broken;
+    }
+    if info.cover_path.is_some() && !dir.join(COVER_FILE).is_file() {
+        issues.push(format!(
+            "cover {} is recorded in GameInfo.json but missing",
+            dir.join(COVER_FILE).display()
+        ));
     }
     let blocking = state == PackageState::Broken;
     Ok(VerifyReport {
@@ -1162,5 +1301,96 @@ mod tests {
             "{:?}",
             report.issues
         );
+    }
+
+    #[test]
+    fn records_localized_titles_publisher_and_cover_path() {
+        let temp = tempdir().unwrap();
+        let rom = rom_info(temp.path());
+        let mut info = GameInfo::new(&rom, "Test Game", "CTR-P-EK2A", 1).unwrap();
+        assert!(info.display_names.is_empty());
+        assert!(info.publisher.is_empty());
+        info.display_names
+            .insert("en".to_string(), "Test Game".to_string());
+        info.display_names
+            .insert("ja".to_string(), "テスト".to_string());
+        info.publisher = "Example".to_string();
+        info.cover_path = Some(COVER_FILE.to_string());
+        let json = info.to_json().unwrap();
+        assert!(json.contains("\"displayNames\": {"), "{json}");
+        let en = json.find("\"en\": \"Test Game\"").expect("en title");
+        let ja = json.find("\"ja\": \"テスト\"").expect("ja title");
+        assert!(en < ja, "BTreeMap order must be deterministic: {json}");
+        assert!(json.contains("\"publisher\": \"Example\""), "{json}");
+        assert!(json.contains("\"coverPath\": \"cover.png\""), "{json}");
+        assert_eq!(
+            GameInfo::from_json(&json, Path::new("GameInfo.json")).unwrap(),
+            info
+        );
+
+        // Invalid metadata is refused before anything is written.
+        info.display_names
+            .insert("xx".to_string(), "Nope".to_string());
+        assert!(info.validate().is_err());
+        info.display_names.remove("xx");
+        info.cover_path = Some("../cover.png".to_string());
+        assert!(info.validate().is_err());
+        info.cover_path = Some(COVER_FILE.to_string());
+        info.publisher = "two\nlines".to_string();
+        assert!(info.validate().is_err());
+        info.publisher = "Example".to_string();
+        assert!(info.validate().is_ok());
+    }
+
+    #[test]
+    fn covers_are_extracted_once_and_user_covers_are_kept() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("game.cci");
+        let smdh = crate::smdh::test_support::synthetic_smdh(&[
+            (0, "テスト", "Example"),
+            (1, "Test Game", "Example"),
+        ]);
+        write_rom(
+            &path,
+            &crate::rom::test_support::synthetic_ncsd_with_smdh(
+                0x0004_0000_0005_5E00,
+                "CTR-P-EK2A",
+                &smdh,
+            ),
+        );
+        let rom = rom::detect_rom(&path).unwrap();
+        let info = GameInfo::new(&rom, "Test Game", "CTR-P-EK2A", 1).unwrap();
+        assert_eq!(info.display_names.len(), 2);
+        assert_eq!(info.publisher, "Example");
+        let dir = package_dir(temp.path(), &info.title_id);
+        info.write(&dir).unwrap();
+        assert_eq!(
+            ensure_cover(&dir, &path).unwrap().as_deref(),
+            Some(COVER_FILE)
+        );
+        let cover = std::fs::read(dir.join(COVER_FILE)).unwrap();
+        assert!(
+            cover.starts_with(b"\x89PNG\r\n\x1a\n"),
+            "extracted cover is a PNG"
+        );
+
+        // An existing user cover is never overwritten.
+        std::fs::write(dir.join(COVER_FILE), b"user cover").unwrap();
+        assert_eq!(
+            ensure_cover(&dir, &path).unwrap().as_deref(),
+            Some(COVER_FILE)
+        );
+        assert_eq!(std::fs::read(dir.join(COVER_FILE)).unwrap(), b"user cover");
+
+        // A ROM without an icon/ExeFS yields no cover.
+        let plain = temp.path().join("plain.cci");
+        write_rom(
+            &plain,
+            &synthetic_ncsd(0x0004_0000_0011_C500, "CTR-P-ECLA", 1),
+        );
+        let other = GameInfo::new_without_rom("000400000011C500", "Other", "", 1).unwrap();
+        let other_dir = package_dir(temp.path(), &other.title_id);
+        assert_eq!(ensure_cover(&other_dir, &plain).unwrap(), None);
+        assert!(!other_dir.join(COVER_FILE).exists());
     }
 }

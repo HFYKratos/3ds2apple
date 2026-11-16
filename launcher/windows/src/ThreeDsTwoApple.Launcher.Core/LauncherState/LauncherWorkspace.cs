@@ -1,5 +1,6 @@
 using ThreeDsTwoApple.Launcher.Core.BuildPipeline;
 using ThreeDsTwoApple.Launcher.Core.Models;
+using ThreeDsTwoApple.Launcher.Core.Portable;
 using ThreeDsTwoApple.Launcher.Core.Util;
 
 namespace ThreeDsTwoApple.Launcher.Core.LauncherState;
@@ -51,22 +52,38 @@ public sealed class LauncherStateDocument
 }
 
 /// <summary>
-/// Launcher data root: package output tree, staging, logs and the persisted
-/// state. Defaults to <c>%LOCALAPPDATA%\3ds2apple\launcher</c>; ROMs and built
-/// artifacts stay out of git because the whole root is user data.
+/// Launcher data root: package output tree, staging, logs and the persisted state.
+/// Portable layout: <c>&lt;exe-dir&gt;\3ds2apple-data\workspace</c> when the launcher
+/// folder is writable; otherwise fall back to <c>%LOCALAPPDATA%\3ds2apple\launcher</c>
+/// (the pre-portable location, also the migration source). ROMs and built artifacts
+/// stay out of git because the whole root is user data.
 /// </summary>
 public sealed class LauncherWorkspace
 {
     private readonly object _stateLock = new();
     private readonly object _logLock = new();
 
-    private LauncherWorkspace(string root, LauncherStateDocument state)
+    private LauncherWorkspace(string root, LauncherStateDocument state, DataRootDecision location, WorkspaceMigrationResult? migration)
     {
         Root = root;
         State = state;
+        Location = location;
+        Migration = migration;
     }
 
     public string Root { get; }
+
+    /// <summary>How the root was chosen (portable / LocalAppData fallback / explicit).</summary>
+    public DataRootDecision Location { get; }
+
+    /// <summary>Present when this run adopted (or tried to adopt) the pre-portable workspace.</summary>
+    public WorkspaceMigrationResult? Migration { get; }
+
+    /// <summary>Machine-readable reason for the chosen root (see <see cref="DataRootKind"/>).</summary>
+    public DataRootKind RootKind => Location.Kind;
+
+    /// <summary>Human-readable English reason (logged and shown in Diagnostics).</summary>
+    public string RootReason => Location.Reason;
 
     /// <summary><c>3ds2apple-pack --out</c> root (packages live in <c>packages/</c>).</summary>
     public string OutRoot => Path.Combine(Root, "out");
@@ -83,33 +100,59 @@ public sealed class LauncherWorkspace
 
     public LauncherStateDocument State { get; }
 
+    /// <summary>Open the default (portable) workspace, migrating the old LocalAppData one.</summary>
     public static LauncherWorkspace Open(string? root = null)
     {
-        var resolved = string.IsNullOrWhiteSpace(root)
-            ? DefaultRoot()
-            : Path.GetFullPath(root);
-        foreach (var directory in new[] { resolved, Path.Combine(resolved, "out"), Path.Combine(resolved, "staging"), Path.Combine(resolved, "work"), Path.Combine(resolved, "downloads"), Path.Combine(resolved, "logs") })
+        if (!string.IsNullOrWhiteSpace(root))
         {
-            Directory.CreateDirectory(directory);
+            return OpenAt(Path.GetFullPath(root), ExplicitLocation(Path.GetFullPath(root), "explicit workspace path"), migration: null);
         }
-        LauncherStateDocument state;
-        var statePath = Path.Combine(resolved, "state.json");
-        try
+        var configured = Environment.GetEnvironmentVariable(WorkspaceEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(configured))
         {
-            state = File.Exists(statePath)
-                ? System.Text.Json.JsonSerializer.Deserialize<LauncherStateDocument>(File.ReadAllText(statePath), Json.ReadOptions) ?? new LauncherStateDocument()
-                : new LauncherStateDocument();
+            var explicitRoot = Path.GetFullPath(configured);
+            return OpenAt(explicitRoot, ExplicitLocation(explicitRoot, "explicit override (" + WorkspaceEnvironmentVariable + ")"), migration: null);
         }
-        catch (System.Text.Json.JsonException)
+
+        var decision = PortableLayout.Resolve();
+        WorkspaceMigrationResult? migration = null;
+        var resolved = decision.WorkspaceRoot;
+        if (decision.Kind == DataRootKind.Portable)
         {
-            state = new LauncherStateDocument();
+            try
+            {
+                migration = PortableLayout.MigrateIfNeeded(resolved, PortableLayout.LegacyWorkspaceRoot());
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            {
+                migration = new WorkspaceMigrationResult(true, false, 0, exception.Message, Path.Combine(resolved, PortableLayout.MigrationMarkerFileName));
+            }
+            if (migration is { Attempted: true, StateCopied: false })
+            {
+                // Never hide an existing library because of a failed copy: keep using the
+                // old workspace this run and leave the portable folder in place for retry.
+                var legacy = PortableLayout.LegacyWorkspaceRoot();
+                if (Directory.Exists(legacy))
+                {
+                    var fallback = decision with
+                    {
+                        WorkspaceRoot = legacy,
+                        DataRoot = PortableLayout.LegacyDataRoot(),
+                        DistributionBase = PortableLayout.LegacyDistributionBase(),
+                        Kind = DataRootKind.LocalAppData,
+                        Reason = "kept the existing workspace at " + legacy + " because the portable migration failed: " + (migration.Warning ?? "unknown error"),
+                    };
+                    return OpenAt(legacy, fallback, migration);
+                }
+            }
         }
-        return new LauncherWorkspace(resolved, state);
+        return OpenAt(resolved, decision, migration);
     }
 
-    /// <summary>Optional workspace override for QA/screenshot runs; the shipped launcher never sets it.</summary>
+    /// <summary>Optional explicit workspace override for QA/screenshot runs; the shipped launcher never sets it.</summary>
     public const string WorkspaceEnvironmentVariable = "THREEDS2APPLE_WORKSPACE";
 
+    /// <summary>Default workspace: portable beside the executable when writable.</summary>
     public static string DefaultRoot()
     {
         var configured = Environment.GetEnvironmentVariable(WorkspaceEnvironmentVariable);
@@ -117,12 +160,7 @@ public sealed class LauncherWorkspace
         {
             return Path.GetFullPath(configured);
         }
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(localAppData))
-        {
-            localAppData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
-        }
-        return Path.Combine(localAppData, "3ds2apple", "launcher");
+        return PortableLayout.Resolve().WorkspaceRoot;
     }
 
     public LibraryEntry? Find(string titleId) =>
@@ -184,4 +222,40 @@ public sealed class LauncherWorkspace
     }
 
     public string CurrentLogPath => Path.Combine(LogsDirectory, $"launcher-{DateTimeOffset.Now:yyyyMMdd}.log");
+
+    private static LauncherWorkspace OpenAt(string resolved, DataRootDecision location, WorkspaceMigrationResult? migration)
+    {
+        EnsureDirectories(resolved);
+        LauncherStateDocument state;
+        var statePath = Path.Combine(resolved, "state.json");
+        try
+        {
+            state = File.Exists(statePath)
+                ? System.Text.Json.JsonSerializer.Deserialize<LauncherStateDocument>(File.ReadAllText(statePath), Json.ReadOptions) ?? new LauncherStateDocument()
+                : new LauncherStateDocument();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            state = new LauncherStateDocument();
+        }
+        return new LauncherWorkspace(resolved, state, location, migration);
+    }
+
+    private static void EnsureDirectories(string root)
+    {
+        foreach (var directory in new[] { root, Path.Combine(root, "out"), Path.Combine(root, "staging"), Path.Combine(root, "work"), Path.Combine(root, "downloads"), Path.Combine(root, "logs") })
+        {
+            Directory.CreateDirectory(directory);
+        }
+    }
+
+    private static DataRootDecision ExplicitLocation(string root, string reason) => new(
+        root,
+        root,
+        root,
+        DataRootKind.Explicit,
+        reason,
+        PortableLayout.ExeDirectory(),
+        null,
+        PortableLayout.LegacyWorkspaceRoot());
 }

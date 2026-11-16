@@ -1,6 +1,7 @@
 using ThreeDsTwoApple.Launcher.Core.Distribution;
 using ThreeDsTwoApple.Launcher.Core.LauncherState;
 using ThreeDsTwoApple.Launcher.Core.Localization;
+using ThreeDsTwoApple.Launcher.Core.Portable;
 using Xunit;
 
 namespace ThreeDsTwoApple.Launcher.Core.Tests;
@@ -227,10 +228,20 @@ public sealed class DistributionLayoutTests
     }
 
     [Fact]
-    public void DefaultExtractionRootLivesUnderLocalAppData()
+    public void DefaultExtractionRootFollowsThePortableLayout()
     {
+        var decision = PortableLayout.Resolve();
         var root = DistributionLayout.DefaultExtractionRoot();
+        Assert.Equal(decision.DistributionRoot(LauncherInfo.Version), root);
         Assert.EndsWith(Path.Combine("distribution", LauncherInfo.Version), root);
-        Assert.Contains("3ds2apple", root);
+        // Preferred: <exe-dir>\3ds2apple-data\distribution\<version>; LocalAppData only when read-only.
+        if (decision.Kind == DataRootKind.Portable)
+        {
+            Assert.Contains(PortableLayout.DataDirectoryName, root);
+        }
+        else
+        {
+            Assert.Contains("3ds2apple", root);
+        }
     }
 }

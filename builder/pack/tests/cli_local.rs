@@ -84,6 +84,63 @@ fn synthetic_ncsd(title_id: u64, product_code: &str) -> Vec<u8> {
     bytes
 }
 
+/// Synthetic SMDH with neutral test titles and a gradient icon (no game data).
+fn synthetic_smdh() -> Vec<u8> {
+    let mut bytes = vec![0_u8; 0x36C0];
+    bytes[..4].copy_from_slice(b"SMDH");
+    let titles: [(usize, &str, &str); 2] = [
+        (0, "テストゲーム", "Example Publisher"),
+        (1, "Test Game", "Example Publisher"),
+    ];
+    for (index, short, publisher) in titles {
+        let base = 0x8 + index * 0x200;
+        put_utf16(&mut bytes, base, 0x80, short);
+        put_utf16(&mut bytes, base + 0x180, 0x80, publisher);
+    }
+    for (index, pixel) in bytes[0x2008..0x3208].chunks_exact_mut(2).enumerate() {
+        pixel.copy_from_slice(&(((index * 977) & 0xFFFF) as u16).to_le_bytes());
+    }
+    bytes
+}
+
+fn put_utf16(bytes: &mut [u8], offset: usize, size: usize, text: &str) {
+    let mut units: Vec<u16> = text.encode_utf16().take(size / 2 - 1).collect();
+    units.push(0);
+    for (index, unit) in units.iter().enumerate() {
+        let start = offset + index * 2;
+        bytes[start..start + 2].copy_from_slice(&unit.to_le_bytes());
+    }
+}
+
+/// Synthetic NCSD whose ExeFS carries `smdh` (headers + zero padding only).
+fn synthetic_ncsd_with_smdh(title_id: u64, product_code: &str, smdh: &[u8]) -> Vec<u8> {
+    let partition_offset = 0x4000_usize;
+    let exefs_relative = 0x400_u64;
+    let exefs_size = 0x200 + smdh.len();
+    let end = partition_offset as u64 + exefs_relative + exefs_size as u64;
+    let len = (end.div_ceil(0x200) * 0x200) as usize;
+    let mut bytes = vec![0_u8; len];
+    let media_units = (len / 512) as u32;
+    bytes[0x100..0x104].copy_from_slice(b"NCSD");
+    bytes[0x104..0x108].copy_from_slice(&media_units.to_le_bytes());
+    bytes[0x108..0x110].copy_from_slice(&title_id.to_le_bytes());
+    bytes[0x120..0x124].copy_from_slice(&((partition_offset / 512) as u32).to_le_bytes());
+    let ncch = &mut bytes[partition_offset..];
+    ncch[0x100..0x104].copy_from_slice(b"NCCH");
+    ncch[0x104..0x108].copy_from_slice(&4_u32.to_le_bytes());
+    ncch[0x112..0x114].copy_from_slice(&2_u16.to_le_bytes());
+    ncch[0x118..0x120].copy_from_slice(&title_id.to_le_bytes());
+    let code = product_code.as_bytes();
+    ncch[0x150..0x150 + code.len()].copy_from_slice(code);
+    ncch[0x1A0..0x1A4].copy_from_slice(&((exefs_relative / 512) as u32).to_le_bytes());
+    ncch[0x1A4..0x1A8].copy_from_slice(&((exefs_size as u64).div_ceil(0x200) as u32).to_le_bytes());
+    let exefs = partition_offset + exefs_relative as usize;
+    bytes[exefs..exefs + 4].copy_from_slice(b"icon");
+    bytes[exefs + 12..exefs + 16].copy_from_slice(&(smdh.len() as u32).to_le_bytes());
+    bytes[exefs + 0x200..exefs + 0x200 + smdh.len()].copy_from_slice(smdh);
+    bytes
+}
+
 fn write_roms(dir: &Path) -> Vec<PathBuf> {
     let pokemon_y = dir.join("Pokémon Y.cci");
     std::fs::write(&pokemon_y, synthetic_ncsd(POKEMON_Y, "CTR-P-EK2A")).unwrap();
@@ -337,6 +394,10 @@ fn detects_local_roms_when_present() {
         if rom.file_name().and_then(|name| name.to_str()) == Some("Pokemon Y.cci") {
             assert_eq!(title_id, "0004000000055E00");
             assert_eq!(info["productCode"], "CTR-P-EK2A");
+            // SMDH metadata from the local ROM; no ROM content is logged.
+            assert_eq!(info["displayName"], "Pokémon Y");
+            assert_eq!(info["displayNames"]["en"], "Pokémon Y");
+            assert_eq!(info["publisher"], "Nintendo");
         }
     }
 }
@@ -613,4 +674,183 @@ fn include_rom_copies_the_rom_and_is_deterministic() {
     assert!(!plain_out
         .join("packages/0004000000055E00/GameRom.cci")
         .exists());
+}
+
+/// The launcher contract: package dir cover.png + JSON displayNames/publisher/
+/// coverPath on packages add/list, with displayName kept as the English title.
+#[test]
+fn smdh_metadata_and_cover_flow_through_cli_json() {
+    let temp = TempDir::new().unwrap();
+    let out = temp.path().join("out");
+    let out_arg = out.display().to_string();
+    // The file name deliberately differs from the SMDH title.
+    let rom = temp.path().join("local-dump.cci");
+    std::fs::write(
+        &rom,
+        synthetic_ncsd_with_smdh(POKEMON_Y, "CTR-P-EK2A", &synthetic_smdh()),
+    )
+    .unwrap();
+
+    // rom inspect exposes the SMDH metadata too.
+    let inspect = run(&[
+        "--json".to_string(),
+        "rom".to_string(),
+        "inspect".to_string(),
+        rom.display().to_string(),
+    ]);
+    assert!(inspect.success, "stderr: {}", inspect.stderr);
+    let inspected: serde_json::Value = serde_json::from_str(&inspect.stdout).unwrap();
+    assert_eq!(inspected["roms"][0]["displayName"], "Test Game");
+    assert_eq!(inspected["roms"][0]["displayNames"]["en"], "Test Game");
+    assert_eq!(inspected["roms"][0]["displayNames"]["ja"], "テストゲーム");
+    assert_eq!(inspected["roms"][0]["publisher"], "Example Publisher");
+
+    // packages add --json: displayNames/publisher/coverPath (absolute).
+    let add = run(&[
+        "--json".to_string(),
+        "--out".to_string(),
+        out_arg.clone(),
+        "packages".to_string(),
+        "add".to_string(),
+        "--roms".to_string(),
+        rom.display().to_string(),
+    ]);
+    assert!(add.success, "stderr: {}", add.stderr);
+    let added: serde_json::Value = serde_json::from_str(&add.stdout).unwrap();
+    let package = &added["packages"][0];
+    assert_eq!(package["titleID"], "0004000000055E00");
+    assert_eq!(package["displayName"], "Test Game");
+    assert_eq!(package["displayNames"]["en"], "Test Game");
+    assert_eq!(package["displayNames"]["ja"], "テストゲーム");
+    assert_eq!(package["publisher"], "Example Publisher");
+    let cover = Path::new(package["coverPath"].as_str().expect("coverPath"));
+    assert!(
+        cover.is_absolute(),
+        "coverPath is absolute: {}",
+        cover.display()
+    );
+    assert!(cover.is_file());
+    assert!(cover.starts_with(&out), "cover stays in the output tree");
+    let png = std::fs::read(cover).unwrap();
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"), "cover is a PNG");
+    assert!(png.len() < 64 * 1024, "48x48 cover stays small");
+
+    // GameInfo.json records the additive metadata and the package-relative cover.
+    let manifest: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(out.join("packages/0004000000055E00/GameInfo.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest["displayName"], "Test Game");
+    assert_eq!(manifest["displayNames"]["en"], "Test Game");
+    assert_eq!(manifest["publisher"], "Example Publisher");
+    assert_eq!(manifest["coverPath"], "cover.png");
+
+    // packages list --json exposes the same contract for launchers.
+    let list = run(&[
+        "--json".to_string(),
+        "--out".to_string(),
+        out_arg,
+        "packages".to_string(),
+        "list".to_string(),
+    ]);
+    assert!(list.success, "stderr: {}", list.stderr);
+    let listed: serde_json::Value = serde_json::from_str(&list.stdout).unwrap();
+    let package = &listed["packages"][0];
+    assert_eq!(package["displayName"], "Test Game");
+    assert_eq!(package["displayNames"]["ja"], "テストゲーム");
+    assert_eq!(package["publisher"], "Example Publisher");
+    assert!(package["coverPath"]
+        .as_str()
+        .expect("coverPath")
+        .ends_with("cover.png"));
+}
+
+#[test]
+fn rom_without_smdh_keeps_the_file_stem_and_no_cover() {
+    let temp = TempDir::new().unwrap();
+    let out = temp.path().join("out");
+    let rom = temp.path().join("Plain Game.cci");
+    std::fs::write(&rom, synthetic_ncsd(POKEMON_Y, "CTR-P-EK2A")).unwrap();
+    let add = run(&[
+        "--json".to_string(),
+        "--out".to_string(),
+        out.display().to_string(),
+        "packages".to_string(),
+        "add".to_string(),
+        "--roms".to_string(),
+        rom.display().to_string(),
+    ]);
+    assert!(add.success, "stderr: {}", add.stderr);
+    let added: serde_json::Value = serde_json::from_str(&add.stdout).unwrap();
+    let package = &added["packages"][0];
+    assert_eq!(package["displayName"], "Plain Game");
+    assert_eq!(package["displayNames"], serde_json::json!({}));
+    assert_eq!(package["publisher"], "");
+    assert!(package["coverPath"].is_null());
+    assert!(!out.join("packages/0004000000055E00/cover.png").exists());
+    let manifest =
+        std::fs::read_to_string(out.join("packages/0004000000055E00/GameInfo.json")).unwrap();
+    assert!(!manifest.contains("displayNames"), "{manifest}");
+    assert!(!manifest.contains("coverPath"), "{manifest}");
+}
+
+#[test]
+fn truncated_smdh_rom_falls_back_without_error() {
+    let temp = TempDir::new().unwrap();
+    let out = temp.path().join("out");
+    let rom = temp.path().join("Truncated.cci");
+    let mut bytes = synthetic_ncsd_with_smdh(POKEMON_Y, "CTR-P-EK2A", &synthetic_smdh());
+    bytes.truncate(bytes.len() - 0x400);
+    std::fs::write(&rom, bytes).unwrap();
+    let add = run(&[
+        "--json".to_string(),
+        "--out".to_string(),
+        out.display().to_string(),
+        "packages".to_string(),
+        "add".to_string(),
+        "--roms".to_string(),
+        rom.display().to_string(),
+    ]);
+    assert!(add.success, "stderr: {}", add.stderr);
+    let added: serde_json::Value = serde_json::from_str(&add.stdout).unwrap();
+    let package = &added["packages"][0];
+    assert_eq!(package["displayName"], "Truncated");
+    assert!(package["coverPath"].is_null());
+}
+
+/// End-to-end SMDH extraction against the user's local (gitignored) ROM. The
+/// icon is written only into a temporary package tree, never into the repo.
+#[test]
+fn imports_local_rom_metadata_into_a_temp_package() {
+    let rom = repo_root().join("ROM").join("Pokemon Y.cci");
+    if !rom.is_file() {
+        eprintln!("skipping: {} is not present", rom.display());
+        return;
+    }
+    let temp = TempDir::new().unwrap();
+    let out = temp.path().join("out");
+    let add = run(&[
+        "--json".to_string(),
+        "--out".to_string(),
+        out.display().to_string(),
+        "packages".to_string(),
+        "add".to_string(),
+        "--roms".to_string(),
+        rom.display().to_string(),
+    ]);
+    assert!(add.success, "stderr: {}", add.stderr);
+    let added: serde_json::Value = serde_json::from_str(&add.stdout).unwrap();
+    let package = &added["packages"][0];
+    assert_eq!(package["titleID"], "0004000000055E00");
+    assert_eq!(package["displayName"], "Pokémon Y");
+    assert_eq!(package["displayNames"]["en"], "Pokémon Y");
+    assert_eq!(package["displayNames"]["ja"], "ポケットモンスター Ｙ");
+    assert_eq!(package["publisher"], "Nintendo");
+    let cover = Path::new(package["coverPath"].as_str().expect("coverPath"));
+    assert!(cover.starts_with(&out), "cover stays in the temp tree");
+    let png = std::fs::read(cover).unwrap();
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert!(png.len() < 64 * 1024, "48x48 cover is {} bytes", png.len());
+    // The temp tree holds only the package output: nothing leaked into the repo.
+    assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 1);
 }

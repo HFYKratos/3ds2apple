@@ -125,7 +125,7 @@ cleanup) on Linux.
 | Piece | Implemented now | Verified where |
 |---|---|---|
 | `builder/core` | protocol types, framing, versioning, validation, hashing, SSH/local transports, client state, config | `cargo test -p builder-core`, golden fixtures |
-| `builder/pack` (`3ds2apple-pack`) | ROM header detection (NCSD/NCCH), import queue, per-game package manifests, self-contained packages with a bundled user ROM (`--include-rom`), deterministic schema-v2 catalogue allocation, macOS script plan, fake/preview packs + preview multi-game IPA | `cargo test -p builder-pack` (unit + CLI integration on Linux); `scripts/tests/desktop-aot-selfcheck.sh` (68 checks) |
+| `builder/pack` (`3ds2apple-pack`) | ROM header detection (NCSD/NCCH), SMDH title/publisher/icon metadata (localized `displayNames`, `publisher`, 48x48 `cover.png`), import queue, per-game package manifests, self-contained packages with a bundled user ROM (`--include-rom`), deterministic schema-v2 catalogue allocation, macOS script plan, fake/preview packs + preview multi-game IPA | `cargo test -p builder-pack` (unit + CLI integration on Linux); `scripts/tests/desktop-aot-selfcheck.sh` (68 checks) |
 | `builder/windows` | Windows frontend: guided session, `doctor`/`self-test`, build/status/logs/cancel/download/jobs, install guide, long-path and CJK handling, portable packaging | `cargo test -p builder-windows` (unit + real-Agent E2E on Linux); run on Windows 11 incl. a build over SSH |
 | `builder/cli` (`zkb`) | `host add/list/test/remove`, `build`, `status`, `logs`, `cancel`, `download`, `jobs`, `delete`, `doctor`, `config` | `cargo test -p builder-cli` (E2E against the real Agent) |
 | `builder/agent` | daemon + stdio sessions, `ssh-dispatch` forced command, queue with one build slot, store/recovery, NDJSON events, cancellation with process groups, cleanup, artifact verification, `doctor`, `gc`, fake-build mode | unit tests + CLI E2E on Linux |
@@ -173,6 +173,16 @@ the catalogue names it as `Roms/<TITLE_ID>.<ext>`:
 target/debug/3ds2apple-pack packages add --roms "../ROM/Game.cci" --include-rom
 target/debug/3ds2apple-pack packages verify
 ```
+
+Import also reads the game metadata from the NCCH ExeFS: the SMDH title table
+gives localized names (BCP-47 keys `ja`/`en`/`fr`/`de`/`it`/`es`/`zh-Hans`/
+`ko`/`nl`/`pt`/`ru`/`zh-Hant`), the publisher and the 48x48 icon, which is
+written to the package as `cover.png`. `GameInfo.json` gains additive optional
+`displayNames`, `publisher` and `coverPath` fields (schema version stays 1;
+`displayName` remains the English/default title), and the same fields plus the
+absolute `coverPath` are exposed by `packages add --json` / `packages list
+--json` for launchers. Only ~14 KiB of the ROM is read and the extracted cover
+stays in the gitignored output tree.
 
 Contract, package layout, catalogue schema v2 and the GamePack ABI hand-off:
 [../docs/desktop-aot.md](../docs/desktop-aot.md). The zkb/Agent remote flow is

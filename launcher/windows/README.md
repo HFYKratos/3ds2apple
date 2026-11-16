@@ -1,18 +1,20 @@
 # 3ds2apple launcher for Windows (MVP)
 
-Status: **launcher v3 polish (task-33, 2026-11-16) — centered top tabs, one Import
-button (file picker), automatic startup readiness light, new 0.2.2/build-10 ROM-free shell
-template with Frameworks/MoltenVK.framework, single-file package rebuilt.**
-This checkout compiles cleanly (0 errors, warnings as errors), its **125 unit/integration
-tests pass** (3 consecutive runs; a pre-existing thread-pool ordering flake in the devpush
-progress test was made deterministic), the host self-test passes, and the packaged
-single-file exe runs its clean-folder `--self-test` on both Linux/WSL (payload extraction)
-and real Windows 11 (all checks PASS, shell template v0.2.2). The UI has exactly two
-sections (Library, Deploy) plus a minimal Settings gear; it is localized (English / 简体中文)
-and uses the iOS app icon. The user-facing package is a ZIP with exactly one self-contained
-exe. Real Windows captures of the v3 UI are in `docs/ui/v3-*.png`; the Impactor signing run
-and the phone flows still need verification with an iPhone/iPad; the artifact hash and
-remaining risks are in [docs/windows-launcher.md](../../docs/windows-launcher.md) section 16
+Status: **launcher v4 polish (task-39, 2026-11-16) — portable data folder beside the
+exe (LocalAppData only when read-only, with one-time migration), hardware-aware compile line
+(cores/RAM + 3dsrecomp auto-parallelism), and ROM metadata UI from the pack CLI (SMDH
+`cover.png` icon, localized `displayNames`, `publisher`; the editable name box is gone).
+Single-file package rebuilt around the 0.2.3/build-11 ROM-free shell template.**
+This checkout compiles cleanly (0 errors, warnings as errors) and its **146
+unit/integration tests pass**. The host self-test passes, including the new portable-root,
+read-only-fallback, workspace-migration, hardware and ROM-metadata checks; the packaged
+single-file exe runs its clean-folder `--self-test` on Linux/WSL with the embedded payload.
+The UI has exactly two sections (Library, Deploy) plus a minimal Settings gear; it is
+localized (English / 简体中文) and uses the iOS app icon. The user-facing package is a ZIP
+with exactly one self-contained exe. Synthetic (non-game) UI captures of the v4 UI are in
+`docs/ui/v4-*.png`; a real Windows 11 run of this exact 0.2.4 build and the Impactor
+signing/phone flows still need verification; the artifact hash and remaining risks are
+tracked in [docs/windows-launcher.md](../../docs/windows-launcher.md) section 16
 (acceptance steps in section 11).
 
 Architecture correction (Lead, 2026-11-14): iOS cannot dlopen a loose unsigned
@@ -90,7 +92,10 @@ No ROM, key, IPA, generated C or Apple credential is stored in this repository.
                                         shell template manifest + whole-IPA install service
         Device/                         devpush/1 JSON/NDJSON client + read-only usbmuxd ListDevices
         Deploy/                         GameInfo.json writer, ROM+GameInfo push plan + verification
-        LauncherState/                      %LOCALAPPDATA%/3ds2apple/launcher state + logs
+        LauncherState/                      persistent state + logs (portable workspace)
+      Portable/                           <exe-dir>/3ds2apple-data layout policy, writability
+                                          probe, one-time LocalAppData workspace migration
+      Hardware/                           logical/physical cores + RAM probe for the compile line
       src/Launcher.Desktop/             Avalonia UI (Program, App, MainWindow, view model,
                                         Localization/LocalizedText, Assets/app.ico + placeholder)
       tests/ThreeDsTwoApple.Launcher.Core.Tests/   125 xUnit tests (incl. DeployFlowTests + ComposedIpaVerifierTests)

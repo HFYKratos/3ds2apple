@@ -39,10 +39,13 @@ public sealed record LocalToolchain(
         var file = fileExists ?? File.Exists;
         var directory = directoryExists ?? Directory.Exists;
         var missing = new List<string>();
-        if (!IsFile(file, RecompilerPath)) missing.Add("3dsrecomp.exe (missing from the launcher payload; expected at Bin/3dsrecomp.exe)");
-        if (!IsFile(file, ClangPath)) missing.Add("clang.exe (install the official LLVM 21.1.8 release; the launcher also looks in Bin/llvm)");
-        if (!IsFile(file, LlvmArPath)) missing.Add("llvm-ar.exe (part of the LLVM release)");
-        if (!IsFile(file, Ld64LldPath)) missing.Add("ld64.lld.exe (part of the LLVM release)");
+        // The bundled payload is always the Windows build: accept name.exe as well, so a
+        // --self-test run of the packaged payload on a Linux/WSL CI host reports the truth
+        // (the tools are present) instead of a false warning.
+        if (!IsToolFile(file, RecompilerPath)) missing.Add("3dsrecomp.exe (missing from the launcher payload; expected at Bin/3dsrecomp.exe)");
+        if (!IsToolFile(file, ClangPath)) missing.Add("clang.exe (install the official LLVM 21.1.8 release; the launcher also looks in Bin/llvm)");
+        if (!IsToolFile(file, LlvmArPath)) missing.Add("llvm-ar.exe (part of the LLVM release)");
+        if (!IsToolFile(file, Ld64LldPath)) missing.Add("ld64.lld.exe (part of the LLVM release)");
         if (!IsDirectory(directory, ResourceIncludeDirectory)) missing.Add("LLVM clang resource headers (lib/clang/21/include)");
         if (!IsDirectory(directory, DarwinStubsDirectory)) missing.Add("tools/winbuild/darwin-stubs/include (hand-written ISO C headers, no Apple SDK)");
         if (!IsFile(file, ShimSourcePath)) missing.Add("ios/zakuro-ios/gamepack/zk_gamepack_shim.c");
@@ -52,6 +55,10 @@ public sealed record LocalToolchain(
 
     private static bool IsFile(Func<string, bool> exists, string? path) =>
         !string.IsNullOrWhiteSpace(path) && exists(path);
+
+    /// <summary>Tool binary check that also accepts the Windows ".exe" suffix.</summary>
+    private static bool IsToolFile(Func<string, bool> exists, string? path) =>
+        !string.IsNullOrWhiteSpace(path) && (exists(path) || exists(path + ".exe"));
 
     private static bool IsDirectory(Func<string, bool> exists, string? path) =>
         !string.IsNullOrWhiteSpace(path) && exists(path);

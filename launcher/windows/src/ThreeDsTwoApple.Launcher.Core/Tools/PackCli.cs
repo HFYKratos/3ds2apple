@@ -20,7 +20,10 @@ public sealed record ImportedPackage(
     string ProductCode,
     string PackageDir,
     string RomPath,
-    string Status);
+    string Status,
+    IReadOnlyDictionary<string, string>? DisplayNames = null,
+    string? Publisher = null,
+    string? CoverPath = null);
 
 /// <summary>Result of <c>packages add --json</c>.</summary>
 public sealed record PackageAddResult(
@@ -167,7 +170,10 @@ public sealed class PackCli
                     (int)(Json.Long(element, "aotVersion") ?? 1),
                     Json.String(element, "state") ?? "?",
                     pack,
-                    Json.Array(element, "issues").Select(i => i.GetString() ?? i.GetRawText()).ToList()));
+                    Json.Array(element, "issues").Select(i => i.GetString() ?? i.GetRawText()).ToList(),
+                    ParseDisplayNames(element),
+                    Json.String(element, "publisher"),
+                    Json.String(element, "coverPath")));
             }
             foreach (var element in Json.Array(document.RootElement, "errors"))
             {
@@ -265,7 +271,10 @@ public sealed class PackCli
                     Json.String(element, "productCode") ?? string.Empty,
                     Json.String(element, "packageDir") ?? string.Empty,
                     Json.String(element, "romPath") ?? string.Empty,
-                    Json.String(element, "status") ?? "imported"));
+                    Json.String(element, "status") ?? "imported",
+                    ParseDisplayNames(element),
+                    Json.String(element, "publisher"),
+                    Json.String(element, "coverPath")));
             }
             foreach (var element in Json.Array(document.RootElement, "errors"))
             {
@@ -277,6 +286,28 @@ public sealed class PackCli
             errors.Add(FirstMeaningfulLine(process));
         }
         return new PackageAddResult(packages, errors, process);
+    }
+
+    /// <summary>Parse the optional "displayNames" object (BCP-47 key -> localized short title).</summary>
+    private static IReadOnlyDictionary<string, string>? ParseDisplayNames(JsonElement element)
+    {
+        if (Json.Obj(element, "displayNames") is not { } map)
+        {
+            return null;
+        }
+        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in map.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.String)
+            {
+                var value = property.Value.GetString();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    names[property.Name] = value;
+                }
+            }
+        }
+        return names.Count == 0 ? null : names;
     }
 
     /// <summary>First non-empty diagnostic line: used when a CLI fails without emitting JSON.</summary>

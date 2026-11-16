@@ -28,7 +28,10 @@ public sealed record PackageInfo(
     int AotVersion,
     string State,
     PackRecord? Pack,
-    IReadOnlyList<string> Issues)
+    IReadOnlyList<string> Issues,
+    IReadOnlyDictionary<string, string>? DisplayNames = null,
+    string? Publisher = null,
+    string? CoverPath = null)
 {
     public bool HasPack => Pack is { } pack && !pack.IsPlaceholder;
 
@@ -41,9 +44,23 @@ public sealed record PackageInfo(
 public sealed class LibraryEntry
 {
     public string TitleID { get; set; } = string.Empty;
+
+    /// <summary>English/default display name written by the pack CLI (never user input).</summary>
     public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>Localized short titles from the ROM SMDH icon metadata (BCP-47 keys).</summary>
+    public Dictionary<string, string> DisplayNames { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Publisher from the ROM SMDH (empty when unknown).</summary>
+    public string Publisher { get; set; } = string.Empty;
+
+    /// <summary>Absolute path of the package's cover.png (ROM icon), null when the ROM has no icon.</summary>
+    public string? CoverPath { get; set; }
+
     public string? ProductCode { get; set; }
     public string RomPath { get; set; } = string.Empty;
+
+    /// <summary>Legacy editable-name field; kept only so old state.json files still deserialize (never read for display).</summary>
     public string DisplayNameOverride { get; set; } = string.Empty;
     public string? PackageDir { get; set; }
     public string? PackPath { get; set; }

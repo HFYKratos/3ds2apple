@@ -2,6 +2,7 @@
 //! remove. The CLI is a thin shell over these functions and the tests drive them
 //! directly.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::catalog::GameCatalog;
@@ -55,6 +56,12 @@ pub struct ImportResult {
     pub package_dir: PathBuf,
     /// Package manifest after the import.
     pub game_info: GameInfo,
+    /// Localized short titles recorded for the package (from the ROM SMDH).
+    pub display_names: BTreeMap<String, String>,
+    /// Publisher recorded for the package (from the ROM SMDH).
+    pub publisher: String,
+    /// Absolute path of `<package>/cover.png` when the package has a cover.
+    pub cover_path: Option<PathBuf>,
     /// What happened.
     pub status: ImportStatus,
 }
@@ -105,12 +112,26 @@ pub fn import_rom(root: &Path, rom_path: &Path, options: &ImportOptions) -> Resu
         // source) and record romFile/romSha256/romBytes in the manifest.
         info = gameinfo::install_rom(&dir, rom_path)?;
     }
+    // Extract the ROM SMDH icon into the package as cover.png (never
+    // overwriting a cover the user supplied) and record it in the manifest.
+    let cover_path = gameinfo::ensure_cover(&dir, rom_path)?;
+    if info.cover_path != cover_path {
+        info.cover_path = cover_path;
+        info.write(&dir)?;
+    }
+    let cover_absolute = info
+        .cover_path
+        .as_ref()
+        .map(|_| dir.join(gameinfo::COVER_FILE));
     let mut queue = Queue::load(root)?;
     queue.upsert(QueueEntry::from_import(&info, &rom));
     queue.save(root)?;
     Ok(ImportResult {
         rom,
         package_dir: dir,
+        display_names: info.display_names.clone(),
+        publisher: info.publisher.clone(),
+        cover_path: cover_absolute,
         game_info: info,
         status,
     })
@@ -540,6 +561,14 @@ pub fn record_pack(root: &Path, options: &RecordOptions) -> Result<GameInfo> {
         // shell can boot straight from the bundle with no on-device import.
         built = gameinfo::install_rom(&dir, rom_path)?;
     }
+    if let Some(rom_path) = &options.rom {
+        // Record the ROM SMDH icon as the package cover when it has none yet.
+        let cover_path = gameinfo::ensure_cover(&dir, rom_path)?;
+        if built.cover_path != cover_path {
+            built.cover_path = cover_path;
+            built.write(&dir)?;
+        }
+    }
     let mut queue = Queue::load(root)?;
     queue.upsert(QueueEntry {
         title_id: title.clone(),
@@ -962,5 +991,63 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.to_string().contains("--rom"), "{error}");
+    }
+
+    #[test]
+    fn import_extracts_smdh_metadata_and_cover() {
+        let temp = tempdir().unwrap();
+        let out = temp.path().join("out");
+        let path = temp.path().join("local-dump.cci");
+        let smdh = crate::smdh::test_support::synthetic_smdh(&[
+            (0, "テスト", "Example"),
+            (1, "Test Game", "Example"),
+        ]);
+        write_rom(
+            &path,
+            &crate::rom::test_support::synthetic_ncsd_with_smdh(
+                0x0004_0000_0005_5E00,
+                "CTR-P-EK2A",
+                &smdh,
+            ),
+        );
+        let result = import_rom(&out, &path, &ImportOptions::default()).unwrap();
+        // The English SMDH title wins over the file-name stem.
+        assert_eq!(result.game_info.display_name, "Test Game");
+        assert_eq!(
+            result.display_names.get("en").map(String::as_str),
+            Some("Test Game")
+        );
+        assert_eq!(
+            result.display_names.get("ja").map(String::as_str),
+            Some("テスト")
+        );
+        assert_eq!(result.publisher, "Example");
+        let cover = result.cover_path.clone().expect("extracted cover");
+        assert!(cover.is_file(), "cover {} is missing", cover.display());
+        assert!(
+            std::fs::read(&cover)
+                .unwrap()
+                .starts_with(b"\x89PNG\r\n\x1a\n"),
+            "cover must be a PNG"
+        );
+        assert_eq!(
+            result.game_info.cover_path.as_deref(),
+            Some(gameinfo::COVER_FILE)
+        );
+        // The manifest round-trips the additive fields; the ROM is not bundled
+        // by a header-only import and the cover is local user data.
+        let manifest = GameInfo::read(&result.package_dir).unwrap();
+        assert_eq!(manifest.display_names, result.display_names);
+        assert_eq!(manifest.publisher, result.publisher);
+        assert_eq!(manifest.cover_path, result.game_info.cover_path);
+        assert!(result.game_info.rom_file.is_none());
+        assert!(!result.package_dir.join("GameRom.cci").exists());
+
+        // Re-import keeps the extracted cover and stays deterministic.
+        let before = std::fs::read(&cover).unwrap();
+        let again = import_rom(&out, &path, &ImportOptions::default()).unwrap();
+        assert_eq!(again.status, ImportStatus::Refreshed);
+        assert_eq!(again.cover_path.as_deref(), Some(cover.as_path()));
+        assert_eq!(std::fs::read(&cover).unwrap(), before);
     }
 }

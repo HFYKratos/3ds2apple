@@ -3,7 +3,10 @@ using System.Globalization;
 using ThreeDsTwoApple.Launcher.Core;
 using ThreeDsTwoApple.Launcher.Core.BuildPipeline;
 using ThreeDsTwoApple.Launcher.Core.Deploy;
+using ThreeDsTwoApple.Launcher.Core.Distribution;
+using ThreeDsTwoApple.Launcher.Core.Hardware;
 using ThreeDsTwoApple.Launcher.Core.Models;
+using ThreeDsTwoApple.Launcher.Core.Portable;
 using ThreeDsTwoApple.Launcher.Core.Signing;
 using ThreeDsTwoApple.Launcher.Core.Tools;
 using ThreeDsTwoApple.Launcher.Core.Util;
@@ -12,41 +15,41 @@ using ThreeDsTwoApple.Launcher.Core.Localization;
 
 namespace ThreeDsTwoApple.Launcher.App.ViewModels;
 
-/// <summary>One card in the Library: name / state / ROM path + remove (no build/install/push buttons).</summary>
+/// <summary>One card in the Library: ROM icon / name / state / publisher + remove (no build/install/push buttons).</summary>
 public sealed class GameRow : ObservableObject
 {
     private readonly MainViewModel _owner;
     private string _state = "imported";
+    private Avalonia.Media.Imaging.Bitmap? _cover;
+    private string? _coverSourcePath;
 
     public GameRow(MainViewModel owner, LibraryEntry entry)
     {
         _owner = owner;
         Entry = entry;
         RemoveCommand = new AsyncRelayCommand(() => _owner.RemoveGameAsync(this), () => !_owner.IsBusy);
+        Refresh();
     }
 
     public LibraryEntry Entry { get; }
 
     public string TitleID => Entry.TitleID;
 
-    public string DisplayName
-    {
-        get => string.IsNullOrWhiteSpace(Entry.DisplayNameOverride) ? Entry.DisplayName : Entry.DisplayNameOverride;
-        set
-        {
-            var trimmed = (value ?? string.Empty).Trim();
-            if (string.Equals(DisplayName, trimmed, StringComparison.Ordinal))
-            {
-                return;
-            }
-            Entry.DisplayNameOverride = trimmed;
-            _owner.PersistName(Entry);
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(DisplayNameText));
-        }
-    }
+    /// <summary>Name for the current UI language from the ROM's SMDH titles (no user input).</summary>
+    public string DisplayName => GameNames.Resolve(Entry.DisplayNames, Entry.DisplayName, Loc.CurrentTag);
 
     public string DisplayNameText => DisplayName;
+
+    /// <summary>ROM icon extracted by 3ds2apple-pack (cover.png); null falls back to the placeholder.</summary>
+    public Avalonia.Media.Imaging.Bitmap? CoverImage => _cover;
+
+    public bool HasCover => _cover is not null;
+
+    public bool HasPublisher => !string.IsNullOrWhiteSpace(Publisher);
+
+    public string Publisher => GameNames.ResolvePublisher(Entry.Publisher);
+
+    public string PublisherLine => Loc.T("library.card.publisher", Publisher);
 
     public string RomPath => Entry.RomPath;
 
@@ -94,10 +97,16 @@ public sealed class GameRow : ObservableObject
         State = Entry.Pack is null
             ? Entry.State
             : Entry.Pack.IsPlaceholder ? "preview" : "built";
+        RefreshCover();
         OnPropertyChanged(nameof(StateLabel));
         OnPropertyChanged(nameof(PackLine));
         OnPropertyChanged(nameof(DisplayName));
         OnPropertyChanged(nameof(DisplayNameText));
+        OnPropertyChanged(nameof(CoverImage));
+        OnPropertyChanged(nameof(HasCover));
+        OnPropertyChanged(nameof(Publisher));
+        OnPropertyChanged(nameof(PublisherLine));
+        OnPropertyChanged(nameof(HasPublisher));
         OnPropertyChanged(nameof(HasRealPack));
         OnPropertyChanged(nameof(IsPushed));
         OnPropertyChanged(nameof(TitleIdLine));
@@ -106,6 +115,31 @@ public sealed class GameRow : ObservableObject
     }
 
     public void RaiseCommandStates() => RemoveCommand.RaiseCanExecuteChanged();
+
+    /// <summary>Load the ROM icon once per package path; a broken/missing PNG keeps the placeholder.</summary>
+    private void RefreshCover()
+    {
+        var path = GameNames.ResolveCoverPath(Entry.PackageDir, Entry.CoverPath);
+        if (string.Equals(path, _coverSourcePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+        _coverSourcePath = path;
+        _cover?.Dispose();
+        _cover = null;
+        if (path is null)
+        {
+            return;
+        }
+        try
+        {
+            _cover = new Avalonia.Media.Imaging.Bitmap(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            _cover = null;
+        }
+    }
 
     private static string FormatBytes(long bytes) => bytes switch
     {
@@ -132,7 +166,7 @@ public sealed class DeployRow : ObservableObject
 
     public string TitleID => Entry.TitleID;
 
-    public string DisplayName => string.IsNullOrWhiteSpace(Entry.DisplayNameOverride) ? Entry.DisplayName : Entry.DisplayNameOverride;
+    public string DisplayName => GameNames.Resolve(Entry.DisplayNames, Entry.DisplayName, Loc.CurrentTag);
 
     public bool HasRealPack => Entry.Pack is { IsPlaceholder: false }
                                && !string.IsNullOrWhiteSpace(Entry.PackPath)
@@ -295,6 +329,7 @@ public sealed class MainViewModel : ObservableObject
     private LocalizedText _localized = new();
     private LanguageChoice? _selectedLanguage;
     private UiLanguagePreference _languagePreference = UiLanguagePreference.System;
+    private readonly HardwareProfile _hardware = HardwareProbe.Current;
 
     public MainViewModel() : this(LauncherServices.Create())
     {
@@ -325,8 +360,15 @@ public sealed class MainViewModel : ObservableObject
         ToggleDeployLogCommand = new RelayCommand(ToggleDeployLog);
         RebuildLanguageOptions();
         RebuildDeploySteps();
-        Log($"workspace: {_services.Workspace.Root}");
-        Log($"distribution: {_services.Locator.DistributionRoot}");
+        Log($"workspace: {_services.Workspace.Root} ({_services.Workspace.RootReason})");
+        if (_services.Workspace.Migration is { Attempted: true } migration)
+        {
+            Log(migration.Migrated
+                ? $"workspace migrated from {PortableLayout.LegacyWorkspaceRoot()} ({migration.FilesCopied} file(s) copied; the old folder is kept)"
+                : "workspace migration warning: " + (migration.Warning ?? "state.json could not be copied"));
+        }
+        Log($"distribution: {DistributionRoot} ({DistributionLayout.Prepare().Reason ?? "resolved"})");
+        Log("hardware: " + _hardware.Describe());
         Log("3ds2apple launcher v2 started. Add your own decrypted .3ds/.cci in Library, then deploy it in one click.");
     }
 
@@ -410,6 +452,45 @@ public sealed class MainViewModel : ObservableObject
 
     public string DistributionLine => Loc.T("settings.distribution", DistributionRoot);
 
+    /// <summary>Settings/Diagnostics: where games and state live, and why that root was chosen.</summary>
+    public string WorkspaceInfoLine => Loc.T("settings.workspaceInfo", WorkspaceRoot, WorkspaceReasonText);
+
+    /// <summary>Settings/Diagnostics: where the bundled tools were extracted, and why.</summary>
+    public string DistributionInfoLine => Loc.T("settings.distributionInfo", DistributionRoot, DistributionReasonText);
+
+    public string WorkspaceReasonText => _services.Workspace.RootKind switch
+    {
+        DataRootKind.Portable => Loc.T("layout.portable"),
+        DataRootKind.LocalAppData => Loc.T("layout.localAppData"),
+        DataRootKind.Explicit => Loc.T("layout.explicit"),
+        _ => Loc.T("layout.temp"),
+    };
+
+    public string DistributionReasonText
+    {
+        get
+        {
+            try
+            {
+                var prepared = DistributionLayout.Prepare();
+                if (string.Equals(prepared.Root, DistributionRoot, StringComparison.OrdinalIgnoreCase))
+                {
+                    return prepared.Portable ? Loc.T("layout.portable") : Loc.T("layout.localAppData");
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // never break the settings page because a probe failed
+            }
+            return Loc.T("layout.explicit");
+        }
+    }
+
+    /// <summary>Compact Deploy line: cores, RAM and the compiler's automatic parallelism (no jobs setting).</summary>
+    public string HardwareLine => Loc.T("deploy.hardware", _hardware.LogicalCores, _hardware.PhysicalCores, _hardware.TotalMemoryGb, _hardware.AvailableMemoryGb);
+
+    public string HardwareDiagnostics => _hardware.Describe();
+
     public string CurrentLogPath => _services.Workspace.CurrentLogPath;
 
     // --- library -----------------------------------------------------------
@@ -435,12 +516,6 @@ public sealed class MainViewModel : ObservableObject
     };
 
     public string ReadinessDetail => _readinessDetail;
-
-    public void PersistName(LibraryEntry entry)
-    {
-        _services.Workspace.SaveState();
-        OnPropertyChanged(nameof(Games));
-    }
 
     public async Task ImportAsync(IReadOnlyList<string> paths)
     {
@@ -481,14 +556,22 @@ public sealed class MainViewModel : ObservableObject
                     ImportedAt = DateTimeOffset.UtcNow,
                 };
                 entry.DisplayName = imported.DisplayName;
+                entry.DisplayNames = imported.DisplayNames is null
+                    ? entry.DisplayNames
+                    : new Dictionary<string, string>(imported.DisplayNames, StringComparer.OrdinalIgnoreCase);
+                entry.Publisher = GameNames.ResolvePublisher(imported.Publisher);
                 entry.ProductCode = imported.ProductCode;
                 entry.RomPath = path;
                 entry.PackageDir = imported.PackageDir;
+                entry.CoverPath = GameNames.ResolveCoverPath(imported.PackageDir, imported.CoverPath);
                 entry.State = "queued";
                 entry.LastError = null;
                 _services.Workspace.Upsert(entry);
                 _services.Workspace.SaveState();
-                Log($"imported {imported.TitleID}  {imported.DisplayName}  {imported.ProductCode}  (headers only; Deploy sends it later)");
+                Log($"imported {imported.TitleID}  {imported.DisplayName}  {imported.ProductCode}"
+                    + (string.IsNullOrWhiteSpace(entry.Publisher) ? string.Empty : "  " + entry.Publisher)
+                    + (entry.CoverPath is null ? "  (no SMDH icon)" : "  (SMDH icon + " + entry.DisplayNames.Count + " language name(s))")
+                    + "  (headers only; Deploy sends it later)");
             }
             await RefreshLibraryAsync().ConfigureAwait(true);
             await RefreshStatusAsync().ConfigureAwait(true);
@@ -520,9 +603,19 @@ public sealed class MainViewModel : ObservableObject
                     continue;
                 }
                 entry.DisplayName = info.DisplayName;
+                if (info.DisplayNames is { Count: > 0 })
+                {
+                    entry.DisplayNames = new Dictionary<string, string>(info.DisplayNames, StringComparer.OrdinalIgnoreCase);
+                }
+                if (!string.IsNullOrWhiteSpace(info.Publisher))
+                {
+                    entry.Publisher = GameNames.ResolvePublisher(info.Publisher);
+                }
                 entry.ProductCode = info.ProductCode;
                 entry.State = info.State;
                 entry.Pack = info.Pack;
+                entry.PackageDir ??= Path.Combine(_services.Workspace.OutRoot, "packages", info.TitleID);
+                entry.CoverPath = GameNames.ResolveCoverPath(entry.PackageDir, info.CoverPath ?? entry.CoverPath);
                 if (info.Pack is not null)
                 {
                     entry.PackPath = Path.Combine(_services.Workspace.OutRoot, "packages", info.TitleID, GameInfoWriter.GamePackFileName);
@@ -701,6 +794,7 @@ public sealed class MainViewModel : ObservableObject
         var orchestrator = _services.CreateDeployOrchestrator(_shell);
         ResetDeploySteps();
         SetDeployRunning();
+        Log("[deploy] hardware: " + _hardware.Describe());
         SetBusy(true, L.DeployRunning);
         try
         {
@@ -1084,6 +1178,12 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(InstalledStatus));
         OnPropertyChanged(nameof(InstalledBundleIdLine));
         OnPropertyChanged(nameof(DistributionLine));
+        OnPropertyChanged(nameof(WorkspaceInfoLine));
+        OnPropertyChanged(nameof(DistributionInfoLine));
+        OnPropertyChanged(nameof(WorkspaceReasonText));
+        OnPropertyChanged(nameof(DistributionReasonText));
+        OnPropertyChanged(nameof(HardwareLine));
+        OnPropertyChanged(nameof(HardwareDiagnostics));
         OnPropertyChanged(nameof(ToolchainStatus));
         OnPropertyChanged(nameof(DiagnosticsToggleLabel));
         OnPropertyChanged(nameof(DeployLogToggleLabel));
