@@ -65,9 +65,17 @@ struct GameLaunch {
 /// A user-facing message on the home page: an AOT-only launch refusal or a
 /// missing-game-data hint. Dismissed with the card's Dismiss button.
 struct SessionNotice: Identifiable, Equatable {
+    /// How serious the message is; the home page paints the card red for an
+    /// AOT-only refusal (the game did not start) and orange for a hint.
+    enum Severity: Equatable {
+        case warning
+        case error
+    }
+
     let id: UUID
     let title: String
     let message: String
+    var severity: Severity = .warning
 }
 
 /// Rolling status of the frame loop, shown in the UI status line and diagnostics.
@@ -96,6 +104,52 @@ enum AOTStatus: String {
 
     /// Localized label for the About page and diagnostics.
     var title: String { L10n.tr(rawValue) }
+}
+
+/// What the AOT checks reported for the loaded game: the build-level linked
+/// code, the per-handle recompiled flag, the runtime's reason text and the
+/// pack/catalog path. Logged on every load and exported in diagnostics, so a
+/// device run proves whether the game really executed AOT code (the shell never
+/// falls back to the interpreter).
+struct AOTDiagnostics: Equatable {
+    /// zk_linked_code(): 1 when this build carries linked AOT code at all.
+    var linkedCode: Bool = false
+    /// zk_linked_program_id(): title the linked code is for, 0 when none.
+    var linkedProgramID: UInt64 = 0
+    /// zk_recompiled(handle): 1 when the loaded system runs AOT code.
+    var recompiled: Bool = false
+    /// zk_recompiled_status(handle): why recompiled is false, and how much of
+    /// the work is still interpreted when a title mixes AOT and interpreted
+    /// code.
+    var status: String = ""
+    /// GamePack path registered with the runtime (bundle-relative), "static
+    /// linked" for the single-game build, empty when none was registered.
+    var packPath: String = ""
+    /// zk_registered_gamepack_title_id(): title in the runtime's pack slot.
+    var registeredTitleID: UInt64 = 0
+
+    /// Stable English line for the device log and diagnostics.
+    var label: String {
+        "linked_code=\(linkedCode ? 1 : 0)"
+            + " linked_program=\(String(format: "%016llX", linkedProgramID))"
+            + " recompiled=\(recompiled ? 1 : 0)"
+            + " registered_pack=\(String(format: "%016llX", registeredTitleID))"
+            + " pack=\(packPath.isEmpty ? "none" : packPath)"
+            + " status=\(status.isEmpty ? "-" : status)"
+    }
+}
+
+/// One compact row for the always-visible in-game runtime badge: AOT state,
+/// FPS, display/renderer path and Metal HUD state. Everything is localized here
+/// so the view is a dumb renderer and both languages come from one place.
+struct RuntimeBadgeState {
+    var aotText: String
+    var aotIsError: Bool
+    var fpsText: String
+    var displayText: String
+    var displayIsSoftware: Bool
+    var hudText: String
+    var hudNeedsAttention: Bool
 }
 
 /// A1: how the frame loop reaches the display.
@@ -192,6 +246,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// via Vulkan (MoltenVK) and how the screens are presented; shown in
     /// diagnostics next to the warm-up/cache state.
     @Published private(set) var hardwareStatus: String = "—"
+    /// AOT checks of the last load (linked code, recompiled flag, runtime status
+    /// text and the pack that was registered). Shown in About and exported in
+    /// diagnostics; a refusal publishes it too, so the log and UI agree.
+    @Published private(set) var aotDiagnostics = AOTDiagnostics()
     /// Pipeline-cache files seen at the last check (load, warm-up end,
     /// unload/background). Used to tell a cold first run from a warmed one and
     /// exported in diagnostics.
@@ -384,6 +442,12 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private func startValidated(_ entry: GameEntry) {
         switch AOTPackageLoader.shared.availability(for: entry) {
         case .unavailable(let reason):
+            AppLog.log(
+                "[3ds2apple] AOT gate: %@ (%@) is not runnable in this build: %@",
+                entry.title,
+                entry.titleID,
+                reason.localizedMessage
+            )
             presentNoAOTNotice(for: entry, reason: reason)
         case .available(.bundlePackage(_)):
             switch AOTPackageLoader.shared.resolve(for: entry) {
@@ -519,21 +583,25 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         let detail = issues.map { "• " + $0.localizedMessage }.joined(separator: "\n")
         presentNotice(
             title: L10n.tr("This game cannot be started"),
-            message: "\(entry.title)\n\n\(detail)"
+            message: "\(entry.title)\n\n\(detail)",
+            severity: .error
         )
     }
 
-    /// Shows the "No AOT build for this game" state on the home page.
+    /// Shows the "No AOT build for this game" state on the home page (red: the
+    /// game cannot run in this build).
     func presentNoAOTNotice(for entry: GameEntry, reason: AOTUnavailableReason) {
         presentNotice(
             title: L10n.tr("No AOT build for this game"),
-            message: L10n.format("%@ — %@", entry.title, reason.localizedMessage)
+            message: L10n.format("%@ — %@", entry.title, reason.localizedMessage),
+            severity: .error
         )
     }
 
-    /// Publishes one dismissible notice on the home page.
-    func presentNotice(title: String, message: String) {
-        let notice = SessionNotice(id: UUID(), title: title, message: message)
+    /// Publishes one dismissible notice on the home page. `severity` is what
+    /// the home page uses to paint an AOT-only refusal red.
+    func presentNotice(title: String, message: String, severity: SessionNotice.Severity = .warning) {
+        let notice = SessionNotice(id: UUID(), title: title, message: message, severity: severity)
         if Thread.isMainThread {
             self.notice = notice
         } else {
@@ -549,7 +617,11 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     func presentNoAOTMessage(_ message: String) {
         currentGame = nil
         aotStatus = .notLoaded
-        presentNotice(title: L10n.tr("No AOT build for this game"), message: message)
+        presentNotice(
+            title: L10n.tr("No AOT build for this game"),
+            message: message,
+            severity: .error
+        )
         setPhase(.idle)
     }
 
@@ -754,6 +826,85 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             view.applySystemMetalHUD(enabled: enabled)
         }
         AppLog.log("[3ds2apple] system Metal HUD: %@", enabled ? "on" : "off")
+    }
+
+    /// Whether the Settings switch asks for the system Metal HUD (the badge and
+    /// the Settings page read this; the layer property is applied when the Metal
+    /// view exists).
+    var isSystemMetalHUDEnabled: Bool { systemMetalHUDEnabled }
+
+    /// One-line runtime state for the always-visible in-game badge: AOT code,
+    /// presented FPS, renderer path (Metal GPU / software upload / CPU readback)
+    /// and Metal HUD state. The HUD can only show on the presented Metal layer,
+    /// so a software/readback load is reported as the reason instead of
+    /// pretending the switch worked.
+    var runtimeBadgeState: RuntimeBadgeState {
+        let loaded: Bool
+        if case .loaded = phase { loaded = true } else { loaded = false }
+
+        let aotText: String
+        var aotIsError = false
+        switch phase {
+        case .starting:
+            aotText = L10n.tr("AOT …")
+        case .preparing, .loaded:
+            switch aotStatus {
+            case .package: aotText = L10n.tr("AOT pack")
+            case .staticLinked: aotText = L10n.tr("AOT linked")
+            case .notLoaded:
+                aotText = L10n.tr("AOT missing")
+                aotIsError = true
+            }
+        case .idle, .failed, .finished:
+            aotText = L10n.tr("AOT missing")
+            aotIsError = true
+        }
+
+        let fpsText: String
+        if loaded, frameStats.frames > 0 {
+            fpsText = String(format: "%.0f fps", frameStats.fps)
+        } else {
+            fpsText = L10n.tr("fps …")
+        }
+
+        var displayText = L10n.tr("GPU …")
+        var displayIsSoftware = false
+        if loaded {
+            switch displayPath {
+            case .metalDirect:
+                displayText = L10n.tr("Metal GPU")
+            case .metalUploaded:
+                displayText = L10n.tr("Metal upload")
+                displayIsSoftware = true
+            case .readback:
+                displayText = L10n.tr("CPU render")
+                displayIsSoftware = true
+            }
+        }
+
+        let hudText: String
+        var hudNeedsAttention = false
+        if !buildEnablesSystemMetalHUD {
+            hudText = L10n.tr("HUD build off")
+            hudNeedsAttention = true
+        } else if !systemMetalHUDEnabled {
+            hudText = L10n.tr("HUD off")
+        } else if loaded && !displayPath.usesMetalLayer {
+            hudText = L10n.tr("HUD needs Metal")
+            hudNeedsAttention = true
+        } else {
+            hudText = L10n.tr("HUD on")
+        }
+
+        return RuntimeBadgeState(
+            aotText: aotText,
+            aotIsError: aotIsError,
+            fpsText: fpsText,
+            displayText: displayText,
+            displayIsSoftware: displayIsSoftware,
+            hudText: hudText,
+            hudNeedsAttention: hudNeedsAttention
+        )
     }
 
     /// Whether the build's Info.plist enables the system Metal HUD. The runtime
@@ -1247,33 +1398,75 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         case 2: displayPath = .metalUploaded
         default: displayPath = .readback
         }
-        let programID = zk_linked_program_id()
-        let recompiled = zk_recompiled(handle) == 1
+        // AOT proof for this load. The shell never runs interpreted code: the
+        // linked code compiled into the build, the per-handle recompiled flag and
+        // the runtime's own status text are logged together so a device log (or
+        // the exported diagnostics) cannot leave "is AOT actually active?"
+        // ambiguous.
+        let linkedProgramID = zk_linked_program_id()
+        let linkedCode = zk_linked_code() == 1
+        let recompiledFlag = zk_recompiled(handle) == 1
+        let recompiledStatus = Self.recompiledStatusText(handle)
+        let registeredPack = zk_registered_gamepack_title_id()
+        let packPath: String
+        if launch.aotStatus == .staticLinked {
+            packPath = "static linked (main binary)"
+        } else {
+            let loaded = AOTPackageLoader.shared.loadedPackages.map(\.path)
+            packPath = loaded.joined(separator: ",")
+        }
+        var aotDiagnostics = AOTDiagnostics(
+            linkedCode: linkedCode,
+            linkedProgramID: linkedProgramID,
+            recompiled: recompiledFlag,
+            status: recompiledStatus,
+            packPath: packPath,
+            registeredTitleID: registeredPack
+        )
+        if launch.aotStatus == .package, aotDiagnostics.packPath.isEmpty {
+            aotDiagnostics.packPath = launch.entry.packFile ?? "unknown (catalog has no packFile)"
+        }
         let hardwareStatus = Self.hardwareStatusText(handle)
-        guard recompiled else {
+        AppLog.log("[3ds2apple] AOT: %@", aotDiagnostics.label)
+        AppLog.log("[3ds2apple] display: %@", displayPath.label)
+        AppLog.log("[3ds2apple] hardware: %@", hardwareStatus)
+        // Low-fps triage: a software renderer is the common reason a device build
+        // "feels slow" (and it is also why the Metal HUD cannot appear). Log it
+        // as its own warning line instead of hiding it among the status output.
+        let softwareRenderer = !displayPath.usesMetalLayer
+            || hardwareStatus.lowercased().contains("software")
+        if softwareRenderer {
+            AppLog.log(
+                "[3ds2apple] PERFORMANCE WARNING: the 3D draws in software (PICA200 on the CPU)%@. Expect a low frame rate; the GPU path needs Frameworks/MoltenVK.framework and the presented CAMetalLayer. hardware=%@",
+                MetalBackend.isMoltenVKEmbedded ? "" : "; this app has no MoltenVK.framework",
+                hardwareStatus
+            )
+        }
+        guard recompiledFlag else {
             // No interpreter fallback: a title the runtime would interpret must
-            // not run at all. Release the handle again and tell the user why.
-            let linkedTitle = String(format: "%016llX", programID)
+            // not run at all. Release the handle again and show a red error that
+            // names the actual runtime reason instead of silently interpreting.
+            let linkedTitle = String(format: "%016llX", linkedProgramID)
             zk_destroy(handle)
             system = nil
             framePresenter = nil
             presentFailures = 0
+            let reason = recompiledStatus.isEmpty ? "-" : recompiledStatus
             let message = L10n.format(
-                "No AOT build for this game: “%@” was loaded, but the runtime is not executing AOT code (linked title %@).",
+                "No AOT build for this game: “%@” was loaded, but the runtime is not executing AOT code (linked title %@, runtime status: %@). The shell refuses to run interpreted code.",
                 launch.entry.title,
-                linkedTitle
+                linkedTitle,
+                reason
             )
-            AppLog.log("[3ds2apple] %@", message)
+            AppLog.log("[3ds2apple] AOT REFUSED: %@", message)
             DispatchQueue.main.async { [weak self] in
-                self?.presentNoAOTMessage(message)
+                guard let self else { return }
+                self.aotDiagnostics = aotDiagnostics
+                self.presentNoAOTMessage(message)
             }
             return
         }
         let aot: AOTStatus = launch.aotStatus
-        AppLog.log("[3ds2apple] AOT linked=1 recompiled=1 program=0x%016llX status=%@",
-              programID, aot.label)
-        AppLog.log("[3ds2apple] display: %@", displayPath.label)
-        AppLog.log("[3ds2apple] hardware: %@", hardwareStatus)
         AppLog.log("[3ds2apple] zk_create OK after %.1f s: %@ (%@)",
               elapsed, launch.entry.title, romURL.lastPathComponent)
 
@@ -1301,6 +1494,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             self.inputState.clearAll()
             self.clearScreens()
             self.aotStatus = aot
+            self.aotDiagnostics = aotDiagnostics
             self.displayPath = displayPath
             self.hardwareStatus = hardwareStatus
             self.pipelineCacheStats = cacheAtLoad
@@ -1347,6 +1541,15 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
 
     /// Copies `zk_hardware_status()` into a Swift String. The pointer is
     /// library-owned and only valid until the next status call on this thread.
+    /// Copies zk_recompiled_status(): whether the loaded system runs AOT code
+    /// and, when it does not (or only partly), the runtime's own explanation.
+    /// The library-owned pointer is valid only until the next status call on the
+    /// calling thread, so it is copied here immediately.
+    private static func recompiledStatusText(_ handle: zk_system_t) -> String {
+        guard let pointer = zk_recompiled_status(handle) else { return "" }
+        return String(cString: pointer).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func hardwareStatusText(_ handle: zk_system_t) -> String {
         guard let pointer = zk_hardware_status(handle) else { return "no status" }
         let text = String(cString: pointer)

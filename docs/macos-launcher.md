@@ -1,10 +1,14 @@
 # macOS launcher (Library -> Deploy v2)
 
-> Status: task-31 v2 flow revision (2026-11-16) · owner: mac-flow-v2 ·
-> uncommitted on purpose (Lead review). Backend contracts (desktop CLI, device
-> bridge, Xcode signing) are unchanged; this revision is the user-visible flow,
-> the minimal Settings panel, the automatic install->push chain using the actual
-> installed bundle ID, the IPA verification gate and the app-only package.
+> Status: task-35 MoltenVK revision (2026-11-16) · owner: mac-moltenvk ·
+> uncommitted on purpose (Lead review). Builds on the task-34 polish (centered
+> header tabs, single Import button, automatic startup readiness light) and the
+> v2 install->push chain; backend contracts (desktop CLI, device bridge, Xcode
+> signing) are unchanged. This revision copies the verified
+> Frameworks/MoltenVK.framework from the pinned shell template into the shell
+> .app before signing (hardware PICA200 renderer + system Metal HUD instead of
+> the software fallback), adds the shell-runtime self-check, and bumps the
+> launcher to 0.2.3 (build 5).
 >
 > Code: [launcher/macos](../launcher/macos) · flow spec:
 > [launcher-flow-v2.md](launcher-flow-v2.md) · desktop pipeline:
@@ -58,13 +62,16 @@ Navigation is exactly two top-level sections plus a gear:
 
 | Area | Content |
 |---|---|
-| Library (游戏库) | Import a decrypted .3ds/.cci (drag/drop or picker in a sheet), list the games, rename or remove each one. No build/install/push buttons here. |
+| Library (游戏库) | One **导入 / Import** button opens the file picker and imports the chosen decrypted .3ds/.cci (no path/name fields, no explanatory card, no import sheet); game cards below can be renamed or removed. No build/install/push buttons here. |
 | Deploy (导入手机) | The selection list with checkboxes (one or several games), the target device, **一键部署 / Deploy selected** and the ordered step list + log: check device & Apple ID -> compile GamePacks -> compose one ROM-free IPA -> verify IPA (real packs + schema-2 GameCatalog, no ROM) -> sign & install -> push each ROM+GameInfo -> verify -> Done ("可以打开手机 App 游玩"). |
 | Settings (gear) | Only language, Apple ID/Xcode signing status (read-only, auto-detected Team ID), device status + installed app ID, logs (export/clear) and About/version. |
 
 The button always runs the whole chain in order; there is no way to install the
-bare shell or to install first and push later by hand. Import is a sheet of the
-Library, not a top-level tab. Build modes, sign/install strategies, tool paths,
+bare shell or to install first and push later by hand. The two sections are
+centered tabs in the header (no sidebar); Import is a single Library button, not
+a top-level tab or a sheet. Readiness is probed automatically on every launch
+and kept as a green/red light in the header (details in the tooltip and log).
+Build modes, sign/install strategies, tool paths,
 Team ID input, device UDID and bundle-ID overrides are removed from the UI:
 
 - tools (3ds2apple-pack, devpush, xcodegen) are auto-detected inside the app
@@ -132,13 +139,14 @@ Components (launcher/macos/Sources):
 | PackBackend.swift | desktop-CLI wrapper (rom inspect, packages add/list/verify, build, pack library IPA) + JSON parsing |
 | GameInfoWriter.swift | ROM-oriented Documents GameInfo.json (pack object informational) |
 | PushPlanner.swift | Documents/Games plan: GameRom + GameInfo (last); no dylib |
-| InstallBackend.swift | shell build, IPA inspection (packs + schema-2 catalog + no ROM), codesign + devicectl install, actual bundle ID read-back, Apple error mapper |
+| InstallBackend.swift | shell build, IPA inspection (packs + schema-2 catalog + no ROM), MoltenVK embedding + nested signing, codesign + devicectl install, actual bundle ID read-back, Apple error mapper |
+| ShellRuntime.swift | pinned MoltenVK.framework source (launcher-embedded / build/third_party / pinned template IPA), copy into the built shell .app and Metal/HUD readiness verification |
 | DeviceBridge.swift | devpush/1 NDJSON client + unavailable bridge |
 | MockBackends.swift | deterministic fixtures + mock CLI/installer/bridge used by mock, self-check and screenshots |
 | SelfCheck*.swift | headless logic + flow + i18n checks (PASS/FAIL lines) |
 | Localization.swift | LauncherLanguage resolution + complete English / zh-Hans string tables |
 | SnapshotRenderer.swift | offscreen SwiftUI ImageRenderer screenshots (en+zh, dark+light) |
-| Views/ | theme, components, two-section shell, Library, Deploy, minimal Settings, Import sheet |
+| Views/ | theme, components, header with centered tabs + readiness light, Library, Deploy, minimal Settings |
 | Resources/ | app icon (.icns/.png, from the iOS icon) + en / zh-Hans InfoPlist.strings |
 | scripts/vm-build.sh | Release build + self-check + screenshots + app-only ZIP under out/launchers |
 
@@ -179,6 +187,10 @@ modes are no longer user-visible.
       -derivedDataPath build/launcher-shell \
       CODE_SIGN_STYLE=Automatic CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES \
       DEVELOPMENT_TEAM=<detected team id> -allowProvisioningUpdates build
+    # launcher: copy Frameworks/MoltenVK.framework (pinned 4,822,128 B, sha256
+    # 6cd58884…) into the built .app, sign the nested framework + re-seal the
+    # app (hardware renderer + CAMetalLayer Metal HUD); the deploy is refused
+    # if the shell is not Metal/HUD ready
     3ds2apple-pack pack --title-id ... --execute --base-app <built .app> \
       --ipa-out IPA --ipa-name 3ds2apple-library-<n>-games
     unzip IPA/3ds2apple-library-<n>-games.ipa -d <temp>
@@ -255,7 +267,7 @@ GameInfo.json (schemaVersion 1) example:
      "registrationSymbol":"zk_gamepack_register",
      "packInBundle":true,
      "saveNamespace":"0004000000055E00",
-     "launcherVersion":"0.2.1",
+     "launcherVersion":"0.2.2",
      "pushedAt":"...Z",
      "rom":{"file":"GameRom.cci","size":1446201088,"sha256":"..."},
      "pack":{"file":"Frameworks/GamePack-0004000000055E00.dylib","size":...,"sha256":"...","inBundle":true,"sourceFile":"GamePack.dylib"},
@@ -273,7 +285,7 @@ put into the IPA.
 | Live | normal app launch | real CLI, real Xcode/codesign/devicectl, real devpush |
 | Mock | --selfcheck, --screenshot-dir | deterministic fixtures; no ROM, phone, Apple ID or network |
 
-The sidebar always shows MOCK / DRY RUN vs LIVE so a demo can never be mistaken
+The header always shows MOCK / DRY RUN vs LIVE so a demo can never be mistaken
 for a real device run. Build/install modes are not user-selectable any more.
 
 ## 6. Build and test on the macOS VM
@@ -349,36 +361,98 @@ build/ios/libzakuro_ios.a built; decrypted ROMs the player owns.
 7. Offscreen ImageRenderer screenshots occasionally show minor badge-spacing
    artifacts (the same view tree renders normally in the live app); the evidence
    PNGs are mock/non-game only.
+8. The MoltenVK embedding is verified up to the unsigned shell .app (real
+   xcodebuild shell + pinned framework copy + Info.plist, self-check 151/151).
+   Signing the nested MoltenVK.framework on a real device (Xcode/devicectl or
+   Windows plumesign) and the actual Metal HUD/FPS on hardware remain device-only
+   acceptance items. The packaged launcher carries the framework itself; a
+   launcher built with plain xcodebuild (no scripts/vm-build.sh) falls back to
+   build/third_party/MoltenVK.framework or the pinned out/shell template in the
+   checkout, and the deploy is refused if neither is present.
 
-## 10. Build and test evidence (task-31 v2 flow, 2026-11-16)
+## 10. Build and test evidence (task-34 polish + task-35 MoltenVK, 2026-11-16)
 
 Environment: macOS 26.7.3 VM (8 vCPU / 12 GB, QEMU on the CachyOS host), Xcode
 26.6 (17F113), xcodegen 2.46.0, no Aqua GUI session, no Apple ID signing assets,
 no attached iPhone/iPad. Sources were synced to ~/3ds2apple on the VM and built
-over SSH with launcher/macos/scripts/vm-build.sh.
+over SSH with launcher/macos/scripts/vm-build.sh. The task-35 build used an
+isolated checkout on the same VM (~/3ds2apple-moltenvk, sources synced over
+SSH) so the task-34 checkout was untouched.
+
+### task-35 (MoltenVK into the launcher-built shell)
+
+Root cause carried over from shell-aot-hud: the launcher built the iOS shell
+itself and never copied MoltenVK.framework, so device deploys ran the software
+PICA200 renderer (low fps, no CAMetalLayer/Metal HUD). The fix lives in
+ShellRuntime.swift + InstallBackend.buildShellApp: the verified framework is
+copied into the shell .app before signing/compose, the nested framework is
+signed and the app re-sealed, and installLibrary re-checks + re-signs it.
+
+- Framework pin: Frameworks/MoltenVK.framework/MoltenVK = 4,822,128 bytes,
+  sha256 6cd5888490d08b36356d04c50c05e2eda5b9bcb3d0338ece693a28987de96aff
+  (MoltenVK 1.4.2 ios-arm64 Mach-O dylib). Pinned template:
+  out/shell/3ds2apple-shell.ipa 0.2.2 build 10 = 5,477,984 bytes, sha256
+  d05af5a74570f24f5235378f3b2e46a3ecbbdff5a0dce6f8c504d08d8506a5aa.
+- Sources in priority order: the launcher's own
+  Contents/Resources/MoltenVK.framework (embedded by scripts/vm-build.sh from
+  the pinned template), build/third_party/MoltenVK.framework, then the pinned
+  out/shell template (extracted read-only). Anything that does not match the
+  pin is refused.
+- Real-shell proof on the VM: ios/app was built unsigned with xcodebuild
+  (** BUILD SUCCEEDED **, 0 errors, 3 pre-existing warnings; shell 0.2.2 build
+  10, Info.plist MetalHudEnabled / UIFileSharingEnabled /
+  LSSupportsOpeningDocumentsInPlace = true) and had no Frameworks/ directory.
+  The launcher's ShellRuntime then copied the pinned framework into that real
+  .app and verifyShellApp returned 0 problems (4,822,128-byte framework,
+  plist keys intact). This is the exact pre-signing copy the Deploy chain does
+  after xcodebuild.
+- Deploy guards: composed-IPA inspection requires Frameworks/MoltenVK.framework,
+  installLibrary signs the nested framework before the app, and 9 new
+  self-check assertions cover source resolution/pin, template integrity,
+  copy+verify and refusal of shells without the framework, MetalHudEnabled or
+  file sharing.
+- Launcher build: xcodebuild BUILD SUCCEEDED (Release), 0 errors, universal
+  x86_64 + arm64 (6,720,464-byte executable), com.kratos.3ds2apple.launcher,
+  version 0.2.3 build 5.
+- Self-check: **151/151 passed** (exit 0); the packaged fresh extraction also
+  reported 151/151.
+- Artifact: out/launchers/3ds2apple-launcher-0.2.3-macos-app.zip =
+  5,350,734 bytes, sha256
+  6ffcf9c655342370f1237885115befc00666072af0617c0d6f228f32d5211c3a, only the
+  .app (16 entries, 13,540,061 bytes uncompressed) including
+  Contents/Resources/MoltenVK.framework; the launcher is self-contained for
+  device deploys. 18 screenshots regenerated: 14 byte-identical to task-34 and
+  the 4 Settings shots differ only because About now shows 0.2.3.
+- Raw VM logs: /tmp/zl-launcher-build.log, /tmp/zl-launcher-selfcheck.log,
+  /tmp/zl-launcher-selfcheck-packaged.log, /tmp/zl-package-list.txt,
+  /tmp/zl-shell-build.log.
+
+### task-34 (polish)
 
 Results:
 
 - xcodebuild: BUILD SUCCEEDED, Release, 0 errors. Universal binary
-  (lipo: x86_64 arm64), 7,141,296-byte executable; bundle id
-  com.kratos.3ds2apple.launcher; version 0.2.1 (build 3).
-- Self-check: **132/132 passed** (exit 0): CLI/JSON/GameInfo/push-plan checks,
-  library-IPA inspection rules (missing pack, schema-1/empty catalogue, selected
-  title missing, bundled ROM, missing bundle ID), Team ID detection, devpush
-  contract, Apple-error translation, log redaction, library rename/remove and the
-  full mock Deploy chain (success + never-install-bare-shell failure paths + retry
-  + invalid-IPA refusal), plus 45+ localization checks (system language resolution,
-  both tables complete, v2 Library/Deploy terminology, one-click deploy and
-  "可以打开手机 App 游玩" wording, persisted override).
-- Screenshots: 20 non-game PNGs at 2x, SwiftUI ImageRenderer drawn offscreen,
-  English + Simplified Chinese, dark + light, no game pixels:
-  library (populated/empty), import sheet, deploy selection, deploy running,
-  deploy done, deploy failed, minimal Settings.
+  (lipo: x86_64 arm64), 6,541,632-byte executable; bundle id
+  com.kratos.3ds2apple.launcher; version 0.2.2 (build 4).
+- Self-check: **142/142 passed** (exit 0): all task-31 checks (CLI/JSON/GameInfo/
+  push-plan, library-IPA inspection rules, Team ID detection, devpush contract,
+  Apple-error translation, log redaction, library rename/remove, the full mock
+  Deploy chain and 45+ localization checks) plus the new automatic readiness and
+  single-action import assertions: ready fixture is green, a missing tool and
+  missing Apple ID signing are red, the launch check turns green automatically,
+  is written to the log and refreshes the device list; one Import action stages
+  the ROM data and lands the game in the library.
+- Screenshots: 18 non-game PNGs at 2x, SwiftUI ImageRenderer drawn offscreen,
+  English + Simplified Chinese, dark + light, no game pixels: library
+  (populated/empty/red not-ready), deploy selection, deploy running, deploy done,
+  deploy failed, minimal Settings. The header shows the centered 游戏库/部署 tabs
+  and the persistent green/red readiness light; the Library page has exactly one
+  导入 button and no import sheet or explanatory path/name card.
 
 | Evidence | Files |
 |---|---|
 | Library | [dark en](../launcher/macos/screenshots/launcher-library-dark-en.png) · [dark zh](../launcher/macos/screenshots/launcher-library-dark-zh.png) · [light en](../launcher/macos/screenshots/launcher-library-light-en.png) · [empty](../launcher/macos/screenshots/launcher-library-empty-dark-en.png) |
-| Import sheet | [dark en](../launcher/macos/screenshots/launcher-import-dark-en.png) · [dark zh](../launcher/macos/screenshots/launcher-import-dark-zh.png) |
+| Library, red "未完成准备" light | [dark en](../launcher/macos/screenshots/launcher-library-not-ready-dark-en.png) · [dark zh](../launcher/macos/screenshots/launcher-library-not-ready-dark-zh.png) |
 | Deploy selection | [dark en](../launcher/macos/screenshots/launcher-deploy-selected-dark-en.png) · [dark zh](../launcher/macos/screenshots/launcher-deploy-selected-dark-zh.png) |
 | Deploy running | [dark en](../launcher/macos/screenshots/launcher-deploy-running-dark-en.png) |
 | Deploy Done | [dark en](../launcher/macos/screenshots/launcher-deploy-done-dark-en.png) · [dark zh](../launcher/macos/screenshots/launcher-deploy-done-dark-zh.png) |
@@ -386,16 +460,17 @@ Results:
 | Minimal Settings | [dark en](../launcher/macos/screenshots/launcher-settings-dark-en.png) · [dark zh](../launcher/macos/screenshots/launcher-settings-dark-zh.png) · [light en](../launcher/macos/screenshots/launcher-settings-light-en.png) |
 
 - User-facing artifact (gitignored, project tree only — not temp_transfer):
-  `out/launchers/3ds2apple-launcher-0.2.1-macos-app.zip`
-  (3,978,571 bytes,
-  sha256 `07b7956695a0a948dc623d9df6a17e0adfbe8c46967a2b2f45608748d9217b8e`),
+  `out/launchers/3ds2apple-launcher-0.2.2-macos-app.zip`
+  (3,864,954 bytes,
+  sha256 `fce3c8fd3d71066737eac12c3c4edb73c5c2a75cd96d8c3b285f72f81943833a`),
   plus its `.sha256` sidecar. The ZIP contains exactly one
-  3ds2apple-launcher.app (13 entries, 9,139,716 bytes uncompressed): binary
+  3ds2apple-launcher.app (13 entries, 8,538,356 bytes uncompressed): binary
   (x86_64 + arm64), Info.plist, PkgInfo, AppIcon.icns/png, en + zh-Hans
-  InfoPlist.strings. No screenshots, README, ROM, IPA, dylib or game data.
-- Package verification: unzip -t OK; a fresh extraction ran --selfcheck 132/132
-  and rendered the zh screenshots on the VM; lipo reports x86_64 arm64; version
-  0.2.1 build 3.
-- Raw VM logs kept on the build VM: /tmp/zl-launcher-build.log,
+  InfoPlist.strings. No screenshots, README, ROM, IPA, dylib or game data. The
+  previous 0.2.1 ZIP remains on disk but is superseded by the task-35 0.2.3
+  ZIP (5,350,734 bytes, sha256 6ffcf9c6…).
+- Package verification: unzip -t OK; a fresh extraction ran --selfcheck 142/142
+  on the VM and reported lipo x86_64 arm64, version 0.2.2 build 4.
+- Raw VM logs kept on the build VM: /tmp/zl-polish-build.log,
   /tmp/zl-launcher-selfcheck.log, /tmp/zl-launcher-shots-*.log,
-  /tmp/zl-launcher-shots.tgz.
+  /tmp/zl-launcher-shots.tgz, /tmp/zl-polish-verify/.

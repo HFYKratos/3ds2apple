@@ -306,6 +306,7 @@ enum MockFixtures {
             "xcodebuild ... -allowProvisioningUpdates build",
             "3ds2apple-pack pack --title-id ... --execute (ROM-free)",
             "IPA verified: 2 packs, GameCatalog schema 2, no bundled ROM",
+            "codesign nested Frameworks/MoltenVK.framework (Metal/HUD runtime)",
             "codesign embedded GamePack dylibs (local identity)",
             "xcrun devicectl device install app",
             "installed bundle id: com.kratos.3ds2apple",

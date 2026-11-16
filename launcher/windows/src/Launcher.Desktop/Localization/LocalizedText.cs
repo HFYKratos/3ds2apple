@@ -25,11 +25,7 @@ public sealed class LocalizedText
     public string LibraryEmptyBody => Loc.T("library.empty.body");
     public string LibraryEmptyAction => Loc.T("library.empty.action");
     public string LibraryImportTitle => Loc.T("library.import.title");
-    public string LibraryImportBody => Loc.T("library.import.body");
-    public string LibraryImportName => Loc.T("library.import.name");
-    public string LibraryImportNamePlaceholder => Loc.T("library.import.namePlaceholder");
     public string LibraryImportAction => Loc.T("library.import.action");
-    public string LibraryImportHint => Loc.T("library.import.hint");
     public string LibraryCardRemove => Loc.T("library.card.remove");
     public string LibraryCardRename => Loc.T("library.card.rename");
     public string LibraryCardNotBuilt => Loc.T("library.card.notBuilt");
@@ -79,8 +75,6 @@ public sealed class LocalizedText
     public string DevicePrereqUsb => Loc.T("device.prereqUsb");
     public string DevicePrereqTrust => Loc.T("device.prereqTrust");
     public string DevicePrereqUnlock => Loc.T("device.prereqUnlock");
-    public string SettingsAutoTitle => Loc.T("settings.autoTitle");
-    public string SettingsAutoBody => Loc.T("settings.autoBody");
     public string SettingsLanguageTitle => Loc.T("settings.languageTitle");
     public string SettingsLanguageBody => Loc.T("settings.languageBody");
     public string SettingsLogsTitle => Loc.T("settings.logsTitle");
@@ -93,6 +87,10 @@ public sealed class LocalizedText
     public string SettingsAboutBody => Loc.T("settings.aboutBody", LauncherInfo.Version);
     public string SettingsVersion => Loc.T("settings.version", LauncherInfo.Version);
     public string ReadinessTitle => Loc.T("readiness.title");
+    public string ReadinessStatusReady => Loc.T("readiness.status.ready");
+    public string ReadinessStatusFailed => Loc.T("readiness.status.failed");
+    public string ReadinessStatusChecking => Loc.T("readiness.status.checking");
+    public string ReadinessRetryHint => Loc.T("readiness.status.retryHint");
 
     // Common
     public string CommonBrowse => Loc.T("common.browse");

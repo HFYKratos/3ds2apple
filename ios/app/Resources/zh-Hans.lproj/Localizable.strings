@@ -476,3 +476,33 @@
 "The game data's SHA-256 does not match the manifest (expected %@, got %@). Push the game data again with the launcher." = "游戏数据的 SHA-256 与清单不符（应为 %@，实际为 %@）。请用启动器重新推送游戏数据。";
 "The game data of %@ has not been pushed yet. Install the build from the desktop launcher, then let it push the game's data." = "%@ 的游戏数据尚未推送。请先安装桌面启动器生成的构建，再让它推送游戏数据。";
 "The game data folder “%@” is no longer in Documents/Games. Refresh the library." = "游戏数据文件夹“%@”已不在 Documents/Games 中。请刷新游戏库。";
+/* --- 0.2.2 运行状态徽标、AOT 诊断与 Metal HUD 状态 --- */
+"AOT …" = "AOT …";
+"AOT missing" = "AOT 缺失";
+"AOT pack" = "AOT 游戏包";
+"AOT linked" = "AOT 已链接";
+"AOT linked code" = "AOT 链接代码";
+"AOT recompiled" = "AOT 已重编译";
+"AOT status" = "AOT 状态";
+"fps …" = "fps …";
+"GPU …" = "GPU …";
+"Metal GPU" = "Metal GPU";
+"Metal upload" = "Metal 上传";
+"CPU render" = "CPU 渲染";
+"HUD on" = "HUD 开启";
+"HUD off" = "HUD 关闭";
+"HUD build off" = "HUD 构建未启用";
+"HUD needs Metal" = "HUD 需要 Metal";
+"Runtime status: %@, %@, %@, %@" = "运行状态：%@，%@，%@，%@";
+"Metal backend" = "Metal 后端";
+"MoltenVK embedded" = "已内嵌 MoltenVK";
+"Software renderer (no MoltenVK)" = "软件渲染（无 MoltenVK）";
+"Yes" = "是";
+"No" = "否";
+"None" = "无";
+"No AOT build for this game: “%@” was loaded, but the runtime is not executing AOT code (linked title %@, runtime status: %@). The shell refuses to run interpreted code." = "此游戏没有 AOT 构建：“%@”已加载，但运行时没有执行 AOT 代码（链接标题 %@，运行时状态：%@）。本壳拒绝运行解释执行的代码。";
+"This build does not enable the Metal HUD (MetalHudEnabled is missing from Info.plist), so the switch cannot show it. Rebuild the shell with scripts/build-ios-app.sh." = "此构建未启用 Metal HUD（Info.plist 缺少 MetalHudEnabled），因此开关无法显示它。请用 scripts/build-ios-app.sh 重新构建壳。";
+"The game is showing the CPU readback path, so the HUD has no Metal layer to attach to. This happens when the app has no MoltenVK.framework; deploy the launcher's 0.2.2+ shell template." = "游戏正在使用 CPU 回读路径，HUD 没有可附着的 Metal 图层。这通常说明应用没有 MoltenVK.framework；请部署启动器 0.2.2+ 的壳模板。";
+"On by default since 0.2.2. The HUD appears over a running game on the Metal layer; a Metal device that already existed at launch picks the switch up on the next launch." = "自 0.2.2 起默认开启。HUD 会显示在 Metal 图层上的运行游戏之上；如果启动时 Metal 设备已经创建，则下次启动才生效。";
+"Turn on to show Apple's FPS / GPU HUD over a running game." = "开启后在运行游戏上显示 Apple 的 FPS / GPU HUD。";
+

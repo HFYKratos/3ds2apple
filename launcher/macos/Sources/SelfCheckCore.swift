@@ -162,6 +162,7 @@ enum SelfCheckCore {
             catalogSchemaVersion: 2,
             catalogTitleIDs: ["0004000000055E00", "0004000000086400"],
             containsBundledROM: false,
+            hasMoltenVK: true,
             bytes: 12_345_678
         )
         let expectedTitles = ["0004000000055E00", "0004000000086400"]
@@ -184,6 +185,9 @@ enum SelfCheckCore {
         var noBundle = validInspection
         noBundle.bundleID = ""
         expect("IPA check: app without CFBundleIdentifier is refused", !noBundle.problems(expectedTitles: expectedTitles).isEmpty)
+        var noRuntime = validInspection
+        noRuntime.hasMoltenVK = false
+        expect("IPA check: a shell without Frameworks/MoltenVK.framework is refused", !noRuntime.problems(expectedTitles: expectedTitles).isEmpty)
 
         let catalogJSON = """
         {"schemaVersion":2,"games":[{"titleID":"0004000000055E00","displayName":"Pokemon Y","packFile":"Frameworks/GamePack-0004000000055E00.dylib"},{"titleID":"0004000000086400","displayName":"Animal Crossing","packFile":"Frameworks/GamePack-0004000000086400.dylib"}]}
@@ -196,6 +200,107 @@ enum SelfCheckCore {
         """.utf8))
         expect("catalog JSON: romFile entries are detected", romCatalog?.packedROMFiles.count == 1)
         expect("catalog JSON: invalid JSON parses to nil", LibraryIPACatalog.parse(Data("not json".utf8)) == nil)
+
+        // 8b. Shell runtime (task-35): the shell the launcher builds must carry
+        // the verified Frameworks/MoltenVK.framework (hardware PICA200/Metal
+        // layer + system Metal HUD) and keep the HUD/file-sharing Info.plist
+        // keys. The framework is hash-pinned; sources are the launcher-embedded
+        // resource, checkout build/third_party, or the pinned
+        // out/shell/3ds2apple-shell.ipa template.
+        let runtimeScratch = NSTemporaryDirectory() + "zl-shell-runtime-" + UUID().uuidString
+        try? FileManager.default.createDirectory(atPath: runtimeScratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: runtimeScratch) }
+        var runtimeSource: ShellRuntime.Source?
+        do {
+            runtimeSource = try ShellRuntime.resolveFramework(repoRoot: repo)
+        } catch {
+            expect("shell runtime: a verified MoltenVK.framework source resolves", false, error.localizedDescription)
+        }
+        if let source = runtimeSource {
+            defer { source.cleanUp() }
+            expect(
+                "shell runtime: a verified MoltenVK.framework source resolves",
+                true,
+                source.origin.rawValue + " · " + source.detail
+            )
+            let sourceProblems = ShellRuntime.problemsWithFramework(at: source.directory)
+            expect(
+                "shell runtime: the source is the pinned arm64 MoltenVK 1.4.2 dylib",
+                sourceProblems.isEmpty,
+                sourceProblems.joined(separator: "; ")
+            )
+            let template = repo + "/" + ShellRuntime.pinnedTemplateRelativePath
+            if FileManager.default.fileExists(atPath: template) {
+                let templateProblems = ShellRuntime.inspectPinnedTemplate(at: template)
+                expect(
+                    "shell runtime: pinned shell template carries the verified framework + HUD/file-sharing plist",
+                    templateProblems.isEmpty,
+                    templateProblems.joined(separator: "; ")
+                )
+            } else {
+                expect("shell runtime: pinned shell template not in checkout (launcher-embedded copy is used)", true)
+            }
+
+            // Copy the framework exactly like buildShellApp does, then prove the
+            // shell verification accepts the good shell and refuses the broken
+            // variants (no framework / HUD off / file sharing off).
+            let scratchApp = runtimeScratch + "/Payload/3ds2apple.app"
+            try? FileManager.default.createDirectory(atPath: scratchApp + "/Frameworks", withIntermediateDirectories: true)
+            writeShellInfoPlist(to: scratchApp + "/Info.plist", metalHUD: true, fileSharing: true)
+            do {
+                try ShellRuntime.copyFramework(from: source, intoShellAppAt: scratchApp)
+                let shellProblems = ShellRuntime.verifyShellApp(at: scratchApp)
+                expect(
+                    "shell runtime: built shell with Frameworks/MoltenVK.framework verifies",
+                    shellProblems.isEmpty,
+                    shellProblems.joined(separator: "; ")
+                )
+                let copied = ShellRuntime.problemsWithFramework(at: ShellRuntime.frameworkDirectory(inShellAppAt: scratchApp))
+                expect(
+                    "shell runtime: copied framework keeps the pinned bytes",
+                    copied.isEmpty,
+                    copied.joined(separator: "; ")
+                )
+                try? FileManager.default.removeItem(atPath: ShellRuntime.frameworkDirectory(inShellAppAt: scratchApp))
+                expect(
+                    "shell runtime: a shell without Frameworks/MoltenVK.framework is refused",
+                    !ShellRuntime.verifyShellApp(at: scratchApp).isEmpty
+                )
+                try? ShellRuntime.copyFramework(from: source, intoShellAppAt: scratchApp)
+                writeShellInfoPlist(to: scratchApp + "/Info.plist", metalHUD: false, fileSharing: true)
+                expect(
+                    "shell runtime: a shell without MetalHudEnabled is refused",
+                    ShellRuntime.verifyShellApp(at: scratchApp).contains { $0.contains("MetalHudEnabled") }
+                )
+                writeShellInfoPlist(to: scratchApp + "/Info.plist", metalHUD: true, fileSharing: false)
+                expect(
+                    "shell runtime: a shell without Documents file sharing is refused",
+                    ShellRuntime.verifyShellApp(at: scratchApp).contains { $0.contains("UIFileSharingEnabled") }
+                )
+            } catch {
+                for name in [
+                    "shell runtime: built shell with Frameworks/MoltenVK.framework verifies",
+                    "shell runtime: copied framework keeps the pinned bytes",
+                    "shell runtime: a shell without Frameworks/MoltenVK.framework is refused",
+                    "shell runtime: a shell without MetalHudEnabled is refused",
+                    "shell runtime: a shell without Documents file sharing is refused",
+                ] {
+                    expect(name, false, error.localizedDescription)
+                }
+            }
+        } else {
+            for name in [
+                "shell runtime: the source is the pinned arm64 MoltenVK 1.4.2 dylib",
+                "shell runtime: pinned shell template carries the verified framework + HUD/file-sharing plist",
+                "shell runtime: built shell with Frameworks/MoltenVK.framework verifies",
+                "shell runtime: copied framework keeps the pinned bytes",
+                "shell runtime: a shell without Frameworks/MoltenVK.framework is refused",
+                "shell runtime: a shell without MetalHudEnabled is refused",
+                "shell runtime: a shell without Documents file sharing is refused",
+            ] {
+                expect(name, false, "no verified MoltenVK.framework source")
+            }
+        }
 
         // 9. Team ID detection from Xcode's local state (never typed by the user)
         let profilePlist = """
@@ -240,5 +345,20 @@ enum SelfCheckCore {
         expect("devpush: container hint mentions file sharing", BridgeExitCodes.hint(for: "container_unavailable").lowercased().contains("file sharing"))
 
         return checks
+    }
+
+    /// Write a synthetic shell Info.plist for the shell-runtime checks; the
+    /// launcher verifies these same keys on the real built shell.
+    private static func writeShellInfoPlist(to path: String, metalHUD: Bool, fileSharing: Bool) {
+        let plist: [String: Any] = [
+            "CFBundleIdentifier": "com.kratos.3ds2apple",
+            "CFBundleShortVersionString": "0.2.2",
+            "CFBundleVersion": "10",
+            "MetalHudEnabled": metalHUD,
+            "UIFileSharingEnabled": fileSharing,
+            "LSSupportsOpeningDocumentsInPlace": fileSharing,
+        ]
+        guard let data = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0) else { return }
+        try? data.write(to: URL(fileURLWithPath: path))
     }
 }

@@ -488,6 +488,18 @@ uint64_t zk_linked_program_id(void);
  */
 int32_t zk_recompiled(zk_system_t system);
 
+/**
+ * Why zk_recompiled() returned 0, and how much of the work is still interpreted:
+ * the loader/AOT fallback reason plus the interpreted-instruction percentage for
+ * a system that mixes compiled and interpreted code. NULL is not expected; treat
+ * it as "no text".
+ *
+ * The pointer is owned by the library and stays valid until the next status call
+ * on the same thread; copy it (String(cString:) in Swift) before hopping to
+ * another queue. The shell logs it on every load and exports it in diagnostics.
+ */
+const char *zk_recompiled_status(zk_system_t system);
+
 /* ------------------------------------------------ GamePack registration (AOT) -- */
 
 /*

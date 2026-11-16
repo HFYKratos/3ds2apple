@@ -300,6 +300,50 @@ enum MetalHUD {
             + " plist=\(buildGateEnabled ? 1 : 0)"
     }
 }
+
+/// The GPU backend behind the presented `CAMetalLayer`.
+///
+/// Zakuro's Vulkan renderer reaches Metal through MoltenVK, which is loaded at
+/// run time from `Frameworks/MoltenVK.framework` in the app bundle (the
+/// launcher's shell template embeds it; see scripts/package-ipa.sh). Without
+/// that framework `zk_presenter_create` cannot make a Vulkan device, every load
+/// falls back to the software PICA200 renderer (slow) and there is no Metal
+/// layer for the system HUD to attach to. This is the first thing to check when
+/// a device build feels slow or the HUD never appears.
+enum MetalBackend {
+    /// Bundle-relative path the runtime's iOS patch loads by default.
+    static let moltenVKRelativePath = "Frameworks/MoltenVK.framework/MoltenVK"
+
+    /// Absolute URL of the embedded MoltenVK binary, nil when absent.
+    static var moltenVKURL: URL? {
+        guard let frameworks = Bundle.main.privateFrameworksURL else { return nil }
+        let url = frameworks.appendingPathComponent("MoltenVK.framework/MoltenVK")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// Whether this app bundle carries MoltenVK at all.
+    static var isMoltenVKEmbedded: Bool { moltenVKURL != nil }
+
+    /// Names the embedded framework to the runtime before it creates its first
+    /// Vulkan device. The iOS patch already defaults to this path; setting the
+    /// override makes the choice explicit in the log and keeps the lookup
+    /// working if the patch's default ever changes.
+    static func configureForLaunch() {
+        if let path = moltenVKURL?.path {
+            setenv("ZAKURO_VULKAN_LIBRARY", path, 1)
+        } else {
+            unsetenv("ZAKURO_VULKAN_LIBRARY")
+        }
+    }
+
+    /// Stable English line for the device log and diagnostics.
+    static var diagnosticsLine: String {
+        if isMoltenVKEmbedded {
+            return "moltenvk_embedded=1 path=@executable_path/\(moltenVKRelativePath)"
+        }
+        return "moltenvk_embedded=0 (software PICA200 renderer: the Metal layer/HUD path is unavailable)"
+    }
+}
 /// Persisted shell settings. One shared instance is injected through the view
 /// tree; `SettingsView` and its reusable sections are the only writers.
 final class AppSettings: ObservableObject {
@@ -328,8 +372,9 @@ final class AppSettings: ObservableObject {
     @Published var frameCap: FrameRateCap
 
     /// Show the system Metal Performance HUD (FPS / GPU time / memory) over the
-    /// presented CAMetalLayer. Off by default; applied to the layer at run time
-    /// and remembered across loads.
+    /// presented CAMetalLayer. ON by default since 0.2.2; applied to the layer
+    /// at run time and remembered across launches. The Settings switch can turn
+    /// it off, and a pre-0.2.2 install is migrated to on once (see init).
     @Published var systemMetalHUD: Bool
     /// Optional first-load graphics warm-up behind the "Preparing graphics"
     /// overlay. Off by default: the pipeline cache is still written, so a later
@@ -392,7 +437,22 @@ final class AppSettings: ObservableObject {
         // speed control, so an old stored 30 fps value is ignored on purpose.
         frameCap = .sixty
 
-        systemMetalHUD = Self.bool(defaults, Keys.systemMetalHUD, fallback: false)
+        // System Metal HUD: ON for every new install and for an install that
+        // predates the migration marker. Before 0.2.2 the fallback was off, and
+        // any Settings change wrote that false to disk, so an old install cannot
+        // be told apart from a user who deliberately chose off. The migration
+        // below enables it exactly once per install; after the marker exists the
+        // stored choice (including an explicit off) wins.
+        if defaults.object(forKey: Keys.systemMetalHUDDefaultMigrated) == nil {
+            systemMetalHUD = true
+            defaults.set(true, forKey: Keys.systemMetalHUD)
+            defaults.set(true, forKey: Keys.systemMetalHUDDefaultMigrated)
+            AppLog.log("[3ds2apple] system Metal HUD: enabled by the 0.2.2 default migration")
+        } else if defaults.object(forKey: Keys.systemMetalHUD) != nil {
+            systemMetalHUD = defaults.bool(forKey: Keys.systemMetalHUD)
+        } else {
+            systemMetalHUD = true
+        }
         graphicsWarmUpEnabled = Self.bool(defaults, Keys.graphicsWarmUpEnabled, fallback: false)
         playbackSpeed = PlaybackSpeed(
             rawValue: defaults.integer(forKey: Keys.playbackSpeed)
@@ -456,6 +516,8 @@ final class AppSettings: ObservableObject {
         static let haptics = "UI.haptics"
         static let frameCap = "UI.frameCap"
         static let systemMetalHUD = "UI.systemMetalHUD"
+        /// One-time marker: the 0.2.2 default switched the Metal HUD to on.
+        static let systemMetalHUDDefaultMigrated = "UI.systemMetalHUDDefaultMigrated"
         static let graphicsWarmUpEnabled = "UI.graphicsWarmUpEnabled"
         static let playbackSpeed = "UI.playbackSpeed"
         // Keys already used by earlier builds; kept so existing installs keep

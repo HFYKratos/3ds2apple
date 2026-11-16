@@ -417,6 +417,70 @@ final class XcodeInstallBackend: InstallBackend {
                 exitCode: nil
             )
         }
+
+        // The shell's Vulkan renderer dlopen()s Frameworks/MoltenVK.framework at
+        // run time (hardware PICA200 + CAMetalLayer Metal HUD). Copy the
+        // verified framework into the built .app BEFORE it is signed or
+        // composed into the library IPA; a shell without it stays on the slow
+        // software renderer with no HUD.
+        onProgress(InstallProgress(stage: stageName, fraction: 0.9, line: "Embedding Frameworks/MoltenVK.framework (Metal renderer + HUD)"))
+        let runtimeSource: ShellRuntime.Source
+        do {
+            runtimeSource = try ShellRuntime.resolveFramework(repoRoot: repoRoot.path)
+        } catch {
+            throw LauncherFailure(
+                code: "shell_runtime_source_missing",
+                message: "The MoltenVK runtime for hardware rendering and the Metal HUD was not found.",
+                hint: "Keep the launcher's embedded MoltenVK resource, the pinned out/shell/3ds2apple-shell.ipa template, or build/third_party/MoltenVK.framework in the checkout.",
+                detail: error.localizedDescription,
+                exitCode: nil
+            )
+        }
+        defer { runtimeSource.cleanUp() }
+        do {
+            try ShellRuntime.copyFramework(from: runtimeSource, intoShellAppAt: app.path)
+        } catch {
+            throw LauncherFailure(
+                code: "shell_runtime_embed_failed",
+                message: "Could not embed Frameworks/MoltenVK.framework into the shell app.",
+                hint: "The app was built but is not Metal/HUD capable, so the deploy is refused.",
+                detail: error.localizedDescription,
+                exitCode: nil
+            )
+        }
+        let runtimeProblems = ShellRuntime.verifyShellApp(at: app.path)
+        guard runtimeProblems.isEmpty else {
+            throw LauncherFailure(
+                code: "shell_runtime_invalid",
+                message: "The built shell is not Metal/HUD ready.",
+                hint: runtimeProblems.joined(separator: "; "),
+                detail: app.path,
+                exitCode: nil
+            )
+        }
+        onProgress(InstallProgress(
+            stage: stageName,
+            fraction: 0.92,
+            line: "MoltenVK.framework: " + runtimeSource.origin.rawValue + " (" + String(ShellRuntime.expectedBytes) + " bytes, pinned arm64)"
+        ))
+        // Keep the base .app signature valid after adding nested code: sign the
+        // framework, then re-seal the app preserving its entitlements. The
+        // install step re-signs everything again, so a failure here is not fatal.
+        if let identity = await firstSigningIdentityHash() {
+            let frameworkBinary = app.path + "/" + ShellRuntime.binaryRelativePath
+            let signFramework = try? await runner.run(CommandSpec(
+                executable: "/usr/bin/codesign",
+                arguments: ["--force", "--sign", identity, "--timestamp=none", frameworkBinary]
+            ), onLine: nil)
+            let resealApp = try? await runner.run(CommandSpec(
+                executable: "/usr/bin/codesign",
+                arguments: ["--force", "--sign", identity, "--timestamp=none", "--preserve-metadata=entitlements", app.path]
+            ), onLine: nil)
+            if signFramework?.succeeded != true || resealApp?.succeeded != true {
+                onProgress(InstallProgress(stage: stageName, fraction: 0.94, line: "warning: could not re-seal the base shell after embedding MoltenVK; the install step re-signs it"))
+            }
+        }
+        onProgress(InstallProgress(stage: stageName, fraction: 1.0, line: "Shell app ready (MoltenVK embedded): " + app.path))
         return app.path
     }
 
@@ -459,6 +523,7 @@ final class XcodeInstallBackend: InstallBackend {
             catalogSchemaVersion: facts?.schemaVersion ?? 0,
             catalogTitleIDs: facts?.titleIDs ?? [],
             containsBundledROM: containsROM,
+            hasMoltenVK: ShellRuntime.hasFramework(inShellAppAt: appPath),
             bytes: FileProbe.size(ipaPath) ?? 0
         )
         let problems = inspection.problems(expectedTitles: expectedTitles)
@@ -518,6 +583,28 @@ final class XcodeInstallBackend: InstallBackend {
                 detail: inspection.packFiles.joined(separator: ","),
                 exitCode: nil
             )
+        }
+
+        // The composed shell must still carry the Metal/HUD runtime; sign the
+        // nested framework BEFORE the outer app so codesign --verify --deep
+        // --strict can succeed. A shell without it would run in software.
+        let runtimeProblems = ShellRuntime.verifyShellApp(at: stagedApp)
+        guard runtimeProblems.isEmpty else {
+            throw LauncherFailure(
+                code: "shell_runtime_invalid",
+                message: "The composed library IPA is missing the Metal/HUD runtime.",
+                hint: runtimeProblems.joined(separator: "; "),
+                detail: stagedApp,
+                exitCode: nil
+            )
+        }
+        onProgress(InstallProgress(stage: "Signing MoltenVK", fraction: 0.3, line: "codesign nested Frameworks/MoltenVK.framework (local identity)"))
+        let runtimeSign = try await runner.run(CommandSpec(
+            executable: "/usr/bin/codesign",
+            arguments: ["--force", "--sign", identity, "--timestamp=none", stagedApp + "/" + ShellRuntime.binaryRelativePath]
+        ), onLine: nil)
+        if !runtimeSign.succeeded {
+            throw AppleErrorMapper.failure(command: "codesign (MoltenVK.framework)", text: runtimeSign.combined)
         }
 
         onProgress(InstallProgress(stage: "Signing GamePacks", fraction: 0.35, line: "codesign embedded Frameworks/GamePack-*.dylib (local identity)"))
@@ -700,6 +787,7 @@ final class MockInstallBackend: InstallBackend {
             catalogSchemaVersion: 2,
             catalogTitleIDs: expectedTitles.map { $0.uppercased() },
             containsBundledROM: false,
+            hasMoltenVK: true,
             bytes: 12_345_678
         )
     }
@@ -712,6 +800,7 @@ final class MockInstallBackend: InstallBackend {
     ) async throws -> InstallResult {
         installCalls += 1
         let stages: [(String, Double, String)] = [
+            ("Signing MoltenVK", 0.42, "codesign nested Frameworks/MoltenVK.framework (local identity, mock)"),
             ("Signing GamePacks", 0.5, "codesign Frameworks/GamePack-*.dylib (local identity, mock)"),
             ("Signing app bundle", 0.7, "codesign the staged library app (local identity, mock)"),
             ("Installing with devicectl", 0.9, "xcrun devicectl device install app --device <mock> (mock)"),

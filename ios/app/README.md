@@ -68,21 +68,29 @@ on-screen controls, so no input or audio advances behind it.
   presented frame advances the console 2 or 4 frames. See "Fast-forward" below
   for the presentation/audio policy and the automatic fallback.
 - Presentation on a real `CAMetalLayer` (A1): Zakuro shows both screens through
-  MoltenVK over Metal. When a presenter cannot be made the app falls back to the
-  `zk_read_screen` + `CGImage` path.
-- System Metal Performance HUD (FPS / GPU time / memory): a Settings switch
-  shows or hides it on the presented layer at run time
-  (`CAMetalLayer.developerHUDProperties`, iOS 16), off by default. See "System
-  Metal HUD" below.
+  MoltenVK over Metal; the launcher's shell template embeds
+  `Frameworks/MoltenVK.framework`. When a presenter cannot be made the app falls
+  back to the `zk_read_screen` + `CGImage` path and logs a performance warning.
+- System Metal Performance HUD (FPS / GPU time / memory): **on by default since
+  0.2.2**; a Settings switch shows or hides it on the presented layer
+  (`CAMetalLayer.developerHUDProperties`, iOS 16) and old installs are migrated
+  to on once. See "System Metal HUD" below.
+- Always-visible runtime badge while a game is on screen: AOT state, presented
+  FPS, renderer path (Metal GPU / software upload / CPU readback) and Metal HUD
+  state, so a device tester can verify at a glance that the game runs AOT code on
+  the GPU. See "Runtime status badge and AOT proof" below.
 - Display settings: screen layout, screen rotation, aspect (fit / 4:3 / stretch),
   integer scaling, render resolution (1×–4×) and interface orientation. Layout,
   rotation, aspect and integer scaling apply immediately, also while a game
   runs; the render resolution resizes the presented drawable at once, while the
   internal 3D render scale is applied when a game loads. See "Display settings"
   below.
-- AOT status (`AOT not loaded` / `AOT · linked`), emulation speed relative to
-  the 3DS 60 Hz timeline, and a hard AOT-only launch rule: a game is never started
-  through the interpreter.
+- AOT status (`AOT not loaded` / `AOT · linked` / `AOT · package`), the
+  `zk_recompiled()` / `zk_recompiled_status()` proof recorded for every load,
+  emulation speed relative to the 3DS 60 Hz timeline, and a hard AOT-only launch
+  rule: a game is never started through the interpreter — a title the runtime
+  would interpret is stopped and shown a **red** error naming the runtime's own
+  reason.
 - Storage page: save-data / legacy game-file / log / pipeline-cache usage and a
   "clear graphics pipeline cache" action (only while no game is running).
 - Settings are persisted in `UserDefaults` and restored at launch.
@@ -245,7 +253,7 @@ mapping is documented in the input section below.
 |---|---|---|
 | Frame cap | 60 / 30 fps | Immediately; the free-run loop never starts presented frames closer than 1/60 s (or 1/30 s). It is a cap, not a target. |
 | Fast-forward | 1× / 2× / 4× | Immediately (also from the in-game menu); the next presented frame uses the new value. |
-| System Metal HUD | On / off | Immediately on the presented `CAMetalLayer`; remembered for later loads. |
+| System Metal HUD | On / off, **default on** | Immediately on the presented `CAMetalLayer`; remembered across launches and also written as `MTL_HUD_ENABLED` / `MetalHUDForceEnabled` for the next Metal device. The 0.2.2 build migrates a pre-0.2.2 install to on once. |
 | First-load graphics warm-up (optional) | On / off, default off | Read when the next ROM load starts. The runtime's pipeline-cache persistence is unaffected. |
 
 ## Fast-forward
@@ -298,12 +306,63 @@ re-applied whenever the layer is reused, so it survives page navigation and ROM
 reloads. The app keeps the system HUD's device logging off; the app log and the
 diagnostics report carry the frame timings instead.
 
-The HUD can only appear when something enables it for the build: the packaged
-test IPA sets `MetalHudEnabled` in `Info.plist` (`scripts/package-ipa.sh`), or the
-device's Settings → Developer → Graphics HUD turns it on. When the build does not
-enable it, the Settings row says so instead of pretending the switch worked. On
-the screen-readback path there is no `CAMetalLayer`, so the switch has no visible
-effect until a presented load runs.
+**On by default since 0.2.2.** The switch default was off before 0.2.2 and any
+Settings change persisted that false, so the app enables the HUD once for an
+install that predates the migration marker
+(`UI.systemMetalHUDDefaultMigrated`) and respects the stored choice afterwards.
+`App.init` applies the choice before the first Metal device is created:
+`MetalHUD.apply` sets `MTL_HUD_ENABLED=1` in the environment and the documented
+`MetalHUDForceEnabled` default, and `MetalScreenView.applySystemMetalHUD` sets
+`developerHUDProperties["mode"]` on the layer as soon as the view exists (before
+`zk_create_presented`, so the first frame already has it).
+
+The HUD can only appear when all of these hold:
+
+- the build enables it — `MetalHudEnabled` in `Info.plist`
+  (`ios/app/project.yml`, re-injected by `scripts/build-ios-app.sh` and
+  `scripts/package-ipa.sh`), or the device's Settings → Developer → Graphics HUD
+  turns it on;
+- the screens go through the presented `CAMetalLayer` — the GPU path, which
+  needs `Frameworks/MoltenVK.framework` embedded by the launcher's shell
+  template. On the CPU readback path there is no Metal layer to attach to;
+- the Metal HUD preference is on (the default).
+
+The Settings row explains the exact reason when the HUD cannot appear (build gate
+missing, or the running game is on the CPU readback path), and the always-visible
+runtime badge shows `HUD on` / `HUD off` / `HUD build off` / `HUD needs Metal`
+with the same state.
+
+## Runtime status badge and AOT proof
+
+A small badge is always on top of the screens while a game is starting, preparing
+or loaded (removed on Unload/failure):
+
+```text
+AOT pack · 59 fps · Metal GPU · HUD on
+```
+
+The segments are:
+
+| Segment | Values | Meaning |
+|---|---|---|
+| AOT | `AOT pack` / `AOT linked` / `AOT ·…` / `AOT missing` | Which AOT code source is running; orange/red when the gate is not satisfied. |
+| FPS | `59 fps` / `fps …` | Presented frames per second over the last 0.5 s window. |
+| Renderer | `Metal GPU` / `Metal upload` / `CPU render` | `Metal GPU` = the 3D runs on the host GPU via MoltenVK; `Metal upload` = software renderer uploaded to the layer; `CPU render` = CGImage readback (slow). Orange for the software paths. |
+| Metal HUD | `HUD on` / `HUD off` / `HUD build off` / `HUD needs Metal` | Whether the system HUD can appear and why not. |
+
+Every load also writes the AOT proof to the device log and to the diagnostics
+report — never just "assume it is AOT":
+
+```text
+AOT: linked_code=1 linked_program=0004000000055E00 recompiled=1 registered_pack=0004000000055E00 pack=Frameworks/GamePack-...dylib status=<runtime text>
+```
+
+`zk_linked_code()` / `zk_linked_program_id()` describe the build, `zk_recompiled(handle)`
+says what the loaded system actually runs, and `zk_recompiled_status(handle)`
+carries the runtime's own fallback/interpretation text. When
+`zk_recompiled()` is 0 the runtime handle is destroyed, nothing is presented, and
+the home page shows a red "No AOT build for this game" error with that status —
+there is no silent interpreter fallback.
 
 ## Localization
 
@@ -407,8 +466,24 @@ or AltStore.
 The presented path additionally needs `MoltenVK.framework` inside the app (it is
 loaded at run time, not linked; the binary is never committed). The build and
 packaging steps are in [METAL.md](../zakuro-ios/METAL.md) §8, and
-`scripts/package-ipa.sh` embeds the framework when `MOLTENVK_FRAMEWORK` is set.
-Without it the app still builds and runs, on the readback path.
+`scripts/package-ipa.sh` embeds the framework when `MOLTENVK_FRAMEWORK` points at
+the downloaded `MoltenVK.framework` directory; `--require-moltenvk` turns a
+missing framework into a packaging error (the launcher shell template build uses
+it). The framework is the only piece that makes the CAMetalLayer/presented path
+and the Metal HUD possible. Without it the app still builds and runs, on the
+readback path — the device log then carries a `PERFORMANCE WARNING` line and the
+in-game badge shows `CPU render`.
+```bash
+# 1) download the iOS release (build/ is gitignored; the binary is never committed)
+curl -L -o build/third_party/MoltenVK-ios.tar \
+  https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-ios.tar
+tar -C build/third_party -xf build/third_party/MoltenVK-ios.tar
+MVK="$(pwd)/build/third_party/MoltenVK/MoltenVK/dynamic/MoltenVK.xcframework/ios-arm64"
+# 2) build the shell app, then embed MoltenVK while packaging the template IPA
+scripts/build-ios-app.sh --keep-project
+MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
+  ios/app/build/Release-iphoneos/3ds2apple.app 3ds2apple-shell --require-moltenvk
+```
 
 ## Source layout
 
@@ -489,9 +564,14 @@ The app has one presentation path and one fallback:
 - Because there is a real Metal layer, the system Metal Performance HUD can
   attach to it: Settings → Performance → System Metal HUD sets
   `developerHUDProperties` on the layer (`mode: "default"` / `"disabled"`) at run
-  time, and the build's `MetalHudEnabled` (or the device's Developer settings)
-  must also enable it. On the readback path there is no layer, so the HUD does
-  not appear.
+  time; it is on by default and the build's `MetalHudEnabled` (or the device's
+  Developer settings) also has to enable it. On the readback path there is no
+  layer, so the HUD does not appear. The readback fallback is also logged as a
+  performance warning, because it means the 3D is drawing in software.
+- The presenter needs `Frameworks/MoltenVK.framework` in the app bundle (loaded
+  at run time, never linked into the static library). The launcher's 0.2.2+ shell
+  template embeds it; a plain build without it still runs, but on the CPU
+  readback path.
 
 ## Input
 
@@ -581,9 +661,12 @@ Instant save states:
 
 ## Known limitations
 
-- The 3D can be drawn on the GPU through MoltenVK (hardware-rendering build);
-  otherwise it is Zakuro's software PICA200 renderer. The presented path is
-  experimental and a presenter is reused for the whole app run.
+- The 3D can be drawn on the GPU through MoltenVK (the launcher's shell template
+  embeds it); otherwise it is Zakuro's software PICA200 renderer. A device build
+  that feels slow is almost always missing the framework: the log then says
+  `PERFORMANCE WARNING ... draws in software`, and the runtime badge shows
+  `CPU render`. The presented path is experimental and a presenter is reused for
+  the whole app run.
 - 3D stereo, frame interpolation and texture packs exist in the presenter but
   are not exposed by the app UI.
 - The readback fallback (no MoltenVK / no Vulkan device) still shows every
@@ -622,29 +705,37 @@ Instant save states:
   fallback gives up extra frames when a scene is too slow (see
   "Fast-forward"). It cannot make a game that already runs below 20 fps
   faster.
-- The system Metal HUD switch only works when the build or the device enables
-  the HUD, and only on the presented `CAMetalLayer` path.
+- The system Metal HUD is on by default, but it only works when the build
+  enables it (`MetalHudEnabled`), and only on the presented `CAMetalLayer` path
+  (so not on a software/readback load). The Settings hint and the runtime badge
+  report which condition is missing instead of pretending the switch worked.
 - Only English and Simplified Chinese are included. Traditional Chinese and
   other languages use English.
 - iOS 16+ only; the app is not distributed through the App Store.
 
 ## Diagnostics
 
-The status line in the game view includes:
+The always-visible runtime badge in the game view shows the AOT source, the
+presented FPS, the renderer and the Metal HUD state, e.g.:
 
 ```text
-audio: on
-AOT · linked   fast-forward: 2×
-loop: free-run · cap 60 fps   display: CAMetalLayer · GPU direct
-warm-up ready in 2.40 s · 146 frames · max 586 ms · 3 spiky (>50 ms)
+AOT pack · 59 fps · Metal GPU · HUD on
 ```
 
-The `fast-forward: 2×` and `(auto)` markers appear only above 1×. The `warm-up …`
+A software renderer (the usual cause of a slow device build) turns the renderer
+segment orange (`CPU render`), and a Metal HUD that cannot appear turns the HUD
+segment orange as well. The in-game menu and diagnostics keep the fuller status
+line, including `fast-forward: 2×` and `(auto)` markers that appear only above 1×. The `warm-up …`
 line appears once an enabled warm-up finished (it replaces the "Preparing
 graphics…" overlay), or says it was not needed for a software renderer; it is
 absent by default because the optional warm-up setting is off. The device log
 carries one line per load
-(`zk_presenter_create`, `display:`, `hardware:`), the pipeline-cache state at
+(`zk_presenter_create`, `display:`, `hardware:`), an `AOT:` line per load with
+`linked_code` / `linked_program` / `recompiled` / `registered_pack` / `pack` /
+`status` (an `AOT REFUSED:` line plus a red home-page error when the gate stops
+the game), one `metal backend:` line at launch (whether MoltenVK is embedded),
+a `PERFORMANCE WARNING` line when the 3D falls back to software rendering, and
+the pipeline-cache state at
 launch/load/after `zk_destroy`, one `graphics warm-up:` line with the same
 timing, a `frame cap:` / `render scale:` line when those settings change (the
 render-scale line notes that the internal 3D scale applies on the next load),
@@ -663,7 +754,10 @@ The exported diagnostics header adds the build, device, session phase
 `playback_speed=`, `playback_speed_effective=`,
 `playback_speed_auto_reduced=`, `warmup_enabled=`, `system_metal_hud=`,
 `screen_rotation=`, `presented_native_pixels=`, `presented_drawable_pixels=`,
-`system_metal_hud_build_enabled=`, `app_language=`, `system_language=`), the
+`system_metal_hud_build_enabled=`, `aot_diagnostics=`, `aot_linked_code=`,
+`aot_recompiled=`, `aot_recompiled_status=`, `aot_pack=`,
+`metal_moltenvk_embedded=`, `metal_hud_enabled=`, `renderer_software=`,
+`app_language=`, `system_language=`), the
 `warmup_*` fields (`outcome`, duration, frames, max frame, spike count, plan
 limit, whether the pipelines were already cached) and the `pipeline_cache*`
 fields (directory, file count, size, newest file), followed by the previous and

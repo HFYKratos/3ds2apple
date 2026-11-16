@@ -28,6 +28,11 @@ struct ThreeDS2AppleApp: App {
         // relaunch, but a build whose Metal device was created before the
         // variable was set does (see SettingsView and MetalScreenView).
         MetalHUD.apply(enabled: AppSettings.shared.systemMetalHUD)
+        // GPU backend: the Vulkan renderer loads MoltenVK from the app bundle at
+        // run time. Point the runtime at the embedded framework before the first
+        // device is created (the iOS patch has the same default; setting it here
+        // makes the lookup explicit and logged).
+        MetalBackend.configureForLaunch()
         // Zakuro stores its Vulkan pipeline cache under XDG_CACHE_HOME (or
         // ~/.cache). On iOS the sandbox home's .cache is not writable, which
         // made every launch recompile pipelines and stutter on first use.
@@ -41,6 +46,12 @@ struct ThreeDS2AppleApp: App {
         // One line that answers "why is the HUD not showing?" on device:
         // setting, environment variable and the Info.plist build gate.
         AppLog.log("[3ds2apple] metal hud: %@", MetalHUD.diagnosticsLine)
+        AppLog.log("[3ds2apple] metal backend: %@", MetalBackend.diagnosticsLine)
+        if !MetalBackend.isMoltenVKEmbedded {
+            // The single most useful line for a "slow game / no HUD" device log:
+            // without MoltenVK the presented GPU path cannot start at all.
+            AppLog.log("[3ds2apple] PERFORMANCE WARNING: MoltenVK.framework is not in this app; the 3D draws in software (PICA200 on the CPU), the CAMetalLayer path is unavailable and the Metal HUD cannot appear. Deploy the launcher's 0.2.2+ shell template, which embeds MoltenVK.")
+        }
         if let directory = PipelineCacheStats.directoryURL {
             AppLog.log("pipeline cache dir: %@", directory.path)
         }

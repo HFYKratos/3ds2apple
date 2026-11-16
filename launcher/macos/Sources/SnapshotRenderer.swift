@@ -27,7 +27,6 @@ enum SnapshotRenderer {
     enum Surface {
         case shell(MockScenario)
         case settings
-        case importSheet
     }
 
     struct Shot {
@@ -50,7 +49,18 @@ enum SnapshotRenderer {
                  model.settings.libraryIPAPath = ""
              }),
         Shot(name: "library", surface: .shell(.library), themes: [.dark, .light], languages: [.english, .chinese], height: 860),
-        Shot(name: "import", surface: .importSheet, themes: [.dark, .light], languages: [.english, .chinese], height: 820),
+        Shot(name: "library-not-ready", surface: .shell(.library), themes: [.dark], languages: [.english, .chinese], height: 860,
+             prepare: { model in
+                 var report = MockFixtures.readyEnvironment()
+                 report.tools[0].state = .missing
+                 report.tools[0].detail = "not found in the app bundle, the checkout or PATH"
+                 report.apple.signingIdentityCount = 0
+                 report.apple.provisioningProfileCount = 0
+                 report.apple.teamID = ""
+                 model.envReport = report
+                 model.appleReadiness = report.apple
+                 model.readiness = report.readinessStatus
+             }),
         Shot(name: "deploy-selected", surface: .shell(.deploySelection), themes: [.dark], languages: [.english, .chinese], height: 1_120),
         Shot(name: "deploy-running", surface: .shell(.deployRunning), themes: [.dark], languages: [.english], height: 1_520),
         Shot(name: "deploy-done", surface: .shell(.deployDone), themes: [.dark], languages: [.english, .chinese], height: 1_580),
@@ -115,7 +125,6 @@ enum SnapshotRenderer {
         switch surface {
         case .shell(let scenario): return scenario
         case .settings: return .settings
-        case .importSheet: return .importDetected
         }
     }
 
@@ -141,8 +150,6 @@ enum SnapshotRenderer {
                 LauncherShellView(model: model)
             case .settings:
                 SettingsSheetView(model: model)
-            case .importSheet:
-                ImportSheetView(model: model)
             }
         }
 

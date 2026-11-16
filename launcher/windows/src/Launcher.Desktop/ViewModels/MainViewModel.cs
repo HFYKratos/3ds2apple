@@ -231,9 +231,22 @@ public sealed class DeployStepRow : ObservableObject
 /// <summary>A selectable UI language with its localized label.</summary>
 public sealed record LanguageChoice(UiLanguagePreference Preference, string Label);
 
-/// <summary>One row of the readiness panel.</summary>
-public sealed record ToolRow(string Name, string State, string Message)
+/// <summary>One row of the readiness panel (auto self-check result).</summary>
+public sealed class ToolRow : ObservableObject
 {
+    public ToolRow(string name, string state, string message)
+    {
+        Name = name;
+        State = state;
+        Message = message;
+    }
+
+    public string Name { get; }
+
+    public string State { get; }
+
+    public string Message { get; }
+
     public bool Ready => State == "ready";
 
     public string StateLabel => State switch
@@ -243,6 +256,8 @@ public sealed record ToolRow(string Name, string State, string Message)
         "failed" => Loc.T("tool.state.failed"),
         _ => State,
     };
+
+    public void RefreshLabels() => OnPropertyChanged(nameof(StateLabel));
 }
 
 /// <summary>
@@ -263,13 +278,13 @@ public sealed class MainViewModel : ObservableObject
     private bool _showDeployLog;
     private string _section = "library";
     private string _statusText = string.Empty;
-    private string _importPath = string.Empty;
-    private string _displayNameOverride = string.Empty;
     private string _deviceStatus = string.Empty;
     private string _shellStatus = string.Empty;
     private string _installedStatus = string.Empty;
     private string _toolchainStatus = string.Empty;
     private bool _toolchainReady;
+    private string _readinessState = "checking";
+    private string _readinessDetail = string.Empty;
     private string _deployState = "idle";
     private string _deployMessage = string.Empty;
     private string _deployStepName = string.Empty;
@@ -293,8 +308,6 @@ public sealed class MainViewModel : ObservableObject
         StatusText = Loc.T("status.ready");
         DeviceStatus = Loc.T("deploy.deviceNone");
         ToolchainStatus = Loc.T("readiness.unchecked");
-        ImportCommand = new AsyncRelayCommand(() => ImportFromBoxAsync(), () => !IsBusy);
-        BrowseRomCommand = new RelayCommand(RequestBrowseRom);
         ShowLibraryCommand = new RelayCommand(ShowLibrary);
         ShowDeployCommand = new RelayCommand(ShowDeploy);
         OpenSettingsCommand = new RelayCommand(OpenSettings);
@@ -304,8 +317,8 @@ public sealed class MainViewModel : ObservableObject
         SelectNoneCommand = new RelayCommand(() => SetAllSelected(false));
         RefreshDevicesCommand = new AsyncRelayCommand(() => RefreshDevicesAsync(), () => !IsBusy);
         RefreshStatusCommand = new AsyncRelayCommand(() => RefreshStatusAsync(), () => !IsBusy);
+        RefreshReadinessCommand = new AsyncRelayCommand(() => RefreshStatusAsync(), () => !IsBusy);
         OpenImpactorCommand = new RelayCommand(OpenImpactor, () => !IsBusy);
-        RunSelfTestCommand = new RelayCommand(RunSelfTest, () => !IsBusy);
         OpenWorkspaceCommand = new RelayCommand(OpenWorkspace);
         ExportLogCommand = new RelayCommand(() => ExportLogRequested?.Invoke());
         ToggleDiagnosticsCommand = new RelayCommand(ToggleDiagnostics);
@@ -329,13 +342,9 @@ public sealed class MainViewModel : ObservableObject
 
     public ObservableCollection<string> LogLines { get; } = new();
 
-    public event Action? BrowseRomRequested;
-
     /// <summary>Raised by the settings "Export log" button; the view shows a save picker.</summary>
     public event Action? ExportLogRequested;
 
-    public AsyncRelayCommand ImportCommand { get; }
-    public RelayCommand BrowseRomCommand { get; }
     public RelayCommand ShowLibraryCommand { get; }
     public RelayCommand ShowDeployCommand { get; }
     public RelayCommand OpenSettingsCommand { get; }
@@ -345,8 +354,8 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand SelectNoneCommand { get; }
     public AsyncRelayCommand RefreshDevicesCommand { get; }
     public AsyncRelayCommand RefreshStatusCommand { get; }
+    public AsyncRelayCommand RefreshReadinessCommand { get; }
     public RelayCommand OpenImpactorCommand { get; }
-    public RelayCommand RunSelfTestCommand { get; }
     public RelayCommand OpenWorkspaceCommand { get; }
     public RelayCommand ExportLogCommand { get; }
     public RelayCommand ToggleDiagnosticsCommand { get; }
@@ -393,10 +402,6 @@ public sealed class MainViewModel : ObservableObject
 
     public double ProgressValue { get => _progressValue; private set => SetProperty(ref _progressValue, value); }
 
-    public string ImportPath { get => _importPath; set => SetProperty(ref _importPath, value); }
-
-    public string DisplayNameOverride { get => _displayNameOverride; set => SetProperty(ref _displayNameOverride, value); }
-
     public bool IsImportRunning { get => _importRunning; private set => SetProperty(ref _importRunning, value); }
 
     public string WorkspaceRoot => _services.Workspace.Root;
@@ -415,28 +420,26 @@ public sealed class MainViewModel : ObservableObject
 
     public string GameCountText => Loc.T("library.count", Games.Count);
 
-    public string ReadinessText => Tools.Count == 0
-        ? Loc.T("readiness.unchecked")
-        : Tools.All(tool => tool.Ready)
-            ? Loc.T("readiness.all")
-            : Loc.T("readiness.blocked", string.Join(", ", Tools.Where(tool => !tool.Ready).Select(tool => tool.Name)));
+    /// <summary>Automatic startup self-check result (green/red status light in the status bar).</summary>
+    public bool IsReadinessReady => _readinessState == "ready";
+
+    public bool IsReadinessFailed => _readinessState == "failed";
+
+    public bool IsReadinessChecking => _readinessState == "checking";
+
+    public string ReadinessLabel => _readinessState switch
+    {
+        "ready" => Loc.T("readiness.status.ready"),
+        "failed" => Loc.T("readiness.status.failed"),
+        _ => Loc.T("readiness.status.checking"),
+    };
+
+    public string ReadinessDetail => _readinessDetail;
 
     public void PersistName(LibraryEntry entry)
     {
         _services.Workspace.SaveState();
         OnPropertyChanged(nameof(Games));
-    }
-
-    public void RequestBrowseRom() => BrowseRomRequested?.Invoke();
-
-    public async Task ImportFromBoxAsync()
-    {
-        if (string.IsNullOrWhiteSpace(ImportPath))
-        {
-            Log("Choose a decrypted .3ds/.cci file first.");
-            return;
-        }
-        await ImportAsync(new[] { ImportPath.Trim().Trim('"') }).ConfigureAwait(true);
     }
 
     public async Task ImportAsync(IReadOnlyList<string> paths)
@@ -464,8 +467,7 @@ public sealed class MainViewModel : ObservableObject
                     Log($"import failed: {path}: {error}");
                     continue;
                 }
-                var overrideName = paths.Count == 1 && !string.IsNullOrWhiteSpace(DisplayNameOverride) ? DisplayNameOverride.Trim() : null;
-                var added = await pack.AddAsync(new[] { path }, overrideName).ConfigureAwait(true);
+                var added = await pack.AddAsync(new[] { path }, null).ConfigureAwait(true);
                 if (!added.Ok || added.Packages.Count == 0)
                 {
                     Log($"import failed: {path}: " + (added.Errors.Count > 0 ? string.Join("; ", added.Errors) : PackCli.FirstMeaningfulLine(added.Process)));
@@ -814,8 +816,13 @@ public sealed class MainViewModel : ObservableObject
 
     // --- settings / status -------------------------------------------------
 
+    /// <summary>
+    /// Automatic readiness self-check. Called once at startup and again when the user clicks
+    /// the status light. A failed probe turns the light red; it never breaks the UI.
+    /// </summary>
     public async Task RefreshStatusAsync()
     {
+        SetReadinessState("checking");
         try
         {
             var readiness = await _services.CheckAsync().ConfigureAwait(true);
@@ -824,13 +831,43 @@ public sealed class MainViewModel : ObservableObject
             {
                 Tools.Add(new ToolRow(tool.Name, tool.State, tool.Message));
             }
-            OnPropertyChanged(nameof(ReadinessText));
-            Log("status: " + readiness.Summary);
+            var missing = Tools.Where(tool => !tool.Ready).ToList();
+            _readinessDetail = BuildReadinessDetail(readiness.Summary);
+            OnPropertyChanged(nameof(ReadinessDetail));
+            SetReadinessState(missing.Count == 0 ? "ready" : "failed");
+            Log("readiness: " + readiness.Summary);
+            foreach (var tool in missing)
+            {
+                Log($"readiness detail: {tool.Name} = {tool.State} — {tool.Message}");
+            }
         }
         catch (Exception exception)
         {
+            _readinessDetail = Loc.T("readiness.status.failed") + ": " + exception.Message;
+            OnPropertyChanged(nameof(ReadinessDetail));
+            SetReadinessState("failed");
             Log("status check failed: " + exception.Message);
         }
+    }
+
+    private string BuildReadinessDetail(string summary)
+    {
+        var lines = new List<string> { summary };
+        foreach (var tool in Tools)
+        {
+            lines.Add($"{tool.Name}: {tool.StateLabel}" + (string.IsNullOrWhiteSpace(tool.Message) ? string.Empty : " — " + tool.Message));
+        }
+        lines.Add(Loc.T("readiness.status.retryHint"));
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private void SetReadinessState(string state)
+    {
+        _readinessState = state;
+        OnPropertyChanged(nameof(IsReadinessReady));
+        OnPropertyChanged(nameof(IsReadinessFailed));
+        OnPropertyChanged(nameof(IsReadinessChecking));
+        OnPropertyChanged(nameof(ReadinessLabel));
     }
 
     private async Task RefreshDeployReadinessAsync()
@@ -1026,9 +1063,14 @@ public sealed class MainViewModel : ObservableObject
             DeploySteps[index].Label = stepLabels[index];
             DeploySteps[index].RefreshLabels();
         }
+        foreach (var tool in Tools)
+        {
+            tool.RefreshLabels();
+        }
         OnPropertyChanged(nameof(WindowTitle));
         OnPropertyChanged(nameof(StatusText));
-        OnPropertyChanged(nameof(ReadinessText));
+        OnPropertyChanged(nameof(ReadinessLabel));
+        OnPropertyChanged(nameof(ReadinessDetail));
         OnPropertyChanged(nameof(GameCountText));
         OnPropertyChanged(nameof(DeploySelectedCountText));
         OnPropertyChanged(nameof(DeployStateLabel));
@@ -1067,18 +1109,6 @@ public sealed class MainViewModel : ObservableObject
         {
             Log("could not start Impactor: " + exception.Message);
         }
-    }
-
-    private void RunSelfTest()
-    {
-        var writer = new StringWriter();
-        var code = SelfTest.Run(writer, writer);
-        foreach (var line in writer.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries))
-        {
-            Log(line.TrimEnd('\r'));
-        }
-        Log(code == 0 ? "self-test passed (see lines above)." : "self-test FAILED — export the log when reporting.");
-        StatusText = code == 0 ? Loc.T("status.selftestPassed") : Loc.T("status.selftestFailed");
     }
 
     private void OpenWorkspace()
@@ -1174,8 +1204,8 @@ public sealed class MainViewModel : ObservableObject
         }
         foreach (var command in new System.Windows.Input.ICommand[]
                  {
-                     ImportCommand, DeployCommand, RefreshDevicesCommand, RefreshStatusCommand,
-                     OpenImpactorCommand, RunSelfTestCommand,
+                     DeployCommand, RefreshDevicesCommand, RefreshStatusCommand, RefreshReadinessCommand,
+                     OpenImpactorCommand,
                  })
         {
             switch (command)

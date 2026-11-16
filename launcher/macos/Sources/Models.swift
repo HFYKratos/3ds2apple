@@ -285,6 +285,67 @@ struct EnvironmentReport: Equatable {
     var hasBlockingIssue: Bool { tools.contains { $0.state == .missing } }
 }
 
+// MARK: - Launcher readiness (automatic startup check)
+
+/// Result of the automatic startup readiness probe. The top bar keeps this as a
+/// persistent green/red light: green means the local build + Apple-ID signing
+/// environment is ready to deploy, red means something actionable is missing.
+/// Details go to the tooltip and the log, never to a wall of text in the UI.
+enum ReadinessStatus: Equatable {
+    case checking
+    case ready(detail: String)
+    case notReady(detail: String)
+
+    var isChecking: Bool {
+        if case .checking = self { return true }
+        return false
+    }
+
+    var isReady: Bool {
+        if case .ready = self { return true }
+        return false
+    }
+
+    /// Raw engineering detail (missing tools, Apple ID state) for tooltips/logs.
+    var detail: String {
+        switch self {
+        case .checking: return ""
+        case .ready(let detail), .notReady(let detail): return detail
+        }
+    }
+}
+
+extension EnvironmentReport {
+    /// Green when every probed component is present and Xcode has signing assets
+    /// for a detected team; red otherwise. Warnings are kept in the detail text
+    /// but do not block (they are actionable-but-optional).
+    var readinessStatus: ReadinessStatus {
+        var blockers: [String] = []
+        var notes: [String] = []
+        for tool in tools {
+            switch tool.state {
+            case .ok:
+                continue
+            case .missing:
+                blockers.append(tool.name + " is missing" + (tool.detail.isEmpty ? "" : " — " + tool.detail))
+            case .warning:
+                notes.append(tool.name + ": " + tool.detail)
+            }
+        }
+        if !apple.ready {
+            blockers.append("Apple ID signing — " + apple.plainTextState)
+        }
+        if blockers.isEmpty {
+            var detail = "All " + String(tools.count) + " checks passed; Apple ID signing ready"
+            if !notes.isEmpty {
+                detail += ". Warnings: " + notes.joined(separator: "; ")
+            }
+            return .ready(detail: detail + ".")
+        }
+        return .notReady(detail: blockers.joined(separator: "\n"))
+    }
+}
+
 // MARK: - Devices and install
 
 struct DeviceInfo: Identifiable, Equatable, Codable {
@@ -335,6 +396,10 @@ struct IPAInspection: Equatable {
     var catalogSchemaVersion: Int
     var catalogTitleIDs: [String]
     var containsBundledROM: Bool
+    /// True when the composed shell carries Frameworks/MoltenVK.framework. The
+    /// shell needs it for the hardware PICA200/Metal layer (and the system Metal
+    /// HUD); without it the runtime silently falls back to software rendering.
+    var hasMoltenVK: Bool = false
     var bytes: Int64
 
     var packCount: Int { packFiles.count }
@@ -347,6 +412,9 @@ struct IPAInspection: Equatable {
         if ipaPath.isEmpty { issues.append("IPA path is empty") }
         if bundleID.trimmingCharacters(in: .whitespaces).isEmpty {
             issues.append("the composed app has no CFBundleIdentifier")
+        }
+        if !hasMoltenVK {
+            issues.append("the composed shell has no Frameworks/MoltenVK.framework (hardware rendering + Metal HUD unavailable)")
         }
         if catalogSchemaVersion != 2 {
             issues.append("GameCatalog.json is not schema 2 (found " + String(catalogSchemaVersion) + ")")

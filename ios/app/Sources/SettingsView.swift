@@ -188,10 +188,11 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Toggle("System Metal HUD", isOn: persistedBinding(settings, \.systemMetalHUD))
                     .accessibilityIdentifier("settings-system-metal-hud")
-                if settings.systemMetalHUD {
-                    hintText(L10n.tr("Restart the app to apply. If it still does not appear, check System Settings."))
-                }
+                hintText(hudStatusText)
             }
+            infoRow("Metal backend", MetalBackend.isMoltenVKEmbedded
+                ? L10n.tr("MoltenVK embedded")
+                : L10n.tr("Software renderer (no MoltenVK)"))
             VStack(alignment: .leading, spacing: 6) {
                 Toggle("First-load graphics warm-up (optional)", isOn: persistedBinding(settings, \.graphicsWarmUpEnabled))
                 hintText(warmUpStatusText)
@@ -200,6 +201,23 @@ struct SettingsView: View {
             Text("Performance")
         }
     }
+    /// What the HUD switch can actually do in this build and this session. The
+    /// switch only controls the live layer: the build must enable the HUD
+    /// (MetalHudEnabled) and the screens must be on the CAMetalLayer (no
+    /// software/readback load) for it to have anything to attach to.
+    private var hudStatusText: String {
+        if !model.buildEnablesSystemMetalHUD {
+            return L10n.tr("This build does not enable the Metal HUD (MetalHudEnabled is missing from Info.plist), so the switch cannot show it. Rebuild the shell with scripts/build-ios-app.sh.")
+        }
+        if settings.systemMetalHUD && model.isRuntimeLoaded && !model.displayPath.usesMetalLayer {
+            return L10n.tr("The game is showing the CPU readback path, so the HUD has no Metal layer to attach to. This happens when the app has no MoltenVK.framework; deploy the launcher's 0.2.2+ shell template.")
+        }
+        if settings.systemMetalHUD {
+            return L10n.tr("On by default since 0.2.2. The HUD appears over a running game on the Metal layer; a Metal device that already existed at launch picks the switch up on the next launch.")
+        }
+        return L10n.tr("Turn on to show Apple's FPS / GPU HUD over a running game.")
+    }
+
     // MARK: - Storage
 
     private var storageSection: some View {

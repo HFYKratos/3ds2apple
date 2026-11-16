@@ -92,6 +92,16 @@ struct GameView: View {
                         onLoadStateCompleted: resumeAfterStateLoad
                     )
                 }
+
+                // Always-visible verification strip: AOT state, FPS, renderer and
+                // Metal HUD state, so a device tester can see at a glance whether
+                // the game really runs AOT code and on which GPU path.
+                if shouldShowRuntimeBadge {
+                    runtimeStatusBadge
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .padding(.horizontal, 10)
+                        .padding(.top, 6)
+                }
             }
             .onAppear { syncPresentedLayout(isLandscape) }
             .onChange(of: isLandscape) { newValue in syncPresentedLayout(newValue) }
@@ -663,6 +673,60 @@ struct GameView: View {
     private var isPreparingGraphics: Bool {
         if case .preparing = model.phase { return true }
         return false
+    }
+
+    // MARK: - Runtime status badge
+
+    /// True while the game view represents a starting/preparing/loaded session.
+    private var shouldShowRuntimeBadge: Bool {
+        switch model.phase {
+        case .starting, .preparing, .loaded: return true
+        case .idle, .failed, .finished: return false
+        }
+    }
+
+    /// AOT · fps · renderer · HUD, always on top of the screens while a game is
+    /// on screen. Colored orange when the AOT gate is not satisfied, the 3D draws
+    /// in software, or the Metal HUD cannot appear — the three device-side causes
+    /// of "feels slow / HUD missing".
+    private var runtimeStatusBadge: some View {
+        let state = model.runtimeBadgeState
+        return HStack(spacing: 5) {
+            badgeSegment(state.aotText, attention: state.aotIsError)
+            badgeDot
+            badgeSegment(state.fpsText, attention: false)
+            badgeDot
+            badgeSegment(state.displayText, attention: state.displayIsSoftware)
+            badgeDot
+            badgeSegment(state.hudText, attention: state.hudNeedsAttention)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(Color.black.opacity(0.58)))
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("runtime-status-badge")
+        .accessibilityLabel(L10n.format(
+            "Runtime status: %@, %@, %@, %@",
+            state.aotText,
+            state.fpsText,
+            state.displayText,
+            state.hudText
+        ))
+    }
+
+    private var badgeDot: some View {
+        Text("·")
+            .font(.caption2)
+            .foregroundColor(.white.opacity(0.35))
+    }
+
+    private func badgeSegment(_ text: String, attention: Bool) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .monospacedDigit()
+            .foregroundColor(attention ? .orange : .white.opacity(0.88))
     }
 
     // MARK: - Diagnostics

@@ -19,7 +19,8 @@ public partial class App : Application
         {
             var viewModel = new MainViewModel();
             desktop.MainWindow = new MainWindow { DataContext = viewModel };
-            _ = viewModel.InitializeAsync();
+            // Startup readiness self-check runs automatically; the status bar light turns green/red.
+            var initialize = viewModel.InitializeAsync();
             if (desktop.Args?.Contains("--ui-smoke") == true)
             {
                 var view = Environment.GetEnvironmentVariable("THREEDS2APPLE_UI_SMOKE_VIEW");
@@ -34,8 +35,16 @@ public partial class App : Application
                 // Headless smoke run (CI/Xvfb): build the whole visual tree, render a few
                 // frames, report and exit. Never used by the shipped launcher.
                 DispatcherTimer.RunOnce(
-                    () =>
+                    async () =>
                     {
+                        try
+                        {
+                            await initialize;
+                        }
+                        catch (Exception)
+                        {
+                            // a failed probe must not block the smoke render
+                        }
                         var shot = Environment.GetEnvironmentVariable("THREEDS2APPLE_UI_SMOKE_SHOT");
                         if (!string.IsNullOrWhiteSpace(shot) && desktop.MainWindow is { } window && window.Bounds.Width > 0)
                         {

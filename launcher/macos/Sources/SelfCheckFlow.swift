@@ -165,6 +165,31 @@ enum SelfCheckFlow {
         logModel.exportLog()
         expect("logs: export writes a file", logModel.lastExportPath.map { FileProbe.exists($0) } == true)
 
+        // 18. Automatic startup readiness: green/red light, no manual button.
+        let readyReport = MockFixtures.readyEnvironment()
+        expect("readiness: ready fixture is green", readyReport.readinessStatus.isReady, readyReport.readinessStatus.detail)
+        let missingSigning = MockFixtures.missingSigningEnvironment()
+        expect("readiness: missing Apple ID signing is red", !missingSigning.readinessStatus.isReady, missingSigning.readinessStatus.detail)
+        var missingToolReport = readyReport
+        missingToolReport.tools[0].state = .missing
+        let missingToolStatus = missingToolReport.readinessStatus
+        expect("readiness: a missing tool is red with its name", !missingToolStatus.isReady && missingToolStatus.detail.contains(missingToolReport.tools[0].name), missingToolStatus.detail)
+        let startupModel = AppModel.mock(scenario: .library)
+        startupModel.resetForSelfCheck()
+        expect("readiness: initial state is checking", startupModel.readiness.isChecking)
+        await startupModel.runStartupReadinessCheck()
+        expect("readiness: launch check turns green automatically", startupModel.readiness.isReady, startupModel.readiness.detail)
+        expect("readiness: launch check is written to the log", startupModel.logs.contains { $0.category == "readiness" })
+        expect("readiness: launch check refreshes the device list", !startupModel.devices.isEmpty)
+
+        // 19. Single-action import: one button -> picker -> header read + staging + entry.
+        let oneAction = AppModel.mock(scenario: .library)
+        oneAction.resetForSelfCheck()
+        await oneAction.importROM(at: "/tmp/Pokemon Y.cci")
+        expect("import: one action imports the chosen ROM", oneAction.games.count == 1 && oneAction.games.first?.titleID == MockFixtures.titlePokemonY, String(oneAction.games.count))
+        expect("import: one action stages the ROM data", oneAction.games.first?.romDataPath != nil)
+        expect("import: one action lands in the library", oneAction.importPresented == false && oneAction.screen == .library)
+
         return checks
     }
 }

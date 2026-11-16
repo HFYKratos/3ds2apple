@@ -162,13 +162,6 @@ struct SettingsSheetView: View {
                         Label(strings.signingOpenXcode, systemImage: "person.crop.circle.badge.checkmark")
                     }
                     .buttonStyle(SecondaryButtonStyle())
-                    Button {
-                        Task { await model.refreshEnvironment() }
-                    } label: {
-                        Label(strings.signingRefresh, systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(model.isBusy)
                     Spacer()
                 }
                 Text(strings.signingExplanation)
@@ -176,18 +169,10 @@ struct SettingsSheetView: View {
                     .foregroundStyle(LauncherTheme.mutedText)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                HStack {
-                    Text(strings.signingStatusMissing)
-                        .font(.system(size: 11))
-                        .foregroundStyle(LauncherTheme.mutedText)
-                    Spacer()
-                    Button {
-                        Task { await model.refreshEnvironment() }
-                    } label: {
-                        Label(strings.signingRefresh, systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                }
+                Text(strings.signingStatusMissing)
+                    .font(.system(size: 11))
+                    .foregroundStyle(LauncherTheme.mutedText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }

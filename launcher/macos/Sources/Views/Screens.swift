@@ -9,8 +9,9 @@
 //             compile -> compose one ROM-free IPA -> verify -> install -> push
 //             -> verify -> Done. Per-step state and logs live on this page.
 //
-//  Import is a sheet launched from the Library. Everything is pure SwiftUI so
-//  the offscreen snapshot renderer can draw it on the headless build VM.
+//  Import is a single Library button that opens the file picker and imports the
+//  chosen ROM directly (no import sheet). Everything is pure SwiftUI so the
+//  offscreen snapshot renderer can draw it on the headless build VM.
 //
 
 import SwiftUI
@@ -22,30 +23,6 @@ import UniformTypeIdentifiers
 func humanBytes(_ bytes: Int64?) -> String {
     guard let bytes else { return "-" }
     return FileProbe.formatBytes(bytes)
-}
-
-func shortHash(_ hash: String?) -> String {
-    guard let hash, hash.count >= 12 else { return hash ?? "-" }
-    return String(hash.prefix(12)) + "..."
-}
-
-func stepRow(_ number: Int, _ title: String, _ detail: String) -> some View {
-    HStack(alignment: .top, spacing: 10) {
-        Text(String(number))
-            .font(LauncherTheme.mono(10, weight: .bold))
-            .foregroundStyle(LauncherTheme.accentDeep)
-            .frame(width: 18, height: 18)
-            .background(Circle().fill(LauncherTheme.accent.opacity(0.2)))
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-            Text(detail)
-                .font(.system(size: 11))
-                .foregroundStyle(LauncherTheme.mutedText)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        Spacer(minLength: 0)
-    }
 }
 
 // MARK: - Library
@@ -72,92 +49,50 @@ struct LibraryScreen: View {
                     }
                 }
             }
-            libraryStatusCard
         }
     }
 
+    /// The whole import area is exactly one button: it opens the file picker and
+    /// imports the chosen ROM (header read + staging + library entry in one go).
+    /// No path field, name override, explanatory card or readiness panel here.
     private var header: some View {
         HStack(spacing: 10) {
             Text(strings.gamesCount(model.games.count))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(LauncherTheme.mutedText)
             Spacer()
-            deviceChip
             Button {
-                model.importPresented = true
+                chooseROM()
             } label: {
-                Label(strings.importGame, systemImage: "plus")
+                Label(strings.importButton, systemImage: "plus")
             }
-            .buttonStyle(SecondaryButtonStyle())
-            .disabled(model.isBusy)
-        }
-    }
-
-    @ViewBuilder
-    private var deviceChip: some View {
-        if let device = model.selectedDevice {
-            HStack(spacing: 6) {
-                Image(systemName: "iphone")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(LauncherTheme.accentDeep)
-                Text(device.name)
-                    .font(.system(size: 11, weight: .medium))
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(LauncherTheme.success.opacity(0.12)))
-        } else {
-            Button {
-                Task { await model.detectDevices() }
-            } label: {
-                Label(strings.deployDeviceNone, systemImage: "iphone.slash")
-            }
-            .buttonStyle(SecondaryButtonStyle())
+            .buttonStyle(PrimaryButtonStyle())
             .disabled(model.isBusy)
         }
     }
 
     private var emptyLibrary: some View {
-        Card {
-            EmptyStateView(
-                symbol: "square.grid.2x2",
-                title: strings.emptyLibraryTitle,
-                message: strings.emptyLibraryMessage
-            )
-            Button(strings.addFirstGame) {
-                model.importPresented = true
-            }
-            .buttonStyle(PrimaryButtonStyle())
-        }
+        EmptyStateView(
+            symbol: "square.grid.2x2",
+            title: strings.emptyLibraryTitle,
+            message: ""
+        )
     }
 
-    private var libraryStatusCard: some View {
-        Card(title: strings.deployInstalledBundle) {
-            VStack(alignment: .leading, spacing: 6) {
-                if settings.libraryInstalledTitles.isEmpty {
-                    Text(strings.deployNotInstalledBundle)
-                        .font(.system(size: 11))
-                        .foregroundStyle(LauncherTheme.mutedText)
-                } else {
-                    KeyValueRow(key: strings.statusLabel, value: strings.deployPushed(settings.libraryInstalledTitles.count))
-                    KeyValueRow(key: strings.deployInstalledBundle, value: settings.installedBundleID.isEmpty ? strings.deviceBundleIDNone : settings.installedBundleID, mono: true)
-                    KeyValueRow(key: strings.libraryIPALabel, value: settings.libraryIPAPath.isEmpty ? "-" : settings.libraryIPAPath, mono: true)
-                    if model.libraryNeedsRebuild {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(LauncherTheme.warning)
-                            Text(strings.deployNeedsBuild)
-                                .font(.system(size: 10.5))
-                                .foregroundStyle(LauncherTheme.mutedText)
-                            Spacer(minLength: 0)
-                        }
-                    }
-                }
-                Text(strings.deployNoteROMFree)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(LauncherTheme.mutedText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+    private func chooseROM() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        let extensions = ["3ds", "cci", "ncch", "cxi"]
+        let types = extensions.compactMap { UTType(filenameExtension: $0) }
+        if !types.isEmpty {
+            panel.allowedContentTypes = types
+        }
+        panel.message = strings.dropHint
+        panel.prompt = strings.choose
+        if panel.runModal() == .OK, let url = panel.url {
+            Task { await model.importROM(at: url.path) }
         }
     }
 }
@@ -302,10 +237,10 @@ struct DeployScreen: View {
             EmptyStateView(
                 symbol: "iphone.and.arrow.forward",
                 title: strings.deployNoGames,
-                message: strings.emptyLibraryMessage
+                message: ""
             )
-            Button(strings.addFirstGame) {
-                model.importPresented = true
+            Button(strings.openLibrary) {
+                model.screen = .library
             }
             .buttonStyle(PrimaryButtonStyle())
         }
@@ -558,256 +493,5 @@ struct DeployReportCard: View {
             }
         }
         .launcherCard()
-    }
-}
-
-// MARK: - Import sheet
-
-/// File drop is a live-app feature only; the offscreen snapshot renderer draws the
-/// same tree without the AppKit drag-destination registration.
-private struct SheetFileDropModifier: ViewModifier {
-    let enabled: Bool
-    @Binding var isTargeted: Bool
-    let onDrop: ([NSItemProvider]) -> Bool
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if enabled {
-            content.onDrop(of: [UTType.fileURL.identifier], isTargeted: $isTargeted, perform: onDrop)
-        } else {
-            content
-        }
-    }
-}
-
-struct ImportSheetView: View {
-    @ObservedObject var model: AppModel
-    @Environment(\.launcherScreenshotMode) private var screenshotMode
-    @State private var isDropTarget = false
-    @State private var rejection: String?
-
-    private var strings: LauncherStrings { model.strings }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            header
-            Rectangle()
-                .fill(LauncherTheme.border)
-                .frame(height: 1)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    dropCard
-                    if let rom = model.detectedROM {
-                        detectedCard(rom)
-                    } else if let error = model.detectedROMError {
-                        errorCard(error)
-                    }
-                    stepsCard
-                    if model.isBusy {
-                        Card(title: strings.importLogsTitle) {
-                            LogConsole(
-                                entries: model.logs.filter { ["rom", "pack", "import"].contains($0.category) },
-                                maximumLines: 8,
-                                strings: strings
-                            )
-                        }
-                    }
-                }
-                .padding(20)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .frame(minWidth: 760, idealWidth: 860, minHeight: 620, idealHeight: 700)
-        .background(LauncherTheme.background)
-    }
-
-    private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            IconTile(symbol: "square.and.arrow.down.on.square", size: 34)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(strings.importTitle)
-                    .font(LauncherTheme.rounded(19, weight: .bold))
-                Text(strings.importSubtitle)
-                    .font(.system(size: 11))
-                    .foregroundStyle(LauncherTheme.mutedText)
-            }
-            Spacer()
-            ModeBadge(isMock: model.isMock, strings: strings)
-            Button(strings.close) {
-                model.importPresented = false
-            }
-            .buttonStyle(SecondaryButtonStyle())
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .background(LauncherTheme.background)
-    }
-
-    private var dropCard: some View {
-        Card(title: strings.dropTitle) {
-            HStack(alignment: .top, spacing: 16) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(LauncherTheme.accent.opacity(0.14))
-                        .frame(width: 66, height: 66)
-                    Image(systemName: "square.and.arrow.down.on.square")
-                        .font(.system(size: 25, weight: .medium))
-                        .foregroundStyle(LauncherTheme.accentDeep)
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(strings.dropMessage)
-                        .font(.system(size: 12))
-                        .foregroundStyle(LauncherTheme.mutedText)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(strings.dropHint)
-                        .font(.system(size: 11))
-                        .foregroundStyle(LauncherTheme.mutedText.opacity(0.85))
-                    if let rejection {
-                        Text(rejection)
-                            .font(.system(size: 11))
-                            .foregroundStyle(LauncherTheme.danger)
-                    }
-                }
-                Spacer(minLength: 8)
-                if screenshotMode {
-                    Text(strings.dropChoose)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(LauncherTheme.accentDeep))
-                } else {
-                    Button {
-                        chooseROM()
-                    } label: {
-                        Label(strings.dropChoose, systemImage: "doc.badge.plus")
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(model.isBusy)
-                }
-            }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isDropTarget ? LauncherTheme.accent.opacity(0.12) : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(
-                        isDropTarget ? LauncherTheme.accent : LauncherTheme.border,
-                        style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
-                    )
-            )
-            .modifier(SheetFileDropModifier(enabled: !screenshotMode, isTargeted: $isDropTarget, onDrop: handleDrop))
-        }
-    }
-
-    private func detectedCard(_ rom: DetectedROM) -> some View {
-        Card(
-            title: strings.detectedTitle,
-            trailing: AnyView(Badge(text: strings.detectedBadge, tone: .accent, symbol: "eye"))
-        ) {
-            VStack(spacing: 6) {
-                KeyValueRow(key: strings.fieldTitleID, value: rom.titleID, mono: true)
-                KeyValueRow(key: strings.fieldDisplayName, value: rom.displayName)
-                KeyValueRow(key: strings.fieldProductCode, value: rom.productCode.isEmpty ? "-" : rom.productCode, mono: true)
-                KeyValueRow(key: strings.fieldContainer, value: rom.container.uppercased(), mono: true)
-                KeyValueRow(key: strings.fieldROMSize, value: humanBytes(rom.bytes))
-                KeyValueRow(key: strings.fieldContentSize, value: humanBytes(rom.contentBytes))
-            }
-            HStack(spacing: 10) {
-                Button {
-                    Task { await model.importDetected() }
-                } label: {
-                    Label(strings.addGame, systemImage: "plus.circle.fill")
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(model.isBusy)
-                Button(strings.clearSelection) {
-                    model.detectedROM = nil
-                    model.detectedROMError = nil
-                }
-                .buttonStyle(SecondaryButtonStyle())
-                Spacer()
-            }
-            .padding(.top, 4)
-        }
-    }
-
-    private func errorCard(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(LauncherTheme.danger)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(strings.unrecognisedTitle)
-                    .font(.system(size: 12, weight: .semibold))
-                Text(message)
-                    .font(.system(size: 11))
-                    .foregroundStyle(LauncherTheme.mutedText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer()
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 9).fill(LauncherTheme.danger.opacity(0.08)))
-        .overlay(RoundedRectangle(cornerRadius: 9).stroke(LauncherTheme.danger.opacity(0.3), lineWidth: 1))
-    }
-
-    private var stepsCard: some View {
-        Card(title: strings.importStepsTitle) {
-            VStack(alignment: .leading, spacing: 9) {
-                stepRow(1, strings.step1Title, strings.step1Detail)
-                stepRow(2, strings.step2Title, strings.step2Detail)
-                stepRow(3, strings.step3Title, strings.step3Detail)
-                stepRow(4, strings.step4Title, strings.step4Detail)
-            }
-        }
-    }
-
-    // MARK: file picking
-
-    private func chooseROM() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        let extensions = ["3ds", "cci", "ncch", "cxi"]
-        let types = extensions.compactMap { UTType(filenameExtension: $0) }
-        if !types.isEmpty {
-            panel.allowedContentTypes = types
-        }
-        panel.message = strings.dropHint
-        panel.prompt = strings.choose
-        if panel.runModal() == .OK, let url = panel.url {
-            rejection = nil
-            Task { await model.detectROM(at: url.path) }
-        }
-    }
-
-    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        var accepted = false
-        for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-            accepted = true
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                var url: URL?
-                if let data = item as? Data {
-                    url = URL(dataRepresentation: data, relativeTo: nil)
-                } else if let itemURL = item as? URL {
-                    url = itemURL
-                }
-                guard let url else { return }
-                let allowed = ["3ds", "cci", "ncch", "cxi"]
-                guard allowed.contains(url.pathExtension.lowercased()) else {
-                    DispatchQueue.main.async { rejection = strings.dropUnsupported }
-                    return
-                }
-                DispatchQueue.main.async {
-                    rejection = nil
-                    Task { await model.detectROM(at: url.path) }
-                }
-            }
-        }
-        return accepted
     }
 }

@@ -472,3 +472,33 @@
 "The game data's SHA-256 does not match the manifest (expected %@, got %@). Push the game data again with the launcher." = "The game data's SHA-256 does not match the manifest (expected %@, got %@). Push the game data again with the launcher.";
 "The game data of %@ has not been pushed yet. Install the build from the desktop launcher, then let it push the game's data." = "The game data of %@ has not been pushed yet. Install the build from the desktop launcher, then let it push the game's data.";
 "The game data folder “%@” is no longer in Documents/Games. Refresh the library." = "The game data folder “%@” is no longer in Documents/Games. Refresh the library.";
+/* --- 0.2.2 runtime badge, AOT diagnostics and Metal HUD state --- */
+"AOT …" = "AOT …";
+"AOT missing" = "AOT missing";
+"AOT pack" = "AOT pack";
+"AOT linked" = "AOT linked";
+"AOT linked code" = "AOT linked code";
+"AOT recompiled" = "AOT recompiled";
+"AOT status" = "AOT status";
+"fps …" = "fps …";
+"GPU …" = "GPU …";
+"Metal GPU" = "Metal GPU";
+"Metal upload" = "Metal upload";
+"CPU render" = "CPU render";
+"HUD on" = "HUD on";
+"HUD off" = "HUD off";
+"HUD build off" = "HUD build off";
+"HUD needs Metal" = "HUD needs Metal";
+"Runtime status: %@, %@, %@, %@" = "Runtime status: %@, %@, %@, %@";
+"Metal backend" = "Metal backend";
+"MoltenVK embedded" = "MoltenVK embedded";
+"Software renderer (no MoltenVK)" = "Software renderer (no MoltenVK)";
+"Yes" = "Yes";
+"No" = "No";
+"None" = "None";
+"No AOT build for this game: “%@” was loaded, but the runtime is not executing AOT code (linked title %@, runtime status: %@). The shell refuses to run interpreted code." = "No AOT build for this game: “%@” was loaded, but the runtime is not executing AOT code (linked title %@, runtime status: %@). The shell refuses to run interpreted code.";
+"This build does not enable the Metal HUD (MetalHudEnabled is missing from Info.plist), so the switch cannot show it. Rebuild the shell with scripts/build-ios-app.sh." = "This build does not enable the Metal HUD (MetalHudEnabled is missing from Info.plist), so the switch cannot show it. Rebuild the shell with scripts/build-ios-app.sh.";
+"The game is showing the CPU readback path, so the HUD has no Metal layer to attach to. This happens when the app has no MoltenVK.framework; deploy the launcher's 0.2.2+ shell template." = "The game is showing the CPU readback path, so the HUD has no Metal layer to attach to. This happens when the app has no MoltenVK.framework; deploy the launcher's 0.2.2+ shell template.";
+"On by default since 0.2.2. The HUD appears over a running game on the Metal layer; a Metal device that already existed at launch picks the switch up on the next launch." = "On by default since 0.2.2. The HUD appears over a running game on the Metal layer; a Metal device that already existed at launch picks the switch up on the next launch.";
+"Turn on to show Apple's FPS / GPU HUD over a running game." = "Turn on to show Apple's FPS / GPU HUD over a running game.";
+

@@ -32,6 +32,8 @@ source "${SCRIPT_DIR}/lib/game-catalog.sh"
 APP_ARG=""
 NAME_ARG=""
 OUT_DIR="IPA"
+REQUIRE_MOLTENVK=0
+MOLTENVK_REPORT="not checked"
 
 usage() {
   cat <<'EOF'
@@ -48,6 +50,11 @@ Arguments:
 Options:
   --name NAME        Output file name (alternative to the second argument)
   --out-dir DIR      Output directory (default: IPA/, gitignored)
+  --require-moltenvk Fail when the packaged app has no
+                     Frameworks/MoltenVK.framework/MoltenVK. Use it for the
+                     launcher shell template: without MoltenVK the presented
+                     CAMetalLayer path (GPU rendering + system Metal HUD) cannot
+                     start on the device.
   -h, --help         Show this help and exit
 
 Output:
@@ -89,6 +96,10 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || die "--out-dir requires a value"
       OUT_DIR="$2"
       shift 2
+      ;;
+    --require-moltenvk)
+      REQUIRE_MOLTENVK=1
+      shift
       ;;
     -h|--help)
       usage
@@ -214,6 +225,26 @@ if [[ -n "${MOLTENVK_FRAMEWORK:-}" ]]; then
   log "embedded MoltenVK.framework"
 fi
 
+# --- MoltenVK (presented CAMetalLayer + system Metal HUD) --------------------
+# The Vulkan renderer dlopen()s MoltenVK from Frameworks/ at run time. Without
+# it the app falls back to the software PICA200 renderer: slow, and there is no
+# Metal layer for the HUD. The launcher shell template must ship it, so a missing
+# framework is fatal when --require-moltenvk was requested.
+MOLTENVK_APP_PATH="$STAGE/Payload/$APP_BASENAME/Frameworks/MoltenVK.framework/MoltenVK"
+if [[ -f "$MOLTENVK_APP_PATH" ]]; then
+  MOLTENVK_BYTES="$(wc -c < "$MOLTENVK_APP_PATH" | tr -d '[:space:]')"
+  MOLTENVK_REPORT="embedded (${MOLTENVK_BYTES} bytes)"
+  log "MoltenVK: $MOLTENVK_REPORT"
+elif [[ "$REQUIRE_MOLTENVK" -eq 1 ]]; then
+  die "the app bundle has no Frameworks/MoltenVK.framework/MoltenVK.
+     The presented CAMetalLayer path (GPU rendering and the system Metal HUD)
+     needs it. Download MoltenVK and pass MOLTENVK_FRAMEWORK=<path to the
+     .framework directory> (see ios/app/README.md), or drop --require-moltenvk."
+else
+  MOLTENVK_REPORT="absent (CPU readback path only)"
+  printf '[package-ipa] warning: the app has no MoltenVK.framework; it will run on the CPU readback path (slow, no Metal HUD)\n' >&2
+fi
+
 # ROM transfer: expose Documents/ to Finder/iTunes and the Files app. The
 # generated Info.plist does not reliably carry these keys from XcodeGen, so
 # inject them into the staged bundle before zipping.
@@ -306,6 +337,7 @@ fi
 printf '\n'
 log "IPA:    $OUT_IPA"
 printf 'CATALOG: %s\n' "$CATALOG_REPORT"
+printf 'MOLTENVK: %s\n' "$MOLTENVK_REPORT"
 printf 'SHA256: %s\n' "$SHA256"
 printf 'SIZE:   %s\n' "$SIZE"
 printf 'NOTE:   unsigned IPA — sign with Sideloadly/AltStore on Windows using your own Apple ID.\n'

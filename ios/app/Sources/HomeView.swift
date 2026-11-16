@@ -295,13 +295,17 @@ struct HomeView: View {
     @ViewBuilder
     private var statusMessages: some View {
         if let notice = model.notice {
+            // An AOT-only refusal is an error (the game did not run): red octagon.
+            // A fixable hint (data not pushed yet, ...) stays an orange warning.
+            let isError = notice.severity == .error
             noticeCard(
-                icon: "exclamationmark.triangle.fill",
-                tint: .orange,
+                icon: isError ? "exclamationmark.octagon.fill" : "exclamationmark.triangle.fill",
+                tint: isError ? .red : .orange,
                 title: notice.title,
                 message: notice.message,
                 dismiss: { model.dismissNotice() }
             )
+            .accessibilityIdentifier(isError ? "game-error" : "game-notice")
         }
         phaseStatus
     }

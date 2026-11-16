@@ -13,14 +13,17 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$HERE"
 ROOT="$(cd "$HERE/../.." && pwd)"
+# Point the headless self-check at this build tree (checkout detection) so the
+# MoltenVK/template assertions inspect the right out/shell template.
+export THREEDS2APPLE_ROOT="$ROOT"
 
 export PATH=/usr/local/bin:$PATH
 CONFIG="${CONFIG:-Release}"
 LOG=/tmp/zl-launcher-build.log
 VERSION="$(sed -n 's/^        MARKETING_VERSION: "\(.*\)"/\1/p' project.yml | head -1)"
-[ -n "$VERSION" ] || VERSION="0.2.1"
+[ -n "$VERSION" ] || VERSION="0.2.3"
 BUILD_NUMBER="$(sed -n 's/^        CURRENT_PROJECT_VERSION: "\(.*\)"/\1/p' project.yml | head -1)"
-[ -n "$BUILD_NUMBER" ] || BUILD_NUMBER="3"
+[ -n "$BUILD_NUMBER" ] || BUILD_NUMBER="5"
 OUT_DIR="$ROOT/out/launchers"
 PACKAGE_NAME="3ds2apple-launcher-${VERSION}-macos-app"
 STATUS=0
@@ -55,6 +58,35 @@ echo "binary: $(ls -l "$BIN" | awk '{print $5}') bytes"
 echo "archs: $(lipo -archs "$BIN" 2>/dev/null || file "$BIN")"
 echo "bundle id: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist" 2>/dev/null || echo unknown)"
 echo "version: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist" 2>/dev/null) build $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist" 2>/dev/null)"
+
+echo "== embed MoltenVK.framework (hardware renderer + system Metal HUD) =="
+TEMPLATE="$ROOT/out/shell/3ds2apple-shell.ipa"
+MOLTENVK_SHA="6cd5888490d08b36356d04c50c05e2eda5b9bcb3d0338ece693a28987de96aff"
+if [ ! -f "$TEMPLATE" ]; then
+  echo "SHELL TEMPLATE MISSING: $TEMPLATE"
+  echo "  the launcher copies Frameworks/MoltenVK.framework from the pinned ROM-free shell template"
+  exit 1
+fi
+rm -rf /tmp/zl-shell-template-extract "$APP/Contents/Resources/MoltenVK.framework"
+mkdir -p /tmp/zl-shell-template-extract
+if ! unzip -q -o "$TEMPLATE" -d /tmp/zl-shell-template-extract; then
+  echo "SHELL TEMPLATE UNZIP FAILED: $TEMPLATE"; exit 1
+fi
+SHELL_APP="$(find /tmp/zl-shell-template-extract/Payload -maxdepth 1 -name '*.app' -type d 2>/dev/null | head -1)"
+SRC_FW="$SHELL_APP/Frameworks/MoltenVK.framework"
+if [ ! -f "$SRC_FW/MoltenVK" ]; then
+  echo "TEMPLATE HAS NO Frameworks/MoltenVK.framework: $SRC_FW"; exit 1
+fi
+mkdir -p "$APP/Contents/Resources"
+ditto "$SRC_FW" "$APP/Contents/Resources/MoltenVK.framework"
+EMBEDDED_FW="$APP/Contents/Resources/MoltenVK.framework/MoltenVK"
+EMBEDDED_SHA="$(shasum -a 256 "$EMBEDDED_FW" | awk '{print $1}')"
+EMBEDDED_BYTES="$(stat -f%z "$EMBEDDED_FW")"
+if [ "$EMBEDDED_SHA" != "$MOLTENVK_SHA" ] || [ "$EMBEDDED_BYTES" != "4822128" ]; then
+  echo "EMBEDDED MOLTENVK MISMATCH: $EMBEDDED_BYTES bytes sha256 $EMBEDDED_SHA"; exit 1
+fi
+echo "embedded MoltenVK.framework: $EMBEDDED_BYTES bytes sha256 $EMBEDDED_SHA"
+echo "template IPA sha256: $(shasum -a 256 "$TEMPLATE" | awk '{print $1}')"
 
 echo "== app icon =="
 ICON="$APP/Contents/Resources/AppIcon.icns"
@@ -119,11 +151,36 @@ echo "zip: $OUT_DIR/$PACKAGE_NAME.zip ($ZIP_SIZE bytes)"
 
 echo "== package verification =="
 unzip -t "$OUT_DIR/$PACKAGE_NAME.zip" | tail -2
-echo "zip entries: $(unzip -l "$OUT_DIR/$PACKAGE_NAME.zip" | tail -1)"
-if unzip -l "$OUT_DIR/$PACKAGE_NAME.zip" | grep -E -i '(\.cci|\.3ds|\.ipa|\.dylib|GameRom|GamePack|screenshots/)'; then
+unzip -l "$OUT_DIR/$PACKAGE_NAME.zip" > /tmp/zl-package-list.txt
+echo "zip entries: $(tail -1 /tmp/zl-package-list.txt)"
+if grep -E -i '(\.cci|\.3ds|\.ipa|\.dylib|GameRom|GamePack|screenshots/)' /tmp/zl-package-list.txt; then
   echo "PACKAGE CONTAINS FORBIDDEN GAME/BUILD ENTRIES"; STATUS=1
 else
   echo "package contains only the .app (no ROM/IPA/dylib/screenshot entries)"
+fi
+
+echo "== packaged app verification (fresh extraction) =="
+PACKAGED_FW="3ds2apple-launcher.app/Contents/Resources/MoltenVK.framework/MoltenVK"
+if grep -q "$PACKAGED_FW" /tmp/zl-package-list.txt; then
+  echo "package carries the launcher-embedded MoltenVK.framework"
+else
+  echo "PACKAGE MISSING $PACKAGED_FW"; STATUS=1
+fi
+rm -rf /tmp/zl-macos-verify
+mkdir -p /tmp/zl-macos-verify
+ditto -x -k "$OUT_DIR/$PACKAGE_NAME.zip" /tmp/zl-macos-verify
+VERIFY_APP="/tmp/zl-macos-verify/3ds2apple-launcher.app"
+VERIFY_BIN="$VERIFY_APP/Contents/MacOS/3ds2apple-launcher"
+if [ -x "$VERIFY_BIN" ] && THREEDS2APPLE_ROOT="$ROOT" "$VERIFY_BIN" --selfcheck > /tmp/zl-launcher-selfcheck-packaged.log 2>&1; then
+  echo "packaged app selfcheck PASSED: $(tail -1 /tmp/zl-launcher-selfcheck-packaged.log)"
+else
+  echo "packaged app selfcheck FAILED"
+  tail -20 /tmp/zl-launcher-selfcheck-packaged.log 2>/dev/null
+  STATUS=1
+fi
+VERIFY_ARCHS="$(lipo -archs "$VERIFY_BIN" 2>/dev/null || echo "unknown")"
+if [ -d "$VERIFY_APP" ]; then
+  echo "packaged app: $(stat -f%z "$OUT_DIR/$PACKAGE_NAME.zip") bytes zip, archs $VERIFY_ARCHS, version $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$VERIFY_APP/Contents/Info.plist" 2>/dev/null) build $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$VERIFY_APP/Contents/Info.plist" 2>/dev/null)"
 fi
 
 echo "== vm-build done (status $STATUS) =="

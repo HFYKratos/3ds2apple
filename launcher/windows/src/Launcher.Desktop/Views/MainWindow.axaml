@@ -9,15 +9,16 @@
   <Grid RowDefinitions="Auto,*,Auto">
     <!-- Top bar: app identity, exactly two primary sections (Library / Deploy), Settings gear. -->
     <Border Grid.Row="0" Padding="20,14" Background="{DynamicResource AppSurfaceBrush}">
-      <Grid ColumnDefinitions="Auto,*,Auto">
-        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+      <Grid>
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center" HorizontalAlignment="Left">
           <Image Source="/Assets/game-placeholder.png" Width="34" Height="34" />
           <StackPanel Spacing="0" VerticalAlignment="Center">
             <TextBlock Text="{Binding L.AppTitle}" FontSize="16" FontWeight="SemiBold" />
             <TextBlock Text="{Binding WindowTitle}" FontSize="11" Classes="caption" />
           </StackPanel>
         </StackPanel>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <!-- Centered relative to the whole window (not squeezed between the identity block and the gear). -->
+        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
           <Button Classes="nav" Command="{Binding ShowLibraryCommand}">
             <StackPanel Spacing="3">
               <TextBlock Text="{Binding L.NavLibrary}" FontSize="14" HorizontalAlignment="Center" />
@@ -31,8 +32,8 @@
             </StackPanel>
           </Button>
         </StackPanel>
-        <Button Grid.Column="2" Classes="gear" Content="⚙" ToolTip.Tip="{Binding L.NavSettings}"
-                Command="{Binding OpenSettingsCommand}" VerticalAlignment="Center" />
+        <Button Classes="gear" Content="⚙" ToolTip.Tip="{Binding L.NavSettings}"
+                Command="{Binding OpenSettingsCommand}" HorizontalAlignment="Right" VerticalAlignment="Center" />
       </Grid>
     </Border>
 
@@ -46,35 +47,13 @@
             <TextBlock Text="{Binding L.LibrarySubtitle}" Classes="muted" MaxWidth="820" HorizontalAlignment="Left" />
           </StackPanel>
 
-          <Border Classes="card">
-            <StackPanel Spacing="10">
-              <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Spacing="2">
-                  <TextBlock Text="{Binding L.LibraryImportTitle}" Classes="h2" />
-                  <TextBlock Text="{Binding L.LibraryImportBody}" Classes="muted" />
-                </StackPanel>
-                <TextBlock Grid.Column="1" Text="{Binding GameCountText}" Classes="caption" VerticalAlignment="Center" />
-              </Grid>
-              <Grid ColumnDefinitions="*,Auto">
-                <TextBox Text="{Binding ImportPath}" PlaceholderText="D:/ROM/MyGame.cci" />
-                <Button Grid.Column="1" Content="{Binding L.CommonBrowse}" Click="BrowseRomClicked" Margin="8,0,0,0" Classes="ghost" />
-              </Grid>
-              <Grid ColumnDefinitions="*,Auto">
-                <TextBox Text="{Binding DisplayNameOverride}" PlaceholderText="{Binding L.LibraryImportNamePlaceholder}" />
-                <Button Grid.Column="1" Content="{Binding L.LibraryImportAction}" Command="{Binding ImportCommand}" Classes="primary" Margin="8,0,0,0" />
-              </Grid>
-              <ProgressBar Value="{Binding ProgressValue}" IsVisible="{Binding IsImportRunning}" Height="6" />
-              <TextBlock Text="{Binding L.LibraryImportHint}" Classes="caption" />
-            </StackPanel>
-          </Border>
-
-          <Border Classes="card" IsVisible="{Binding IsLibraryEmpty}" VerticalAlignment="Top">
-            <StackPanel Spacing="10">
-              <TextBlock Text="{Binding L.LibraryEmptyTitle}" Classes="h2" />
-              <TextBlock Text="{Binding L.LibraryEmptyBody}" Classes="muted" MaxWidth="640" HorizontalAlignment="Left" />
-              <Button Content="{Binding L.LibraryEmptyAction}" Click="BrowseRomClicked" Classes="primary" HorizontalAlignment="Left" />
-            </StackPanel>
-          </Border>
+          <!-- Exactly one import action: opens the file picker and imports the selected ROM(s).
+               No path box, no name override, no explanatory card. Imported games render below. -->
+          <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+            <Button Content="{Binding L.LibraryImportAction}" Click="BrowseRomClicked" Classes="primary" />
+            <ProgressBar Width="260" Value="{Binding ProgressValue}" IsVisible="{Binding IsImportRunning}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding GameCountText}" Classes="caption" VerticalAlignment="Center" />
+          </StackPanel>
 
           <ItemsControl ItemsSource="{Binding Games}">
             <ItemsControl.ItemsPanel>
@@ -109,7 +88,6 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
 
-          <TextBlock Text="{Binding ReadinessText}" Classes="caption" />
         </StackPanel>
       </ScrollViewer>
 
@@ -256,12 +234,6 @@
                   <TextBlock Text="{Binding L.DevicePrereqUnlock}" Classes="caption" />
                 </StackPanel>
               </Border>
-              <Border Classes="card">
-                <StackPanel Spacing="8">
-                  <TextBlock Text="{Binding L.SettingsAutoTitle}" Classes="h2" />
-                  <TextBlock Text="{Binding L.SettingsAutoBody}" Classes="muted" />
-                </StackPanel>
-              </Border>
             </StackPanel>
 
             <StackPanel Grid.Column="2" Spacing="12">
@@ -283,7 +255,6 @@
                   <TextBlock Text="{Binding L.SettingsLogsTitle}" Classes="h2" />
                   <TextBlock Text="{Binding CurrentLogPath}" Classes="caption" />
                   <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button Content="{Binding L.SettingsLogsSelfTest}" Command="{Binding RunSelfTestCommand}" Classes="ghost" />
                     <Button Content="{Binding L.SettingsLogsWorkspace}" Command="{Binding OpenWorkspaceCommand}" Classes="ghost" />
                     <Button Content="{Binding L.SettingsLogsExport}" Command="{Binding ExportLogCommand}" Classes="ghost" />
                   </StackPanel>
@@ -320,7 +291,19 @@
     <Border Grid.Row="2" Padding="20,10" Background="{DynamicResource AppSurfaceBrush}">
       <Grid ColumnDefinitions="*,Auto">
         <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="12" />
-        <ProgressBar Grid.Column="1" Width="220" Height="6" Minimum="0" Maximum="100" Value="{Binding ProgressValue}" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+          <!-- Automatic startup self-check: green = ready, red = something is missing.
+               Hover shows the per-component details; clicking reruns the check. -->
+          <Button Classes="readiness" Command="{Binding RefreshReadinessCommand}" ToolTip.Tip="{Binding ReadinessDetail}">
+            <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+              <Border Width="9" Height="9" CornerRadius="5" Background="{DynamicResource AppReadyBrush}" IsVisible="{Binding IsReadinessReady}" VerticalAlignment="Center" />
+              <Border Width="9" Height="9" CornerRadius="5" Background="{DynamicResource AppErrorBrush}" IsVisible="{Binding IsReadinessFailed}" VerticalAlignment="Center" />
+              <Border Width="9" Height="9" CornerRadius="5" Background="{DynamicResource AppWarningBrush}" IsVisible="{Binding IsReadinessChecking}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding ReadinessLabel}" FontSize="12" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <ProgressBar Width="220" Height="6" Minimum="0" Maximum="100" Value="{Binding ProgressValue}" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
+        </StackPanel>
       </Grid>
     </Border>
   </Grid>

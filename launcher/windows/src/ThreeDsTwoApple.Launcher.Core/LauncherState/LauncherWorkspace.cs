@@ -107,8 +107,16 @@ public sealed class LauncherWorkspace
         return new LauncherWorkspace(resolved, state);
     }
 
+    /// <summary>Optional workspace override for QA/screenshot runs; the shipped launcher never sets it.</summary>
+    public const string WorkspaceEnvironmentVariable = "THREEDS2APPLE_WORKSPACE";
+
     public static string DefaultRoot()
     {
+        var configured = Environment.GetEnvironmentVariable(WorkspaceEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return Path.GetFullPath(configured);
+        }
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (string.IsNullOrWhiteSpace(localAppData))
         {

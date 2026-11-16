@@ -58,6 +58,9 @@ final class AppModel: ObservableObject {
     // Environment / devices
     @Published var envReport: EnvironmentReport?
     @Published var appleReadiness: AppleReadiness?
+    /// Automatic startup readiness result: the persistent green/red light in the
+    /// header (no manual "check" button in the UI).
+    @Published var readiness: ReadinessStatus = .checking
     @Published var devices: [DeviceInfo] = []
     @Published var selectedDeviceUDID: String?
 
@@ -75,6 +78,7 @@ final class AppModel: ObservableObject {
     let stagingRoot: URL
 
     private var lastInstallLine: String?
+    private var hasRunStartupReadiness = false
     private let maximumVisibleLogs = 800
 
     // MARK: init
@@ -319,10 +323,33 @@ final class AppModel: ObservableObject {
         }
         envReport = report
         appleReadiness = report.apple
+        readiness = report.readinessStatus
         appendLog(.info, "toolchain", "ready: " + String(report.okCount) + "/" + String(report.tools.count) + " checks passed")
         for tool in report.tools where tool.state != .ok {
             appendLog(.warn, "toolchain", tool.name + ": " + tool.detail + " - " + tool.hint)
         }
+    }
+
+    /// Runs automatically on every live launch: probe the local build/signing
+    /// environment once and keep the result as the persistent readiness light.
+    /// There is deliberately no manual readiness button in the UI.
+    func runStartupReadinessCheck() async {
+        if hasRunStartupReadiness { return }
+        hasRunStartupReadiness = true
+        readiness = .checking
+        appendLog(.info, "readiness", "automatic startup readiness check")
+        await refreshEnvironment()
+        switch readiness {
+        case .ready(let detail):
+            appendLog(.success, "readiness", "ready: " + detail)
+        case .notReady(let detail):
+            appendLog(.warn, "readiness", "not ready: " + detail.replacingOccurrences(of: "\n", with: "; "))
+        case .checking:
+            break
+        }
+        // Refresh the device list quietly so Deploy is usable without extra clicks;
+        // a missing cable/phone is not a readiness failure.
+        await detectDevicesWithoutBusy(quiet: true)
     }
 
     // MARK: ROM detection and import
@@ -397,6 +424,17 @@ final class AppModel: ObservableObject {
             finishTask(taskID, .failed, message: failure.message, hint: failure.hint)
             appendLog(.error, "import", failure.message + " " + failure.hint)
             banner = Banner(kind: .error, title: strings.importTitle, message: failure.plainText)
+        }
+    }
+
+    /// Single-action import used by the Library button: inspect the chosen ROM
+    /// header, stage the game data for the device push and add the game to the
+    /// library — one button press, no import sheet/confirmation card.
+    func importROM(at path: String) async {
+        guard !path.isEmpty, !isBusy else { return }
+        await detectROM(at: path)
+        if detectedROM != nil {
+            await importDetected()
         }
     }
 
@@ -1001,6 +1039,8 @@ final class AppModel: ObservableObject {
         logs = MockFixtures.logsForScreenshots()
         envReport = MockFixtures.readyEnvironment()
         appleReadiness = envReport?.apple
+        readiness = envReport?.readinessStatus ?? .ready(detail: "mock environment")
+        hasRunStartupReadiness = true
         devices = MockFixtures.devices
         selectedDeviceUDID = devices.first?.udid
         selectedForDeploy = []
@@ -1142,6 +1182,7 @@ final class AppModel: ObservableObject {
             catalogSchemaVersion: 2,
             catalogTitleIDs: titles.map { $0.uppercased() },
             containsBundledROM: false,
+            hasMoltenVK: true,
             bytes: 12_345_678
         )
     }
@@ -1178,6 +1219,8 @@ final class AppModel: ObservableObject {
         banner = nil
         envReport = nil
         appleReadiness = nil
+        readiness = .checking
+        hasRunStartupReadiness = false
         selectedDeviceUDID = nil
         settings.libraryInstalledTitles = []
         settings.libraryIPAPath = ""

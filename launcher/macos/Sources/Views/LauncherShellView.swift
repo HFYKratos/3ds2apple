@@ -4,11 +4,13 @@
 //
 //  The whole window for the two-section launcher UI (docs/launcher-flow-v2.md):
 //
-//      Library | Deploy (导入手机)          gear -> minimal Settings panel
+//      [3ds2apple]        游戏库  部署 (centered)        (ready) (gear)
 //
-//  Import is a sheet of the Library; Settings is a modal panel. Pure SwiftUI (no
-//  NavigationSplitView) so the same view tree is drawn offscreen by
-//  SnapshotRenderer on the headless build VM.
+//  Import stays a single button on the Library page; Settings is a modal panel.
+//  The readiness light is filled by the automatic startup probe and stays visible
+//  on every screen (green 已完成准备 / red 未完成准备, details in tooltip + log).
+//  Pure SwiftUI (no NavigationSplitView) so the same view tree is drawn offscreen
+//  by SnapshotRenderer on the headless build VM.
 //
 
 import SwiftUI
@@ -27,29 +29,26 @@ struct LauncherShellView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            LauncherSidebar(model: model, settings: settings, strings: strings)
+        VStack(spacing: 0) {
+            LauncherTopBar(model: model, strings: strings)
             Rectangle()
                 .fill(LauncherTheme.border)
-                .frame(width: 1)
-            VStack(spacing: 0) {
-                LauncherTopBar(model: model, strings: strings)
-                Rectangle()
-                    .fill(LauncherTheme.border)
-                    .frame(height: 1)
-                content
-                if model.isBusy {
-                    LauncherBusyBar(model: model, strings: strings)
-                }
+                .frame(height: 1)
+            content
+            if model.isBusy {
+                LauncherBusyBar(model: model, strings: strings)
             }
-            .background(LauncherTheme.background)
         }
         .background(LauncherTheme.background)
         .sheet(isPresented: $model.settingsPresented) {
             SettingsSheetView(model: model)
         }
-        .sheet(isPresented: $model.importPresented) {
-            ImportSheetView(model: model)
+        .task {
+            // Automatic on every live launch; the mock/screenshot model seeds a
+            // deterministic readiness result and must not probe the real machine.
+            if model.kind == .live {
+                await model.runStartupReadinessCheck()
+            }
         }
     }
 
@@ -67,106 +66,71 @@ struct LauncherShellView: View {
     }
 }
 
-// MARK: - Sidebar
+// MARK: - Top bar
 
-private struct LauncherSidebar: View {
+/// App identity on the left, the two primary sections centered in the window,
+/// readiness + mode + gear on the right. No sidebar: the v2 navigation is exactly
+/// two tabs plus a gear, mirroring the Windows launcher polish.
+private struct LauncherTopBar: View {
     @ObservedObject var model: AppModel
-    @ObservedObject var settings: LauncherSettings
     let strings: LauncherStrings
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                AppIconBadge(size: 36)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("3ds2apple")
-                        .font(LauncherTheme.rounded(16, weight: .bold))
-                    Text(strings.appTagline)
-                        .font(.system(size: 10))
-                        .foregroundStyle(LauncherTheme.mutedText)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
-            .padding(.bottom, 18)
-
-            VStack(spacing: 3) {
+        ZStack {
+            HStack(spacing: 26) {
                 ForEach(LauncherScreen.allCases) { screen in
-                    Button {
-                        model.screen = screen
-                    } label: {
-                        HStack(spacing: 9) {
-                            Image(systemName: screen.symbolName)
-                                .font(.system(size: 12, weight: .semibold))
-                                .frame(width: 16)
-                            Text(title(for: screen))
-                                .font(.system(size: 12.5, weight: model.screen == screen ? .semibold : .regular))
-                            Spacer(minLength: 0)
-                            if screen == .library && !model.games.isEmpty {
-                                Text(String(model.games.count))
-                                    .font(LauncherTheme.mono(10, weight: .semibold))
-                                    .foregroundStyle(LauncherTheme.mutedText)
-                            }
-                            if screen == .deploy && !model.selectedForDeploy.isEmpty {
-                                Text(String(model.selectedForDeploy.count))
-                                    .font(LauncherTheme.mono(10, weight: .semibold))
-                                    .foregroundStyle(LauncherTheme.accentDeep)
-                            }
-                        }
-                        .foregroundStyle(model.screen == screen ? Color.primary : Color.primary.opacity(0.72))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(model.screen == screen ? LauncherTheme.accent.opacity(0.16) : Color.clear)
-                        )
-                    }
-                    .buttonStyle(.plain)
+                    navButton(screen)
                 }
             }
-            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: .center)
 
-            Spacer(minLength: 12)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Rectangle()
-                    .fill(LauncherTheme.border)
-                    .frame(height: 1)
-                HStack(spacing: 6) {
-                    Image(systemName: "iphone")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(LauncherTheme.mutedText)
-                    Text(deviceLine)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(LauncherTheme.mutedText)
-                        .lineLimit(1)
+            HStack(spacing: 12) {
+                HStack(spacing: 10) {
+                    AppIconBadge(size: 30)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("3ds2apple")
+                            .font(LauncherTheme.rounded(14, weight: .bold))
+                        Text(strings.appTagline)
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(LauncherTheme.mutedText)
+                    }
                 }
+                Spacer(minLength: 0)
+                ReadinessLight(status: model.readiness, strings: strings)
+                ModeBadge(isMock: model.isMock, strings: strings)
                 Button {
                     model.settingsPresented = true
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "gearshape")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text(strings.settings)
-                            .font(.system(size: 11.5, weight: .medium))
-                        Spacer(minLength: 0)
-                    }
-                    .contentShape(Rectangle())
+                    Image(systemName: "gearshape")
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.primary.opacity(0.8))
-                HStack {
-                    ModeBadge(isMock: model.isMock, strings: strings)
-                    Spacer()
-                }
-                Text(strings.versionLabel + " " + LauncherInfo.shortVersion)
-                    .font(LauncherTheme.mono(9.5))
-                    .foregroundStyle(LauncherTheme.mutedText.opacity(0.8))
+                .buttonStyle(SecondaryButtonStyle())
+                .help(strings.settings)
             }
-            .padding(14)
         }
-        .frame(width: LauncherTheme.sidebarWidth)
-        .background(LauncherTheme.sidebarBackground)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 9)
+        .background(LauncherTheme.background)
+    }
+
+    private func navButton(_ screen: LauncherScreen) -> some View {
+        let selected = model.screen == screen
+        return Button {
+            model.screen = screen
+        } label: {
+            VStack(spacing: 5) {
+                Text(title(for: screen))
+                    .font(.system(size: 13.5, weight: selected ? .semibold : .medium))
+                    .foregroundStyle(selected ? Color.primary : Color.primary.opacity(0.62))
+                Capsule()
+                    .fill(selected ? LauncherTheme.accentDeep : Color.clear)
+                    .frame(width: 30, height: 2.5)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(title(for: screen))
     }
 
     private func title(for screen: LauncherScreen) -> String {
@@ -175,93 +139,60 @@ private struct LauncherSidebar: View {
         case .deploy: return strings.navDeploy
         }
     }
-
-    private var deviceLine: String {
-        if let device = model.selectedDevice {
-            return device.name
-        }
-        return strings.deployDeviceNone
-    }
 }
 
-// MARK: - Top bar
+// MARK: - Readiness light
 
-private struct LauncherTopBar: View {
-    @ObservedObject var model: AppModel
+/// Persistent readiness indicator filled by the automatic startup check. The
+/// detail string is raw engineering output (tool names, Apple ID state), shown on
+/// hover and written to the log; the visible label stays localized and short.
+struct ReadinessLight: View {
+    let status: ReadinessStatus
     let strings: LauncherStrings
 
+    private var color: Color {
+        switch status {
+        case .checking: return LauncherTheme.warning
+        case .ready: return LauncherTheme.success
+        case .notReady: return LauncherTheme.danger
+        }
+    }
+
+    private var label: String {
+        switch status {
+        case .checking: return strings.readinessChecking
+        case .ready: return strings.readinessReady
+        case .notReady: return strings.readinessNotReady
+        }
+    }
+
+    private var help: String {
+        let base: String
+        switch status {
+        case .checking: base = strings.readinessHelpChecking
+        case .ready: base = strings.readinessHelpReady
+        case .notReady: base = strings.readinessHelpNotReady
+        }
+        let detail = status.detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        return detail.isEmpty ? base : base + "\n\n" + detail
+    }
+
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(LauncherTheme.rounded(19, weight: .bold))
-                Text(subtitle)
-                    .font(.system(size: 11))
-                    .foregroundStyle(LauncherTheme.mutedText)
-            }
-            Spacer()
-            if model.isBusy {
-                ProgressView()
-                    .controlSize(.small)
-            }
-            switch model.screen {
-            case .library:
-                Button {
-                    model.importPresented = true
-                } label: {
-                    Label(strings.importGame, systemImage: "plus")
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(model.isBusy)
-            case .deploy:
-                if !model.games.isEmpty {
-                    Button {
-                        Task { await model.deploySelected() }
-                    } label: {
-                        Label(strings.deployButton(model.deployCandidates.isEmpty ? 0 : model.deployCandidates.count), systemImage: "iphone.and.arrow.forward")
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(model.isBusy || model.deployCandidates.isEmpty)
-                }
-            }
-            Button {
-                Task {
-                    await model.refreshEnvironment()
-                    await model.refreshLibrary()
-                    await model.detectDevices()
-                }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(SecondaryButtonStyle())
-            .help(strings.refresh)
-            .disabled(model.isBusy)
-            Button {
-                model.settingsPresented = true
-            } label: {
-                Image(systemName: "gearshape")
-            }
-            .buttonStyle(SecondaryButtonStyle())
-            .help(strings.settings)
-            ModeBadge(isMock: model.isMock, strings: strings)
+        HStack(spacing: 6) {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(color)
+                .lineLimit(1)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(LauncherTheme.background)
-    }
-
-    private var title: String {
-        switch model.screen {
-        case .library: return strings.navLibrary
-        case .deploy: return strings.navDeploy
-        }
-    }
-
-    private var subtitle: String {
-        switch model.screen {
-        case .library: return strings.librarySubtitle
-        case .deploy: return strings.deploySubtitle
-        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(color.opacity(0.12)))
+        .overlay(Capsule().stroke(color.opacity(0.32), lineWidth: 1))
+        .help(help)
+        .accessibilityLabel(label)
     }
 }
 

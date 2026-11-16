@@ -37,6 +37,16 @@ internal sealed class FakeProcessRunner : IProcessRunner
     }
 }
 
+/// <summary>IProgress that runs callbacks inline (no thread-pool posting) so report order is deterministic.</summary>
+internal sealed class ImmediateProgress<T> : IProgress<T>
+{
+    private readonly Action<T> _report;
+
+    public ImmediateProgress(Action<T> report) => _report = report;
+
+    public void Report(T value) => _report(value);
+}
+
 internal sealed class TempDir : IDisposable
 {
     public TempDir()
@@ -247,10 +257,9 @@ public sealed class DevPushClientTests
         var runner = new FakeProcessRunner(_ => new ProcessResult(0, lines, string.Empty, false, true));
         var reported = new List<TransferProgress>();
         var client = new DevPushClient(runner, "devpush");
-        var result = await client.PutAsync("com.example.app", "/tmp/GamePack.dylib", "Documents/Games/0004000000055E00/GamePack.dylib", progress: new Progress<TransferProgress>(reported.Add));
-        // Progress<T> posts asynchronously; the client's report happens on the calling thread here,
-        // so allow a short drain window for the dispatcher-free implementation.
-        await Task.Delay(50);
+        var result = await client.PutAsync("com.example.app", "/tmp/GamePack.dylib", "Documents/Games/0004000000055E00/GamePack.dylib", progress: new ImmediateProgress<TransferProgress>(reported.Add));
+        // Deterministic collector: Progress<T> posts to the thread pool and can deliver the
+        // two progress events out of order (a pre-existing flake when the machine is busy).
         Assert.Equal(2, reported.Count);
         Assert.Equal(90, reported[1].BytesSent);
         Assert.Equal(100, result.Bytes);

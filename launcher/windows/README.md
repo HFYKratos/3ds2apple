@@ -1,17 +1,19 @@
 # 3ds2apple launcher for Windows (MVP)
 
-Status: **launcher v2 (task-30, 2026-11-16) — Library→Deploy one-click flow, Windows
-local build by default, fix for the reported "installed but no game / no ROM pushed" chain.**
+Status: **launcher v3 polish (task-33, 2026-11-16) — centered top tabs, one Import
+button (file picker), automatic startup readiness light, new 0.2.2/build-10 ROM-free shell
+template with Frameworks/MoltenVK.framework, single-file package rebuilt.**
 This checkout compiles cleanly (0 errors, warnings as errors), its **125 unit/integration
-tests pass**, the host self-test passes and the single-exe package runs its clean-folder
-self-test (payload extraction + all package checks). The UI has exactly two sections
-(Library, Deploy) plus a minimal Settings gear; it is localized (English / 简体中文) and
-uses the iOS app icon. The user-facing package is a ZIP with exactly one self-contained
-exe. The graphical UI, the Impactor signing run and the phone flows still need
-verification on a real Windows PC with an iPhone/iPad; the root cause, new flow,
-correctness gates, artifact hash and remaining risks are in
-[docs/windows-launcher.md](../../docs/windows-launcher.md) section 16 (acceptance steps
-in section 11).
+tests pass** (3 consecutive runs; a pre-existing thread-pool ordering flake in the devpush
+progress test was made deterministic), the host self-test passes, and the packaged
+single-file exe runs its clean-folder `--self-test` on both Linux/WSL (payload extraction)
+and real Windows 11 (all checks PASS, shell template v0.2.2). The UI has exactly two
+sections (Library, Deploy) plus a minimal Settings gear; it is localized (English / 简体中文)
+and uses the iOS app icon. The user-facing package is a ZIP with exactly one self-contained
+exe. Real Windows captures of the v3 UI are in `docs/ui/v3-*.png`; the Impactor signing run
+and the phone flows still need verification with an iPhone/iPad; the artifact hash and
+remaining risks are in [docs/windows-launcher.md](../../docs/windows-launcher.md) section 16
+(acceptance steps in section 11).
 
 Architecture correction (Lead, 2026-11-14): iOS cannot dlopen a loose unsigned
 dylib from Documents. The **GamePack.dylib lives inside the signed app IPA**
@@ -22,7 +24,10 @@ overwrite install/update (a clean uninstall clears app data; verify on device).
 
 Shell-template identity is validated before signing: version >= 0.2.0-beta1,
 build >= 9 (manifest and Info.plist), bundle catalogue schema 2 + empty for the
-template, no Roms/. Device UDIDs are redacted in all UI/log output.
+template, no Roms/. The shipped template is **0.2.2 / build 10** and additionally
+contains `Frameworks/MoltenVK.framework` (GPU renderer + Metal HUD); `IpaComposer` copies
+every non-GamePack template entry, so the framework survives composition and is signed
+with the app. Device UDIDs are redacted in all UI/log output.
 
 ## What it does
 
@@ -134,19 +139,23 @@ the project's Build Agent (builder/README.md). The project never downloads Xcode
     dotnet src/Launcher.Desktop/bin/Debug/net10.0/3ds2apple-launcher.dll --self-test
 
 Evidence from this checkout: solution build succeeded (0 errors, warnings as
-errors), **111/111 tests passed** (3 consecutive runs), Debug self-test passes (only
-the "developer build" payload warning). The Release single-file exe was published,
-ZIPped (one file) and its `--self-test` was run from a clean folder via WSL interop:
-exit 0, embedded payload extracted to `%LOCALAPPDATA%\3ds2apple\distribution\0.1.0`,
-ROM-free shell template + pinned Impactor + all three Bin tools PASS. The Avalonia
-window was rendered under Xvfb in English and Simplified Chinese
-(`docs/ui/launcher-en.png`, `launcher-zh.png`); real UI interaction is part of the
-Windows manual test plan.
+errors), **125/125 tests passed** (3 consecutive runs). The final single-file package
+`out/launchers/3ds2apple-windows-single-0.2.2.zip` (150,011,456 B, SHA-256
+`37e659542ba6499d7154a00543bc2d6ab4b894a51a8706f98ff2d1e5107b4782`) contains exactly one
+`3ds2apple-launcher.exe` (156,653,598 B, SHA-256
+`42568da15a6de4856b32e8e363c9410240de6f67abd023435c1e1f5360d74207`). It embeds the
+0.2.2/build-10 shell template (incl. MoltenVK framework), pinned official Impactor
+v2.7.2/plumesign, the Bin tool CLIs, 3dsrecomp.exe and the official LLVM 21.1.8 payload
+(326 embedded files, staged explicitly with `THREEDS2APPLE_LLVM_DIR`). Its clean-folder `--self-test` PASSes on the Linux/WSL host
+(first-run extraction exercised with an isolated HOME) and on real Windows 11 (all checks
+PASS, no warnings, shell template v0.2.2). Real Windows window captures in English and
+Simplified Chinese, plus a headless render of the red not-ready status light, are under
+`docs/ui/v3-*.png`.
 
 ## Assemble a distribution (release step)
 
     powershell -ExecutionPolicy Bypass -File tools/fetch-impactor.ps1   # official v2.7.2, verified
-    powershell -ExecutionPolicy Bypass -File tools/prepare-dist.ps1 -Version 0.1.0
+    powershell -ExecutionPolicy Bypass -File tools/prepare-dist.ps1 -Version 0.2.2
     # -SkipShell builds a preview package without the shell template IPA
 
 prepare-dist.ps1 publishes the launcher self-contained multi-file (developer mode:
@@ -166,7 +175,7 @@ there. `THREEDS2APPLE_DIST` and the multi-file layout still work for development
 
     # stage shell/manifest.json + shell/3ds2apple-shell.ipa, vendor/impactor (verified),
     # and Bin/*.exe first (see shell/README.md, tools/fetch-impactor.sh)
-    launcher/windows/tools/prepare-dist-singlefile.sh /mnt/f/temp_transfer/dist/windows-single
+    launcher/windows/tools/prepare-dist-singlefile.sh    # output defaults to out/launchers/
     # Windows twin: powershell -ExecutionPolicy Bypass -File tools/prepare-dist-singlefile.ps1
     unzip -l dist/3ds2apple-windows-single-<version>.zip   # exactly one entry
     # clean-folder check: copy only the exe into an empty folder and run --self-test

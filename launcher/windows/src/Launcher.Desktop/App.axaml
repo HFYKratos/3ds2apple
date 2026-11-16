@@ -14,6 +14,8 @@
           <SolidColorBrush x:Key="AppBorderBrush" Color="#2C333F" />
           <SolidColorBrush x:Key="AppAccentBrush" Color="#5C9CFF" />
           <SolidColorBrush x:Key="AppWarningBrush" Color="#E8C98A" />
+          <SolidColorBrush x:Key="AppReadyBrush" Color="#4CC38A" />
+          <SolidColorBrush x:Key="AppErrorBrush" Color="#F06A6A" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
           <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F5F6F9" />
@@ -25,6 +27,8 @@
           <SolidColorBrush x:Key="AppBorderBrush" Color="#DDE2EA" />
           <SolidColorBrush x:Key="AppAccentBrush" Color="#2F6FE0" />
           <SolidColorBrush x:Key="AppWarningBrush" Color="#8A5A00" />
+          <SolidColorBrush x:Key="AppReadyBrush" Color="#2E9E5B" />
+          <SolidColorBrush x:Key="AppErrorBrush" Color="#C43B3B" />
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
     </ResourceDictionary>
@@ -33,7 +37,7 @@
     <FluentTheme />
     <Style Selector="Window">
       <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}" />
-      <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI, Noto Sans CJK SC, sans-serif" />
+      <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI, Microsoft YaHei, Noto Sans CJK SC, sans-serif" />
     </Style>
     <Style Selector="TextBlock">
       <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
@@ -80,6 +84,13 @@
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Padding" Value="10" />
       <Setter Property="FontSize" Value="18" />
+      <Setter Property="Foreground" Value="{DynamicResource AppMutedBrush}" />
+    </Style>
+    <Style Selector="Button.readiness">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="8,4" />
+      <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Foreground" Value="{DynamicResource AppMutedBrush}" />
     </Style>
     <Style Selector="Button.primary">

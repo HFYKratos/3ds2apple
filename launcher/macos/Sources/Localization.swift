@@ -83,6 +83,12 @@ struct LauncherStrings {
     var modeMock: String
     var busyWorking: String
     var busyCancelling: String
+    var readinessChecking: String
+    var readinessReady: String
+    var readinessNotReady: String
+    var readinessHelpChecking: String
+    var readinessHelpReady: String
+    var readinessHelpNotReady: String
     var statusReady: String
     var statusNeedsAttention: String
     var statusLabel: String
@@ -94,6 +100,8 @@ struct LauncherStrings {
     var emptyLibraryTitle: String
     var emptyLibraryMessage: String
     var importGame: String
+    var importButton: String
+    var openLibrary: String
     var addFirstGame: String
     var remove: String
     var rename: String
@@ -252,6 +260,18 @@ struct LauncherStrings {
         modeMock = t("MOCK / DRY RUN", "模拟 / 试运行")
         busyWorking = t("Working...", "正在处理...")
         busyCancelling = t("Cancelling...", "正在取消...")
+        readinessChecking = t("Checking...", "正在检查...")
+        readinessReady = t("Ready", "已完成准备")
+        readinessNotReady = t("Not ready", "未完成准备")
+        readinessHelpChecking = t("Running the automatic startup readiness check...", "正在运行启动自动检查...")
+        readinessHelpReady = t(
+            "The local toolchain and Apple ID signing are ready. The check runs automatically on every launch.",
+            "本机工具链与 Apple ID 签名均已就绪。每次启动都会自动检查。",
+        )
+        readinessHelpNotReady = t(
+            "Some local tools are missing or Xcode is not signed in. Details are in the tooltip/log; fix them and relaunch.",
+            "缺少本机工具，或 Xcode 尚未登录。详情见提示/日志；修复后重新启动即可。",
+        )
         statusReady = t("Ready", "就绪")
         statusNeedsAttention = t("Needs attention", "需要处理")
         statusLabel = t("Status", "状态")
@@ -265,6 +285,8 @@ struct LauncherStrings {
             "导入你自己拥有的解密 .3ds/.cci 文件。在“导入手机”页里，启动器会为每个游戏编译原生 AOT 包，并在 iPhone/iPad 上安装一个统一的外壳。"
         )
         importGame = t("Import game", "导入游戏")
+        importButton = t("Import", "导入")
+        openLibrary = t("Go to Library", "去游戏库导入")
         addFirstGame = t("Import your first game", "导入第一个游戏")
         remove = t("Remove", "移除")
         rename = t("Rename", "重命名")

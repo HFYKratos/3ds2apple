@@ -79,6 +79,30 @@ struct AboutView: View {
             Divider()
             aboutRow("AOT code", model.aotStatus.title)
             Divider()
+            aboutRow("AOT linked code", model.aotDiagnostics.linkedCode ? L10n.tr("Yes") : L10n.tr("No"))
+            Divider()
+            aboutRow("AOT recompiled", model.aotDiagnostics.recompiled ? L10n.tr("Yes") : L10n.tr("No"))
+            Divider()
+            aboutRow("AOT pack", model.aotDiagnostics.packPath.isEmpty ? L10n.tr("None") : model.aotDiagnostics.packPath)
+            Divider()
+            aboutRow(
+                "Metal backend",
+                MetalBackend.isMoltenVKEmbedded
+                    ? L10n.tr("MoltenVK embedded")
+                    : L10n.tr("Software renderer (no MoltenVK)")
+            )
+            if !model.aotDiagnostics.status.isEmpty {
+                Divider()
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("AOT status")
+                        .font(.subheadline)
+                    Text(model.aotDiagnostics.status)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Divider()
             aboutRow("Presentation", model.displayPath.title)
             Divider()
             aboutRow("Frame loop", model.frameLoopDisplayLabel)

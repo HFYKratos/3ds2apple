@@ -22,7 +22,6 @@ public partial class MainWindow : Window
     {
         if (ViewModel is { } viewModel)
         {
-            viewModel.BrowseRomRequested += OnBrowseRomRequested;
             viewModel.ExportLogRequested += OnExportLogRequested;
             ((INotifyCollectionChanged)viewModel.LogLines).CollectionChanged += (_, _) => ScrollLogToEnd();
         }
@@ -41,18 +40,6 @@ public partial class MainWindow : Window
                 }
             }
         });
-    }
-
-    private async void OnBrowseRomRequested()
-    {
-        try
-        {
-            await PickRomAsync();
-        }
-        catch (Exception exception)
-        {
-            ViewModel?.Log("file picker failed: " + exception.Message);
-        }
     }
 
     private async void BrowseRomClicked(object? sender, RoutedEventArgs e)
@@ -88,7 +75,6 @@ public partial class MainWindow : Window
         {
             return;
         }
-        viewModel.ImportPath = paths[0];
         await viewModel.ImportAsync(paths);
     }
 

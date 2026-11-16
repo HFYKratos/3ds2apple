@@ -89,12 +89,16 @@ is ever committed.
 
 | Track | Build command | App contents | IPA name |
 |---|---|---|---|
-| Shell IPA | `build-ios-app.sh` then `package-ipa.sh` | interpreter runtime only; empty catalog | `3ds2apple-shell-<version>.ipa` |
+| Shell IPA | `build-ios-app.sh` then `package-ipa.sh` (with `MOLTENVK_FRAMEWORK` + `--require-moltenvk`) | ROM-free shell; empty catalog; `Frameworks/MoltenVK.framework` for the GPU/CAMetalLayer path and the Metal HUD | `3ds2apple-shell-<version>.ipa` |
 | Game IPA | `build-recomp-ios.sh` -> `build-linked-ios-lib.sh` -> `build-game-ipa.sh` | linked runtime + `libgame.a` for one title + one-game catalog | `3ds2apple-<game>-<version>.ipa` |
 | Multi-game shell IPA (AOT-first preview) | per game: `build-recomp-ios.sh` -> `build-linked-ios-lib.sh` -> `build-game-pack.sh`; then `build-multi-game-ipa.sh --base-app ...` | linked packs (`GamePack-<TITLE>.dylib`) for several titles + schema-v2 catalog | `3ds2apple-multi-game-<version>.ipa` |
 
-On a game IPA the selected ROM runs the linked AOT code; on a shell IPA (or for a
-ROM that is not in the catalog) the runtime uses the interpreter fallback.
+The shell is **AOT-only**: a game runs only when this build carries its AOT code
+(a linked `libgame.a` in the 0.1.x single-game IPA, or a
+`Frameworks/GamePack-<TITLEID>.dylib` listed in `GameCatalog.json` for the
+launcher-first flow). A title the runtime would interpret is refused with a red
+error that names the runtime's `zk_recompiled_status()` reason; there is no
+interpreter fallback.
 
 ### GameCatalog.json
 
@@ -155,11 +159,14 @@ builds, serial-compile fallbacks and failure diagnostics.
 
 ### Verification
 
-For a game build, the runtime logs whether the linked code was accepted. On
-device, the app's status area shows `AOT: linked, active` when the generated
-code is executing, or `linked, interpreting` when the title/ABI did not match
-and the interpreter is used. The build also proves that the catalog ships inside
-the app:
+For a game build, the runtime logs whether the linked code was accepted. Every
+load writes an `AOT:` line with `linked_code`, `linked_program`, `recompiled`,
+`registered_pack`, `pack` and the runtime's `status` text
+(`zk_recompiled_status()`); the in-game runtime badge shows `AOT pack` /
+`AOT linked` / `AOT missing` together with the FPS, renderer and Metal HUD state.
+If `zk_recompiled()` is 0 the shell destroys the runtime and shows a red
+"No AOT build for this game" error instead of running interpreted code. The
+build also proves that the catalog ships inside the app:
 
 ```bash
 unzip -p IPA/3ds2apple-pokemon-y-0.1.2.ipa Payload/3ds2apple.app/GameCatalog.json
@@ -168,17 +175,36 @@ grep -E '^(title_id|game_catalog_title_id|ipa_sha256)=' build/ios/pokemon-y/mani
 
 ## 5. Package and install
 
-Shell IPA:
+Shell IPA (the ROM-free launcher template). The presented `CAMetalLayer` path —
+GPU rendering and the system Metal HUD — needs the MoltenVK framework inside the
+app, so download it into the gitignored `build/` and embed it while packaging;
+`--require-moltenvk` makes a missing framework a fatal packaging error:
 
 ```bash
-scripts/package-ipa.sh ios/app/build/Release-iphoneos/3ds2apple.app 3ds2apple-shell-0.1.2
+# one-time: MoltenVK 1.4.2 iOS release (binary never committed)
+mkdir -p build/third_party
+curl -L -o build/third_party/MoltenVK-ios.tar \
+  https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-ios.tar
+tar -C build/third_party -xf build/third_party/MoltenVK-ios.tar
+MVK="$PWD/build/third_party/MoltenVK/MoltenVK/dynamic/MoltenVK.xcframework/ios-arm64"
+
+scripts/build-ios-app.sh --keep-project
+MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
+  ios/app/build/Release-iphoneos/3ds2apple.app 3ds2apple-shell --require-moltenvk
 ```
 
 `package-ipa.sh` validates the bundle's `GameCatalog.json` when present and
 prints the game count and AOT title(s), e.g.
-`CATALOG: games=1; AOT: Pokémon Y (0004000000055E00)`. A shell app reports
-`CATALOG: games=0; interpreter shell (no AOT games)`. (Game IPAs are packaged
-by `build-game-ipa.sh` itself with the same script.)
+`CATALOG: games=1; AOT: Pokémon Y (0004000000055E00)`, plus a
+`MOLTENVK: embedded (4822128 bytes)` line and the IPA SHA-256. A ROM-free shell
+template reports `CATALOG: games=0; interpreter shell (no AOT games)` (the label
+is historical — the shell itself never falls back to the interpreter). (Game IPAs
+are packaged by `build-game-ipa.sh` itself with the same script.)
+
+The current launcher template is **0.2.2 (build 10)**, 5,477,984 B,
+SHA-256 `d05af5a74570f24f5235378f3b2e46a3ecbbdff5a0dce6f8c504d08d8506a5aa`;
+launchers require version >= 0.2.0-beta1 and build >= 9, and the template must
+keep its `GameCatalog.json` schema 2 with an empty games list.
 
 The IPA is unsigned. Sign and install it with Sideloadly or AltStore using your
 own Apple ID. The app is not intended for App Store distribution.

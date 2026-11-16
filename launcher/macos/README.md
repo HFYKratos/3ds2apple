@@ -7,6 +7,8 @@ A SwiftUI macOS app for the AOT-first product flow (v2: Library -> Deploy):
          batch compile one GamePack.dylib per game (local AOT)
       -> compose ONE ROM-free library IPA: shell + Frameworks/GamePack-<TITLEID>.dylib
          + schema-2 GameCatalog.json
+      -> embed the verified Frameworks/MoltenVK.framework in the shell before signing
+         (hardware PICA200/Metal renderer + system Metal HUD; no software fallback)
       -> verify that IPA (real packs + catalogue, no ROM) before anything is installed
       -> sign with your own Apple ID via Xcode automatic signing + devicectl install,
          reading back the bundle ID of the app that was actually installed
@@ -22,11 +24,20 @@ Nothing in the launcher implements signing or USB/AFC itself: it orchestrates
 Xcode/devicectl and the device bridge, and it never stores an Apple ID, password,
 certificate or device UDID.
 
-## UI (two sections + minimal Settings)
+## UI (two centered sections + minimal Settings)
+
+Navigation is exactly two tabs centered in the header (**游戏库 / Library** and
+**部署 / Deploy**) plus a gear for Settings; there is no sidebar. The launcher
+shows a persistent readiness light next to the gear: green **已完成准备 / Ready**
+after the automatic startup probe passes, red **未完成准备 / Not ready** when a
+local tool or the Apple ID/Xcode signing is missing (raw details live in the
+tooltip and the log — there is no manual "check" button).
 
 - **Library** - game cards with placeholder artwork, title/Title ID, phase badge,
   ROM/GamePack sizes and one staged-data line; rename/remove only. Import is a
-  sheet (drag a decrypted .3ds/.cci or use the picker).
+  single **导入 / Import** button that opens the file picker and imports the
+  chosen decrypted .3ds/.cci in one action (no path field, name override or
+  explanatory card).
 - **Deploy** - device status, the checkbox selection list (one or several games),
   the single **一键部署 / Deploy selected** button, then the ordered step report
   (check device & Apple ID -> compile -> compose IPA -> verify IPA -> sign &
@@ -57,7 +68,7 @@ About panel. Regenerate it with `bash scripts/make-app-icon.sh`.
 Release builds are universal (arm64 + x86_64). Headless modes used on the build VM:
 
     BIN=build/Build/Products/Release/3ds2apple-launcher.app/Contents/MacOS/3ds2apple-launcher
-    "$BIN" --selfcheck                                    # 132 logic/flow/i18n checks, exit 0/1
+    "$BIN" --selfcheck                                    # 151 logic/flow/i18n/shell-runtime checks, exit 0/1
     "$BIN" --screenshot-dir screenshots --mock --lang all  # offscreen non-game UI PNGs
 
 `scripts/vm-build.sh` does the whole Release build, the self-checks, the
@@ -92,12 +103,13 @@ checkout and PATH. Settings persist in `UserDefaults`; nothing is written outsid
       GameInfoWriter.swift     launcher -> shell GameInfo.json (push layout)
       PushPlanner.swift        Documents/Games/TITLEID plan, GameInfo.json last
       InstallBackend.swift     signed shell build, IPA inspection, codesign + devicectl, Apple error mapper
+      ShellRuntime.swift       pinned MoltenVK.framework source + embedding / Metal-HUD readiness verification
       DeviceBridge.swift       devpush contract v1 client (NDJSON) + mock bridge
       MockBackends.swift       deterministic fixtures, mock CLI/installer/bridge
       SelfCheck*.swift         headless logic + flow + i18n checks
       Localization.swift       LauncherLanguage + complete en / zh-Hans strings
       SnapshotRenderer.swift   offscreen SwiftUI screenshots (en/zh, dark/light)
-      Views/                   theme, components, shell, Library, Deploy, minimal Settings, Import sheet
+      Views/                   theme, components, centered-tab shell + readiness light, Library, Deploy, minimal Settings
     Resources/                 app icon (.icns/.png) + en/zh-Hans InfoPlist.strings
     scripts/vm-build.sh        Release build + self-check + screenshots + app-only ZIP in out/launchers
     scripts/make-app-icon.sh   regenerate the icon from the iOS app icon
@@ -105,24 +117,33 @@ checkout and PATH. Settings persist in `UserDefaults`; nothing is written outsid
 
 ## Evidence / QA
 
-The task-31 v2 build on the macOS VM (Xcode 26.6, headless) produced:
+The task-35 MoltenVK revision on the macOS VM (Xcode 26.6, headless) produced:
 
 - xcodebuild: BUILD SUCCEEDED (Release), 0 errors; universal binary
-  (x86_64 + arm64, 7,141,296-byte executable), version 0.2.1 build 3.
-- self-check: 132/132 checks passed (exit 0): CLI/JSON/push-plan/IPA-inspection/
-  Team-ID/devpush/Apple-error/log-redaction checks, the full mock Deploy chain
-  (success, never-install-bare-shell failure paths, retry, invalid-IPA refusal)
-  and the two-language UI checks.
-- screenshots: 20 non-game PNGs, English + Simplified Chinese, dark + light:
-  Library (populated + empty), Import sheet, Deploy selection/running/Done/failed,
-  minimal Settings.
+  (x86_64 + arm64, 6,720,464-byte executable), version 0.2.3 build 5.
+- self-check: 151/151 checks passed (exit 0): the task-34 142 checks plus 9
+  shell-runtime checks (verified MoltenVK source resolves and is the pinned
+  arm64 MoltenVK 1.4.2 dylib, the pinned template carries it, copy into the
+  shell app passes verification, and a shell without the framework /
+  MetalHudEnabled / file sharing is refused; the composed-IPA inspection also
+  refuses a shell without the runtime). A real xcodebuild-built unsigned shell
+  .app got the framework copied in and verified, proving the pre-signing step.
+- screenshots: 18 non-game PNGs, English + Simplified Chinese, dark + light:
+  Library (populated, empty, red not-ready), Deploy selection/running/Done/failed,
+  minimal Settings. Import is a single button, so there is no import-sheet shot.
 - app icon: valid multi-size AppIcon.icns; en/zh-Hans InfoPlist.strings carry the
   localized app name.
-- artifact: out/launchers/3ds2apple-launcher-0.2.1-macos-app.zip
-  (3,978,571 bytes, sha256
-  07b7956695a0a948dc623d9df6a17e0adfbe8c46967a2b2f45608748d9217b8e), one
-  .app only; a fresh extraction ran the 132 checks and rendered the zh
-  screenshots on the VM.
+- artifact: out/launchers/3ds2apple-launcher-0.2.3-macos-app.zip
+  (5,350,734 bytes, sha256
+  6ffcf9c655342370f1237885115befc00666072af0617c0d6f228f32d5211c3a), one
+  .app only (16 entries, 13,540,061 bytes uncompressed) including
+  Contents/Resources/MoltenVK.framework (4,822,128 bytes, sha256 6cd58884…);
+  a fresh extraction ran the 151 checks and reported x86_64 + arm64,
+  version 0.2.3 build 5 on the VM. The packaged launcher is self-contained for
+  device deploys (the user's Mac needs no shell template).
+- embedded framework source: pinned out/shell/3ds2apple-shell.ipa 0.2.2 build
+  10 (5,477,984 bytes, sha256 d05af5a7…); scripts/vm-build.sh refuses to package
+  if the template or its MoltenVK binary is missing or not the pinned bytes.
 
 Full architecture, contracts, build commands and the manual device-test
 checklist are in [docs/macos-launcher.md](../../docs/macos-launcher.md).
