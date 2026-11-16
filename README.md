@@ -25,6 +25,31 @@ Each game is recompiled ahead of time: the 3DS code is translated to C by 3dsrec
 
 Every game you select is compiled into its own `GamePack<TITLEID>.dylib` and composed into a single signed app together with a `GameCatalog.json`. Install one app and the whole library travels with it; adding or removing a game means deploying again, and the pushed game data survives reinstalls and updates. Per-game code must live inside the signed IPA because iOS will not load unsigned code from `Documents`.
 
+Each library card is built from what the launcher already read out of the ROM at import time: the game's own SMDH icon, the title in the app's language, the publisher and the pushed game size. The launcher pushes that metadata in `GameInfo.json` next to the game data, so the phone never parses the ROM. A library pushed by an older launcher keeps working: the card falls back to the catalog name, hides the publisher row and draws a placeholder icon until you deploy again.
+
+## Full 3DS controls on screen
+
+The on-screen pad is the complete New 3DS set: D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a real analog Circle Pad and the New 3DS C-stick. The Circle Pad reports true analog values (-1 to 1 per axis, with a small dead zone so a resting finger reads exactly 0) instead of acting as a second D-pad, and the C-stick works the same way. A hardware controller's left stick feeds the Circle Pad and its right stick feeds the C-stick; L2/R2 map to ZL/ZR, and several fingers can hold buttons and drag the sticks at the same time.
+
+Every control can be dragged, resized and faded - or reset - in **Settings -> Controls -> Screen and control layout**, with separate portrait and landscape profiles. The editor changes position, size and opacity only: which 3DS button a control reports is fixed (no remapping in this build). The C-stick needs a game that uses the New 3DS nub, and a shell built with the current runtime (`scripts/build-zakuro-ios.sh` from source has it).
+
+## Four screen layouts
+
+The same Layout page arranges the two 3DS screens four ways:
+
+- **Automatic** (the default) keeps the original behaviour: stacked in portrait, the large top screen in landscape.
+- **Preset** pins one of the five classic arrangements: stacked, side by side, large top, upper screen only, lower screen only.
+- **Custom (Metal)** takes a preset and adds a uniform scale and offset to the whole picture, still drawn by the `CAMetalLayer` presenter.
+- **Free layout (software)** places each screen at its own rectangle. It is opt-in, the page warns that it is slower, and it switches the session to the software readback path because the Metal presenter only knows the five fixed arrangements; it applies from the next game load.
+
+The Custom (Metal) zoom/position and the free layout are saved per orientation, and each editor can reset to the default. Rotation, aspect ratio, integer scaling and render resolution keep their meaning in every mode.
+
+## What the phone shows while you play
+
+The app's own game-view overlay is a single **FPS counter** - on by default, in the portrait title bar or a slim strip in the landscape top safe area, never over the 3DS picture, the pause button or the on-screen controls (turn it off in Settings -> Performance). Everything else is kept out of the game view: the AOT state, the renderer path, the Metal HUD state and the per-phase frame timings are recorded in the device log and the diagnostics report (the About page repeats the runtime summary for diagnostics, but nothing is drawn over the game).
+
+The Settings page no longer shows the old "Metal backend" info row and no longer has a first-load graphics warm-up switch: a game is revealed as soon as it loads, and the runtime's pipeline cache still makes later loads of the same title warm. Apple's separate system Metal HUD switch (the GPU/FPS overlay) is still in Settings -> Performance.
+
 ## Graphical launchers, next to zero setup
 
 There is a launcher for Windows and one for macOS. Import your own decrypted `.3ds`/`.cci`, pick the games and press the one deploy button: the launcher compiles the GamePacks, composes a ROM-free base IPA, signs and installs it with your own Apple ID (bundled official Impactor/plumesign on Windows, Xcode automatic signing on macOS), then pushes only `GameRom.cci` + `GameInfo.json` into the app Documents folder.
@@ -39,7 +64,7 @@ On a physical iPhone, Pokémon Y run through the Windows launcher path measures 
 
 | Platform | Support |
 |---|---|
-| **iPhone / iPad** | iOS 16 and later. One app holds the library, in-game menu, touch controls and save states. |
+| **iPhone / iPad** | iOS 16 and later. One app holds the library, in-game menu, the full editable New 3DS control set, four screen layouts, save states and the FPS counter. |
 | **Windows** | Windows 10/11 x64. One self-contained launcher executable; builds, signs, installs and pushes without a Mac. |
 | **macOS** | macOS 13+ (Intel + Apple silicon). SwiftUI launcher using Xcode signing; the package is not self-contained yet and device install is not verified by the maintainers. |
 | **Build host** | Windows (bundled LLVM/LLD) or macOS (Apple clang + Xcode). |
@@ -65,6 +90,7 @@ On a physical iPhone, Pokémon Y run through the Windows launcher path measures 
 ### Phone data, saves and limits
 
 - Game data lives in `Documents/Games/<TITLEID>/` (visible in the Files app); saves and save states live in the app container.
+- The on-screen controls and the four screen layouts are edited under **Settings -> Controls -> Screen and control layout**; the control layout and the three Metal screen modes apply immediately, the free layout from the next game load.
 - A free Apple ID allows 3 apps per device and about 7 days of signing; deploy again to refresh. A paid developer account removes those limits.
 - Uninstalling the app removes its data; your ROMs on the computer are never touched.
 
@@ -117,7 +143,10 @@ licenses/          third-party license texts (Impactor MIT, apple-codesign MPL-2
 ## Honest boundaries
 
 - **Compatibility is per game.** Some titles may fail to boot or render incorrectly; reports with the title ID are welcome - see [Issue reports and performance data](#issue-reports-and-performance-data).
-- **The macOS package is a developer preview.** It is not self-contained and its device install has not been verified by the maintainers yet; the Windows package is the verified path.
+- **Free layout is a performance trade-off.** It runs on the software readback path (the Metal presenter only knows the five fixed arrangements), applies from the next game load and is slower than the other three modes, which stay on the GPU path.
+- **The C-stick depends on the game.** It is reported through the New 3DS nub API; a title that never reads the nub ignores it, and a shell built from an older runtime does not provide it.
+- **Older installs and older pushes keep working.** `GameInfo.json` only gained optional fields (schema version stays 1), so game data pushed by a 0.1.0 launcher still validates and plays - until you redeploy, the card has no publisher, no real SMDH icon and no size. An app updated from 0.1.0 keeps its library and saves.
+- **The macOS package is a developer preview.** It is not self-contained and its device install has not been verified by the maintainers yet - the real-device acceptance call is tracked in [#1](https://github.com/HFYKratos/3ds2apple/issues/1); the Windows package is the verified path.
 - **No ROMs, keys or BIOS are provided.** Only decrypted ROMs that you own are supported.
 - **No CPU JIT by design.** The shipping path is AOT code plus the Zakuro HLE runtime; there is no interpreter fallback.
 
@@ -132,7 +161,7 @@ devpush ls  --bundle-id com.kratos.3ds2apple --remote Documents/Diagnostics
 devpush get --bundle-id com.kratos.3ds2apple --remote Documents/Diagnostics/<timestamp>.txt --local diagnostics.txt
 ```
 
-The report already carries the build and device state, the AOT proof (`aot_percent`, `aot_fallbacks`), the renderer path, the frame-cap/fast-forward/render-scale settings, per-phase frame timings and both app logs. From 0.1.1 on it also counts stutter (`>33 ms` frames) and severe stutter (`>100 ms`), with the worst frame, per-phase attribution and the most recent spike events. For a stutter report ("mostly 57-60 fps but it hitches now and then") also say when and where it happens (title + scene/menu), whether a second run is better, and which launcher path and settings you used - that plus the diagnostics file is usually all the data needed.
+The report already carries the build and device state, the AOT proof (`aot_percent`, `aot_fallbacks`), the renderer path, the frame-cap/fast-forward/render-scale settings, per-phase frame timings and both app logs. From 0.1.1 on it also counts stutter (`>33.3 ms` frames) and severe stutter (`>100 ms`), with the per-minute rate, the worst frame, per-phase attribution and the 20 most recent spikes. For a stutter report ("mostly 57-60 fps but it hitches now and then") also say when and where it happens (title + scene/menu), whether a second run is better, and which launcher path and settings you used. **Attach the diagnostics file**: the counters and spikes are the measurement, so a stutter report without it usually just gets a request for it.
 
 Testers with a Mac and an iPhone/iPad are especially useful: the [macOS acceptance form](.github/ISSUE_TEMPLATE/macos-acceptance.yml) walks through the checklist in [launcher/macos/README.md](launcher/macos/README.md#real-device-acceptance) (Xcode signing, `devicectl` install, `devpush` push) and records the result.
 
