@@ -14,13 +14,24 @@ native ARM64 code — no CPU JIT, no on-device emulation.
 One phone app holds the whole library. The IPA never contains game ROMs; game data is pushed
 into `Documents/Games/<TITLEID>/` by the launcher.
 
+## Download
+
+Tagged public builds are published on [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases)
+together with `SHA256SUMS.txt`, `LICENSE`, `NOTICE` and `THIRD_PARTY.md`. Verify every
+download against the checksum file before running it. Releases contain no game ROMs,
+decryption keys, BIOS, Apple credentials or per-game code: you supply your own legally
+obtained, decrypted ROMs, and the desktop launcher compiles a GamePack locally on your
+machine — the ROM-free phone shell alone is not playable. The full release policy, asset
+list and signing/install rules are in
+[docs/release-launcher-first.md](docs/release-launcher-first.md).
+
 ## Ready-to-test launchers
 
 Build outputs are kept in `out/launchers/` (git-ignored, not in the repository):
 
-- `3ds2apple-windows-single-0.2.4.zip` — one Windows executable; ROM-free shell, Impactor,
-  local 3dsrecomp + LLVM toolchain and the CLI tools are embedded.
-- `3ds2apple-launcher-0.2.3-macos-app.zip` — macOS universal app (Xcode-based signing).
+- `3ds2apple-windows-single-0.2.5.zip` — one Windows executable; ROM-free shell, Impactor,
+  local 3dsrecomp + LLVM toolchain and the CLI tools are embedded (SMDH cover-icon fix).
+- `3ds2apple-launcher-0.2.4-macos-app.zip` — macOS universal app, 0.2.4 build 7 (Xcode-based signing).
 
 These packages contain no ROM, keys, BIOS or Apple credentials. Use only decrypted ROMs you own.
 
@@ -47,12 +58,16 @@ scripts/            build, package and self-check scripts
 docs/               launcher architecture, device bridge, build and validation docs
 ```
 
-## Build
+## Build from source
 
 - Windows launcher: `launcher/windows/README.md` (`.NET 10`; no Mac required).
 - macOS launcher: `launcher/macos/README.md` (Xcode 26.6; Xcodegen).
 - iPhone shell: `scripts/build-ios-app.sh` on macOS (Xcode 26.6 / iOS 26.5 SDK).
 - Device bridge: `cargo build --release --manifest-path tools/devpush/Cargo.toml`.
+
+Release packaging and checksums: `scripts/release/assemble-release.sh` and
+`scripts/release/verify-release.sh` (see
+[docs/release-launcher-first.md](docs/release-launcher-first.md)).
 
 See [docs/launcher-architecture.md](docs/launcher-architecture.md),
 [docs/launcher-flow-v2.md](docs/launcher-flow-v2.md),
@@ -65,3 +80,6 @@ See [docs/launcher-architecture.md](docs/launcher-architecture.md),
 Apache-2.0. The project ships no ROMs, decryption keys, BIOS or system files and provides no
 ROM download or piracy support. You must own the games you import. Third-party licenses and
 source links are documented in [THIRD_PARTY.md](THIRD_PARTY.md) and [NOTICE](NOTICE).
+
+Public release assets, checksums, signing/install requirements and the rollback policy are
+documented in [docs/release-launcher-first.md](docs/release-launcher-first.md).

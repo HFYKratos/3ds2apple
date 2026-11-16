@@ -23,7 +23,20 @@ MPL-2.0. The binaries are downloaded from the official GitHub release
 time, verified against pinned SHA-256 values, and are not committed to this
 repository; the MIT and MPL-2.0 license texts and source links are kept in
 scripts/impactor/licenses/. 3ds2apple does not implement Apple ID authentication
-and never receives or logs the user's password or session tokens.
+and never receives or logs the user's password or session tokens. plumesign is the
+command-line signer from the same official Impactor v2.7.2 release; it is shipped
+unmodified under the same upstream MIT licence and its SHA-256 is pinned as well.
+
+The iOS shell template and the macOS launcher bundle the unmodified MoltenVK 1.4.2
+framework (Apache-2.0, https://github.com/KhronosGroup/MoltenVK) for the
+Vulkan-to-Metal renderer path. The framework is a build/packaging input and is not
+committed to this repository; its upstream licence is listed in THIRD_PARTY.md, and
+every public release also attaches this NOTICE and THIRD_PARTY.md.
+
+The Windows single-file launcher is a self-contained .NET 10 application (MIT) using
+the Avalonia 12.1.5 UI framework (MIT), built only from the sources in this
+repository. The launcher embeds the project LICENSE/NOTICE/THIRD_PARTY texts and the
+relevant third-party licence files in its payload and extracts them on first run.
 
 The device bridge does not contain or distribute game data. Game files are
 pushed by the user from their own machine to their own device; ROMs, IPAs and
@@ -41,3 +54,10 @@ notices are shipped alongside them (source: https://github.com/llvm/llvm-project
 3dsrecomp declares MIT in its Cargo.toml but ships no LICENSE file upstream; it is
 only run as a build tool (cloned at a pinned revision at build time) and is never
 vendored or redistributed by this project.
+
+Public binaries are distributed only through the project's GitHub Releases
+(https://github.com/HFYKratos/3ds2apple/releases); every release also attaches
+LICENSE, NOTICE, THIRD_PARTY.md and SHA256SUMS.txt. No Nintendo ROMs, decryption keys,
+BIOS or firmware, generated C, per-game GamePack dylibs or composed game IPAs are
+published, and the release policy/checks are documented in
+docs/release-launcher-first.md.
