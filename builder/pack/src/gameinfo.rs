@@ -10,6 +10,11 @@
 //!   cover.png          cover image (SMDH icon or user-supplied); never committed
 //! ```
 //!
+//! `coverSource` records where `cover.png` came from (`smdh` = extracted from
+//! the ROM SMDH by the importer, `user` = supplied by the user). A forced
+//! re-import re-extracts `smdh` covers (healing covers written by older builds
+//! with the wrong SMDH icon offset) and never overwrites `user` covers.
+//!
 //! The manifest is deterministic: fixed field order, pretty JSON, no
 //! timestamps, so importing/cataloguing the same ROM set twice produces
 //! byte-identical files. The pack itself is hashed with the shared
@@ -85,6 +90,21 @@ pub enum PackFormat {
     Placeholder,
 }
 
+/// Where a package cover (`cover.png`) came from.
+///
+/// Recorded as the additive `coverSource` manifest field. Covers extracted from
+/// the ROM SMDH icon are re-extracted by a forced re-import (this heals covers
+/// written by older builds that decoded the wrong SMDH offset); user-supplied
+/// covers are never overwritten.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CoverSource {
+    /// Extracted from the ROM SMDH icon by the importer.
+    Smdh,
+    /// Placed by the user; re-imports keep it.
+    User,
+}
+
 /// Hash and size of the pack file, recorded after the pack is built/adopted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PackFile {
@@ -156,6 +176,16 @@ pub struct GameInfo {
     /// import, or supplied by the user; it is never committed.
     #[serde(rename = "coverPath", default, skip_serializing_if = "Option::is_none")]
     pub cover_path: Option<String>,
+    /// Where `coverPath` came from. Additive optional field: manifests written
+    /// before it existed have none, and a recorded `coverPath` without a
+    /// `coverSource` is treated as an extracted SMDH cover so one forced
+    /// re-import heals it. `user` covers are never overwritten.
+    #[serde(
+        rename = "coverSource",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub cover_source: Option<CoverSource>,
     /// Free-form note (kept short; shown in the catalogue).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub notes: String,
@@ -211,6 +241,7 @@ impl GameInfo {
             rom_bytes: None,
             rom: None,
             cover_path: None,
+            cover_source: None,
             notes: String::new(),
         };
         Ok(info)
@@ -237,6 +268,7 @@ impl GameInfo {
         validate_display_names(&self.title_id, &self.display_names)?;
         validate_publisher(&self.title_id, &self.publisher)?;
         validate_cover_path(&self.title_id, &self.cover_path)?;
+        validate_cover_source(&self.title_id, &self.cover_path, self.cover_source)?;
         if self.aot_version < 1 {
             return Err(PackError::invalid(format!(
                 "{}: aotVersion must be >= 1 (got {})",
@@ -304,6 +336,18 @@ impl GameInfo {
     /// use `verify_package` for that check).
     pub fn has_pack(&self) -> bool {
         self.pack.is_some()
+    }
+
+    /// Record a resolved cover in the manifest. Returns whether anything
+    /// changed (so callers only rewrite `GameInfo.json` when needed).
+    pub fn set_cover(&mut self, cover: CoverState) -> bool {
+        let cover_path = cover.present.then(|| COVER_FILE.to_string());
+        if self.cover_path == cover_path && self.cover_source == cover.source {
+            return false;
+        }
+        self.cover_path = cover_path;
+        self.cover_source = cover.source;
+        true
     }
 }
 
@@ -402,6 +446,22 @@ fn validate_cover_path(title_id: &str, cover_path: &Option<String>) -> Result<()
                 "{title_id}: coverPath must be '{COVER_FILE}' (got '{cover}')"
             )));
         }
+    }
+    Ok(())
+}
+
+/// A cover source only makes sense together with a cover path. A cover path
+/// without a source is accepted: it is a manifest written before `coverSource`
+/// existed, and `ensure_cover` treats it as an extracted SMDH cover.
+fn validate_cover_source(
+    title_id: &str,
+    cover_path: &Option<String>,
+    cover_source: Option<CoverSource>,
+) -> Result<()> {
+    if cover_source.is_some() && cover_path.is_none() {
+        return Err(PackError::invalid(format!(
+            "{title_id}: coverSource requires coverPath"
+        )));
     }
     Ok(())
 }
@@ -584,21 +644,71 @@ pub fn install_rom(dir: &Path, source: &Path) -> Result<GameInfo> {
     Ok(info)
 }
 
-/// Extract the ROM SMDH icon into `<dir>/cover.png` when the package has no
-/// cover yet.
+/// Resolved cover of one package: whether `cover.png` exists and where it
+/// came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CoverState {
+    /// A cover file exists in the package directory afterwards.
+    pub present: bool,
+    /// Provenance of the existing cover (`None` when there is no cover).
+    pub source: Option<CoverSource>,
+}
+
+/// Extract or refresh `<dir>/cover.png` from the ROM SMDH icon.
 ///
-/// An existing `cover.png` (for example one the user added by hand) is never
-/// overwritten. Returns the package-relative cover path when a cover file
-/// exists afterwards.
-pub fn ensure_cover(dir: &Path, rom_path: &Path) -> Result<Option<String>> {
+/// * an existing user cover is never overwritten;
+/// * a cover this importer extracted from the SMDH is re-extracted when
+///   `refresh_extracted` is set (a forced re-import). This heals covers written
+///   by older builds that read the wrong offset (application settings) and did
+///   not apply the 8x8 tile transform;
+/// * a cover file the manifest does not know about is treated as user data;
+/// * `previous` is the manifest that was on disk before this operation. A
+///   manifest with `coverPath` but no `coverSource` predates `coverSource` and
+///   is treated as an extracted cover, so one forced re-import repairs an old
+///   library;
+/// * a ROM without an ExeFS `icon` entry (or a blank icon) leaves any existing
+///   file untouched.
+///
+/// Only the SMDH (a few KiB) is read; the ROM itself is never copied.
+pub fn ensure_cover(
+    dir: &Path,
+    rom_path: &Path,
+    previous: Option<&GameInfo>,
+    refresh_extracted: bool,
+) -> Result<CoverState> {
     std::fs::create_dir_all(dir).map_err(|error| PackError::io(dir, error))?;
     let cover = dir.join(COVER_FILE);
-    if !cover.is_file() {
-        if let Some(smdh) = rom::read_smdh_bytes(rom_path)? {
-            crate::smdh::write_cover_png(&smdh, &cover)?;
+    let known = previous.and_then(|info| {
+        info.cover_source.or_else(|| {
+            // Pre-fix manifests recorded only the path for extracted covers.
+            info.cover_path.as_ref().map(|_| CoverSource::Smdh)
+        })
+    });
+    if cover.is_file() {
+        let source = known.unwrap_or(CoverSource::User);
+        if !(refresh_extracted && source == CoverSource::Smdh) {
+            return Ok(CoverState {
+                present: true,
+                source: Some(source),
+            });
         }
     }
-    Ok(cover.is_file().then(|| COVER_FILE.to_string()))
+    let extracted = match rom::read_smdh_bytes(rom_path)? {
+        Some(smdh) => crate::smdh::write_cover_png(&smdh, &cover)?,
+        None => false,
+    };
+    if extracted {
+        return Ok(CoverState {
+            present: true,
+            source: Some(CoverSource::Smdh),
+        });
+    }
+    // The ROM has no usable icon: extraction wrote/deleted nothing, so keep an
+    // existing file and its recorded provenance.
+    Ok(CoverState {
+        present: cover.is_file(),
+        source: cover.is_file().then(|| known.unwrap_or(CoverSource::Smdh)),
+    })
 }
 
 /// Refuse a ROM whose size disagrees with the provenance record the package was
@@ -1316,6 +1426,7 @@ mod tests {
             .insert("ja".to_string(), "テスト".to_string());
         info.publisher = "Example".to_string();
         info.cover_path = Some(COVER_FILE.to_string());
+        info.cover_source = Some(CoverSource::Smdh);
         let json = info.to_json().unwrap();
         assert!(json.contains("\"displayNames\": {"), "{json}");
         let en = json.find("\"en\": \"Test Game\"").expect("en title");
@@ -1323,6 +1434,7 @@ mod tests {
         assert!(en < ja, "BTreeMap order must be deterministic: {json}");
         assert!(json.contains("\"publisher\": \"Example\""), "{json}");
         assert!(json.contains("\"coverPath\": \"cover.png\""), "{json}");
+        assert!(json.contains("\"coverSource\": \"smdh\""), "{json}");
         assert_eq!(
             GameInfo::from_json(&json, Path::new("GameInfo.json")).unwrap(),
             info
@@ -1336,10 +1448,30 @@ mod tests {
         info.cover_path = Some("../cover.png".to_string());
         assert!(info.validate().is_err());
         info.cover_path = Some(COVER_FILE.to_string());
+        // coverSource requires coverPath.
+        info.cover_source = Some(CoverSource::User);
+        info.cover_path = None;
+        assert!(info.validate().is_err());
+        info.cover_path = Some(COVER_FILE.to_string());
         info.publisher = "two\nlines".to_string();
         assert!(info.validate().is_err());
         info.publisher = "Example".to_string();
         assert!(info.validate().is_ok());
+    }
+
+    #[test]
+    fn manifests_without_cover_source_stay_readable() {
+        // A manifest written before coverSource existed must keep parsing: its
+        // recorded coverPath is treated as an extracted SMDH cover.
+        let temp = tempdir().unwrap();
+        let rom = rom_info(temp.path());
+        let mut info = GameInfo::new(&rom, "Test Game", "CTR-P-EK2A", 1).unwrap();
+        info.cover_path = Some(COVER_FILE.to_string());
+        let json = info.to_json().unwrap();
+        assert!(!json.contains("coverSource"), "{json}");
+        let parsed = GameInfo::from_json(&json, Path::new("GameInfo.json")).unwrap();
+        assert_eq!(parsed.cover_path.as_deref(), Some(COVER_FILE));
+        assert_eq!(parsed.cover_source, None);
     }
 
     #[test]
@@ -1359,28 +1491,63 @@ mod tests {
             ),
         );
         let rom = rom::detect_rom(&path).unwrap();
-        let info = GameInfo::new(&rom, "Test Game", "CTR-P-EK2A", 1).unwrap();
+        let mut info = GameInfo::new(&rom, "Test Game", "CTR-P-EK2A", 1).unwrap();
         assert_eq!(info.display_names.len(), 2);
         assert_eq!(info.publisher, "Example");
         let dir = package_dir(temp.path(), &info.title_id);
         info.write(&dir).unwrap();
+
+        // The first import extracts the large icon from 0x24C0 as cover.png.
+        let extracted_state = ensure_cover(&dir, &path, None, false).unwrap();
         assert_eq!(
-            ensure_cover(&dir, &path).unwrap().as_deref(),
-            Some(COVER_FILE)
+            extracted_state,
+            CoverState {
+                present: true,
+                source: Some(CoverSource::Smdh)
+            }
         );
-        let cover = std::fs::read(dir.join(COVER_FILE)).unwrap();
+        assert!(info.set_cover(extracted_state));
+        info.write(&dir).unwrap();
+        let extracted = std::fs::read(dir.join(COVER_FILE)).unwrap();
         assert!(
-            cover.starts_with(b"\x89PNG\r\n\x1a\n"),
+            extracted.starts_with(b"\x89PNG\r\n\x1a\n"),
             "extracted cover is a PNG"
         );
 
-        // An existing user cover is never overwritten.
+        // A normal re-import keeps the extracted cover untouched.
+        let kept = ensure_cover(&dir, &path, Some(&info), false).unwrap();
+        assert_eq!(kept, extracted_state);
+        assert_eq!(std::fs::read(dir.join(COVER_FILE)).unwrap(), extracted);
+
+        // A forced re-import re-extracts it (deterministic PNG), which heals
+        // the garbled cover written by an older build.
+        std::fs::write(dir.join(COVER_FILE), b"garbled rainbow noise").unwrap();
+        let healed = ensure_cover(&dir, &path, Some(&info), true).unwrap();
+        assert_eq!(healed.source, Some(CoverSource::Smdh));
+        assert_eq!(std::fs::read(dir.join(COVER_FILE)).unwrap(), extracted);
+
+        // A cover the manifest does not know about is user data: never touched.
         std::fs::write(dir.join(COVER_FILE), b"user cover").unwrap();
+        info.cover_path = None;
+        info.cover_source = None;
+        let user_cover = ensure_cover(&dir, &path, Some(&info), true).unwrap();
         assert_eq!(
-            ensure_cover(&dir, &path).unwrap().as_deref(),
-            Some(COVER_FILE)
+            user_cover,
+            CoverState {
+                present: true,
+                source: Some(CoverSource::User)
+            }
         );
         assert_eq!(std::fs::read(dir.join(COVER_FILE)).unwrap(), b"user cover");
+
+        // A legacy manifest (coverPath but no coverSource) is treated as an
+        // extracted cover, so one forced re-import repairs it.
+        info.cover_path = Some(COVER_FILE.to_string());
+        info.cover_source = None;
+        std::fs::write(dir.join(COVER_FILE), b"old garbled cover").unwrap();
+        let legacy = ensure_cover(&dir, &path, Some(&info), true).unwrap();
+        assert_eq!(legacy.source, Some(CoverSource::Smdh));
+        assert_eq!(std::fs::read(dir.join(COVER_FILE)).unwrap(), extracted);
 
         // A ROM without an icon/ExeFS yields no cover.
         let plain = temp.path().join("plain.cci");
@@ -1390,7 +1557,10 @@ mod tests {
         );
         let other = GameInfo::new_without_rom("000400000011C500", "Other", "", 1).unwrap();
         let other_dir = package_dir(temp.path(), &other.title_id);
-        assert_eq!(ensure_cover(&other_dir, &plain).unwrap(), None);
+        assert_eq!(
+            ensure_cover(&other_dir, &plain, None, false).unwrap(),
+            CoverState::default()
+        );
         assert!(!other_dir.join(COVER_FILE).exists());
     }
 }

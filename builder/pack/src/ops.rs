@@ -78,8 +78,14 @@ pub fn import_rom(root: &Path, rom_path: &Path, options: &ImportOptions) -> Resu
     let mut info = GameInfo::new(&rom, display_name, &product_code, options.aot_version)?;
     let dir = gameinfo::package_dir(root, &info.title_id);
 
-    let status = if dir.join(gameinfo::GAME_INFO_FILE).is_file() {
-        let existing = GameInfo::read(&dir)?;
+    // The manifest that was on disk before this import: it tells the pack
+    // state, an extracted cover from a user cover, and legacy provenance.
+    let existing = if dir.join(gameinfo::GAME_INFO_FILE).is_file() {
+        Some(GameInfo::read(&dir)?)
+    } else {
+        None
+    };
+    let status = if let Some(existing) = &existing {
         let built = existing.pack.is_some() && dir.join(gameinfo::GAME_PACK_FILE).is_file();
         if built && !options.force {
             return Err(PackError::invalid(format!(
@@ -90,13 +96,15 @@ pub fn import_rom(root: &Path, rom_path: &Path, options: &ImportOptions) -> Resu
                 existing.title_id
             )));
         }
-        // Keep the pack record, the bundled ROM and any note the user added;
-        // refresh detection data.
+        // Keep the pack record, the bundled ROM, the cover and any note the
+        // user added; refresh detection data.
         info.pack = existing.pack.clone();
         info.notes = existing.notes.clone();
         info.rom_file = existing.rom_file.clone();
         info.rom_sha256 = existing.rom_sha256.clone();
         info.rom_bytes = existing.rom_bytes.clone();
+        info.cover_path = existing.cover_path.clone();
+        info.cover_source = existing.cover_source;
         if built {
             ImportStatus::AlreadyBuilt
         } else {
@@ -112,11 +120,12 @@ pub fn import_rom(root: &Path, rom_path: &Path, options: &ImportOptions) -> Resu
         // source) and record romFile/romSha256/romBytes in the manifest.
         info = gameinfo::install_rom(&dir, rom_path)?;
     }
-    // Extract the ROM SMDH icon into the package as cover.png (never
-    // overwriting a cover the user supplied) and record it in the manifest.
-    let cover_path = gameinfo::ensure_cover(&dir, rom_path)?;
-    if info.cover_path != cover_path {
-        info.cover_path = cover_path;
+    // Extract the ROM SMDH icon into the package as cover.png and record it.
+    // A forced re-import re-extracts a cover we produced ourselves (healing the
+    // garbled covers written by builds with the wrong SMDH icon offset and no
+    // tile decode); a cover the user supplied is never overwritten.
+    let cover = gameinfo::ensure_cover(&dir, rom_path, existing.as_ref(), options.force)?;
+    if info.set_cover(cover) {
         info.write(&dir)?;
     }
     let cover_absolute = info
@@ -563,9 +572,9 @@ pub fn record_pack(root: &Path, options: &RecordOptions) -> Result<GameInfo> {
     }
     if let Some(rom_path) = &options.rom {
         // Record the ROM SMDH icon as the package cover when it has none yet.
-        let cover_path = gameinfo::ensure_cover(&dir, rom_path)?;
-        if built.cover_path != cover_path {
-            built.cover_path = cover_path;
+        // A re-record never forces a refresh: existing covers are kept.
+        let cover = gameinfo::ensure_cover(&dir, rom_path, Some(&built), false)?;
+        if built.set_cover(cover) {
             built.write(&dir)?;
         }
     }
@@ -1034,12 +1043,17 @@ mod tests {
             result.game_info.cover_path.as_deref(),
             Some(gameinfo::COVER_FILE)
         );
+        assert_eq!(
+            result.game_info.cover_source,
+            Some(gameinfo::CoverSource::Smdh)
+        );
         // The manifest round-trips the additive fields; the ROM is not bundled
         // by a header-only import and the cover is local user data.
         let manifest = GameInfo::read(&result.package_dir).unwrap();
         assert_eq!(manifest.display_names, result.display_names);
         assert_eq!(manifest.publisher, result.publisher);
         assert_eq!(manifest.cover_path, result.game_info.cover_path);
+        assert_eq!(manifest.cover_source, result.game_info.cover_source);
         assert!(result.game_info.rom_file.is_none());
         assert!(!result.package_dir.join("GameRom.cci").exists());
 
@@ -1049,5 +1063,115 @@ mod tests {
         assert_eq!(again.status, ImportStatus::Refreshed);
         assert_eq!(again.cover_path.as_deref(), Some(cover.as_path()));
         assert_eq!(std::fs::read(&cover).unwrap(), before);
+    }
+
+    #[test]
+    fn force_reimport_heals_a_stale_extracted_cover() {
+        let temp = tempdir().unwrap();
+        let out = temp.path().join("out");
+        let path = temp.path().join("local-dump.cci");
+        let smdh = crate::smdh::test_support::synthetic_smdh(&[(1, "Test Game", "Example")]);
+        write_rom(
+            &path,
+            &crate::rom::test_support::synthetic_ncsd_with_smdh(
+                0x0004_0000_0005_5E00,
+                "CTR-P-EK2A",
+                &smdh,
+            ),
+        );
+        let imported = import_rom(&out, &path, &ImportOptions::default()).unwrap();
+        let cover = imported.cover_path.clone().expect("extracted cover");
+        let expected = std::fs::read(&cover).unwrap();
+        assert_eq!(
+            imported.game_info.cover_source,
+            Some(gameinfo::CoverSource::Smdh)
+        );
+
+        // Simulate the garbled cover written by the pre-fix decoder.
+        std::fs::write(&cover, b"stale rainbow noise").unwrap();
+        // A plain re-import keeps the existing file...
+        let refreshed = import_rom(&out, &path, &ImportOptions::default()).unwrap();
+        assert_eq!(refreshed.status, ImportStatus::Refreshed);
+        assert_eq!(std::fs::read(&cover).unwrap(), b"stale rainbow noise");
+        // ...a forced re-import re-extracts the deterministic PNG.
+        let forced = import_rom(
+            &out,
+            &path,
+            &ImportOptions {
+                force: true,
+                ..ImportOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(forced.status, ImportStatus::Refreshed);
+        assert_eq!(std::fs::read(&cover).unwrap(), expected);
+
+        // Legacy manifests (written before coverSource existed) are treated as
+        // extracted covers too, so one forced re-import heals old libraries.
+        let manifest_path = imported.package_dir.join(gameinfo::GAME_INFO_FILE);
+        let mut json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+        json.as_object_mut().unwrap().remove("coverSource");
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&json).unwrap() + "\n",
+        )
+        .unwrap();
+        std::fs::write(&cover, b"legacy garbled cover").unwrap();
+        import_rom(
+            &out,
+            &path,
+            &ImportOptions {
+                force: true,
+                ..ImportOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(std::fs::read(&cover).unwrap(), expected);
+        assert_eq!(
+            GameInfo::read(&imported.package_dir).unwrap().cover_source,
+            Some(gameinfo::CoverSource::Smdh)
+        );
+    }
+
+    #[test]
+    fn force_reimport_never_overwrites_a_user_cover() {
+        let temp = tempdir().unwrap();
+        let out = temp.path().join("out");
+        let path = temp.path().join("local-dump.cci");
+        let smdh = crate::smdh::test_support::synthetic_smdh(&[(1, "Test Game", "Example")]);
+        write_rom(
+            &path,
+            &crate::rom::test_support::synthetic_ncsd_with_smdh(
+                0x0004_0000_0005_5E00,
+                "CTR-P-EK2A",
+                &smdh,
+            ),
+        );
+        let imported = import_rom(&out, &path, &ImportOptions::default()).unwrap();
+        let cover = imported.cover_path.clone().expect("extracted cover");
+
+        // The user replaces the extracted cover; the manifest records it as
+        // user-supplied.
+        let mut manifest = GameInfo::read(&imported.package_dir).unwrap();
+        std::fs::write(&cover, b"my own cover").unwrap();
+        manifest.cover_source = Some(gameinfo::CoverSource::User);
+        manifest.write(&imported.package_dir).unwrap();
+
+        let forced = import_rom(
+            &out,
+            &path,
+            &ImportOptions {
+                force: true,
+                ..ImportOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(forced.status, ImportStatus::Refreshed);
+        assert_eq!(std::fs::read(&cover).unwrap(), b"my own cover");
+        assert_eq!(
+            GameInfo::read(&imported.package_dir).unwrap().cover_source,
+            Some(gameinfo::CoverSource::User)
+        );
     }
 }

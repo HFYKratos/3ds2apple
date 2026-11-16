@@ -220,7 +220,7 @@ pub fn shell_quote_join(command: &[String]) -> String {
 pub fn execute(entries: &[QueueEntry], out_root: &Path, repo_root: &Path) -> Result<()> {
     if !cfg!(target_os = "macos") {
         return Err(PackError::invalid(
-            "the real AOT build must run on macOS with Xcode; run this from a Mac or the Build Agent (use --fake on Linux/Windows for a preview package)",
+            "the real AOT build must run on macOS with Xcode or on Windows with the launcher's bundled LLVM toolchain; run it on the matching host (use --fake on Linux/Windows for a preview package)",
         ));
     }
     for entry in entries {

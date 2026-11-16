@@ -7,10 +7,21 @@
 //!
 //! ```text
 //! 0x0000  magic "SMDH", u32 version
-//! 0x0008  title block x 16 (0x200 bytes each)
-//! 0x2008  large icon, 48x48 RGB565 (0x1200 bytes)
-//! 0x3208  small icon, 24x24 RGB565 (0x480 bytes)
+//! 0x0008  title block x 16 (0x200 bytes each)                -> ends 0x2008
+//! 0x2008  application settings (0x30) + reserved (0x8)       -> ends 0x2040
+//! 0x2040  small icon, 24x24 RGB565 (0x480 bytes)             -> ends 0x24C0
+//! 0x24C0  large icon, 48x48 RGB565 (0x1200 bytes)            -> ends 0x36C0
 //! ```
+//!
+//! The small icon comes *first* in the icon graphics block; the large icon that
+//! becomes the cover starts at `0x24C0`, not at `0x2040` and certainly not at
+//! `0x2008` (application settings). Both icons are RGB565 little-endian but
+//! stored as 8x8 tiles: tiles are ordered row-major and inside one tile the 2x2
+//! pixel blocks follow a Morton/Z curve ([3dbrew SMDH]). Reading the icon
+//! without the tile transform (or from the wrong offset) produces the garbled
+//! rainbow covers seen in older builds.
+//!
+//! [3dbrew SMDH]: https://www.3dbrew.org/wiki/SMDH
 //!
 //! Title block (0x200 bytes): short description (0x80 bytes UTF-16LE), long
 //! description (0x100 bytes UTF-16LE), publisher (0x80 bytes UTF-16LE).
@@ -43,16 +54,41 @@ pub const LONG_DESC_SIZE: usize = 0x100;
 pub const PUBLISHER_OFFSET: usize = 0x180;
 /// Publisher field size in bytes (UTF-16LE).
 pub const PUBLISHER_SIZE: usize = 0x80;
-/// Offset of the large icon (also the end of the title table).
-pub const LARGE_ICON_OFFSET: usize = 0x2008;
+/// End of the title table: header + 16 title blocks (`0x8 + 16 * 0x200`).
+/// This is where the application settings block starts.
+pub const TITLE_TABLE_END: usize = SMDH_HEADER_SIZE + TITLE_BLOCK_COUNT * TITLE_BLOCK_SIZE;
+/// Application settings block (`0x30` bytes) that follows the title table.
+pub const APPLICATION_SETTINGS_OFFSET: usize = TITLE_TABLE_END;
+/// Application settings block size.
+pub const APPLICATION_SETTINGS_SIZE: usize = 0x30;
+/// Reserved bytes between the application settings and the icon graphics.
+pub const APPLICATION_SETTINGS_RESERVED_SIZE: usize = 0x8;
+/// Start of the icon graphics block. The small icon comes first.
+pub const ICON_GRAPHICS_OFFSET: usize =
+    APPLICATION_SETTINGS_OFFSET + APPLICATION_SETTINGS_SIZE + APPLICATION_SETTINGS_RESERVED_SIZE;
+/// Offset of the small icon (24 * 24 RGB565) at the start of the icon graphics.
+pub const SMALL_ICON_OFFSET: usize = ICON_GRAPHICS_OFFSET;
+/// Edge length in pixels of the small icon.
+pub const SMALL_ICON_SIDE: u32 = 24;
+/// Size of the small icon (24 * 24 RGB565 pixels).
+pub const SMALL_ICON_SIZE: usize = 0x480;
+/// Offset of the 48x48 icon that becomes the cover (`0x24C0`). The pre-fix code
+/// used `0x2008` here, which is the application settings block, not icon data.
+pub const LARGE_ICON_OFFSET: usize = SMALL_ICON_OFFSET + SMALL_ICON_SIZE;
 /// Edge length in pixels of the large icon that becomes the cover.
 pub const COVER_SIDE: u32 = 48;
 /// Size of the large icon (48 * 48 RGB565 pixels).
 pub const LARGE_ICON_SIZE: usize = 0x1200;
-/// End of the large icon: the minimum SMDH length for a cover.
+/// End of the large icon (and of the SMDH): the minimum length for a cover.
 pub const LARGE_ICON_END: usize = LARGE_ICON_OFFSET + LARGE_ICON_SIZE;
-/// Full SMDH size (title table + large icon + small icon + padding).
-pub const FULL_SMDH_SIZE: usize = 0x36C0;
+/// Size of the icon graphics block (small icon + large icon, `0x1680`).
+pub const ICON_GRAPHICS_SIZE: usize = SMALL_ICON_SIZE + LARGE_ICON_SIZE;
+/// Full SMDH size (title table + application settings + icon graphics).
+pub const FULL_SMDH_SIZE: usize = ICON_GRAPHICS_OFFSET + ICON_GRAPHICS_SIZE;
+/// Edge length in pixels of one icon tile.
+pub const ICON_TILE_SIDE: usize = 8;
+/// Pixels in one icon tile (8 * 8).
+pub const ICON_TILE_PIXELS: usize = ICON_TILE_SIDE * ICON_TILE_SIDE;
 /// Index of the English title block.
 pub const ENGLISH_SLOT: usize = 1;
 
@@ -88,7 +124,7 @@ impl SmdhMetadata {
 /// Invalid UTF-16 in one language only drops that language, never the whole
 /// metadata block.
 pub fn parse(bytes: &[u8]) -> Option<SmdhMetadata> {
-    if bytes.len() < LARGE_ICON_OFFSET || &bytes[..SMDH_MAGIC.len()] != SMDH_MAGIC {
+    if bytes.len() < TITLE_TABLE_END || &bytes[..SMDH_MAGIC.len()] != SMDH_MAGIC {
         return None;
     }
     let mut display_names = BTreeMap::new();
@@ -130,7 +166,7 @@ pub fn large_icon(bytes: &[u8]) -> Option<&[u8]> {
 /// Returns `false` (writing nothing) when the SMDH has no large icon or the
 /// icon is entirely blank. The PNG is deterministic.
 pub fn write_cover_png(smdh: &[u8], destination: &Path) -> Result<bool> {
-    if smdh.len() < LARGE_ICON_OFFSET || &smdh[..SMDH_MAGIC.len()] != SMDH_MAGIC {
+    if smdh.len() < SMDH_HEADER_SIZE || &smdh[..SMDH_MAGIC.len()] != SMDH_MAGIC {
         return Ok(false);
     }
     let Some(icon) = large_icon(smdh) else {
@@ -139,7 +175,7 @@ pub fn write_cover_png(smdh: &[u8], destination: &Path) -> Result<bool> {
     if icon.iter().all(|byte| *byte == 0) {
         return Ok(false);
     }
-    let pixels = rgb565_to_rgb888(icon);
+    let pixels = decode_tiled_rgb565(icon, COVER_SIDE as usize);
     let png = encode_rgb_png(COVER_SIDE, COVER_SIDE, &pixels);
     std::fs::write(destination, png).map_err(|error| PackError::io(destination, error))?;
     Ok(true)
@@ -173,16 +209,53 @@ fn is_space(unit: u16) -> bool {
         .unwrap_or(false)
 }
 
-fn rgb565_to_rgb888(icon: &[u8]) -> Vec<u8> {
-    let mut rgb = Vec::with_capacity(icon.len() / 2 * 3);
-    for pixel in icon.chunks_exact(2) {
-        let value = u16::from_le_bytes([pixel[0], pixel[1]]);
-        let r = ((value >> 11) & 0x1F) as u8;
-        let g = ((value >> 5) & 0x3F) as u8;
-        let b = (value & 0x1F) as u8;
-        rgb.push((r << 3) | (r >> 2));
-        rgb.push((g << 2) | (g >> 4));
-        rgb.push((b << 3) | (b >> 2));
+/// Offset of one pixel inside an 8x8 icon tile.
+///
+/// The tile is a 4x4 grid of 2x2 pixel blocks stored in Morton/Z order: the
+/// block coordinates are bit-interleaved (x bit 0, y bit 0, x bit 1, y bit 1,
+/// ...) and each block holds its four pixels row-major. This matches the
+/// example table on 3dbrew: (0,0)=0, (1,0)=1, (2,0)=4, (3,0)=5, (0,1)=2,
+/// (1,1)=3, (0,2)=8, (1,2)=9, (2,2)=12, (4,0)=16.
+fn tile_pixel_offset(x: usize, y: usize) -> usize {
+    let (mut block_x, mut block_y) = (x / 2, y / 2);
+    let mut block = 0_usize;
+    let mut bit = 0_u32;
+    while block_x != 0 || block_y != 0 {
+        block |= (block_x & 1) << bit;
+        block |= (block_y & 1) << (bit + 1);
+        block_x >>= 1;
+        block_y >>= 1;
+        bit += 2;
+    }
+    block * 4 + (y % 2) * 2 + (x % 2)
+}
+
+/// Index of one pixel of a `side` x `side` tiled icon, in row-major order.
+///
+/// 8x8 tiles are laid out row-major (`tiles_per_row = side / 8`); the small
+/// 24x24 and the large 48x48 icon both use the same transform.
+fn tiled_icon_index(side: usize, x: usize, y: usize) -> usize {
+    let tiles_per_row = side / ICON_TILE_SIDE;
+    let tile = (y / ICON_TILE_SIDE) * tiles_per_row + x / ICON_TILE_SIDE;
+    tile * ICON_TILE_PIXELS + tile_pixel_offset(x % ICON_TILE_SIDE, y % ICON_TILE_SIDE)
+}
+
+/// Decode a row-major `side` x `side` RGB888 image from a tiled RGB565 icon.
+fn decode_tiled_rgb565(icon: &[u8], side: usize) -> Vec<u8> {
+    debug_assert!(icon.len() >= side * side * 2);
+    let mut rgb = Vec::with_capacity(side * side * 3);
+    for y in 0..side {
+        for x in 0..side {
+            let index = tiled_icon_index(side, x, y);
+            let pixel = &icon[index * 2..index * 2 + 2];
+            let value = u16::from_le_bytes([pixel[0], pixel[1]]);
+            let r = ((value >> 11) & 0x1F) as u8;
+            let g = ((value >> 5) & 0x3F) as u8;
+            let b = (value & 0x1F) as u8;
+            rgb.push((r << 3) | (r >> 2));
+            rgb.push((g << 2) | (g >> 4));
+            rgb.push((b << 3) | (b >> 2));
+        }
     }
     rgb
 }
@@ -281,14 +354,43 @@ pub(crate) mod test_support {
                 publisher,
             );
         }
-        for (index, pixel) in bytes[LARGE_ICON_OFFSET..LARGE_ICON_END]
-            .chunks_exact_mut(2)
-            .enumerate()
+        // The application settings block is not icon data; fill it with a
+        // constant so a decoder using the wrong offset produces different
+        // pixels. The small icon (0x2040) is flat green and the large icon
+        // (0x24C0) is a deterministic gradient encoded through the tile layout.
+        bytes[APPLICATION_SETTINGS_OFFSET..ICON_GRAPHICS_OFFSET].fill(0x5A);
+        for pixel in
+            bytes[SMALL_ICON_OFFSET..SMALL_ICON_OFFSET + SMALL_ICON_SIZE].chunks_exact_mut(2)
         {
-            let value = ((index * 977) & 0xFFFF) as u16;
-            pixel.copy_from_slice(&value.to_le_bytes());
+            pixel.copy_from_slice(&0x07E0_u16.to_le_bytes());
+        }
+        for y in 0..COVER_SIDE as usize {
+            for x in 0..COVER_SIDE as usize {
+                let value = (((y * COVER_SIDE as usize + x) * 977 + 0x1234) & 0xFFFF) as u16;
+                put_tiled_pixel(
+                    &mut bytes,
+                    LARGE_ICON_OFFSET,
+                    COVER_SIDE as usize,
+                    x,
+                    y,
+                    value,
+                );
+            }
         }
         bytes
+    }
+
+    /// Write one RGB565 pixel into the tiled icon starting at `base`.
+    pub fn put_tiled_pixel(
+        icon: &mut [u8],
+        base: usize,
+        side: usize,
+        x: usize,
+        y: usize,
+        value: u16,
+    ) {
+        let offset = base + tiled_icon_index(side, x, y) * 2;
+        icon[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
     }
 
     fn put_utf16(bytes: &mut [u8], offset: usize, size: usize, text: &str) {
@@ -303,9 +405,138 @@ pub(crate) mod test_support {
 
 #[cfg(test)]
 mod tests {
-    use super::test_support::synthetic_smdh;
+    use super::test_support::{put_tiled_pixel, synthetic_smdh};
     use super::*;
     use tempfile::tempdir;
+
+    /// Decode one pixel of a tiled RGB565 icon (row-major `(x, y)`) to RGB888,
+    /// with the same rounding as the PNG encoder.
+    fn tiled_pixel(bytes: &[u8], base: usize, side: usize, x: usize, y: usize) -> [u8; 3] {
+        let offset = base + tiled_icon_index(side, x, y) * 2;
+        let value = u16::from_le_bytes([bytes[offset], bytes[offset + 1]]);
+        let r = ((value >> 11) & 0x1F) as u8;
+        let g = ((value >> 5) & 0x3F) as u8;
+        let b = (value & 0x1F) as u8;
+        [
+            (r << 3) | (r >> 2),
+            (g << 2) | (g >> 4),
+            (b << 3) | (b >> 2),
+        ]
+    }
+
+    #[test]
+    fn layout_constants_match_the_3dbrew_smdh_layout() {
+        // 3dbrew SMDH: title table -> application settings -> icon graphics,
+        // with the small icon first and the large icon at 0x24C0.
+        assert_eq!(
+            SMDH_HEADER_SIZE + TITLE_BLOCK_COUNT * TITLE_BLOCK_SIZE,
+            0x2008
+        );
+        assert_eq!(TITLE_TABLE_END, 0x2008);
+        assert_eq!(APPLICATION_SETTINGS_OFFSET, 0x2008);
+        assert_eq!(APPLICATION_SETTINGS_SIZE, 0x30);
+        assert_eq!(APPLICATION_SETTINGS_RESERVED_SIZE, 0x8);
+        assert_eq!(ICON_GRAPHICS_OFFSET, 0x2040);
+        assert_eq!(SMALL_ICON_OFFSET, 0x2040);
+        assert_eq!(SMALL_ICON_SIDE, 24);
+        assert_eq!(SMALL_ICON_SIZE, 0x480);
+        assert_eq!(LARGE_ICON_OFFSET, 0x24C0);
+        assert_eq!(COVER_SIDE, 48);
+        assert_eq!(LARGE_ICON_SIZE, 0x1200);
+        assert_eq!(LARGE_ICON_END, 0x36C0);
+        assert_eq!(FULL_SMDH_SIZE, 0x36C0);
+        assert_eq!(ICON_GRAPHICS_SIZE, 0x1680);
+        assert_eq!(ICON_GRAPHICS_OFFSET + ICON_GRAPHICS_SIZE, FULL_SMDH_SIZE);
+        assert_eq!(SMALL_ICON_OFFSET + SMALL_ICON_SIZE, LARGE_ICON_OFFSET);
+        assert_eq!(LARGE_ICON_END, FULL_SMDH_SIZE);
+        assert_eq!(ICON_TILE_SIDE, 8);
+    }
+
+    #[test]
+    fn tile_pixels_follow_the_3dbrew_example_table() {
+        // 3dbrew SMDH example table: within an 8x8 tile the 2x2 pixel blocks
+        // are stored in Morton/Z order and the four pixels inside a block are
+        // row-major.
+        assert_eq!(tile_pixel_offset(0, 0), 0);
+        assert_eq!(tile_pixel_offset(1, 0), 1);
+        assert_eq!(tile_pixel_offset(2, 0), 4);
+        assert_eq!(tile_pixel_offset(3, 0), 5);
+        assert_eq!(tile_pixel_offset(0, 1), 2);
+        assert_eq!(tile_pixel_offset(1, 1), 3);
+        assert_eq!(tile_pixel_offset(0, 2), 8);
+        assert_eq!(tile_pixel_offset(1, 2), 9);
+        assert_eq!(tile_pixel_offset(2, 2), 12);
+        assert_eq!(tile_pixel_offset(4, 0), 16);
+
+        let expected: [[usize; 8]; 8] = [
+            [0, 1, 4, 5, 16, 17, 20, 21],
+            [2, 3, 6, 7, 18, 19, 22, 23],
+            [8, 9, 12, 13, 24, 25, 28, 29],
+            [10, 11, 14, 15, 26, 27, 30, 31],
+            [32, 33, 36, 37, 48, 49, 52, 53],
+            [34, 35, 38, 39, 50, 51, 54, 55],
+            [40, 41, 44, 45, 56, 57, 60, 61],
+            [42, 43, 46, 47, 58, 59, 62, 63],
+        ];
+        let mut seen = [false; ICON_TILE_PIXELS];
+        for (y, row) in expected.iter().enumerate() {
+            for (x, offset) in row.iter().enumerate() {
+                assert_eq!(tile_pixel_offset(x, y), *offset, "tile pixel ({x}, {y})");
+                assert!(!seen[*offset], "tile offset {offset} used twice");
+                seen[*offset] = true;
+            }
+        }
+        assert!(seen.iter().all(|used| *used), "all 64 tile pixels covered");
+    }
+
+    #[test]
+    fn icon_tiles_are_laid_out_row_major() {
+        // 48x48 = 6x6 tiles, 24x24 = 3x3 tiles; tiles are row-major.
+        assert_eq!(tiled_icon_index(48, 0, 0), 0);
+        assert_eq!(tiled_icon_index(48, 8, 0), ICON_TILE_PIXELS);
+        assert_eq!(tiled_icon_index(48, 0, 8), 6 * ICON_TILE_PIXELS);
+        assert_eq!(tiled_icon_index(48, 47, 47), 36 * ICON_TILE_PIXELS - 1);
+        assert_eq!(tiled_icon_index(24, 0, 8), 3 * ICON_TILE_PIXELS);
+        assert_eq!(tiled_icon_index(24, 23, 23), 9 * ICON_TILE_PIXELS - 1);
+    }
+
+    #[test]
+    fn cover_encodes_the_tiled_large_icon_row_major() {
+        // End-to-end: every large-icon pixel comes out row-major in the PNG.
+        let smdh = synthetic_smdh(&[(1, "Test Game", "Example")]);
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("cover.png");
+        assert!(write_cover_png(&smdh, &path).unwrap());
+        let (_, _, pixels) = decode_png(&std::fs::read(&path).unwrap());
+        for y in 0..COVER_SIDE as usize {
+            for x in 0..COVER_SIDE as usize {
+                let expected = tiled_pixel(&smdh, LARGE_ICON_OFFSET, COVER_SIDE as usize, x, y);
+                let start = (y * COVER_SIDE as usize + x) * 3;
+                assert_eq!(
+                    &pixels[start..start + 3],
+                    &expected,
+                    "cover pixel ({x}, {y})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn decodes_the_small_icon_with_the_same_tile_transform() {
+        // The small 24x24 icon at 0x2040 uses the same tile transform; the
+        // fixture paints it flat green, so every decoded pixel is (0, 255, 0).
+        let smdh = synthetic_smdh(&[(1, "Test Game", "Example")]);
+        let small = &smdh[SMALL_ICON_OFFSET..SMALL_ICON_OFFSET + SMALL_ICON_SIZE];
+        let rgb = decode_tiled_rgb565(small, SMALL_ICON_SIDE as usize);
+        assert_eq!(
+            rgb.len(),
+            SMALL_ICON_SIDE as usize * SMALL_ICON_SIDE as usize * 3
+        );
+        assert!(
+            rgb.chunks_exact(3).all(|pixel| pixel == [0, 255, 0]),
+            "small icon decodes as flat green"
+        );
+    }
 
     #[test]
     fn parses_localized_titles_and_publisher() {
@@ -350,7 +581,7 @@ mod tests {
     #[test]
     fn rejects_malformed_or_truncated_smdh() {
         assert!(parse(&[]).is_none());
-        assert!(parse(&vec![0_u8; LARGE_ICON_OFFSET]).is_none());
+        assert!(parse(&vec![0_u8; TITLE_TABLE_END]).is_none());
         let mut no_magic = synthetic_smdh(&[(1, "Test Game", "Example")]);
         no_magic[0] = 0;
         assert!(parse(&no_magic).is_none());
@@ -362,7 +593,9 @@ mod tests {
         assert!(parse(&blank_magic).is_none());
         // One title block cut short: parse fails instead of panicking.
         let smdh = synthetic_smdh(&[(1, "Test Game", "Example")]);
-        assert!(parse(&smdh[..LARGE_ICON_OFFSET - 1]).is_none());
+        assert!(parse(&smdh[..TITLE_TABLE_END - 1]).is_none());
+        // Metadata parsing only needs the title table; the icon is optional.
+        assert!(parse(&smdh[..TITLE_TABLE_END]).is_some());
     }
 
     #[test]
@@ -388,18 +621,30 @@ mod tests {
         assert_eq!((width, height), (COVER_SIDE, COVER_SIDE));
         assert_eq!(pixels.len(), COVER_SIDE as usize * COVER_SIDE as usize * 3);
 
-        let first = u16::from_le_bytes([smdh[LARGE_ICON_OFFSET], smdh[LARGE_ICON_OFFSET + 1]]);
-        let r = ((first >> 11) & 0x1F) as u8;
-        let g = ((first >> 5) & 0x3F) as u8;
-        let b = (first & 0x1F) as u8;
-        assert_eq!(
-            &pixels[..3],
-            &[
-                (r << 3) | (r >> 2),
-                (g << 2) | (g >> 4),
-                (b << 3) | (b >> 2)
-            ]
+        // The cover comes from the 48x48 large icon at 0x24C0, decoded through
+        // the tile transform; the small icon at 0x2040 is flat green.
+        let from_icon = tiled_pixel(&smdh, LARGE_ICON_OFFSET, COVER_SIDE as usize, 0, 0);
+        let from_small = tiled_pixel(&smdh, SMALL_ICON_OFFSET, SMALL_ICON_SIDE as usize, 0, 0);
+        assert_eq!(&pixels[..3], &from_icon);
+        assert_ne!(from_small, from_icon);
+
+        // Patch the large icon pixel (2, 0) pure red. Its tiled byte offset is
+        // 4 while its flat offset is 2: the PNG must show it at x=2 and not at
+        // x=4, proving the decoder applies the tile transform.
+        let mut patched = smdh.clone();
+        put_tiled_pixel(
+            &mut patched,
+            LARGE_ICON_OFFSET,
+            COVER_SIDE as usize,
+            2,
+            0,
+            0xF800,
         );
+        let patched_path = dir.path().join("patched.png");
+        assert!(write_cover_png(&patched, &patched_path).unwrap());
+        let (_, _, patched_pixels) = decode_png(&std::fs::read(&patched_path).unwrap());
+        assert_eq!(&patched_pixels[2 * 3..3 * 3], &[255, 0, 0]);
+        assert_ne!(&patched_pixels[4 * 3..5 * 3], &[255, 0, 0]);
 
         let second = dir.path().join("cover-2.png");
         assert!(write_cover_png(&smdh, &second).unwrap());
@@ -422,6 +667,11 @@ mod tests {
 
         let truncated = vec![0_u8; LARGE_ICON_OFFSET];
         assert!(!write_cover_png(&truncated, &path).unwrap());
+
+        // A valid SMDH cut one byte before the large icon ends: no cover.
+        let mut short = synthetic_smdh(&[(1, "Test Game", "Example")]);
+        short.truncate(LARGE_ICON_END - 1);
+        assert!(!write_cover_png(&short, &path).unwrap());
         assert!(!path.exists());
     }
 

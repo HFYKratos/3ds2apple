@@ -356,7 +356,7 @@ fn read_smdh_at(
             return Ok(None);
         }
         let read_len = data_size.min(smdh::FULL_SMDH_SIZE as u64) as usize;
-        if read_len < smdh::LARGE_ICON_OFFSET {
+        if read_len < smdh::TITLE_TABLE_END {
             return Ok(None);
         }
         let mut bytes = vec![0_u8; read_len];
