@@ -13,7 +13,7 @@
 | D2 | 每期 Release 资产 = 3 个可执行包 + 校验文件 + 许可文本 | Windows 启动器 zip、macOS 启动器 zip、ROM-free 基础壳 IPA 模板、SHA256SUMS.txt、LICENSE/NOTICE/THIRD_PARTY.md；release notes 写在 GitHub Release 正文。 |
 | D3 | 永不发布 | ROM/BIOS/密钥/系统文件、生成 C、GamePack-*.dylib、含 pack 的每用户 IPA、游戏数据、含游戏画面截图、Apple ID/证书/profile/UDID、被修改过的第三方二进制。 |
 | D4 | 版本线：**v0.1.0** | 产品版本重置为 0.1.0 / build 1：Windows 启动器、macOS 启动器、手机壳模板与发布 tag 使用同一版本。 |
-| D5 | 未验证项不得暗示已验证 | macOS 真机未验证时标 pre-release 或在正文写"开发者预览"；Windows 用户真机复测结果如实写入 release notes（§4）。 |
+| D5 | 未验证项不得暗示已验证 | 0.1.0 按用户决定作为正式 Release 发布；macOS 真机未验证与分发包不自包含已在 release notes/§4 如实标注，Windows 真机复测结果同样如实写入。改变验证状态时用新 tag 发布。 |
 | D6 | 人工发布、资产不可变 | 由 Lead 验收后执行；不自动发布；已 push 的 tag 与已上传的资产不覆盖，修正走新 tag。 |
 
 **关键契约（决定资产边界）**：每游戏的 AOT <code>GamePack-&lt;TITLEID&gt;.dylib</code> 必须由用户本机从
@@ -81,11 +81,13 @@ Windows zip 内部只有一个 <code>3ds2apple-launcher.exe</code>（155,464,345
 
 ### 3.1 现状（2026-11-16 产品版本重置）
 
-- 源码：launcher-first 重构（仓库清理 + 产品级 README）与版本统一 0.1.0 已由 Lead 验证并 commit；
-  发布时 push 到 main 并打 tag <code>v0.1.0</code>（当前本地 main 领先远端）。
-- 公开 Release 仍是旧版本线：<code>v0.1.5-beta3/beta2/beta1</code>、<code>v0.1.4</code>、
-  <code>v0.1.0-alpha</code>；发布 0.1.0 时这 5 个旧 Release 与 tag 将被删除（保留 git 历史），
-  旧 <code>agent/*</code> 分支一并清理。
+- 源码：launcher-first 重构（仓库清理 + 产品级 README）与版本统一 0.1.0 已提交并 push；
+  发布 commit <code>573a527</code>，annotated tag <code>v0.1.0</code> 已 push。
+- **0.1.0 已发布（2026-11-16）**：<https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.0>
+  （GitHub Latest，非 pre-release，标题只用版本号 <code>0.1.0</code>；7 个资产 = 3 个包 + SHA256SUMS +
+  LICENSE/NOTICE/THIRD_PARTY，下载后 <code>sha256sum -c SHA256SUMS.txt</code> 全部 OK）。
+  旧版本线 <code>v0.1.5-beta3/beta2/beta1</code>、<code>v0.1.4</code>、<code>v0.1.0-alpha</code>
+  的 Release 与 tag 已删除（git 历史保留），28 个旧 <code>agent/*</code> 分支已清理，远端只剩 <code>main</code> 与 tag <code>v0.1.0</code>。
 - 0.1.0 定稿组件（2026-11-16 重建）：Windows 启动器 **0.1.0**、macOS 启动器 **0.1.0 build 1**、
   手机壳模板 **0.1.0 / build 1**；三件套与本 Release 使用同一版本号。
 
