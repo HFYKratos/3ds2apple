@@ -1,12 +1,16 @@
 3ds2apple bundled signing tools - official Impactor v2.7.2 (unmodified)
 
 What this directory is for
-  The Windows and macOS launchers bundle the *official* Impactor v2.7.2 release
-  files unmodified so the user can sign the base shell IPA with their own Apple
-  ID without a second download. Nothing here is modified, patched or re-signed;
-  Apple ID login and passwords stay inside Impactor (or Xcode), never in 3ds2apple.
+  The Windows launcher bundles the *official* Impactor v2.7.2 release files
+  unmodified so the user can sign the base shell IPA with their own Apple ID
+  without a second download. The macOS launcher signs through Xcode/devicectl
+  and bundles no Impactor or plumesign files. Nothing here is modified, patched
+  or re-signed; Apple ID login and passwords stay inside Impactor (or Xcode),
+  never in 3ds2apple.
 
-Files bundled at launcher packaging time (NOT committed to git; see .gitignore)
+Official release files and their pins (NOT committed to git; see .gitignore;
+  the Windows launcher bundles only the Windows x64 pair, the other rows are pin
+  references for the fetch tool / future ports)
   Windows x64: Impactor-windows-x86_64-portable.exe  and plumesign-windows-x86_64.exe
   Windows arm64: Impactor-windows-arm64-portable.exe and plumesign-windows-arm64.exe
   macOS universal: Impactor-macos-universal.dmg      and plumesign-macos-universal

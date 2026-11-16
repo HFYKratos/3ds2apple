@@ -85,7 +85,11 @@ Release builds are universal (arm64 + x86_64). Headless modes used on the build 
 dark/light + English/Chinese screenshots and the user-facing ZIP in one shot on a
 Mac; it needs no ROM, phone, Apple ID or network. The ZIP is written to
 **out/launchers/3ds2apple-launcher-<version>-macos-app.zip** (gitignored) and
-contains only the .app. Regenerate the icon with `bash scripts/make-app-icon.sh`.
+contains the `.app` plus `LICENSE`, `NOTICE` and `THIRD_PARTY.md` at the ZIP root,
+byte-identical to the repository files (enforced by
+`scripts/release/verify-release.sh`); the licence texts ship inside the package
+and are never separate Release assets. Regenerate the icon with
+`bash scripts/make-app-icon.sh`.
 
 ## Portable data folder (0.2.4)
 
@@ -140,7 +144,7 @@ it from a source tree).
       SnapshotRenderer.swift   offscreen SwiftUI screenshots (en/zh, dark/light)
       Views/                   theme, components, centered-tab shell + readiness light, Library, Deploy, minimal Settings
     Resources/                 app icon (.icns/.png) + en/zh-Hans InfoPlist.strings
-    scripts/vm-build.sh        Release build + self-check + screenshots + app-only ZIP in out/launchers
+    scripts/vm-build.sh        Release build + self-check + screenshots + .app/licence-text ZIP in out/launchers
     scripts/make-app-icon.sh   regenerate the icon from the iOS app icon
     screenshots/               generated non-game UI evidence (committed)
 
@@ -169,7 +173,9 @@ The rebuilt 0.1.0 build 1 package on the macOS VM (Xcode 26.6, headless):
   .app only (16 entries, 13,973,837 bytes uncompressed) including
   Contents/Resources/MoltenVK.framework. The launcher embeds the MoltenVK
   framework, but the macOS package is not self-contained yet (a checkout + Xcode +
-  the built tools are required).
+  the built tools are required). The already-published 0.1.0 asset predates the
+  licence-text packaging change; releases from 0.1.1 on carry
+  LICENSE/NOTICE/THIRD_PARTY.md at the ZIP root.
 - real iPhone acceptance is NOT done: the shared VM has no attached iPhone and no
   Apple ID signing assets. Signing/install/push need the player's own Xcode
   account and a USB device; the manual checklist is section **Real-device

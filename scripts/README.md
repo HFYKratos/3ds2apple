@@ -144,13 +144,14 @@ Large generated files can exhaust memory on an 8 GB build VM:
 | `tests/game-catalog-selfcheck.sh` | Catalog helper: generation, schema validation, builder/script wiring, `--help` checks (Linux and macOS) |
 | `tests/desktop-aot-selfcheck.sh` | Desktop pipeline: synthetic ROM import, fake build, schema-v2 catalogue, preview IPA and script safety checks (no Xcode/ROM needed) |
 | `tests/perf-selfcheck.sh` | Performance contract: this file's performance section, diagnostics badge, AOT flags, MoltenVK hook |
+| `tests/release-selfcheck.sh` | Release gate: synthetic Windows/macOS zips prove `verify-release.sh` accepts launcher + licence texts and rejects missing/altered/extra texts, extra files and ROM payloads (offline, mktemp only) |
 
 ## Release
 
 | Script | Purpose |
 |---|---|
-| `release/assemble-release.sh` | Collect the two platform launcher zips (Windows + macOS), rename them to the canonical `3ds2apple-<ver>-{windows-x64,macos-universal}.zip` names and run the verifier; no `SHA256SUMS`/license/shell assets |
-| `release/verify-release.sh` | Read-only release gate: exactly the two platform zips, archive contents, no ROM/pack/IPA data |
+| `release/assemble-release.sh` | Collect the two platform launcher zips (Windows + macOS), rename them to the canonical `3ds2apple-<ver>-{windows-x64,macos-universal}.zip` names and run the verifier; the licence texts travel inside the zips, so no `SHA256SUMS`/separate license/shell assets are collected |
+| `release/verify-release.sh` | Read-only release gate: exactly the two platform zips; each archive is exactly launcher (`.exe` / `.app`) + `LICENSE`/`NOTICE`/`THIRD_PARTY.md` with digests equal to the repository files; no ROM/pack/IPA data |
 
 The full release policy (two assets only, bilingual release notes,
 immutable tags) is in [CONTRIBUTING.md](../CONTRIBUTING.md#release-policy).

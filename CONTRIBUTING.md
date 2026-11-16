@@ -79,16 +79,20 @@ Attach only the two platform packages produced by the release build:
 
 | Asset | Content |
 |---|---|
-| `3ds2apple-<version>-windows-x64.zip` | Windows 10/11 launcher; one self-contained executable |
-| `3ds2apple-<version>-macos-universal.zip` | macOS 13+ launcher (`.app`, Intel + Apple silicon) |
+| `3ds2apple-<version>-windows-x64.zip` | Windows 10/11 launcher; one self-contained executable plus `LICENSE`, `NOTICE`, `THIRD_PARTY.md` at the ZIP root |
+| `3ds2apple-<version>-macos-universal.zip` | macOS 13+ launcher (`.app`, Intel + Apple silicon) plus the same three licence texts at the ZIP root |
 
-**Never attach:** `LICENSE`, `NOTICE`, `THIRD_PARTY.md`, a `SHA256SUMS.txt`,
-the ROM-free shell IPA template, per-game IPAs, GamePacks/dylibs, generated C,
-ROMs, keys/BIOS, credentials or certificates, or screenshots containing game
-art. The shell template is embedded in the launchers; license texts live in the
-repository (and inside the Windows launcher payload); each asset's SHA-256
-digest is visible on the GitHub Release assets page (and can be computed
-locally).
+**Licence texts ship inside the packages, never as separate assets.** Both
+platform zips carry `LICENSE`, `NOTICE` and `THIRD_PARTY.md` at their root,
+byte-identical to the repository files; `verify-release.sh` enforces this and
+`scripts/tests/release-selfcheck.sh` proves the gate offline with synthetic
+zips. **Never attach as separate Release assets:** `LICENSE`, `NOTICE`,
+`THIRD_PARTY.md`, a `SHA256SUMS.txt`, the ROM-free shell IPA template, per-game
+IPAs, GamePacks/dylibs, generated C, ROMs, keys/BIOS, credentials or
+certificates, or screenshots containing game art. The shell template is
+embedded in the launchers; the licence texts also remain in the repository (and
+inside the Windows launcher payload); each asset's SHA-256 digest is visible on
+the GitHub Release assets page (and can be computed locally).
 
 ### Release body: bilingual update highlights
 
@@ -124,7 +128,8 @@ shape:
 ### Process
 
 1. Build the two packages and run the project test gates (`cargo test`,
-   `dotnet test`, `scripts/tests/*-selfcheck.sh`); the Windows package must pass
+   `dotnet test`, `scripts/tests/*-selfcheck.sh`, including
+   `bash scripts/tests/release-selfcheck.sh`); the Windows package must pass
    its clean-folder `--self-test`.
 2. Assemble the release directory (this also renames the build artifacts to the
    canonical asset names and runs the verifier):
@@ -135,6 +140,10 @@ shape:
      --macos-zip out/launchers/3ds2apple-launcher-<version>-macos-app.zip
    bash scripts/release/verify-release.sh --release-dir out/release/v<version>
    ```
+
+   The verifier requires both zips to carry `LICENSE`, `NOTICE` and
+   `THIRD_PARTY.md` at the ZIP root with SHA-256 digests equal to the repository
+   files, and it still requires exactly the two platform assets.
 
 3. Create the annotated tag and the GitHub Release; the **release title is only
    the version number** (`<version>`, e.g. `0.1.0`):

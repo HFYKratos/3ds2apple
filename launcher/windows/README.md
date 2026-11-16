@@ -113,7 +113,7 @@ No ROM, key, IPA, generated C or Apple credential is stored in this repository.
       docs/ui/                          rendered UI evidence (English + 简体中文 screenshots)
       tools/                            fetch-impactor.ps1/.sh (verified official v2.7.2),
                                         prepare-dist.ps1 (multi-file dev package),
-                                        prepare-dist-singlefile.sh/.ps1 (one-exe ZIP)
+                                        prepare-dist-singlefile.sh/.ps1 (exe + licence-text ZIP)
       .gitignore                        excludes bin/obj and downloaded third-party binaries
 
 Directory names are chosen so the repository-wide ignore rules cannot hide them:
@@ -180,8 +180,10 @@ shell template IPA + manifest, and writes SHA256SUMS.
 
 ## Single-file one-exe distribution (task-28)
 
-The shipped Windows package is a ZIP containing exactly one file,
-`3ds2apple-launcher.exe` (self-contained .NET single-file). Release builds embed the
+The shipped Windows package is a ZIP containing `3ds2apple-launcher.exe`
+(self-contained .NET single-file) plus `LICENSE`, `NOTICE` and `THIRD_PARTY.md` at
+the ZIP root, byte-identical to the repository files and enforced by
+`scripts/release/verify-release.sh`. Release builds embed the
 ROM-free shell IPA + manifest, the pinned official Impactor/plumesign + licence texts,
 `Bin/3ds2apple-pack.exe`, `Bin/devpush.exe` and
 LICENSE/NOTICE/THIRD_PARTY as resources; on first run they are extracted to
@@ -192,7 +194,7 @@ there. `THREEDS2APPLE_DIST` and the multi-file layout still work for development
     # and Bin/*.exe first (see shell/README.md, tools/fetch-impactor.sh)
     launcher/windows/tools/prepare-dist-singlefile.sh    # output defaults to out/launchers/
     # Windows twin: powershell -ExecutionPolicy Bypass -File tools/prepare-dist-singlefile.ps1
-    unzip -l dist/3ds2apple-windows-single-<version>.zip   # exactly one entry
+    unzip -l dist/3ds2apple-windows-single-<version>.zip   # exe + LICENSE + NOTICE + THIRD_PARTY.md
     # clean-folder check: copy only the exe into an empty folder and run --self-test
 
 Staged payload inputs are git-ignored (`Bin/`, `shell/*.ipa`, `shell/manifest.json`,

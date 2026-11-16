@@ -9,7 +9,10 @@
   <exe-dir>\3ds2apple-data\distribution\<version> when that folder is writable, and falls
   back to %LOCALAPPDATA%\3ds2apple\distribution\<version> for a read-only launcher folder
   (the workspace follows the same portable/LocalAppData rule). The user-facing ZIP contains
-  exactly one file: 3ds2apple-launcher.exe.
+  3ds2apple-launcher.exe plus the repository licence texts (LICENSE, NOTICE, THIRD_PARTY.md)
+  at the ZIP root, byte-identical to the repository files; those texts ship inside both
+  platform packages and are never separate Release assets (see CONTRIBUTING.md#release-policy).
+  The clean-run-win folder still holds only the exe.
 
   The official LLVM 21.1.8 toolchain is staged under Bin/llvm when present
   (THREEDS2APPLE_LLVM_DIR, default <repo>/build/win-toolchain/llvm). It is never faked: without
@@ -132,9 +135,50 @@ dotnet publish (Join-Path $windowsRoot 'src/Launcher.Desktop/ThreeDsTwoApple.Lau
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Get-ChildItem -LiteralPath $publishDir -Force | Where-Object { $_.Name -ne $exeName } | Remove-Item -Recurse -Force
 
-# 5. ZIP with exactly one file inside.
+# 5. ZIP = the exe + the repository licence texts at the ZIP root. The PowerShell
+#    twin of the WSL script must produce the same archive contract that
+#    scripts/release/verify-release.sh enforces on the published asset.
+$licenseTexts = @('LICENSE', 'NOTICE', 'THIRD_PARTY.md')
+foreach ($text in $licenseTexts) {
+    $source = Join-Path $repoRoot $text
+    if (-not (Test-Path -LiteralPath $source)) {
+        Write-Error "repository licence text is missing: $source"
+        exit 2
+    }
+}
 if (Test-Path -LiteralPath $zipPath) { Remove-Item -Force -LiteralPath $zipPath }
-Compress-Archive -LiteralPath (Join-Path $publishDir $exeName) -DestinationPath $zipPath -CompressionLevel Optimal
+$zipInputs = @(Join-Path $publishDir $exeName) + @($licenseTexts | ForEach-Object { Join-Path $repoRoot $_ })
+Compress-Archive -LiteralPath $zipInputs -DestinationPath $zipPath -CompressionLevel Optimal
+
+# Positive/negative gate: exactly the exe + the three texts at the ZIP root, and
+# the texts inside the archive are byte-identical to the repository files.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zipArchive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+try {
+    $actualEntries = @($zipArchive.Entries | ForEach-Object { $_.FullName } | Sort-Object)
+    $expectedEntries = @(@($exeName) + $licenseTexts | Sort-Object)
+    if (Compare-Object -ReferenceObject $expectedEntries -DifferenceObject $actualEntries) {
+        Write-Error "unexpected ZIP entries in ${zipPath}: $($actualEntries -join ', ')"
+        exit 1
+    }
+    foreach ($text in $licenseTexts) {
+        $entry = $zipArchive.GetEntry($text)
+        $entryStream = $entry.Open()
+        try {
+            $sha256 = [System.Security.Cryptography.SHA256]::Create()
+            try { $entryHash = ([BitConverter]::ToString($sha256.ComputeHash($entryStream)) -replace '-', '').ToLowerInvariant() }
+            finally { $sha256.Dispose() }
+        } finally { $entryStream.Dispose() }
+        $repoHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $repoRoot $text)).Hash.ToLowerInvariant()
+        if ($entryHash -ne $repoHash) {
+            Write-Error "$text inside ${zipPath} ($entryHash) differs from the repository file ($repoHash)"
+            exit 1
+        }
+    }
+} finally {
+    $zipArchive.Dispose()
+}
+Write-Host "[single] zip entries: $exeName + LICENSE + NOTICE + THIRD_PARTY.md (licence texts byte-identical to the repository)"
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath).Hash.ToLowerInvariant()
 Write-Host "[single] zip: $zipPath ($hash)"
 

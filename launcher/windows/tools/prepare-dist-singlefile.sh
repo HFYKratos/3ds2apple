@@ -4,8 +4,12 @@
 # The exe embeds the ROM-free shell template, the pinned official Impactor/plumesign,
 # the Bin/ tool CLIs, 3dsrecomp.exe + Darwin stubs/shim (Windows local build) and
 # LICENSE/NOTICE/THIRD_PARTY. On first run it extracts them to
-# %LOCALAPPDATA%\3ds2apple\distribution\<version>. The user-facing ZIP contains exactly
-# one file: 3ds2apple-launcher.exe.
+# %LOCALAPPDATA%\3ds2apple\distribution\<version>. The user-facing ZIP contains
+# 3ds2apple-launcher.exe plus the repository licence texts (LICENSE, NOTICE,
+# THIRD_PARTY.md) at the ZIP root, byte-identical to the repository files. Those
+# texts ship inside both platform packages; they are never separate Release
+# assets (see CONTRIBUTING.md#release-policy). The clean-run-win folder still
+# holds only the exe, so the clean-folder --self-test semantics are unchanged.
 #
 # The official LLVM 21.1.8 toolchain (clang.exe / llvm-ar.exe / ld64.lld.exe +
 # lib/clang/21/include) is staged under Bin/llvm when available (THREEDS2APPLE_LLVM_DIR,
@@ -129,9 +133,39 @@ dotnet publish "$WINDOWS_ROOT/src/Launcher.Desktop/ThreeDsTwoApple.Launcher.Desk
 # Only the executable stays in the release folder.
 find "$PUBLISH_DIR" -mindepth 1 -maxdepth 1 ! -name "$EXE_NAME" -exec rm -rf {} +
 
-# 5. ZIP with exactly one file inside.
+# 5. ZIP = the exe + the repository licence texts at the ZIP root. Both shipped
+#    packages carry LICENSE/NOTICE/THIRD_PARTY.md inside the archive (the GitHub
+#    Release still has exactly two assets; the texts are never separate uploads),
+#    and each text inside the archive must be byte-identical to the repository
+#    file. scripts/release/verify-release.sh enforces the same rules.
+LICENSE_TEXTS=(LICENSE NOTICE THIRD_PARTY.md)
+for text in "${LICENSE_TEXTS[@]}"; do
+  if [ ! -f "$REPO_ROOT/$text" ]; then
+    echo "error: repository licence text is missing: $REPO_ROOT/$text" >&2
+    exit 2
+  fi
+done
 rm -f "$ZIP_PATH"
 (cd "$PUBLISH_DIR" && zip -j -q "$ZIP_PATH" "$EXE_NAME")
+(cd "$REPO_ROOT" && zip -q -j "$ZIP_PATH" "${LICENSE_TEXTS[@]}")
+# Positive/negative gate: the archive is exactly the exe + the three texts (no
+# directories, nothing else) and the texts match the repository bytes.
+ZIP_ENTRIES="$(unzip -Z1 "$ZIP_PATH" | LC_ALL=C sort)"
+EXPECTED_ENTRIES="$(printf '%s\n' "$EXE_NAME" "${LICENSE_TEXTS[@]}" | LC_ALL=C sort)"
+if [ "$ZIP_ENTRIES" != "$EXPECTED_ENTRIES" ]; then
+  echo "error: unexpected entries in $ZIP_PATH (expected $EXE_NAME + LICENSE + NOTICE + THIRD_PARTY.md):" >&2
+  printf '%s\n' "$ZIP_ENTRIES" >&2
+  exit 1
+fi
+for text in "${LICENSE_TEXTS[@]}"; do
+  ZIP_TEXT_SHA="$(unzip -p "$ZIP_PATH" "$text" | sha256sum | cut -d' ' -f1)"
+  REPO_TEXT_SHA="$(sha256sum "$REPO_ROOT/$text" | cut -d' ' -f1)"
+  if [ "$ZIP_TEXT_SHA" != "$REPO_TEXT_SHA" ]; then
+    echo "error: $text in $ZIP_PATH ($ZIP_TEXT_SHA) differs from the repository file ($REPO_TEXT_SHA)" >&2
+    exit 1
+  fi
+done
+echo "[single] zip entries: $EXE_NAME + LICENSE + NOTICE + THIRD_PARTY.md (licence texts byte-identical to the repository)"
 echo "[single] zip: $ZIP_PATH"
 unzip -l "$ZIP_PATH"
 sha256sum "$ZIP_PATH" "$PUBLISH_DIR/$EXE_NAME" | tee "$OUTPUT_ROOT/SHA256SUMS-single.txt"

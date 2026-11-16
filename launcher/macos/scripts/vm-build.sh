@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # vm-build.sh - build the macOS launcher (Release, universal), run its
 # self-checks, render the localized non-game UI screenshots and assemble the
-# user-facing app-only ZIP under the project's own out/launchers/ directory
-# (gitignored), per launcher/macos/README.md.
+# user-facing ZIP (3ds2apple-launcher.app + LICENSE/NOTICE/THIRD_PARTY.md at the
+# ZIP root) under the project's own out/launchers/ directory (gitignored), per
+# launcher/macos/README.md.
 #
 #   cd ~/3ds2apple/launcher/macos && bash scripts/vm-build.sh
 #
@@ -30,6 +31,7 @@ BUILD_NUMBER="$(sed -n 's/^        CURRENT_PROJECT_VERSION: "\(.*\)"/\1/p' proje
 [ -n "$BUILD_NUMBER" ] || BUILD_NUMBER="1"
 OUT_DIR="$ROOT/out/launchers"
 PACKAGE_NAME="3ds2apple-launcher-${VERSION}-macos-app"
+LICENSE_TEXTS=(LICENSE NOTICE THIRD_PARTY.md)
 STATUS=0
 
 echo "== xcodegen =="
@@ -149,13 +151,24 @@ ls -l screenshots | tail -25
 SHOT_COUNT="$(ls screenshots | wc -l | tr -d ' ')"
 echo "screenshot count: $SHOT_COUNT"
 
-echo "== package (app-only ZIP under out/launchers) =="
+echo "== package (ZIP = .app + repository licence texts under out/launchers) =="
 mkdir -p "$OUT_DIR"
+for text in "${LICENSE_TEXTS[@]}"; do
+  if [ ! -f "$ROOT/$text" ]; then
+    echo "REPOSITORY LICENCE TEXT MISSING: $ROOT/$text"; exit 1
+  fi
+done
 rm -rf /tmp/zl-macos-package
 mkdir -p /tmp/zl-macos-package
 ditto "$APP" "/tmp/zl-macos-package/3ds2apple-launcher.app"
 rm -f "$OUT_DIR/$PACKAGE_NAME.zip"
+# ditto keeps the .app bundle structure byte-for-byte (symlinks, resource forks,
+# extended attributes); the three repository licence texts are then appended at
+# the ZIP root. Both shipped packages carry them inside the archive and the
+# GitHub Release still has exactly two assets (the texts are never separate
+# uploads), matching CONTRIBUTING.md#release-policy.
 ditto -c -k --sequesterRsrc --keepParent "/tmp/zl-macos-package/3ds2apple-launcher.app" "$OUT_DIR/$PACKAGE_NAME.zip"
+(cd "$ROOT" && zip -q "$OUT_DIR/$PACKAGE_NAME.zip" "${LICENSE_TEXTS[@]}")
 shasum -a 256 "$OUT_DIR/$PACKAGE_NAME.zip" | tee "$OUT_DIR/$PACKAGE_NAME.zip.sha256"
 ZIP_SIZE="$(stat -f%z "$OUT_DIR/$PACKAGE_NAME.zip")"
 echo "zip: $OUT_DIR/$PACKAGE_NAME.zip ($ZIP_SIZE bytes)"
@@ -164,10 +177,32 @@ echo "== package verification =="
 unzip -t "$OUT_DIR/$PACKAGE_NAME.zip" | tail -2
 unzip -l "$OUT_DIR/$PACKAGE_NAME.zip" > /tmp/zl-package-list.txt
 echo "zip entries: $(tail -1 /tmp/zl-package-list.txt)"
+ZIP_ENTRIES="$(unzip -Z1 "$OUT_DIR/$PACKAGE_NAME.zip")"
+EXPECTED_ROOTS="$(printf '%s\n' "3ds2apple-launcher.app" "${LICENSE_TEXTS[@]}" | LC_ALL=C sort)"
+ACTUAL_ROOTS="$(printf '%s\n' "$ZIP_ENTRIES" | cut -d/ -f1 | LC_ALL=C sort -u)"
+if [ "$ACTUAL_ROOTS" != "$EXPECTED_ROOTS" ]; then
+  echo "PACKAGE TOP-LEVEL ENTRIES MISMATCH (expected 3ds2apple-launcher.app + LICENSE + NOTICE + THIRD_PARTY.md)"
+  printf '%s\n' "$ACTUAL_ROOTS"
+  STATUS=1
+else
+  echo "package top level: 3ds2apple-launcher.app + LICENSE + NOTICE + THIRD_PARTY.md"
+fi
+for text in "${LICENSE_TEXTS[@]}"; do
+  if ! grep -Fxq "$text" <<< "$ZIP_ENTRIES"; then
+    echo "PACKAGE LICENCE TEXT MISSING: $text"; STATUS=1; continue
+  fi
+  ZIP_TEXT_SHA="$(unzip -p "$OUT_DIR/$PACKAGE_NAME.zip" "$text" | shasum -a 256 | awk '{print $1}')"
+  REPO_TEXT_SHA="$(shasum -a 256 "$ROOT/$text" | awk '{print $1}')"
+  if [ "$ZIP_TEXT_SHA" != "$REPO_TEXT_SHA" ]; then
+    echo "PACKAGE LICENCE TEXT MISMATCH: $text ($ZIP_TEXT_SHA != $REPO_TEXT_SHA)"; STATUS=1
+  else
+    echo "package licence text: $text sha256 $ZIP_TEXT_SHA (matches repository)"
+  fi
+done
 if grep -E -i '(\.cci|\.3ds|\.ipa|\.dylib|GameRom|GamePack|screenshots/)' /tmp/zl-package-list.txt; then
   echo "PACKAGE CONTAINS FORBIDDEN GAME/BUILD ENTRIES"; STATUS=1
 else
-  echo "package contains only the .app (no ROM/IPA/dylib/screenshot entries)"
+  echo "package contains no ROM/IPA/dylib/screenshot entries"
 fi
 
 echo "== packaged app verification (fresh extraction) =="

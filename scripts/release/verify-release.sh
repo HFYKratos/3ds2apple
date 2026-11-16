@@ -3,20 +3,29 @@
 #
 # Release policy (CONTRIBUTING.md#release-policy): a release carries exactly two
 # assets, 3ds2apple-<ver>-windows-x64.zip and
-# 3ds2apple-<ver>-macos-universal.zip. The ROM-free shell template is embedded in
-# the launchers, license texts live in the repository, and GitHub shows each
-# asset's SHA-256 digest on the Release page.
+# 3ds2apple-<ver>-macos-universal.zip. Each zip carries its platform launcher
+# plus the repository licence texts LICENSE, NOTICE and THIRD_PARTY.md at the
+# ZIP root, byte-identical to the repository files. The texts ship inside the
+# packages and are never separate Release assets. The ROM-free shell template is
+# embedded in the launchers, and GitHub shows each asset's SHA-256 digest on the
+# Release page.
 #
 # This script never publishes or modifies anything: archives are listed with
-# unzip (nothing is extracted) and the release directory is only read.
+# unzip and licence texts are streamed with "unzip -p" (nothing is extracted to
+# disk); the release directory is only read.
 #
-# Checks:
-#   windows zip   one top-level 3ds2apple-launcher.exe and nothing else
-#   macOS zip     one top-level 3ds2apple-launcher.app with Contents/Info.plist
-#                 and Contents/MacOS/*, and nothing else
+# Checks (each result is printed as [PASS]/[FAIL]/[SKIP]):
+#   windows zip   exactly 3ds2apple-launcher.exe + LICENSE + NOTICE +
+#                 THIRD_PARTY.md at the ZIP root, nothing else
+#   macOS zip     exactly 3ds2apple-launcher.app + LICENSE + NOTICE +
+#                 THIRD_PARTY.md at the top level; the .app keeps
+#                 Contents/Info.plist and Contents/MacOS/*
+#   both zips     LICENSE/NOTICE/THIRD_PARTY.md are byte-identical to the
+#                 repository files (ROOT/<name>, compared by SHA-256)
 #   both zips     no ROM (.3ds/.cci/.cia/.cxi/.3dsx/.nsp/.xci/.keys), no .ipa,
 #                 no GamePack-*.dylib, no Roms/ entries
 #   release dir   exactly the two canonical asset files, same <ver>, no extras
+#                 (the licence texts are inside the zips, never separate assets)
 #   always        prints byte size and SHA-256 of each verified asset
 #
 # Usage:
@@ -29,6 +38,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Both shipped packages must carry these three repository files at the ZIP root.
+LICENSE_TEXTS=(LICENSE NOTICE THIRD_PARTY.md)
+# Exact entry sets (no directories, nothing else).
+WINDOWS_ENTRIES=(3ds2apple-launcher.exe LICENSE NOTICE THIRD_PARTY.md)
+MACOS_TOP_LEVEL=(3ds2apple-launcher.app LICENSE NOTICE THIRD_PARTY.md)
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -49,7 +64,9 @@ Options:
   --macos-zip FILE    macOS launcher .app zip to verify.
   -h, --help          Show this help and exit.
 
-Exit codes: 0 all requested checks passed, 1 a check failed, 2 usage/tooling error.
+Both zips must carry LICENSE, NOTICE and THIRD_PARTY.md at their root, identical
+to the repository files. Exit codes: 0 all requested checks passed, 1 a check
+failed, 2 usage/tooling error.
 EOF
 }
 
@@ -70,10 +87,13 @@ file_bytes() { wc -c < "$1" | tr -d ' '; }
 
 if command -v sha256sum >/dev/null 2>&1; then
   hash_file() { sha256sum "$1" | awk '{print $1}'; }
+  stream_hash() { sha256sum | awk '{print $1}'; }
 elif command -v shasum >/dev/null 2>&1; then
   hash_file() { shasum -a 256 "$1" | awk '{print $1}'; }
+  stream_hash() { shasum -a 256 | awk '{print $1}'; }
 else
   hash_file() { echo unavailable; }
+  stream_hash() { echo unavailable; }
 fi
 
 require_unzip() {
@@ -81,6 +101,12 @@ require_unzip() {
 }
 
 zip_entries() { unzip -Z1 "$1"; }
+
+# SHA-256 of one archive entry, streamed from the zip (nothing is written to disk).
+zip_text_hash() {
+  local zip="$1" entry="$2"
+  unzip -p "$zip" "$entry" 2>/dev/null | stream_hash || true
+}
 
 # Forbidden payloads in either asset: ROMs, keys, IPAs and per-game code.
 forbidden_entry() {
@@ -107,8 +133,27 @@ check_forbidden_payloads() {
   [ "$hits" -eq 0 ] && pass "$label: no ROM/key/IPA/GamePack payloads"
 }
 
+# The three licence texts must be present at the archive root and byte-identical
+# to the repository files ($ROOT/<name>); entries is the already-listed zip.
+check_license_texts() {
+  local zip="$1" label="$2" entries="$3" text zip_hash repo_hash
+  for text in "${LICENSE_TEXTS[@]}"; do
+    if ! grep -Fxq "$text" <<< "$entries"; then
+      fail "$label: missing licence text $text at the archive root"
+      continue
+    fi
+    zip_hash="$(zip_text_hash "$zip" "$text")"
+    repo_hash="$(hash_file "$ROOT/$text")"
+    if [ "$zip_hash" = "$repo_hash" ]; then
+      pass "$label: $text is byte-identical to the repository file (sha256 $zip_hash)"
+    else
+      fail "$label: $text sha256 $zip_hash differs from the repository file ($repo_hash)"
+    fi
+  done
+}
+
 check_windows_zip() {
-  local zip="$1" entries count
+  local zip="$1" entries expected actual
   if [ ! -f "$zip" ]; then
     fail "windows zip: not a file: $zip"
     return
@@ -118,21 +163,20 @@ check_windows_zip() {
     fail "windows zip: not a readable zip (or empty): $zip"
     return
   fi
-  count="$(echo "$entries" | grep -c . || true)"
-  if [ "$count" -ne 1 ]; then
-    fail "windows zip: expected exactly 1 entry (one .exe), found $count: $zip"
-    return
-  fi
-  if [ "$entries" != "3ds2apple-launcher.exe" ]; then
-    fail "windows zip: the single entry must be 3ds2apple-launcher.exe: $entries"
-    return
-  fi
-  pass "windows zip: single entry $entries ($(file_bytes "$zip") bytes, sha256 $(hash_file "$zip"))"
   check_forbidden_payloads "$zip" "windows zip"
+  expected="$(printf '%s\n' "${WINDOWS_ENTRIES[@]}" | LC_ALL=C sort)"
+  actual="$(printf '%s\n' "$entries" | LC_ALL=C sort)"
+  if [ "$actual" = "$expected" ]; then
+    pass "windows zip: entries are exactly 3ds2apple-launcher.exe + LICENSE + NOTICE + THIRD_PARTY.md"
+  else
+    fail "windows zip: expected exactly 3ds2apple-launcher.exe + LICENSE + NOTICE + THIRD_PARTY.md at the ZIP root, found: $(printf '%s' "$actual" | tr '\n' ' ')"
+  fi
+  check_license_texts "$zip" "windows zip" "$entries"
+  pass "windows zip: $(file_bytes "$zip") bytes, sha256 $(hash_file "$zip")"
 }
 
 check_macos_zip() {
-  local zip="$1" entries roots app count
+  local zip="$1" entries roots expected count
   if [ ! -f "$zip" ]; then
     fail "macOS zip: not a file: $zip"
     return
@@ -142,30 +186,32 @@ check_macos_zip() {
     fail "macOS zip: not a readable zip (or empty): $zip"
     return
   fi
-  roots="$(echo "$entries" | cut -d/ -f1 | LC_ALL=C sort -u | grep -c . || true)"
-  if [ "$roots" -ne 1 ]; then
-    fail "macOS zip: expected one top-level .app, found $roots top-level root(s)"
-    return
-  fi
-  app="$(echo "$entries" | cut -d/ -f1 | LC_ALL=C sort -u | head -n 1)"
-  if [ "$app" != "3ds2apple-launcher.app" ]; then
-    fail "macOS zip: top-level entry must be 3ds2apple-launcher.app: $app"
-    return
-  fi
-  if ! echo "$entries" | grep -Fxq "3ds2apple-launcher.app/Contents/Info.plist"; then
-    fail "macOS zip: the .app has no Contents/Info.plist"
-    return
-  fi
-  count="$(echo "$entries" | grep -c "^3ds2apple-launcher.app/Contents/MacOS/" || true)"
-  if [ "$count" -lt 1 ]; then
-    fail "macOS zip: the .app has no Contents/MacOS executable"
-    return
-  fi
-  pass "macOS zip: one .app bundle $app ($(file_bytes "$zip") bytes, sha256 $(hash_file "$zip"))"
   check_forbidden_payloads "$zip" "macOS zip"
+  roots="$(printf '%s\n' "$entries" | cut -d/ -f1 | LC_ALL=C sort -u)"
+  expected="$(printf '%s\n' "${MACOS_TOP_LEVEL[@]}" | LC_ALL=C sort)"
+  if [ "$roots" = "$expected" ]; then
+    pass "macOS zip: top level is exactly 3ds2apple-launcher.app + LICENSE + NOTICE + THIRD_PARTY.md"
+  else
+    fail "macOS zip: expected exactly 3ds2apple-launcher.app + LICENSE + NOTICE + THIRD_PARTY.md at the top level, found: $(printf '%s' "$roots" | tr '\n' ' ')"
+  fi
+  if grep -Fxq "3ds2apple-launcher.app/Contents/Info.plist" <<< "$entries"; then
+    pass "macOS zip: the .app has Contents/Info.plist"
+  else
+    fail "macOS zip: the .app has no Contents/Info.plist"
+  fi
+  count="$(printf '%s\n' "$entries" | grep -c "^3ds2apple-launcher.app/Contents/MacOS/" || true)"
+  if [ "$count" -ge 1 ]; then
+    pass "macOS zip: the .app has $count Contents/MacOS/ entries"
+  else
+    fail "macOS zip: the .app has no Contents/MacOS executable"
+  fi
+  check_license_texts "$zip" "macOS zip" "$entries"
+  pass "macOS zip: $(file_bytes "$zip") bytes, sha256 $(hash_file "$zip")"
 }
 
 # release-dir mode: exactly the two canonical assets, same <ver>, nothing else.
+# The licence texts travel inside the zips, so a separate LICENSE/NOTICE/
+# THIRD_PARTY.md (or SHA256SUMS.txt) in the release directory is an extra asset.
 check_release_dir() {
   local dir="$1" f base w_name="" m_name="" ver="" count=0
   for f in "$dir"/*; do
@@ -206,7 +252,7 @@ check_release_dir() {
     fail "release dir: windows and macOS assets have different versions ($w_name / $m_name)"
     return
   fi
-  pass "release dir: exactly two assets, version $ver, no extra files"
+  pass "release dir: exactly two assets, version $ver, no extra files (licence texts are inside the zips)"
 }
 
 find_asset() {
@@ -222,7 +268,7 @@ find_asset() {
 }
 
 main() {
-  local release_dir="" windows_zip="" macos_zip=""
+  local release_dir="" windows_zip="" macos_zip="" text
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --release-dir)
@@ -270,7 +316,10 @@ main() {
   fi
 
   require_unzip
-  info "verify-release: read-only check, no artifact is modified"
+  for text in "${LICENSE_TEXTS[@]}"; do
+    [ -f "$ROOT/$text" ] || die "repository licence text missing: $ROOT/$text (run from the repository checkout)"
+  done
+  info "verify-release: read-only check, no artifact is modified; licence texts are compared with $ROOT"
   if [ -n "$release_dir" ]; then
     info "release dir: $release_dir"
   fi

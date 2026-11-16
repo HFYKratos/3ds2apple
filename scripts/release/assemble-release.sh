@@ -4,12 +4,14 @@
 #
 # Release policy (CONTRIBUTING.md#release-policy): a release carries exactly two
 # assets and nothing else:
-#   3ds2apple-<ver>-windows-x64.zip      Windows launcher (one self-contained exe)
-#   3ds2apple-<ver>-macos-universal.zip  macOS launcher (one .app)
-# No SHA256SUMS.txt, LICENSE/NOTICE/THIRD_PARTY.md or shell IPA are collected:
-# the license texts live in the repository, the ROM-free shell template is
-# embedded in the launchers, and GitHub shows each asset's SHA-256 digest on the
-# Release page.
+#   3ds2apple-<ver>-windows-x64.zip      Windows launcher (self-contained exe +
+#                                        LICENSE/NOTICE/THIRD_PARTY.md at the ZIP root)
+#   3ds2apple-<ver>-macos-universal.zip  macOS launcher (.app + the same three
+#                                        licence texts at the ZIP root)
+# The licence texts ship INSIDE both zips and are never collected as separate
+# assets (no SHA256SUMS.txt, no standalone LICENSE/NOTICE/THIRD_PARTY.md, no
+# shell IPA): the ROM-free shell template is embedded in the launchers and
+# GitHub shows each asset's SHA-256 digest on the Release page.
 #
 # Nothing is published or committed: the script only reads the git-ignored build
 # outputs (out/launchers/**) and copies them into out/release/<tag>/ (also
@@ -67,9 +69,9 @@ Options:
   -h, --help           Show this help and exit.
 
 The release directory contains only 3ds2apple-<ver>-windows-x64.zip and
-3ds2apple-<ver>-macos-universal.zip. License texts stay in the repository, the
-shell template is embedded in the launchers, and the release policy is in
-CONTRIBUTING.md#release-policy.
+3ds2apple-<ver>-macos-universal.zip. The licence texts ship inside both zips
+(never as separate assets), the shell template is embedded in the launchers, and
+the release policy is in CONTRIBUTING.md#release-policy.
 EOF
 }
 
