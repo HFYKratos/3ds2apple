@@ -936,7 +936,7 @@ Then record a steady-state `zk_perf` line from the second or third window:
 | R12 | first present before the `UIView` is in the window hierarchy (very fast load) | low/low | the load takes much longer than SwiftUI's layout pass, and the layer holds a provisional drawable size before layout; verify on device that the first frame appears |
 | R13 | presenter/swapchain failure leaves a black layer | low/medium | the app counts `zk_present` failures and falls back to the CGImage readback path after about a second; the Metal view stays alive for the presenter |
 | R14 | the Vulkan device/Metal layer is suspended with the app and the GPU takes it away | low/low | the frame loop and presenting stop in the background; on return the same device is used again. If the first frames after resume fail, `zk_present` errors fall back to the readback path (R13). Device verification point |
-| R15 | the graphics warm-up delays a first load by up to 5 s | medium/low | the wait is bounded and hidden behind an explicit "Preparing graphics" screen; frames still spiking at the cap reveal the game anyway; a cached later load uses a shorter plan; the overlay has a Skip button (10.3). Device verification point: perceived load time and skip behaviour |
+| R15 | the graphics warm-up delays a first load by up to 5 s | low/none | **removed in 0.1.1**: the app-level warm-up option and its "Preparing graphics" overlay were deleted (10.3 is kept as a design record). The runtime pipeline cache (10.1–10.2) still makes later loads warm |
 | R16 | a live layout/rotation change races a `zk_present` | low/medium | the app sends `zk_presenter_set_layout` / `zk_presenter_set_orientation` / `zk_presenter_resize` on the same serial queue as `zk_present`, so the next frame uses them; the presenter is only configured on the main queue while the frame loop is stopped (load start). Device verification point: switch layouts repeatedly during play |
 
 ## 10. First-run pipeline compilation: warm-up, cache and async creation
@@ -1006,7 +1006,13 @@ the translated module arrives.
   header. Those lines are the easiest way to see "first run cold, second run
   warm" on a device.
 
-### 10.3 App warm-up: "Preparing graphics"
+### 10.3 App warm-up: "Preparing graphics" (removed in 0.1.1)
+
+> **Status in 0.1.1:** the app-level warm-up option, its "Preparing graphics"
+> overlay, the Skip button and the warmed-per-ROM marker were removed from the
+> app (the setting and the in-game overlay no longer exist). The runtime pipeline
+> cache described in 10.1–10.2 is unchanged. This section is kept as the design
+> record of what was removed.
 
 After `zk_create` succeeds and before the game is revealed, the app runs the
 normal frame loop behind an opaque overlay and feeds the runtime neutral input:

@@ -91,7 +91,7 @@ settings use these live while a game runs.
 The app still has to embed MoltenVK; [METAL.md](METAL.md) §8.3 has the download
 and packaging steps.
 
-## Pipeline cache and first-run warm-up
+## Pipeline cache and first-run warm-up (app warm-up removed in 0.1.1)
 
 The Vulkan renderer compiles a draw pipeline the first time a draw needs it.
 On a first run (empty cache) those driver compiles can take hundreds of
@@ -109,13 +109,11 @@ plus app-side behaviour that keeps the first-run cost on a loading screen:
   compiled pipelines; `zk_destroy` (Unload, Change ROM, background) also saves
   the cache on the way out. The app logs the directory contents after
   `zk_destroy` so this is visible in device logs and diagnostics.
-- **Warm-up.** After `zk_create` succeeds the app runs the normal frame loop
-  behind an opaque "Preparing graphics" overlay (neutral input): at least 2 s,
-  ending after 90 consecutive frames with no >50 ms spike, capped at 5 s. The
-  compile costs are absorbed before the game is revealed. The plan is shorter
-  (12 quiet frames, 2 s cap) when the ROM was already warmed in this app
-  install and its cache files are still on disk; a Skip button ends it early.
-  A software renderer has no Vulkan pipelines and is revealed immediately.
+- **Warm-up (removed in 0.1.1).** The app-level "Preparing graphics" warm-up
+  overlay was removed together with its Settings option; a game is revealed as
+  soon as it loads. The runtime pipeline cache above still absorbs the first
+  compiles of later sessions, and a pipeline first used during play compiles on
+  a worker thread (async creation below) instead of a loading screen.
 - **Async creation.** Zakuro already compiles new draw combinations on its
   own `shader compiler` threads and draws through a generic fallback pipeline
   meanwhile; dropping draws until a pipeline is ready is analysed in
