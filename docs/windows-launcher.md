@@ -788,20 +788,20 @@ Debug --self-test (developer layout)                     -> SELF-TEST OK with 3 
 THREEDS2APPLE_DIST=launcher/windows ... --self-test      -> deploy step contract + composed-IPA gate PASS
 Xvfb --ui-smoke (library/deploy/settings)                -> no binding errors; screenshots docs/ui/v2-*.png
 prepare-dist-singlefile.sh                               -> out/launchers/3ds2apple-windows-single-0.1.0.zip
-  zip entry count                                        -> 1 (3ds2apple-launcher.exe, 74,724,050 B)
-  ZIP  SHA-256 1e2d0b1c5784c4ec1c2a0a6cb96ff413bbc59f1b50c8547783d383012c2aa607
-  EXE  SHA-256 00b6789055f2dbd387165eb69e4e6640386be86def65d85600f13eba932f5258
-clean-folder self-test (Linux host, extracted payload)   -> SELF-TEST OK with 2 warnings
-                                                            (LLVM payload absent; everything else incl. 3dsrecomp PASS)
+  zip entry count                                        -> 1 (3ds2apple-launcher.exe, 155,195,017 B)
+  ZIP  SHA-256 b3b7712a3cd1be5fba017047828ad1eb5d2f0884e026b66517c896da854df154
+  EXE  SHA-256 6197c6fa1db0257de379875ba2138bd36f12a1d0c275ec49179a7f91dac4ddc0
+clean-folder self-test (Linux host, extracted payload)   -> SELF-TEST OK with 1 warning (PINS source-checkout only)
+                                                            (bundled LLVM payload PASS)
 ```
 
 ### 16.7 Remaining real-device risks
 
-- **LLVM 21.1.8 payload is not bundled in this artifact** (the GitHub download stalled in WSL;
-  only a probe file exists under `build/win-toolchain/`). On the user's Windows PC the Deploy
-  page will therefore fail at step 1 with the single actionable local-toolchain error until
-  `Bin/llvm/**` is staged (or LLVM is installed/PATH-visible) — no Mac fallback exists by design.
-  Next packaging pass: set `THREEDS2APPLE_LLVM_DIR`, rerun the script, re-run its self-test.
+- **LLVM 21.1.8 payload is bundled** (official win64 release, SHA-256 verified, staged as Bin/llvm);
+  the clean-folder self-test reports the bundled LLVM payload PASS, so local compilation needs
+  no Mac and no separate LLVM install. If the payload is ever missing, Deploy shows one
+  actionable local-toolchain error with Retry — there is no Mac fallback by design.
+  Rebuild with `THREEDS2APPLE_LLVM_DIR` and rerun the packaging script/self-test if needed.
 - Not executed on Windows/iPhone in this checkout: plumesign signing of nested `GamePack-*.dylib`,
   devpush AFC transfer, overwrite-install keeping Documents data. The Win11 exe self-test can be
   run directly from `out/launchers/clean-run-win/` by the user/QA.
