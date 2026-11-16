@@ -162,6 +162,11 @@ struct SettingsView: View {
                     .monospacedDigit()
             }
             Toggle("Haptic feedback on button press", isOn: persistedBinding(settings, \.haptics))
+            NavigationLink {
+                LayoutSettingsView(settings: settings)
+            } label: {
+                Label("Screen and control layout", systemImage: "rectangle.and.hand.point.up.left.fill")
+            }
             infoRow("Controller", model.controllerName ?? L10n.tr("Not connected"))
         } header: {
             Text("Controls")

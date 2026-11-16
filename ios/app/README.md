@@ -197,6 +197,8 @@ The shell can be driven headlessly without tapping:
   accepted; an absolute path must stay inside the app container).
 - `-openAOTTitleID <TITLEID>` starts that library game 0.5 s after the home
   page appears, through the same path a card tap uses.
+- `-openLayoutPage` opens Settings → Layout (the screen layout modes and the
+  control/screen layout editors) straight away, for headless screenshots.
 
 A Simulator fixture never has to touch the real library: install a Simulator
 build of the shell that already contains the game's pack + catalog entry, then
@@ -213,7 +215,7 @@ data: never commit them, and remove the fixture from the container when done.
 
 | Setting | Values | Behaviour |
 |---|---|---|
-| Screen layout | Stacked (console), side by side, upper only, lower only | Immediately. Every layout is drawn by the `CAMetalLayer` presenter; the layer's drawable becomes the arrangement's own pixels (400×480 stacked, 720×240 side by side, 400×240 / 320×240 for a single screen). |
+| Screen layout | Automatic (default), preset, custom (Metal), free layout (software) | Immediately for the three Metal modes, from the next game load for the free layout. Settings → Controls → Screen and control layout opens the Layout page. **Automatic** keeps the pre-existing behaviour (stacked in portrait, large top in landscape); **preset** pins one of the five classic arrangements; **custom (Metal)** adds a uniform scale and offset to a preset, saved per orientation; **free layout** places each screen at its own rectangle and therefore runs on the readback path (see "Editable layouts"). The Metal modes are drawn by the `CAMetalLayer` presenter; the layer's drawable becomes the arrangement's own pixels (400×480 stacked, 720×240 side by side, 400×240 / 320×240 for a single screen). |
 | Screen rotation | Upright, 90° clockwise, upside down, 90° counter-clockwise | Immediately. Turns the screens inside their area, e.g. the stacked console becomes two columns (480×400) a quarter turn clockwise. The touchscreen is mapped back into the screen's own pixels. |
 | Aspect ratio | Fit (native), 4:3, Stretch | Immediately. Fit keeps the arrangement's shape; 4:3 fits the picture inside a 4:3 area with black bars; Stretch fills the game view's space and deliberately distorts the picture. |
 | Integer scaling | On / off | Immediately, with Fit and 4:3 (Stretch ignores it): each 3DS pixel maps to a whole number of screen pixels and the layer magnifies with nearest-pixel filtering. |
@@ -234,10 +236,58 @@ once. Fast-forward is silent: see "Fast-forward" below.
 
 ## Controls settings
 
-The opacity slider controls the on-screen pad's background; haptics adds a light
-impact on each button press. The controller row shows the connected
-`GCController` name. Button remapping is not available in this build; the fixed
-mapping is documented in the input section below.
+The opacity slider scales the on-screen controls' transparency; haptics adds a
+light impact on each button press. The controller row shows the connected
+`GCController` name. Settings → Controls → **Screen and control layout** opens
+the Layout page, where both the screen arrangement and the on-screen controls are
+edited (the next sections).
+
+## Editable layouts (controls and screens)
+
+Requirement 7 (complete virtual controls) and requirement 8 (screen layout
+presets plus a custom layout) are implemented in the Layout page:
+
+- **Controls.** The overlay draws the full New 3DS set: D-pad, A/B/X/Y, L/R,
+  ZL/ZR, Start/Select, the Circle Pad and the C-stick. Each control's position,
+  size and opacity are editable by dragging it in the preview and with sliders;
+  the page can reset one control, one orientation, or both, and a Save button
+  persists the result. Portrait and landscape have separate profiles
+  (`UI.controlLayoutPortrait` / `UI.controlLayoutLandscape`, versioned Codable
+  data), and the portrait default keeps the pad area below the screens so no
+  control covers the picture in portrait. The landscape defaults place the
+  D-pad, Circle Pad, L/ZL and Select/Start on the left/top and A/B/X/Y, C-stick
+  and R/ZR on the right, matching the handheld-skin overlay the app had before.
+- **Analog sticks.** The Circle Pad is a real analog stick: dragging inside it
+  reports -1…1 on both axes (a 14% dead zone is removed, so a resting finger is
+  exactly 0) into `InputState.circleX/circleY` and `zk_set_input`. It is not a
+  second D-pad. The C-stick works the same way and reaches the runtime through
+  the additive `zk_set_cstick` C ABI (see below), because `zk_set_input` predates
+  the New 3DS nub. A hardware controller's left stick feeds the Circle Pad and
+  its right stick feeds the C-stick; on-screen and controller vectors add up and
+  clamp to 1.0.
+- **Screens.** The four modes are Automatic, Preset, Custom (Metal) and Free
+  layout. Automatic is the 0.1.x behaviour and stays the default. Custom (Metal)
+  keeps the presenter and the GPU path and only applies a uniform scale and
+  offset to the whole presented picture (saved per orientation); it is the
+  cheapest way to make the screens bigger or move them as a group. Free layout
+  edits a rectangle per screen with drag and a corner handle, and each orientation
+  has its own rectangles (`UI.customScreenLayout`, versioned Codable data).
+- **Why two custom modes.** The upstream Zakuro presenter only knows the five
+  fixed arrangements (`ScreenLayout` in `zakuro-gpu`), so arbitrary per-screen
+  placement cannot be drawn by it. Free layout therefore switches the session to
+  the readback presentation path (`zk_create` + `zk_read_screen`) the app already
+  uses when MoltenVK is unavailable: the two screen images are placed by
+  `CustomScreenGeometry` and the lower screen's touch surface uses the same
+  rectangle. This mode is opt-in, the page says it is slower, and it applies from
+  the next game load — the default and every preset keep the Metal presenter.
+  Extending the Zakuro presenter with a custom arrangement is the follow-up that
+  would let free layout keep the GPU path.
+- **Compatibility.** Presets, Automatic and Custom (Metal) keep the same
+  `ScreenGeometry` drawable sizing and `zk_presenter_*` calls as before, so the
+  render scale, integer scaling, rotation, aspect and presenter resize paths are
+  unchanged. The free layout reuses `ScreenGeometry`'s rotation rules
+  (quarter-turn swap of the container) and applies integer scaling to each
+  screen's rectangle.
 
 ## Performance settings
 
@@ -497,7 +547,12 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `LegacyGameData.swift` | One-time migration for apps updated from 0.1.x: cartridge lookup for the statically linked title, play times, and renaming ROM-named save folders to the title-id namespace. |
 | `ScreenImage.swift` | Reusable RGBA buffers and `CGImage` conversion. |
 | `InputState.swift` | Thread-safe merge of touch, overlay and controller input. |
-| `TouchControlsView.swift` | On-screen button controls: the portrait pad and the landscape top bar / side rails (opacity and haptics options). |
+| `ControlLayout.swift` | Editable control layout model: the full New 3DS control set, normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. |
+| `VirtualControlsView.swift` | Runtime overlay: draws one button / analog stick per control with its own gesture (multi-touch), reports ZK_BUTTON_* bits, Circle Pad and C-stick vectors. |
+| `ControlLayoutEditorView.swift` | "Control layout" page: drag/resize/fade every control, reset one control/orientation/both, save. |
+| `CustomScreenLayout.swift` | Free screen layout model plus `CustomScreenGeometry`: per-orientation screen rectangles, rotation, integer scaling. |
+| `ScreenLayoutEditorView.swift` | "Custom screen layout" page: drag screens, corner-handle resize, keep-shape, show/hide, reset, save. |
+| `LayoutSettingsView.swift` | The combined Layout page: screen layout mode, Metal scale/offset, free-layout editor entry, control layout editors and resets. |
 | `GameControllerInput.swift` | GameController-to-3DS button mapping. |
 | `AudioOutput.swift` | Ring buffer and AVAudioEngine output (volume, mute, buffer duration). |
 | `FrameTiming.swift` | Per-phase frame timing for the diagnostics report and the fast-forward auto-fallback. |
@@ -557,12 +612,18 @@ The app has one presentation path and one fallback:
 
 - The on-screen controls and a connected hardware controller are merged by
   `InputState`; the session reads one snapshot on the runtime queue immediately
-  before `zk_run_frame` and calls `zk_set_input` there. In portrait the pad sits
-  below the screens; in landscape the D-pad and A/B/X/Y clusters sit in reserved
-  left/right rails and L/R/Select/Start in a top bar, so they never cover the
-  screens.
+  before `zk_run_frame` and calls `zk_set_cstick` then `zk_set_input` there. The
+  overlay is editable (see "Editable layouts"): in portrait it is the pad area
+  below the screens, in landscape it covers the whole game view.
 - Controller mapping: D-pad → D-pad, A/B/X/Y → A/B/X/Y, L1/R1 → L/R, L2/R2 →
-  ZL/ZR, Menu → Start, Options → Select, left stick → Circle Pad.
+  ZL/ZR, Menu → Start, Options → Select, left stick → Circle Pad, right stick →
+  C-stick.
+- The C-stick has no parameter in `zk_set_input` (that signature is older than
+  the New 3DS). `zk_set_cstick(system, x, y)` in `ios/zakuro-ios/src/lib.rs`
+  stores the vector in a thread-local slot and the next `zk_set_input` on the
+  same thread merges it; the value starts at (0, 0) and is clamped to -1…1, so an
+  app that never calls it keeps a centred C-stick. The call is additive: the
+  existing ABI and every existing caller are unchanged.
 - Dragging on the lower screen sends touchscreen coordinates in lower-screen
   pixels; on the presented layer the runtime finds the lower screen from the
   current layout and rotation, so only that part of the layer is a touch
@@ -671,9 +732,19 @@ Instant save states:
   check. A size or hash mismatch blocks launch with an error card.
 - The first release does not include camera, microphone, online play or a full
   game library UI.
-- Button remapping is not available in this build. Save states are not
+- Button remapping is not available in this build (positions/size/opacity are
+  editable; which key a control reports is fixed). Save states are not
   interchangeable between games or runtime versions, and only battery saves are
   exported and imported; instant states stay in the app container.
+- The free screen layout runs on the readback presentation path, so it is slower
+  than the Metal presets and applies from the next game load; the default and
+  every preset keep the Metal presenter. Arbitrary per-screen placement inside
+  the Metal presenter needs a custom arrangement in upstream `zakuro-gpu` (its
+  `ScreenLayout` only has the five fixed arrangements) and is the follow-up.
+- The C-stick needs a shell built with the current `libzakuro_ios.a`: the symbol
+  `zk_set_cstick` is new (added additively). Building from source
+  (`scripts/build-zakuro-ios.sh`) produces it; a shell built from an older
+  library would fail to link rather than silently drop the C-stick.
 - A pipeline first used during play compiles on a worker thread and draws
   through the generic fallback meanwhile, so a title can hitch briefly on first
   use. The optional first-load "Preparing graphics" warm-up was removed in

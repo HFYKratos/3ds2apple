@@ -27,6 +27,8 @@ struct ContentView: View {
     /// localized texts and formatters are read again.
     @StateObject private var localization = LocalizationStore.shared
     @Environment(\.scenePhase) private var scenePhase
+    /// Headless screenshot hook (`-openLayoutPage`); never on in normal use.
+    @State private var opensLayoutPage = false
 
     /// Explicit internal init: the stored properties are private and App.swift
     /// constructs ContentView() from another file.
@@ -42,6 +44,11 @@ struct ContentView: View {
         }
         // A locale change while the app runs re-reads the localized texts.
         .id(localization.revision)
+        .sheet(isPresented: $opensLayoutPage) {
+            NavigationStack {
+                LayoutSettingsView(settings: settings)
+            }
+        }
         .onAppear {
             model.startControllerSupport()
             applySettings()
@@ -53,6 +60,10 @@ struct ContentView: View {
             // Automated launch for the Simulator / diagnostics
             // (`-openAOTTitleID <TITLEID>`); inert in normal use.
             DebugLaunch.startIfRequested(model: model, library: library)
+            // Headless screenshot of the layout editors; inert otherwise.
+            if DebugLaunch.opensLayoutPage {
+                opensLayoutPage = true
+            }
         }
         .onChange(of: scenePhase) { newPhase in
             // iOS may jettison a backgrounded process; release the runtime.
@@ -85,6 +96,9 @@ struct ContentView: View {
         }
         .onChange(of: settings.screenRotation) { rotation in
             model.setScreenRotation(rotation)
+        }
+        .onChange(of: settings.screenLayoutMode) { _ in
+            model.setReadbackPresentationRequired(settings.usesFreeformScreenLayout)
         }
         .onChange(of: settings.integerScale) { enabled in
             model.setIntegerScaling(enabled)
@@ -123,6 +137,7 @@ struct ContentView: View {
         model.applyRenderScale(CGFloat(settings.renderScale))
         model.setPlaybackSpeed(settings.playbackSpeed.rawValue)
         model.setSystemMetalHUD(settings.systemMetalHUD)
+        model.setReadbackPresentationRequired(settings.usesFreeformScreenLayout)
     }
 
     // MARK: - Diagnostics

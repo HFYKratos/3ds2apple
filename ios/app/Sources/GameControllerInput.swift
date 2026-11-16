@@ -95,6 +95,11 @@ final class GameControllerManager {
         gamepad.leftThumbstick.valueChangedHandler = { [weak self] _, _, _ in
             self?.refresh()
         }
+        // The right stick is the New 3DS C-stick for titles that read it (the
+        // 3DS itself has no right stick; its C-stick is a small nub).
+        gamepad.rightThumbstick.valueChangedHandler = { [weak self] _, _, _ in
+            self?.refresh()
+        }
     }
 
     /// Recomputes buttons + circle pad from the currently connected pads.
@@ -103,6 +108,8 @@ final class GameControllerManager {
         var mask: UInt32 = 0
         var stickX: Float = 0
         var stickY: Float = 0
+        var cStickX: Float = 0
+        var cStickY: Float = 0
         var controllerName: String?
 
         for controller in GCController.controllers() {
@@ -117,10 +124,15 @@ final class GameControllerManager {
                 stickX = gamepad.leftThumbstick.xAxis.value
                 stickY = gamepad.leftThumbstick.yAxis.value
             }
+            if cStickX == 0 && cStickY == 0 {
+                cStickX = gamepad.rightThumbstick.xAxis.value
+                cStickY = gamepad.rightThumbstick.yAxis.value
+            }
         }
 
         input.setControllerButtons(mask)
         input.setControllerStick(x: stickX, y: stickY)
+        input.setControllerCStick(x: cStickX, y: cStickY)
         onConnectionChange(controllerName)
     }
 

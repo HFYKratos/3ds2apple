@@ -38,6 +38,10 @@ struct InputSnapshot {
     /// Circle Pad, -1.0 ... 1.0, +x right / +y up.
     var circleX: Float = 0
     var circleY: Float = 0
+    /// New 3DS C-stick, same convention as the Circle Pad. It is pushed with
+    /// zk_set_cstick() (the older zk_set_input() call has no C-stick parameter).
+    var cStickX: Float = 0
+    var cStickY: Float = 0
     /// Touchscreen contact in lower-screen pixels.
     var touch: Bool = false
     var touchX: UInt16 = 0
@@ -55,6 +59,14 @@ final class InputState {
     /// Left thumbstick, -1.0 ... 1.0.
     private var controllerStickX: Float = 0
     private var controllerStickY: Float = 0
+    /// Right thumbstick, forwarded as the C-stick (0 when there is none).
+    private var controllerCStickX: Float = 0
+    private var controllerCStickY: Float = 0
+    /// On-screen Circle Pad / C-stick vectors, -1.0 ... 1.0.
+    private var overlayStickX: Float = 0
+    private var overlayStickY: Float = 0
+    private var overlayCStickX: Float = 0
+    private var overlayCStickY: Float = 0
     /// Touchscreen contact in lower-screen pixels; nil = not touching.
     private var touchX: UInt16?
     private var touchY: UInt16?
@@ -78,8 +90,29 @@ final class InputState {
         lock.lock()
         defer { lock.unlock() }
         overlayButtons = 0
+        overlayStickX = 0
+        overlayStickY = 0
+        overlayCStickX = 0
+        overlayCStickY = 0
         touchX = nil
         touchY = nil
+    }
+
+    /// The on-screen Circle Pad vector, -1.0 ... 1.0 (0,0 on release). This is
+    /// analog input: it feeds InputState.circleX/circleY, never the D-pad bits.
+    func setOverlayStick(x: Float, y: Float) {
+        lock.lock()
+        defer { lock.unlock() }
+        overlayStickX = x
+        overlayStickY = y
+    }
+
+    /// The on-screen New 3DS C-stick vector, -1.0 ... 1.0.
+    func setOverlayCStick(x: Float, y: Float) {
+        lock.lock()
+        defer { lock.unlock() }
+        overlayCStickX = x
+        overlayCStickY = y
     }
 
     /// Replaces the whole hardware-controller button mask.
@@ -97,6 +130,14 @@ final class InputState {
         controllerStickY = y
     }
 
+    /// Right thumbstick vector, -1.0 ... 1.0: the C-stick on a New 3DS title.
+    func setControllerCStick(x: Float, y: Float) {
+        lock.lock()
+        defer { lock.unlock() }
+        controllerCStickX = x
+        controllerCStickY = y
+    }
+
     /// Clears the controller contribution (disconnect / teardown).
     func clearController() {
         lock.lock()
@@ -104,6 +145,8 @@ final class InputState {
         controllerButtons = 0
         controllerStickX = 0
         controllerStickY = 0
+        controllerCStickX = 0
+        controllerCStickY = 0
     }
 
     /// Touchscreen contact in lower-screen pixels; nil releases it.
@@ -122,6 +165,12 @@ final class InputState {
         controllerButtons = 0
         controllerStickX = 0
         controllerStickY = 0
+        controllerCStickX = 0
+        controllerCStickY = 0
+        overlayStickX = 0
+        overlayStickY = 0
+        overlayCStickX = 0
+        overlayCStickY = 0
         touchX = nil
         touchY = nil
     }
@@ -134,13 +183,23 @@ final class InputState {
         defer { lock.unlock() }
         var snapshot = InputSnapshot()
         snapshot.buttons = overlayButtons | controllerButtons
-        snapshot.circleX = controllerStickX
-        snapshot.circleY = controllerStickY
+        // Analog sources add up and clamp: an on-screen stick and a hardware
+        // stick pushing the same direction still report at most 1.0, and a
+        // resting source contributes 0.
+        snapshot.circleX = Self.merge(overlayStickX, controllerStickX)
+        snapshot.circleY = Self.merge(overlayStickY, controllerStickY)
+        snapshot.cStickX = Self.merge(overlayCStickX, controllerCStickX)
+        snapshot.cStickY = Self.merge(overlayCStickY, controllerCStickY)
         if let touchX, let touchY {
             snapshot.touch = true
             snapshot.touchX = touchX
             snapshot.touchY = touchY
         }
         return snapshot
+    }
+
+    /// Adds the on-screen and hardware vectors of one axis and clamps to 1.0.
+    private static func merge(_ overlay: Float, _ controller: Float) -> Float {
+        min(max(overlay + controller, -1.0), 1.0)
     }
 }

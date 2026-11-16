@@ -167,6 +167,22 @@ void zk_set_input(zk_system_t system, zk_buttons_t buttons, float circle_x,
                   uint16_t touch_y);
 
 /**
+ * Sets the New 3DS C-stick vector that the next zk_set_input() call pushes.
+ *
+ * zk_set_input() predates the C-stick and has no parameter for it, so this call
+ * stores the vector in a thread-local slot that the next zk_set_input() on the
+ * same thread (the runtime's serial queue) merges into the input state. The
+ * value starts at (0, 0); pass (0, 0) to release the stick. Out-of-range values
+ * are clamped to -1.0 ... 1.0 (NaN becomes 0); a NULL system handle is a no-op.
+ * It is additive: a caller that never calls it keeps the old behaviour of a
+ * centred C-stick.
+ *
+ * @param c_stick_x  C-stick X, -1.0 ... 1.0 (+x is right).
+ * @param c_stick_y  C-stick Y, -1.0 ... 1.0 (+y is up, like the Circle Pad).
+ */
+void zk_set_cstick(zk_system_t system, float c_stick_x, float c_stick_y);
+
+/**
  * Releases a handle returned by zk_create(). Safe to call with NULL.
  *
  * Also releases a saved state the handle measured and did not copy yet (see

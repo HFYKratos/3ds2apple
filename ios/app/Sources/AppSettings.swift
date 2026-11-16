@@ -78,6 +78,83 @@ enum ScreenLayout: String, CaseIterable, Identifiable {
     }
 }
 
+/// How the 3DS screens are arranged (user requirement 8).
+///
+/// Three of the four modes present through the CAMetalLayer (full speed); only
+/// the free layout needs the readback path, because the upstream Zakuro
+/// presenter has no arbitrary per-screen arrangement. See CustomScreenLayout.swift
+/// and ios/app/README.md.
+enum ScreenLayoutMode: String, CaseIterable, Identifiable {
+    /// Follow the device: stacked in portrait, large upper screen in landscape.
+    case automatic
+    /// One of the classic arrangements in both orientations.
+    case preset
+    /// A classic arrangement plus a uniform scale and offset (Metal presenter).
+    case customMetal
+    /// Place each screen anywhere; runs on the readback display path.
+    case freeform
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .automatic: return L10n.tr("Automatic")
+        case .preset: return L10n.tr("Preset")
+        case .customMetal: return L10n.tr("Custom (Metal)")
+        case .freeform: return L10n.tr("Free layout (software)")
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .automatic:
+            return L10n.tr("Follows the device: stacked screens in portrait, the large upper screen in landscape. The Metal presenter draws it.")
+        case .preset:
+            return L10n.tr("One of the classic arrangements in both orientations. The Metal presenter draws it.")
+        case .customMetal:
+            return L10n.tr("A classic arrangement plus a uniform scale and offset, saved separately for portrait and landscape. Still drawn by the Metal presenter.")
+        case .freeform:
+            return L10n.tr("Places each screen anywhere. Runs on the software readback path because the Metal presenter has no arbitrary arrangement.")
+        }
+    }
+}
+
+/// Uniform zoom and offset of the presented picture inside its box, one profile
+/// per orientation. The Metal presenter still draws its own arrangement; these
+/// values only scale and move the whole layer in SwiftUI, so the GPU path is
+/// unchanged.
+struct MetalScreenAdjustment: Codable, Equatable {
+    /// 1.0 = the box the aspect setting gives the picture.
+    var scale: Double
+    /// Offset as a fraction of the box's width / height.
+    var offsetX: Double
+    var offsetY: Double
+
+    static let standard = MetalScreenAdjustment(scale: 1.0, offsetX: 0.0, offsetY: 0.0)
+
+    init(scale: Double, offsetX: Double, offsetY: Double) {
+        self.scale = scale
+        self.offsetX = offsetX
+        self.offsetY = offsetY
+    }
+
+    func clamped() -> MetalScreenAdjustment {
+        MetalScreenAdjustment(
+            scale: min(max(scale, 0.50), 1.50),
+            offsetX: min(max(offsetX, -0.30), 0.30),
+            offsetY: min(max(offsetY, -0.30), 0.30)
+        )
+    }
+
+    func encoded() -> Data? {
+        try? JSONEncoder().encode(self)
+    }
+
+    static func decode(_ data: Data) -> MetalScreenAdjustment? {
+        (try? JSONDecoder().decode(MetalScreenAdjustment.self, from: data))?.clamped()
+    }
+}
+
 /// How the screens fill their area.
 enum ScreenAspect: String, CaseIterable, Identifiable {
     /// Keep the arrangement's own shape and fit it in the available space.
@@ -369,6 +446,19 @@ final class AppSettings: ObservableObject {
     @Published var controlsOpacity: Double
     @Published var haptics: Bool
 
+    // MARK: Editable layouts (requirements 7 + 8)
+
+    /// The screen arrangement mode; see `ScreenLayoutMode`.
+    @Published var screenLayoutMode: ScreenLayoutMode
+    /// The on-screen control layout, one profile per container shape.
+    @Published var controlLayoutPortrait: ControlLayoutProfile
+    @Published var controlLayoutLandscape: ControlLayoutProfile
+    /// The free per-screen layout (only used by `.freeform`).
+    @Published var customScreenLayout: CustomScreenLayout
+    /// Uniform zoom/offset for the Metal custom mode, per orientation.
+    @Published var screenAdjustmentPortrait: MetalScreenAdjustment
+    @Published var screenAdjustmentLandscape: MetalScreenAdjustment
+
     @Published var frameCap: FrameRateCap
 
     /// Show the system Metal Performance HUD (FPS / GPU time / memory) over the
@@ -432,6 +522,23 @@ final class AppSettings: ObservableObject {
         }
         haptics = Self.bool(defaults, Keys.haptics, fallback: false)
 
+        // Layouts: every stored value is versioned Codable data. A missing or
+        // unreadable entry falls back to the shipped default, so an install that
+        // predates this feature keeps a usable layout and an older app reading a
+        // newer profile does not crash.
+        screenLayoutMode = ScreenLayoutMode(
+            rawValue: defaults.string(forKey: Keys.screenLayoutMode) ?? ""
+        ) ?? .automatic
+        controlLayoutPortrait = Self.decodeControlLayout(
+            defaults, Keys.controlLayoutPortrait, orientation: .portrait
+        )
+        controlLayoutLandscape = Self.decodeControlLayout(
+            defaults, Keys.controlLayoutLandscape, orientation: .landscape
+        )
+        customScreenLayout = Self.decodeCustomScreenLayout(defaults, Keys.customScreenLayout)
+        screenAdjustmentPortrait = Self.decodeAdjustment(defaults, Keys.screenAdjustmentPortrait)
+        screenAdjustmentLandscape = Self.decodeAdjustment(defaults, Keys.screenAdjustmentLandscape)
+
         // The performance page no longer offers a frame cap: the console
         // timeline runs at its native 60 Hz and Fast-forward is the only
         // speed control, so an old stored 30 fps value is ignored on purpose.
@@ -481,6 +588,23 @@ final class AppSettings: ObservableObject {
         MetalHUD.apply(enabled: systemMetalHUD)
         defaults.set(showFPS, forKey: Keys.showFPS)
         defaults.set(playbackSpeed.rawValue, forKey: Keys.playbackSpeed)
+        // Editable layouts (versioned Codable data; see the init).
+        defaults.set(screenLayoutMode.rawValue, forKey: Keys.screenLayoutMode)
+        if let data = controlLayoutPortrait.withDefaultsFilled(for: .portrait).encoded() {
+            defaults.set(data, forKey: Keys.controlLayoutPortrait)
+        }
+        if let data = controlLayoutLandscape.withDefaultsFilled(for: .landscape).encoded() {
+            defaults.set(data, forKey: Keys.controlLayoutLandscape)
+        }
+        if let data = customScreenLayout.encoded() {
+            defaults.set(data, forKey: Keys.customScreenLayout)
+        }
+        if let data = screenAdjustmentPortrait.clamped().encoded() {
+            defaults.set(data, forKey: Keys.screenAdjustmentPortrait)
+        }
+        if let data = screenAdjustmentLandscape.clamped().encoded() {
+            defaults.set(data, forKey: Keys.screenAdjustmentLandscape)
+        }
     }
 
     // MARK: - Derived values
@@ -494,6 +618,51 @@ final class AppSettings: ObservableObject {
     var audioVolumeFloat: Float { Float(audioVolume) }
 
     var controlsBackgroundOpacity: Double { Self.clampOpacity(controlsOpacity) }
+
+    /// The arrangement actually presented for an orientation (see
+    /// `ScreenLayoutMode`). Automatic keeps the pre-existing behaviour: stacked
+    /// in portrait, large top in landscape.
+    func effectiveScreenLayout(isLandscape: Bool) -> ScreenLayout {
+        switch screenLayoutMode {
+        case .automatic:
+            return isLandscape ? .largeTop : .stacked
+        case .preset, .customMetal, .freeform:
+            return screenLayout
+        }
+    }
+
+    /// Whether the picture must come from the readback path (free layout).
+    var usesFreeformScreenLayout: Bool { screenLayoutMode == .freeform }
+
+    func controlLayout(for orientation: ControlLayoutOrientation) -> ControlLayoutProfile {
+        switch orientation {
+        case .portrait: return controlLayoutPortrait
+        case .landscape: return controlLayoutLandscape
+        }
+    }
+
+    func setControlLayout(_ profile: ControlLayoutProfile,
+                          for orientation: ControlLayoutOrientation) {
+        switch orientation {
+        case .portrait: controlLayoutPortrait = profile.withDefaultsFilled(for: .portrait)
+        case .landscape: controlLayoutLandscape = profile.withDefaultsFilled(for: .landscape)
+        }
+    }
+
+    func screenAdjustment(for orientation: ControlLayoutOrientation) -> MetalScreenAdjustment {
+        switch orientation {
+        case .portrait: return screenAdjustmentPortrait
+        case .landscape: return screenAdjustmentLandscape
+        }
+    }
+
+    func setScreenAdjustment(_ adjustment: MetalScreenAdjustment,
+                             for orientation: ControlLayoutOrientation) {
+        switch orientation {
+        case .portrait: screenAdjustmentPortrait = adjustment.clamped()
+        case .landscape: screenAdjustmentLandscape = adjustment.clamped()
+        }
+    }
 
     /// Fast-forward target as a plain number for the session and diagnostics.
     var playbackSpeedValue: Int { playbackSpeed.rawValue }
@@ -522,6 +691,12 @@ final class AppSettings: ObservableObject {
         /// "UI.graphicsWarmUpEnabled"; old values are ignored on purpose.
         static let showFPS = "UI.showFPS"
         static let playbackSpeed = "UI.playbackSpeed"
+        static let screenLayoutMode = "UI.screenLayoutMode"
+        static let controlLayoutPortrait = "UI.controlLayoutPortrait"
+        static let controlLayoutLandscape = "UI.controlLayoutLandscape"
+        static let customScreenLayout = "UI.customScreenLayout"
+        static let screenAdjustmentPortrait = "UI.screenAdjustmentPortrait"
+        static let screenAdjustmentLandscape = "UI.screenAdjustmentLandscape"
         // Keys already used by earlier builds; kept so existing installs keep
         // their preference.
         static let showTouchControls = "I3.showTouchControls"
@@ -539,6 +714,36 @@ final class AppSettings: ObservableObject {
     /// internal 3D renderer accept.
     static func clampRenderScale(_ value: Int) -> Int {
         min(max(value, 1), 4)
+    }
+
+    // MARK: Layout decoding
+
+    private static func decodeControlLayout(_ defaults: UserDefaults,
+                                            _ key: String,
+                                            orientation: ControlLayoutOrientation) -> ControlLayoutProfile {
+        guard let data = defaults.data(forKey: key),
+              let decoded = ControlLayoutProfile.decode(data, orientation: orientation) else {
+            return .standard(for: orientation)
+        }
+        return decoded
+    }
+
+    private static func decodeCustomScreenLayout(_ defaults: UserDefaults,
+                                                 _ key: String) -> CustomScreenLayout {
+        guard let data = defaults.data(forKey: key),
+              let decoded = CustomScreenLayout.decode(data) else {
+            return .standard()
+        }
+        return decoded
+    }
+
+    private static func decodeAdjustment(_ defaults: UserDefaults,
+                                         _ key: String) -> MetalScreenAdjustment {
+        guard let data = defaults.data(forKey: key),
+              let decoded = MetalScreenAdjustment.decode(data) else {
+            return .standard
+        }
+        return decoded
     }
 
     private static func clampVolume(_ value: Double) -> Double {

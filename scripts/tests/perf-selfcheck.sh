@@ -145,6 +145,35 @@ else
   printf '  skip shell artifact checks (out/shell/3ds2apple-shell.ipa absent)\n'
 fi
 
+section 'Virtual controls and screen layouts (0.1.1)'
+check "control layout model exists" test -f ios/app/Sources/ControlLayout.swift
+check "control layout has the Circle Pad" contains ios/app/Sources/ControlLayout.swift 'case circlePad'
+check "control layout has the C-stick" contains ios/app/Sources/ControlLayout.swift 'case cStick'
+check "control layout carries ZL/ZR" contains ios/app/Sources/ControlLayout.swift 'case buttonZL'
+check "layout persistence is versioned" contains ios/app/Sources/ControlLayout.swift 'currentVersion'
+check "per-orientation control profiles exist" contains ios/app/Sources/AppSettings.swift 'controlLayoutLandscape'
+check "runtime overlay draws the editable layout" contains ios/app/Sources/VirtualControlsView.swift 'struct VirtualControlsView'
+check "analog stick reports a vector (not D-pad bits)" contains ios/app/Sources/VirtualControlsView.swift 'onCirclePad'
+check "layout editor can move, resize and reset" contains ios/app/Sources/ControlLayoutEditorView.swift 'Reset this control'
+check "layout page is linked from Settings" contains ios/app/Sources/SettingsView.swift 'LayoutSettingsView'
+check "GameView uses the editable overlay in both orientations" \
+  bash -c 'n=$(grep -c "VirtualControlsView(" ios/app/Sources/GameView.swift); [ "$n" -ge 2 ]'
+check "free screen layout model exists" contains ios/app/Sources/CustomScreenLayout.swift 'struct CustomScreenLayout'
+check "free screen layout geometry handles the 90 degree turn" contains ios/app/Sources/CustomScreenLayout.swift 'case .counterClockwise:'
+check "free screen layout editor exists" test -f ios/app/Sources/ScreenLayoutEditorView.swift
+check "free layout forces the readback presentation path" contains ios/app/Sources/ROMSession.swift 'readbackPresentationRequired'
+check "Metal custom zoom/position keeps the Metal layer" contains ios/app/Sources/GameView.swift 'screenLayoutMode == .customMetal'
+check "C-stick ABI is declared" contains ios/ZakuroBridge.h 'void zk_set_cstick('
+check "C-stick ABI is implemented" contains ios/zakuro-ios/src/lib.rs 'pub extern "C" fn zk_set_cstick'
+check "C-stick is pushed before every console frame" \
+  bash -c 'n=$(grep -c "zk_set_cstick(system, input.cStickX, input.cStickY)" ios/app/Sources/ROMSession.swift); [ "$n" -ge 2 ]'
+check "C-stick keeps its value out of the old zk_set_input signature" \
+  contains ios/zakuro-ios/src/lib.rs 'static C_STICK: Cell<(f32, f32)>'
+check "en strings cover the layout editors" contains ios/app/Resources/en.lproj/Localizable.strings '"Edit portrait controls"'
+check "zh-Hans strings cover the layout editors" contains ios/app/Resources/zh-Hans.lproj/Localizable.strings '"编辑竖屏按键"'
+check "no GPL project text copied into the new layout code" \
+  bash -c '! grep -riE "azahar|citra" ios/app/Sources/ControlLayout.swift ios/app/Sources/VirtualControlsView.swift ios/app/Sources/CustomScreenLayout.swift ios/app/Sources/ControlLayoutEditorView.swift ios/app/Sources/ScreenLayoutEditorView.swift ios/app/Sources/LayoutSettingsView.swift'
+
 section 'Repository hygiene'
 if git status --porcelain | grep -E '^(.. )?(ROM/|IPA/|build/)' >/dev/null 2>&1; then
   fail "ROM/, IPA/ or build/ has changes staged/untracked"

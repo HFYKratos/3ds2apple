@@ -93,7 +93,7 @@
 //! are forwarded to stderr by [`zk_create`], because an iOS app installs no
 //! logger and they would otherwise be dropped.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::path::PathBuf;
 use std::ptr;
@@ -115,6 +115,11 @@ mod savestate;
 thread_local! {
     /// Last failure recorded on the current thread; empty when there is none.
     static LAST_ERROR: RefCell<CString> = RefCell::new(CString::default());
+    /// New 3DS C-stick vector for the next `zk_set_input` on this thread. It is
+    /// kept apart because `zk_set_input` predates the C-stick and keeps its
+    /// signature (existing apps call it without one); `zk_set_cstick` stores
+    /// the vector here and `zk_set_input` copies it into the pushed state.
+    static C_STICK: Cell<(f32, f32)> = Cell::new((0.0, 0.0));
     /// Last text [`zk_recompiled_status`] or [`zk_profiler_hot_spots`] returned
     /// on the current thread. Kept apart from `LAST_ERROR` so those calls never
     /// disturb the error contract.
@@ -1304,12 +1309,13 @@ pub extern "C" fn zk_set_input(
     // SAFETY: see `zk_run_frame`: serial calls guarantee exclusive access to the
     // `System` behind `system`.
     let system = unsafe { &mut *(system as *mut System) };
+    let (c_stick_x, c_stick_y) = C_STICK.with(Cell::get);
     system.set_input(InputState {
         buttons: PadState::from_bits_truncate(buttons),
         circle_x,
         circle_y,
-        c_stick_x: 0.0,
-        c_stick_y: 0.0,
+        c_stick_x,
+        c_stick_y,
         touch: if touch != 0 {
             Some((touch_x, touch_y))
         } else {
@@ -1317,6 +1323,36 @@ pub extern "C" fn zk_set_input(
         },
         tilt: [0.0, 0.0],
     });
+}
+
+/// Sets the New 3DS C-stick vector that the next [`zk_set_input`] call on this
+/// thread pushes.
+///
+/// [`zk_set_input`] predates the C-stick and has no parameter for it, so this
+/// call stores the vector in a thread-local slot; the next `zk_set_input` on
+/// the same thread (the runtime's serial queue, where all input calls live)
+/// merges it into the input state. The value starts at (0, 0): pass (0, 0) to
+/// release the stick, as the app does when the virtual nub is let go. Values
+/// are clamped to -1.0 ... 1.0 and NaN becomes 0, so a broken caller cannot
+/// poison the console. A NULL `system` is a no-op, like the other input calls.
+///
+/// Mapping, for the app side: +x is right and +y is up, the same convention as
+/// the Circle Pad in `zk_set_input`. The virtual C-stick in
+/// ios/app/Sources/VirtualControlsView.swift removes a 14% dead zone from the
+/// drag distance before it reports, so a resting finger is exactly (0, 0).
+#[no_mangle]
+pub extern "C" fn zk_set_cstick(system: *mut c_void, c_stick_x: f32, c_stick_y: f32) {
+    if system.is_null() {
+        return;
+    }
+    fn sanitize(value: f32) -> f32 {
+        if value.is_finite() {
+            value.clamp(-1.0, 1.0)
+        } else {
+            0.0
+        }
+    }
+    C_STICK.with(|slot| slot.set((sanitize(c_stick_x), sanitize(c_stick_y))));
 }
 
 /// Releases a handle returned by `zk_create()`. Safe to call with NULL.

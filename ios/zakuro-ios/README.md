@@ -136,6 +136,7 @@ The app-side thresholds, log lines and diagnostics fields are documented in
 | `zk_read_screen(system, which, out, cap)` | Copy RGBA8 pixels; returns full byte count |
 | `zk_take_audio(system, out, cap)` | Drain interleaved stereo `i16` PCM |
 | `zk_set_input(system, buttons, cx, cy, touch, tx, ty)` | Push buttons, Circle Pad and touch |
+| `zk_set_cstick(system, cx, cy)` | Push the New 3DS C-stick vector that the next `zk_set_input` on the same thread carries (additive; (0, 0) releases it) |
 | `zk_destroy(system)` | Release the runtime (and a measured saved state it did not copy) |
 | `zk_save_state_size(system)` | Serialize the console once and return the saved state's byte count; the blob is kept for the copy. `0` on error |
 | `zk_save_state_copy(system, out, cap)` | Copy the measured saved state, or only report its length with `out == NULL`; returns the full byte count (a short buffer is logged), `0` on error |

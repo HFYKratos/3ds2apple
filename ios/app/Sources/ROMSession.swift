@@ -730,6 +730,18 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         inputState.setOverlayButton(bit, pressed: pressed)
     }
 
+    /// On-screen Circle Pad vector, -1.0 ... 1.0 (0,0 when released). Analog:
+    /// this is what analog movement in 3DS games reads, not the D-pad bits.
+    func setOverlayStick(x: Float, y: Float) {
+        inputState.setOverlayStick(x: x, y: y)
+    }
+
+    /// On-screen New 3DS C-stick vector, -1.0 ... 1.0 (0,0 when released). It
+    /// is pushed with zk_set_cstick() immediately before each console frame.
+    func setOverlayCStick(x: Float, y: Float) {
+        inputState.setOverlayCStick(x: x, y: y)
+    }
+
     /// Clears on-screen buttons and the touchscreen contact (overlay hidden).
     func clearOverlayInput() {
         inputState.clearOverlay()
@@ -1050,6 +1062,25 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// the app's Frameworks, a GPU that cannot make a Vulkan device, ...).
     private static let preferMetalPresentation = true
 
+    /// True while the free screen layout is selected. That mode places the two
+    /// screens independently, which the upstream Zakuro presenter cannot draw,
+    /// so a load skips the presenter and uses zk_create + zk_read_screen. It is
+    /// opt-in in Settings, and the picture keeps the Metal path in every other
+    /// mode. Main queue only; applies from the next load.
+    private(set) var readbackPresentationRequired = false
+
+    /// Called from ContentView when the screen layout mode changes. A game that
+    /// is already presenting keeps the Metal layer until the next load (the
+    /// free-layout hint in Settings says so).
+    func setReadbackPresentationRequired(_ required: Bool) {
+        guard required != readbackPresentationRequired else { return }
+        readbackPresentationRequired = required
+        AppLog.log(
+            "[3ds2apple] free screen layout: %@ (a load now uses the readback path)",
+            required ? "on" : "off"
+        )
+    }
+
     /// Consecutive `zk_present()` failures after which the frame loop falls
     /// back to the CGImage readback path (≈ a second at 30-60 fps).
     private static let presentFailureLimit = 30
@@ -1086,6 +1117,13 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// loads do not retry the same missing/unsupported setup.
     private func presenterForLoadOnMain() -> UnsafeMutableRawPointer? {
         guard Self.preferMetalPresentation else { return nil }
+        guard !readbackPresentationRequired else {
+            // Free screen layout: the presenter only knows its own arrangements,
+            // so the two screens must come from zk_read_screen for exact
+            // per-screen placement.
+            AppLog.log("[3ds2apple] free screen layout: loading on the readback path")
+            return nil
+        }
 
         let view: MetalScreenView
         if let existing = metalScreenView {
@@ -1716,6 +1754,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             }
         }
 
+        // The C-stick is separate from zk_set_input() (the older call has no
+        // C-stick parameter); it takes effect for the frame below.
+        zk_set_cstick(system, input.cStickX, input.cStickY)
         zk_set_input(system, input.buttons, input.circleX, input.circleY,
                      input.touch ? 1 : 0, input.touchX, input.touchY)
 
@@ -1795,6 +1836,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private func runFastForwardFrame(system: zk_system_t,
                                      input: InputSnapshot,
                                      frameStart: UInt64) -> Bool {
+        zk_set_cstick(system, input.cStickX, input.cStickY)
         zk_set_input(system, input.buttons, input.circleX, input.circleY,
                      input.touch ? 1 : 0, input.touchX, input.touchY)
         let runStart = FrameClock.now()

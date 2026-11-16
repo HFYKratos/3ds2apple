@@ -7,12 +7,14 @@
 //
 //  The view is responsive:
 //
-//  - portrait: the screens in a card, the on-screen pad below it (scrollable);
-//  - landscape: a top bar (Select/Start), the shoulder buttons and the two
-//    button clusters in reserved side rails, and the screens in the space
-//    between them, so no button covers a screen. The display settings pick the
-//    layout (stacked / side by side / single screen), the rotation and how the
-//    picture fills its area; the CAMetalLayer presenter draws all of them.
+//  - portrait: the screens in a card and the editable on-screen pad below it;
+//  - landscape: the editable overlay drawn over the whole game view (left
+//    Circle Pad + D-pad, right A/B/X/Y + C-stick, L/ZL/Select/Start/R/ZR in the
+//    top bar). Both orientations use the user's layout profile, so no button has
+//    to cover a screen. The display settings pick the layout (automatic preset /
+//    custom Metal zoom / free layout), the rotation and how the picture fills
+//    its area; the CAMetalLayer presenter draws it unless the free layout asks
+//    for the readback path.
 //
 //  The only in-game performance readout is the FPS counter (Settings →
 //  Performance): it sits in the portrait top bar or in a slim strip in the
@@ -34,6 +36,8 @@ struct GameView: View {
 
     @State private var isMenuPresented = false
     @State private var sheet: GameSheet?
+    /// Current interface orientation, for the per-orientation layout profiles.
+    @State private var currentOrientation: ControlLayoutOrientation = .portrait
     /// Kept copy of the last diagnostics export (relative to Documents).
     @State private var diagnosticsHint: String?
 
@@ -79,7 +83,7 @@ struct GameView: View {
                 if isLandscape {
                     landscapeContent
                 } else {
-                    portraitContent
+                    portraitContent(availableHeight: geometry.size.height)
                 }
 
                 if isMenuPresented {
@@ -98,9 +102,16 @@ struct GameView: View {
                     )
                 }
             }
-            .onAppear { syncPresentedLayout(isLandscape) }
-            .onChange(of: isLandscape) { newValue in syncPresentedLayout(newValue) }
+            .onAppear {
+                currentOrientation = isLandscape ? .landscape : .portrait
+                syncPresentedLayout(isLandscape)
+            }
+            .onChange(of: isLandscape) { newValue in
+                currentOrientation = newValue ? .landscape : .portrait
+                syncPresentedLayout(newValue)
+            }
             .onChange(of: settings.screenLayout) { _ in syncPresentedLayout(isLandscape) }
+            .onChange(of: settings.screenLayoutMode) { _ in syncPresentedLayout(isLandscape) }
         }
         .preferredColorScheme(.dark)
         .sheet(item: $sheet) { sheet in
@@ -131,33 +142,44 @@ struct GameView: View {
 
     // MARK: - Portrait layout
 
-    private var portraitContent: some View {
+    private func portraitContent(availableHeight: CGFloat) -> some View {
         VStack(spacing: 10) {
             if isLoaded {
                 portraitTopBar
             }
 
             if isShowingScreens {
-                screenStage(layout: settings.screenLayout)
+                screenStage(layout: settings.effectiveScreenLayout(isLandscape: false))
                     .frame(maxHeight: .infinity)
                     .accessibilityIdentifier("screens")
 
                 // Keep the controls in the layout even when hidden, so the
                 // picture keeps its position and size.
-                TouchControlsView(
-                    backgroundOpacity: settings.controlsBackgroundOpacity,
-                    haptics: settings.haptics
-                ) { bit, pressed in
-                    model.setOverlayButton(bit, pressed: pressed)
-                }
-                .padding(.horizontal, 2)
-                .opacity(showsTouchControls ? 1 : 0)
-                .allowsHitTesting(showsTouchControls)
+                controlPad(availableHeight: availableHeight)
             }
         }
         .padding(.horizontal, 12)
         .padding(.top, 8)
         .padding(.bottom, 10)
+    }
+
+    /// The portrait on-screen controls: the reserved pad area under the screens,
+    /// drawn from the user's portrait layout profile (no control covers the
+    /// picture in the default layout).
+    private func controlPad(availableHeight: CGFloat) -> some View {
+        let height = min(max(availableHeight * 0.27, 220), 300)
+        return VirtualControlsView(
+            profile: settings.controlLayout(for: .portrait),
+            opacityScale: settings.controlsBackgroundOpacity,
+            haptics: settings.haptics,
+            onButton: { bit, pressed in model.setOverlayButton(bit, pressed: pressed) },
+            onCirclePad: { x, y in model.setOverlayStick(x: x, y: y) },
+            onCStick: { x, y in model.setOverlayCStick(x: x, y: y) }
+        )
+        .frame(height: height)
+        .padding(.horizontal, 2)
+        .opacity(showsTouchControls ? 1 : 0)
+        .allowsHitTesting(showsTouchControls)
     }
 
     /// Title, FPS counter and pause button above the screens in portrait. Kept
@@ -198,7 +220,7 @@ struct GameView: View {
     /// lower one at its lower right) by default, like a Manic-style skin. A
     /// layout the user picked explicitly is honoured in both orientations.
     private var landscapeLayout: ScreenLayout {
-        settings.screenLayout == .stacked ? .largeTop : settings.screenLayout
+        settings.effectiveScreenLayout(isLandscape: true)
     }
 
     private func syncPresentedLayout(_ isLandscape: Bool) {
@@ -234,14 +256,9 @@ struct GameView: View {
             // Edge-to-edge controls float over the picture (handheld-skin style)
             // and take no layout space: hiding them never moves the image.
             if isLoaded {
-                LandscapeOverlayControls(
-                    backgroundOpacity: settings.controlsBackgroundOpacity,
-                    haptics: settings.haptics
-                ) { bit, pressed in
-                    model.setOverlayButton(bit, pressed: pressed)
-                }
-                .opacity(showsTouchControls ? 1 : 0)
-                .allowsHitTesting(showsTouchControls)
+                landscapeControls
+                    .opacity(showsTouchControls ? 1 : 0)
+                    .allowsHitTesting(showsTouchControls)
             }
 
             if isLoaded && !isMenuPresented {
@@ -267,6 +284,21 @@ struct GameView: View {
         }
         .accessibilityIdentifier("screens")
     }
+    /// The landscape on-screen controls: the whole game view is the container,
+    /// drawn from the user's landscape layout profile.
+    private var landscapeControls: some View {
+        VirtualControlsView(
+            profile: settings.controlLayout(for: .landscape),
+            opacityScale: settings.controlsBackgroundOpacity,
+            haptics: settings.haptics,
+            onButton: { bit, pressed in model.setOverlayButton(bit, pressed: pressed) },
+            onCirclePad: { x, y in model.setOverlayStick(x: x, y: y) },
+            onCStick: { x, y in model.setOverlayCStick(x: x, y: y) }
+        )
+        .ignoresSafeArea()
+        .accessibilityIdentifier("touch-controls-overlay")
+    }
+
     // MARK: - Menu
 
     /// Glass pause button; opens the in-game menu and pauses the runtime.
@@ -376,11 +408,22 @@ struct GameView: View {
     /// the box. Touch is mapped to 3DS touchscreen pixels by the runtime with the
     /// same layout the presenter uses.
     private func presentedSurface(view: MetalScreenView, size: CGSize) -> some View {
-        MetalScreenRepresentable(view: view)
-            .frame(width: size.width, height: size.height)
+        // Custom (Metal) mode zooms and moves the whole presented picture inside
+        // its box. The presenter above is untouched: only the layer's SwiftUI
+        // frame changes, so the GPU path stays exactly as fast as a preset.
+        let adjustment = settings.screenLayoutMode == .customMetal
+            ? settings.screenAdjustment(for: currentOrientation)
+            : .standard
+        let scaled = CGSize(width: max(size.width * adjustment.scale, 1),
+                            height: max(size.height * adjustment.scale, 1))
+        let offset = CGSize(width: size.width * adjustment.offsetX,
+                            height: size.height * adjustment.offsetY)
+        return MetalScreenRepresentable(view: view)
+            .frame(width: scaled.width, height: scaled.height)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay { metalFirstFramePlaceholder }
             .overlay { presentedTouchOverlay }
+            .offset(offset)
             .accessibilityIdentifier("metal-screen")
     }
 
@@ -391,21 +434,39 @@ struct GameView: View {
     /// presented layer.
     private func readbackArrangement(in area: CGSize, layout: ScreenLayout) -> some View {
         let stretch = settings.screenAspect == .stretch
-        let arrangementAspect = ScreenGeometry.contentAspect(
-            layout: layout,
-            rotation: settings.screenRotation
-        )
-        // Fit/4:3 and integer scaling: the content box from the settings, which
-        // keeps the arrangement's aspect and may be snapped to whole pixels.
-        // Stretch places the arrangement first and scales it to the area after.
-        let layoutBox = stretch
-            ? ScreenGeometry.fittedSize(aspect: arrangementAspect, in: area)
-            : contentSize(in: area, layout: layout)
-        let viewports = ScreenGeometry.layoutViewports(
-            available: layoutBox,
-            layout: layout,
-            rotation: settings.screenRotation
-        )
+        let layoutBox: CGSize
+        let viewports: (top: CGRect?, bottom: CGRect?)
+        if settings.usesFreeformScreenLayout {
+            // Free layout: one rectangle per screen, placed by the same geometry
+            // the Settings editor previews. This mode is the readback path's
+            // reason to exist (see CustomScreenLayout.swift); every other mode
+            // keeps the Metal presenter.
+            layoutBox = area
+            viewports = CustomScreenGeometry.viewports(
+                available: area,
+                placement: settings.customScreenLayout.placement(for: currentOrientation),
+                rotation: settings.screenRotation,
+                displayScale: displayScale,
+                integerScale: settings.integerScale
+            )
+        } else {
+            let arrangementAspect = ScreenGeometry.contentAspect(
+                layout: layout,
+                rotation: settings.screenRotation
+            )
+            // Fit/4:3 and integer scaling: the content box from the settings,
+            // which keeps the arrangement's aspect and may be snapped to whole
+            // pixels. Stretch places the arrangement first and scales it to the
+            // area after.
+            layoutBox = stretch
+                ? ScreenGeometry.fittedSize(aspect: arrangementAspect, in: area)
+                : contentSize(in: area, layout: layout)
+            viewports = ScreenGeometry.layoutViewports(
+                available: layoutBox,
+                layout: layout,
+                rotation: settings.screenRotation
+            )
+        }
         let stretchX = layoutBox.width > 0 ? area.width / layoutBox.width : 1
         let stretchY = layoutBox.height > 0 ? area.height / layoutBox.height : 1
         return ZStack(alignment: .topLeading) {

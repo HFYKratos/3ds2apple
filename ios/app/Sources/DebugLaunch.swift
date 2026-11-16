@@ -15,6 +15,11 @@
 //        zk_create all run exactly as they do for a person. An unknown or
 //        invalid title logs why and leaves the home page untouched.
 //
+//    -openLayoutPage
+//        Open Settings -> Layout right away (screen layout modes + the control
+//        and screen layout editors), for headless screenshots of that page.
+//        Inert in normal launches.
+//
 //    -gamesRoot <path>
 //        Scan this folder instead of Documents/Games. A relative path resolves
 //        against Documents (a "Documents/" prefix is accepted); an absolute path
@@ -41,6 +46,14 @@ enum DebugLaunch {
     /// Launch argument: `-gamesRoot <path>` (relative to Documents, or an
     /// absolute path inside the app container).
     static let gamesRootArgument = "-gamesRoot"
+    /// Launch argument: `-openLayoutPage` opens Settings -> Layout straight
+    /// away, for headless screenshots of the control/screen layout editors.
+    static let layoutPageArgument = "-openLayoutPage"
+
+    /// Whether the launch asked for the Layout page (screenshot automation).
+    static var opensLayoutPage: Bool {
+        ProcessInfo.processInfo.arguments.contains(layoutPageArgument)
+    }
 
     /// Set once a launch request was handled, so a re-appearing view cannot
     /// start the same game twice.
