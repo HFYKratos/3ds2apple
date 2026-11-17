@@ -37,14 +37,13 @@ enum ControlLayoutOrientation: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Width / height of the container the editor previews. The portrait pad is
-    /// the reserved area under the screens; landscape is the whole game view.
-    var editorAspect: CGFloat {
-        switch self {
-        case .portrait: return 1.6
-        case .landscape: return 16.0 / 9.0
-        }
-    }
+    /// Where the profile is applied. The container itself is not a fixed
+    /// aspect: the portrait pad is the box under the screens (as wide as the
+    /// game view minus its paddings, as high as 27% of its height clamped to
+    /// 220...300 pt) and the landscape layout covers the whole game view. Both
+    /// editors get the real container from `GameViewPreviewGeometry`
+    /// (GameViewGeometry.swift), which derives it from the live window scene
+    /// with the same rules GameView uses.
 }
 
 /// One addressable control. The virtual console has the full New 3DS set: the
@@ -182,18 +181,14 @@ struct ControlPlacement: Codable, Equatable {
         return result
     }
 
-    /// The control's bounding box (centre + half sizes) in container units, used
-    /// by the editor's hit testing and clamping.
-    func clampedForLayout() -> ControlPlacement {
-        let placement = clamped()
-        // Keep the whole control inside: a shoulder capsule is wider than tall.
-        let halfWidth = placement.size * 0.8
-        let halfHeight = placement.size * 0.5
-        var result = placement
-        result.x = min(max(placement.x, halfWidth), 1.0 - halfWidth)
-        result.y = min(max(placement.y, halfHeight), 1.0 - halfHeight)
-        return result
-    }
+    // Keeping the whole control inside the container needs the container's
+    // point size, because the same normalised distance is much shorter on the
+    // container's short side. That clamp lives in ControlFrame.clampedCenter
+    // (GameViewGeometry.swift), which both the runtime geometry and the editor
+    // use. The old blanket clamp here (0.8 x size in both axes) made the edges
+    // of the container unreachable - the main reason the old editor was hard to
+    // use.
+
 }
 
 /// A complete control layout for one orientation.
@@ -220,7 +215,7 @@ struct ControlLayoutProfile: Codable, Equatable {
     }
 
     mutating func setPlacement(_ placement: ControlPlacement, for element: ControlElement) {
-        placements[element.rawValue] = placement.clampedForLayout()
+        placements[element.rawValue] = placement.clamped()
     }
 
     /// Fills every missing control with its default and clamps what is there.
@@ -233,7 +228,7 @@ struct ControlLayoutProfile: Codable, Equatable {
         var profile = ControlLayoutProfile(version: Self.currentVersion, placements: healed)
         for element in ControlElement.allCases {
             if let placement = profile.placements[element.rawValue] {
-                profile.placements[element.rawValue] = placement.clampedForLayout()
+                profile.placements[element.rawValue] = placement.clamped()
             }
         }
         return profile

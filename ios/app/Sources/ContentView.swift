@@ -27,8 +27,19 @@ struct ContentView: View {
     /// localized texts and formatters are read again.
     @StateObject private var localization = LocalizationStore.shared
     @Environment(\.scenePhase) private var scenePhase
-    /// Headless screenshot hook (`-openLayoutPage`); never on in normal use.
-    @State private var opensLayoutPage = false
+    /// Headless screenshot hooks for the layout pages; never set in normal use.
+    @State private var layoutLaunch: LayoutLaunch?
+
+    /// The layout page a `-openLayoutPage` / `-openLayoutEditor` launch opens.
+    private enum LayoutLaunch: String, Identifiable {
+        case settings
+        case controlEditorPortrait
+        case controlEditorLandscape
+        case screenEditorPortrait
+        case screenEditorLandscape
+
+        var id: String { rawValue }
+    }
 
     /// Explicit internal init: the stored properties are private and App.swift
     /// constructs ContentView() from another file.
@@ -44,9 +55,20 @@ struct ContentView: View {
         }
         // A locale change while the app runs re-reads the localized texts.
         .id(localization.revision)
-        .sheet(isPresented: $opensLayoutPage) {
+        .sheet(item: $layoutLaunch) { launch in
             NavigationStack {
-                LayoutSettingsView(settings: settings)
+                switch launch {
+                case .settings:
+                    LayoutSettingsView(settings: settings)
+                case .controlEditorPortrait:
+                    ControlLayoutEditorView(settings: settings, orientation: .portrait)
+                case .controlEditorLandscape:
+                    ControlLayoutEditorView(settings: settings, orientation: .landscape)
+                case .screenEditorPortrait:
+                    ScreenLayoutEditorView(settings: settings, orientation: .portrait)
+                case .screenEditorLandscape:
+                    ScreenLayoutEditorView(settings: settings, orientation: .landscape)
+                }
             }
         }
         .onAppear {
@@ -60,9 +82,14 @@ struct ContentView: View {
             // Automated launch for the Simulator / diagnostics
             // (`-openAOTTitleID <TITLEID>`); inert in normal use.
             DebugLaunch.startIfRequested(model: model, library: library)
-            // Headless screenshot of the layout editors; inert otherwise.
-            if DebugLaunch.opensLayoutPage {
-                opensLayoutPage = true
+            // Headless screenshot of the layout pages; inert otherwise.
+            switch DebugLaunch.requestedLayoutPage {
+            case .settings: layoutLaunch = .settings
+            case .controlEditorPortrait: layoutLaunch = .controlEditorPortrait
+            case .controlEditorLandscape: layoutLaunch = .controlEditorLandscape
+            case .screenEditorPortrait: layoutLaunch = .screenEditorPortrait
+            case .screenEditorLandscape: layoutLaunch = .screenEditorLandscape
+            case nil: break
             }
         }
         .onChange(of: scenePhase) { newPhase in

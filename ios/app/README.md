@@ -205,6 +205,8 @@ The shell can be driven headlessly without tapping:
   page appears, through the same path a card tap uses.
 - `-openLayoutPage` opens Settings → Layout (the screen layout modes and the
   control/screen layout editors) straight away, for headless screenshots.
+- `-openLayoutEditor control|screen` opens one of the two layout editors
+  directly, for headless screenshots of the editors themselves.
 
 A Simulator fixture never has to touch the real library: install a Simulator
 build of the shell that already contains the game's pack + catalog entry, then
@@ -254,15 +256,22 @@ Requirement 7 (complete virtual controls) and requirement 8 (screen layout
 presets plus a custom layout) are implemented in the Layout page:
 
 - **Controls.** The overlay draws the full New 3DS set: D-pad, A/B/X/Y, L/R,
-  ZL/ZR, Start/Select, the Circle Pad and the C-stick. Each control's position,
-  size and opacity are editable by dragging it in the preview and with sliders;
-  the page can reset one control, one orientation, or both, and a Save button
-  persists the result. Portrait and landscape have separate profiles
-  (`UI.controlLayoutPortrait` / `UI.controlLayoutLandscape`, versioned Codable
-  data), and the portrait default keeps the pad area below the screens so no
-  control covers the picture in portrait. The landscape defaults place the
-  D-pad, Circle Pad, L/ZL and Select/Start on the left/top and A/B/X/Y, C-stick
-  and R/ZR on the right, matching the handheld-skin overlay the app had before.
+  ZL/ZR, Start/Select, the Circle Pad and the C-stick. The "Control layout" page
+  (reworked in 0.1.2) is a direct-manipulation editor on a scaled copy of the
+  real game view: it draws the same safe-area box, picture stage and pad height
+  the runtime uses (`GameViewGeometry.swift`, shared with `GameView`), so a
+  control dragged in the preview lands where the game draws it - on a phone and
+  on an iPad. Drag a control to move it (guides snap it to the container
+  edges/centre and to the other controls), pinch it or drag its corner handle to
+  resize it, and use the sliders for size and the control's own opacity. One
+  control, one orientation or both can be reset, every change can be undone, and
+  the result is stored immediately (no Save step). Portrait and landscape have
+  separate profiles (`UI.controlLayoutPortrait` /
+  `UI.controlLayoutLandscape`, versioned Codable data), and the portrait
+  default keeps the pad area below the screens so no control covers the picture
+  in portrait. The landscape defaults place the D-pad, Circle Pad, L/ZL and
+  Select/Start on the left/top and A/B/X/Y, C-stick and R/ZR on the right,
+  matching the handheld-skin overlay the app had before.
 - **Analog sticks.** The Circle Pad is a real analog stick: dragging inside it
   reports -1…1 on both axes (a 14% dead zone is removed, so a resting finger is
   exactly 0) into `InputState.circleX/circleY` and `zk_set_input`. It is not a
@@ -276,8 +285,16 @@ presets plus a custom layout) are implemented in the Layout page:
   keeps the presenter and the GPU path and only applies a uniform scale and
   offset to the whole presented picture (saved per orientation); it is the
   cheapest way to make the screens bigger or move them as a group. Free layout
-  edits a rectangle per screen with drag and a corner handle, and each orientation
-  has its own rectangles (`UI.customScreenLayout`, versioned Codable data).
+  opens the "Screen layout" editor: it draws the real picture stage of this
+  device and the two console screens at their native shapes (upper 400×240 =
+  5:3, lower 320×240 = 4:3). Drag a screen to move it, pinch it or drag its
+  corner handle to resize it, and switch **Lock ratio** to keep the console
+  shape; movement snaps to the stage edges/centre and to the other screen with
+  guide lines. One-tap presets (stacked, side by side, upper only, lower only),
+  show/hide and undo are available, each orientation has its own rectangles
+  (`UI.customScreenLayout`, archive version 2), and everything can be reset.
+  A version 1 archive is migrated on read: a customised layout is kept exactly
+  and only an untouched shipped default is upgraded to the native-aspect one.
 - **Why two custom modes.** The upstream Zakuro presenter only knows the five
   fixed arrangements (`ScreenLayout` in `zakuro-gpu`), so arbitrary per-screen
   placement cannot be drawn by it. Free layout therefore switches the session to
@@ -549,12 +566,13 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `ROMSession.swift` | Runtime handle, AOT-only game launch gate, frame loop, presenter lifecycle, input/audio plumbing, software-keyboard polling/answer and the pause it causes, pause/resume/reset and the settings that change runtime behaviour. |
 | `MetalScreenView.swift` | `UIView` with a `CAMetalLayer` the presenter draws into (A1); drawable size for the chosen layout/rotation and the render scale (1×–4×), plus the integer-scaling magnification filter. |
 | `ScreenGeometry.swift` | The drawable size of each layout/rotation and the box the screens occupy for the aspect/integer-scale settings. |
+| `GameViewGeometry.swift` | The game view's box model shared by `GameView` and both layout editors: device/safe-area metrics, picture stage and control container rectangles, control frames, alignment snapping and the preview screen viewports. |
 | `GameInfo.swift` | The launcher's `Documents/Games/<TITLEID>/GameInfo.json` manifest (schema 1): authoritative display title, localized `displayNames`/`publisher`/`region` (optional SMDH base info), save namespace and pushed game-data size/SHA-256; the pack fields are informational metadata about the pack embedded in the IPA. |
 | `InstalledGame.swift` | Scans `Documents/Games` for pushed game data, validates it (folder/title ID, manifest, ROM presence/size/path containment), resolves the pushed `cover.png` and verifies the recorded SHA-256 in the background. |
 | `GameCatalog.swift` | The bundle `GameCatalog.json` schema (v2, v1 compatible): the build's game list plus per-game `packFile`/ABI/`registrationSymbol`. A base shell may ship an empty catalog. |
 | `GameLibrary.swift` | The library: bundle catalog joined with the pushed `Documents/Games` data, per-card title/publisher/size/cover (catalog fallback + placeholder), per-card states (AOT / Checking / Data missing / Error), background SHA-256 checks and `Documents/Library/playHistory.json`. No ROM importing. |
 | `AOTPackageLoader.swift` | Resolves/loads the per-game `GamePack.dylib` from the signed app bundle, validates title/ABI/registration symbols before use, hands the launch the pushed (or legacy bundled) ROM, documents the C ABI, and falls back to the statically linked single-game build. |
-| `DebugLaunch.swift` | Headless launch hooks: `-openAOTTitleID` (start a library game) and `-gamesRoot` (scan a Simulator fixture folder instead of Documents/Games). |
+| `DebugLaunch.swift` | Headless launch hooks: `-openAOTTitleID` (start a library game), `-gamesRoot` (scan a Simulator fixture folder instead of Documents/Games), `-openLayoutPage` / `-openLayoutEditor control\|screen` (layout screenshots). |
 | `LegacyGameData.swift` | One-time migration for apps updated from 0.1.x: cartridge lookup for the statically linked title, play times, and renaming ROM-named save folders to the title-id namespace. |
 | `ScreenImage.swift` | Reusable RGBA buffers and `CGImage` conversion. |
 | `InputState.swift` | Thread-safe merge of touch, overlay and controller input. |
@@ -562,10 +580,10 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `KeyboardOverlayView.swift` | The full-screen overlay that answers a software-keyboard request: hint, pre-filled text field, character counter, applet buttons and validation; portrait and landscape, above the system keyboard. |
 | `ControlLayout.swift` | Editable control layout model: the full New 3DS control set, normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. |
 | `VirtualControlsView.swift` | Runtime overlay: draws one button / analog stick per control with its own gesture (multi-touch), reports ZK_BUTTON_* bits, Circle Pad and C-stick vectors. |
-| `ControlLayoutEditorView.swift` | "Control layout" page: drag/resize/fade every control, reset one control/orientation/both, save. |
-| `CustomScreenLayout.swift` | Free screen layout model plus `CustomScreenGeometry`: per-orientation screen rectangles, rotation, integer scaling. |
-| `ScreenLayoutEditorView.swift` | "Custom screen layout" page: drag screens, corner-handle resize, keep-shape, show/hide, reset, save. |
-| `LayoutSettingsView.swift` | The combined Layout page: screen layout mode, Metal scale/offset, free-layout editor entry, control layout editors and resets. |
+| `ControlLayoutEditorView.swift` | "Control layout" editor: direct manipulation on a scaled real game view (drag with alignment guides, pinch/corner-handle resize, per-control opacity, undo, resets, immediate persistence). |
+| `CustomScreenLayout.swift` | Free screen layout model (archive v2 with the ratio-lock flag and version 1 migration) plus `CustomScreenGeometry`: native-aspect presets, per-orientation screen rectangles, rotation, integer scaling. |
+| `ScreenLayoutEditorView.swift` | "Screen layout" editor: real picture stage preview, drag/pinch/corner-handle resize, edge snapping, Lock ratio, presets, show/hide, undo and resets. |
+| `LayoutSettingsView.swift` | The combined Layout page: screen layout mode, Metal scale/offset, entries to both editors and resets. |
 | `GameControllerInput.swift` | GameController-to-3DS button mapping. |
 | `AudioOutput.swift` | Ring buffer and AVAudioEngine output (volume, mute, buffer duration). |
 | `FrameTiming.swift` | Per-phase frame timing for the diagnostics report and the fast-forward auto-fallback. |

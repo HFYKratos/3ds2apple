@@ -159,7 +159,7 @@ struct GameView: View {
     // MARK: - Portrait layout
 
     private func portraitContent(availableHeight: CGFloat) -> some View {
-        VStack(spacing: 10) {
+        VStack(spacing: GameViewLayout.portraitSpacing) {
             if isLoaded {
                 portraitTopBar
             }
@@ -174,16 +174,18 @@ struct GameView: View {
                 controlPad(availableHeight: availableHeight)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .padding(.bottom, 10)
+        .padding(.horizontal, GameViewLayout.portraitHorizontalPadding)
+        .padding(.top, GameViewLayout.portraitTopPadding)
+        .padding(.bottom, GameViewLayout.portraitBottomPadding)
     }
 
     /// The portrait on-screen controls: the reserved pad area under the screens,
     /// drawn from the user's portrait layout profile (no control covers the
     /// picture in the default layout).
     private func controlPad(availableHeight: CGFloat) -> some View {
-        let height = min(max(availableHeight * 0.27, 220), 300)
+        // Same formula the controls editor previews (GameViewLayout lives in
+        // GameViewGeometry.swift, shared by the runtime and both editors).
+        let height = GameViewLayout.portraitControlPadHeight(gameViewHeight: availableHeight)
         return VirtualControlsView(
             profile: settings.controlLayout(for: .portrait),
             opacityScale: settings.controlsBackgroundOpacity,
@@ -193,7 +195,7 @@ struct GameView: View {
             onCStick: { x, y in model.setOverlayCStick(x: x, y: y) }
         )
         .frame(height: height)
-        .padding(.horizontal, 2)
+        .padding(.horizontal, GameViewLayout.controlPadHorizontalPadding)
         .opacity(showsTouchControls ? 1 : 0)
         .allowsHitTesting(showsTouchControls)
     }
@@ -213,7 +215,7 @@ struct GameView: View {
             }
             pauseButton(size: 36)
         }
-        .frame(height: 36)
+        .frame(height: GameViewLayout.portraitTopBarHeight)
     }
 
     /// The picture area: rounded, subtly bordered black stage that centres the
@@ -265,8 +267,8 @@ struct GameView: View {
     private var landscapeContent: some View {
         ZStack {
             screenStage(layout: landscapeLayout)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 4)
+                .padding(.horizontal, GameViewLayout.landscapeStagePadding)
+                .padding(.vertical, GameViewLayout.landscapeStagePadding)
                 .accessibilityIdentifier("screens-area")
 
             // Edge-to-edge controls float over the picture (handheld-skin style)

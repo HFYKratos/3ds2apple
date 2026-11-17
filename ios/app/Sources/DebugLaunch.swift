@@ -49,6 +49,35 @@ enum DebugLaunch {
     /// Launch argument: `-openLayoutPage` opens Settings -> Layout straight
     /// away, for headless screenshots of the control/screen layout editors.
     static let layoutPageArgument = "-openLayoutPage"
+    /// Launch argument: `-openLayoutEditor control|screen` opens one editor
+    /// directly, for headless screenshots of the new 0.1.2 editors.
+    static let layoutEditorArgument = "-openLayoutEditor"
+
+    /// A layout page a headless launch asked to open.
+    enum LayoutPage: String {
+        case settings
+        case controlEditorPortrait = "control"
+        case controlEditorLandscape = "control-landscape"
+        case screenEditorPortrait = "screen"
+        case screenEditorLandscape = "screen-landscape"
+    }
+
+    /// Which layout page to open right away, for headless screenshots; nil in
+    /// normal launches. `-openLayoutPage` opens the Settings page,
+    /// `-openLayoutEditor control` or `-openLayoutEditor screen` opens an
+    /// editor directly.
+    static var requestedLayoutPage: LayoutPage? {
+        if let raw = argumentValue(for: layoutEditorArgument) {
+            switch raw.lowercased() {
+            case "control", "controls", "buttons": return .controlEditorPortrait
+            case "control-landscape", "landscape-controls": return .controlEditorLandscape
+            case "screen", "screens": return .screenEditorPortrait
+            case "screen-landscape", "landscape-screens": return .screenEditorLandscape
+            default: break
+            }
+        }
+        return opensLayoutPage ? .settings : nil
+    }
 
     /// Whether the launch asked for the Layout page (screenshot automation).
     static var opensLayoutPage: Bool {

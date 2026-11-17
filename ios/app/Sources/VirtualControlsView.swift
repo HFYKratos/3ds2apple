@@ -41,11 +41,10 @@ struct VirtualControlsView: View {
     var body: some View {
         GeometryReader { geometry in
             let container = geometry.size
-            let shortSide = min(container.width, container.height)
             ZStack(alignment: .topLeading) {
                 Color.clear
                 ForEach(ControlElement.allCases) { element in
-                    control(element, in: container, shortSide: shortSide)
+                    control(element, in: container)
                 }
             }
             .frame(width: container.width, height: container.height)
@@ -55,50 +54,39 @@ struct VirtualControlsView: View {
 
     @ViewBuilder
     private func control(_ element: ControlElement,
-                         in container: CGSize,
-                         shortSide: CGFloat) -> some View {
+                         in container: CGSize) -> some View {
         let placement = profile.placement(for: element)
-        let diameter = max(shortSide * CGFloat(placement.size), 18)
+        // Same point frame the controls editor manipulates; see
+        // ControlElement.frame(for:in:) in GameViewGeometry.swift.
+        let frame = element.frame(for: placement, in: container)
         let opacity = min(max(placement.opacity * opacityScale, 0.05), 1.0)
-        let center = CGPoint(x: container.width * CGFloat(placement.x),
-                             y: container.height * CGFloat(placement.y))
         if element.isAnalog {
             AnalogStickControl(
                 label: element.symbol,
                 accessibilityLabel: element.accessibilityTitle,
                 identifier: "control-\(element.rawValue)",
-                diameter: diameter,
+                diameter: frame.diameter,
                 opacity: opacity,
                 haptics: haptics,
                 onChange: element == .circlePad ? onCirclePad : onCStick
             )
-            .position(center)
+            .position(frame.center)
         } else if let bit = element.buttonBit {
             OverlayButtonControl(
                 symbol: element.symbol,
                 accessibilityLabel: element.accessibilityTitle,
                 identifier: "control-\(element.rawValue)",
-                width: buttonWidth(element: element, diameter: diameter),
-                height: diameter,
+                width: frame.width,
+                height: frame.height,
                 opacity: opacity,
                 haptics: haptics
             ) { pressed in
                 onButton(bit, pressed)
             }
-            .position(center)
+            .position(frame.center)
         }
     }
 
-    private func buttonWidth(element: ControlElement, diameter: CGFloat) -> CGFloat {
-        switch element {
-        case .buttonL, .buttonR, .buttonZL, .buttonZR:
-            return diameter * 1.65
-        case .buttonStart, .buttonSelect:
-            return diameter * 1.55
-        default:
-            return diameter
-        }
-    }
 }
 
 // MARK: - One button

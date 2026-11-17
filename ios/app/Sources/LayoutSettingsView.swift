@@ -2,9 +2,15 @@
 //  LayoutSettingsView.swift
 //  3ds2apple
 //
-//  One Settings page for both layout features (requirements 7 + 8): the screen
-//  arrangement (presets, the Metal custom zoom/position, and the free per-screen
-//  layout) and the editable on-screen controls.
+//  The entry point for both layout features (user requirements 7 + 8, reworked
+//  for 0.1.2): the screen arrangement (presets, the Metal custom zoom/position,
+//  and the free per-screen layout) and the editable on-screen controls.
+//
+//  The page itself only picks a mode and opens the two full-screen editors; the
+//  editing happens there, on a scaled copy of the real game view of this device
+//  (see GameViewGeometry.swift and the two editors). The Settings row that opens
+//  this page is "Screen and control layout", and the page title now says the
+//  same instead of just "Layout".
 //
 //  Three screen modes keep the fast path fast:
 //  - Automatic / Preset / Custom (Metal) all present through the CAMetalLayer;
@@ -30,7 +36,7 @@ struct LayoutSettingsView: View {
             controlsSection
             aboutSection
         }
-        .navigationTitle("Layout")
+        .navigationTitle(L10n.tr("Screen and control layout"))
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -55,9 +61,9 @@ struct LayoutSettingsView: View {
                 NavigationLink {
                     ScreenLayoutEditorView(settings: settings)
                 } label: {
-                    Label(L10n.tr("Edit free layout"), systemImage: "rectangle.3.group")
+                    Label(L10n.tr("Edit screen layout"), systemImage: "rectangle.3.group")
                 }
-                hint(L10n.tr("The free layout uses the software readback display path, so it can be slower than the Metal presets. It applies from the next game load. Touch input follows the lower screen's rectangle."))
+                hint(L10n.tr("Free screen layout runs on the software readback path, so it can be slower; it applies from the next game load."))
             }
         } header: {
             Text("Screens")

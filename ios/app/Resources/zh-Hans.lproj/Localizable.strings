@@ -521,7 +521,7 @@
 "Edit landscape controls" = "编辑横屏按键";
 "How it works" = "工作原理";
 "Screen and control layout" = "屏幕与按键布局";
-"Control layout" = "按键布局";
+"Control layout" = "控件布局";
 "Custom screen layout" = "自定义屏幕布局";
 "Reset this control" = "重置此控件";
 "Reset this orientation" = "重置此方向";
@@ -545,6 +545,7 @@
 "Portrait and landscape keep separate control layouts. The editor can move, resize and fade every control, including the Circle Pad and the C-stick, and restore the defaults." = "竖屏与横屏分别保存按键布局。编辑器可移动、缩放、调整每个控件的透明度（含摇杆与 C 杆），并可恢复默认。";
 "Presets and Custom (Metal) draw through the CAMetalLayer presenter: full speed, and every phone rotates, scales and filters the picture the same way. Free layout trades that Metal path for exact per-screen placement, because the presenter only knows its own arrangements; the game picture then comes from the readback path the app also uses when Metal is unavailable." = "预设与「自定义（Metal）」通过 CAMetalLayer presenter 绘制：全速运行，旋转、缩放与过滤在所有机型上一致。自由布局为了精确摆放两块屏幕而放弃该 Metal 路径，因为 presenter 只认识自己的几种排列；此时游戏画面走应用在 Metal 不可用时也会使用的回读路径。";
 "Reset all layouts to defaults" = "重置所有布局为默认";
+
 
 /* --- 0.1.2 settings-ui（task-15）：动态分辨率说明、关于页、精简的 HUD 原因 --- */
 "%ldx is %ld×%ld." = "%ldx 为 %ld×%ld。";
@@ -587,5 +588,24 @@
 "Text cannot be empty or only spaces." = "不能为空，也不能只有空格。";
 "Text cannot be only spaces." = "不能只有空格。";
 "Enter exactly %ld characters." = "请输入正好 %ld 个字符。";
+
+
+/* --- 0.1.2 布局编辑器（layout-ux） --------------------------------------- */
+
+"Undo" = "撤销";
+"Control area" = "按键区";
+"Screen" = "屏幕";
+"Edit screen layout" = "编辑屏幕布局";
+"Default stacked" = "默认堆叠";
+"Upper only" = "仅上屏";
+"Lower only" = "仅下屏";
+"Custom" = "自定义";
+"Lock ratio" = "锁定比例";
+"Upper screen %@" = "上屏 %@";
+"Lower screen %@" = "下屏 %@";
+"Reset screen layout" = "重置屏幕布局";
+"Reset both screen layouts" = "重置两个方向的屏幕布局";
+"Free screen layout runs on the software readback path, so it can be slower; it applies from the next game load." = "自由屏幕布局走软件回读路径，可能更慢；下次载入游戏时生效。";
+"The game applies the screen rotation; this editor arranges the upright screens." = "屏幕旋转在游戏中生效；本编辑器按未旋转的画布排列。";
 
 

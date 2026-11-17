@@ -542,6 +542,7 @@
 "Presets and Custom (Metal) draw through the CAMetalLayer presenter: full speed, and every phone rotates, scales and filters the picture the same way. Free layout trades that Metal path for exact per-screen placement, because the presenter only knows its own arrangements; the game picture then comes from the readback path the app also uses when Metal is unavailable." = "Presets and Custom (Metal) draw through the CAMetalLayer presenter: full speed, and every phone rotates, scales and filters the picture the same way. Free layout trades that Metal path for exact per-screen placement, because the presenter only knows its own arrangements; the game picture then comes from the readback path the app also uses when Metal is unavailable.";
 "Reset all layouts to defaults" = "Reset all layouts to defaults";
 
+
 /* --- 0.1.2 settings-ui (task-15): dynamic resolution caption, About page, trimmed HUD reasons --- */
 "%ldx is %ld×%ld." = "%ldx is %ld×%ld.";
 "Links" = "Links";
@@ -583,5 +584,24 @@
 "Text cannot be empty or only spaces." = "Text cannot be empty or only spaces.";
 "Text cannot be only spaces." = "Text cannot be only spaces.";
 "Enter exactly %ld characters." = "Enter exactly %ld characters.";
+
+
+/* --- 0.1.2 layout editors (layout-ux) ------------------------------------ */
+
+"Undo" = "Undo";
+"Control area" = "Control area";
+"Screen" = "Screen";
+"Edit screen layout" = "Edit screen layout";
+"Default stacked" = "Default stacked";
+"Upper only" = "Upper only";
+"Lower only" = "Lower only";
+"Custom" = "Custom";
+"Lock ratio" = "Lock ratio";
+"Upper screen %@" = "Upper screen %@";
+"Lower screen %@" = "Lower screen %@";
+"Reset screen layout" = "Reset screen layout";
+"Reset both screen layouts" = "Reset both screen layouts";
+"Free screen layout runs on the software readback path, so it can be slower; it applies from the next game load." = "Free screen layout runs on the software readback path, so it can be slower; it applies from the next game load.";
+"The game applies the screen rotation; this editor arranges the upright screens." = "The game applies the screen rotation; this editor arranges the upright screens.";
 
 
