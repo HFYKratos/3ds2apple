@@ -46,6 +46,11 @@ public sealed record ProcessResult(
 /// <summary>Abstraction so unit tests can replace the process layer without a real binary.</summary>
 public interface IProcessRunner
 {
+    /// <summary>
+    /// Run one tool process. When <paramref name="cancellationToken"/> fires the whole
+    /// process tree is terminated and <see cref="OperationCanceledException"/> is thrown,
+    /// so a caller can distinguish "the user stopped this" from a tool failure.
+    /// </summary>
     Task<ProcessResult> RunAsync(
         ProcessRequest request,
         Action<string>? onStdOutLine = null,
@@ -59,10 +64,20 @@ public interface IProcessRunner
 /// official Impactor/plumesign binaries. Arguments are passed as an argv array
 /// (never through a shell string); stdout/stderr are read asynchronously so the
 /// UI can show progress while a transfer or build is running.
+/// A tool process is tracked in <see cref="LauncherProcessRegistry"/> for the whole
+/// run; cancellation kills the process tree (3dsrecomp/clang/lld and their children,
+/// devpush, plumesign, ...), waits for the tree to exit and then rethrows
+/// <see cref="OperationCanceledException"/> so a stopped deploy is not reported as a
+/// tool failure.
 /// </remarks>
 public sealed class ProcessRunner : IProcessRunner
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan KillWaitTimeout = TimeSpan.FromSeconds(15);
+
+    private readonly IProcessTreeKiller _treeKiller;
+
+    public ProcessRunner(IProcessTreeKiller? treeKiller = null) => _treeKiller = treeKiller ?? new ProcessTreeKiller();
 
     public async Task<ProcessResult> RunAsync(
         ProcessRequest request,
@@ -140,56 +155,127 @@ public sealed class ProcessRunner : IProcessRunner
             return new ProcessResult(-1, string.Empty, $"could not start {request.FileName}: {error.Message}", false, false);
         }
 
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-        if (request.StandardInput is not null)
-        {
-            await process.StandardInput.WriteAsync(request.StandardInput.AsMemory(), cancellationToken).ConfigureAwait(false);
-            process.StandardInput.Close();
-        }
-
-        var timeout = request.Timeout ?? DefaultTimeout;
-        using var timeoutSource = new CancellationTokenSource(timeout);
-        using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
-        var timedOut = false;
+        var processId = process.Id;
+        LauncherProcessRegistry.Register(processId, request.FileName);
         try
         {
-            await process.WaitForExitAsync(linkedSource.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            timedOut = !cancellationToken.IsCancellationRequested;
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            var timedOut = false;
+            var cancelled = false;
             try
             {
-                process.Kill(entireProcessTree: true);
-            }
-            catch (InvalidOperationException)
-            {
-                // already exited
-            }
-            try
-            {
-                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (InvalidOperationException)
-            {
-                // nothing to do
-            }
-        }
+                if (request.StandardInput is not null)
+                {
+                    await process.StandardInput.WriteAsync(request.StandardInput.AsMemory(), cancellationToken).ConfigureAwait(false);
+                    process.StandardInput.Close();
+                }
 
-        // Drains the async output handlers so the captured text is complete.
-        process.WaitForExit();
-        string capturedStdout;
-        string capturedStderr;
-        lock (stdoutGate)
-        {
-            capturedStdout = stdout.ToString();
+                var timeout = request.Timeout ?? DefaultTimeout;
+                using var timeoutSource = new CancellationTokenSource(timeout);
+                using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
+                try
+                {
+                    await process.WaitForExitAsync(linkedSource.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    cancelled = cancellationToken.IsCancellationRequested;
+                    timedOut = !cancelled;
+                    TerminateProcessTree(process);
+                    await WaitForTreeExitAsync(process).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // The standard-input write (or another await) observed the stop request.
+                cancelled = true;
+                TerminateProcessTree(process);
+                await WaitForTreeExitAsync(process).ConfigureAwait(false);
+            }
+
+            // Drains the async output handlers so the captured text is complete.
+            if (process.HasExited)
+            {
+                process.WaitForExit();
+            }
+            else
+            {
+                try
+                {
+                    process.CancelOutputRead();
+                    process.CancelErrorRead();
+                }
+                catch (InvalidOperationException)
+                {
+                    // The process exited while the handlers were being cancelled.
+                }
+            }
+
+            string capturedStdout;
+            string capturedStderr;
+            lock (stdoutGate)
+            {
+                capturedStdout = stdout.ToString();
+            }
+            lock (stderrGate)
+            {
+                capturedStderr = stderr.ToString();
+            }
+            var exitCode = process.HasExited ? process.ExitCode : -1;
+            if (cancelled)
+            {
+                throw new OperationCanceledException(
+                    "The tool process was cancelled; its process tree was terminated.", cancellationToken);
+            }
+            return new ProcessResult(exitCode, capturedStdout, capturedStderr, timedOut, true);
         }
-        lock (stderrGate)
+        finally
         {
-            capturedStderr = stderr.ToString();
+            // Last line of defence: an unexpected failure after Start must not leave the
+            // tool (or its compiler children) running while the launcher moves on.
+            try
+            {
+                if (!process.HasExited)
+                {
+                    TerminateProcessTree(process);
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // The process object was already torn down; nothing can be left running.
+            }
+            LauncherProcessRegistry.Unregister(processId);
         }
-        var exitCode = process.HasExited ? process.ExitCode : -1;
-        return new ProcessResult(exitCode, capturedStdout, capturedStderr, timedOut, true);
+    }
+
+    /// <summary>Kill the tool and every process it spawned (Windows: taskkill /T fallback).</summary>
+    private void TerminateProcessTree(Process process)
+    {
+        try
+        {
+            _treeKiller.Kill(process.Id);
+        }
+        catch (Exception error) when (error is InvalidOperationException or Win32Exception or NotSupportedException)
+        {
+            // The process already exited; there is nothing left to kill.
+        }
+    }
+
+    /// <summary>Wait (bounded) for the killed tree to exit so the output drain cannot hang.</summary>
+    private static async Task WaitForTreeExitAsync(Process process)
+    {
+        try
+        {
+            await process.WaitForExitAsync(CancellationToken.None).WaitAsync(KillWaitTimeout).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            // Leave the process object; the caller falls back to CancelOutputRead.
+        }
+        catch (InvalidOperationException)
+        {
+            // Nothing to wait for.
+        }
     }
 }

@@ -327,7 +327,7 @@ public static class LanguageCatalog
         ("library.card.rename", "Name"),
         ("library.import.title", "Add a decrypted ROM"),
         ("library.import.action", "Import"),
-        ("library.card.notBuilt", "Not built yet — Deploy will compile it."),
+        ("library.card.notBuilt", "Not built yet — Deploy compiles it automatically; Build now can compile it ahead of time."),
         ("deploy.title", "Deploy to your iPhone/iPad"),
         ("deploy.subtitle", "Select one or more imported games. One click runs the whole chain in order: compile → compose app IPA → sign/install → push ROM data → verify."),
         ("deploy.selectAll", "Select all"),
@@ -404,11 +404,17 @@ public static class LanguageCatalog
         ("library.buildNow", "Build now"),
         ("library.buildAll", "Build all"),
         ("library.buildStatus.built", "Built · cache {0}"),
-        ("library.buildStatus.notBuilt", "Not built yet — Build now compiles it ahead of Deploy."),
         ("library.buildStatus.noRecord", "Built · no cache marker yet (next build recompiles)"),
         ("library.buildStatus.rebuildCompat", "Rebuild needed · build method changed"),
         ("library.buildStatus.rebuildRom", "Rebuild needed · ROM changed"),
         ("status.buildSummary", "Build finished: {0} built, {1} reused, {2} failed."),
+        // --- task-25: Deploy stop / cancellation (append-only scope; en/zh stay in sync). ---
+        ("deploy.stop", "Stop"),
+        ("deploy.stopping", "Stopping…"),
+        ("deploy.state.cancelled", "Cancelled"),
+        ("deploy.step.cancelled", "Cancelled"),
+        ("deploy.cancelledTitle", "Deploy cancelled"),
+        ("deploy.cancelledBody", "Deploy was stopped before it finished. GamePacks that already compiled are kept and reused; press Deploy selected to start again."),
     });
 
     public static IReadOnlyDictionary<string, string> ChineseSimplified { get; } = Build(new (string Key, string Text)[]
@@ -592,7 +598,7 @@ public static class LanguageCatalog
         ("library.card.rename", "名称"),
         ("library.import.title", "添加解密 ROM"),
         ("library.import.action", "导入"),
-        ("library.card.notBuilt", "尚未编译 —— 部署时会自动编译。"),
+        ("library.card.notBuilt", "尚未构建 —— 部署时会自动编译；也可用“立即构建”提前编译。"),
         ("deploy.title", "部署到 iPhone/iPad"),
         ("deploy.subtitle", "勾选一个或多个已导入的游戏，一键按顺序完成：编译 → 合成 App IPA → 签名安装 → 推送 ROM 数据 → 校验。"),
         ("deploy.selectAll", "全选"),
@@ -669,11 +675,17 @@ public static class LanguageCatalog
         ("library.buildNow", "立即构建"),
         ("library.buildAll", "全部构建"),
         ("library.buildStatus.built", "已构建 · 缓存 {0}"),
-        ("library.buildStatus.notBuilt", "尚未构建 —— “立即构建”可在部署前提前编译。"),
         ("library.buildStatus.noRecord", "已构建 · 暂无缓存标记（下次将重新编译）"),
         ("library.buildStatus.rebuildCompat", "需重新构建 · 构建方式已变更"),
         ("library.buildStatus.rebuildRom", "需重新构建 · ROM 已变更"),
         ("status.buildSummary", "构建完成：新建 {0} 个，复用 {1} 个，失败 {2} 个。"),
+        // --- task-25：Deploy 停止/取消（仅追加；中英 key 保持同步）。---
+        ("deploy.stop", "停止"),
+        ("deploy.stopping", "正在停止…"),
+        ("deploy.state.cancelled", "已取消"),
+        ("deploy.step.cancelled", "已取消"),
+        ("deploy.cancelledTitle", "部署已取消"),
+        ("deploy.cancelledBody", "部署未完成时被停止。已编译好的 GamePack 会保留并在下次复用；点击“一键部署”可重新开始。"),
     });
 
     private static IReadOnlyDictionary<string, string> Build((string Key, string Text)[] entries)

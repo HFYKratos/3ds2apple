@@ -34,6 +34,9 @@ public enum DeployStepStatus
     Succeeded,
     Failed,
     Skipped,
+
+    /// <summary>The user stopped the deploy while this step was running.</summary>
+    Cancelled,
 }
 
 /// <summary>One progress event from the Deploy pipeline (all steps, all games).</summary>
@@ -72,7 +75,8 @@ public sealed record DeployOutcome(
     string? ComposedIpaPath,
     string? InstalledBundleId,
     IReadOnlyList<DeployGameResult> Games,
-    bool Retryable);
+    bool Retryable,
+    bool Cancelled = false);
 
 /// <summary>Composes the installable IPA (implemented by <see cref="IpaComposer"/>).</summary>
 public interface IComposedIpaComposer
@@ -237,7 +241,12 @@ public sealed class DeployOrchestrator
         Action<string>? log = null,
         CancellationToken cancellationToken = default)
     {
+        // Remember the exact step that is running so a user stop reports the phase it stopped in.
+        var tracker = new StepTrackingProgress(progress);
+        progress = tracker;
         var games = new List<DeployGameResult>();
+        try
+        {
         var selected = new List<LibraryEntry>();
         foreach (var titleId in request.TitleIDs.Distinct(StringComparer.OrdinalIgnoreCase))
         {
@@ -526,6 +535,18 @@ public sealed class DeployOrchestrator
             "All selected games are installed and their ROM data is verified on the phone.", 100);
         log?.Invoke("deploy: done — " + plans.Count + " game(s) ready in " + pushBundleId);
         return new DeployOutcome(true, null, null, null, null, composed.IpaPath, pushBundleId, games, Retryable: true);
+        }
+        catch (OperationCanceledException)
+        {
+            // A user stop is not a failure: name the running step and let the UI go back to
+            // a deployable state. Every process started by that step was already killed by
+            // ProcessRunner (process tree) before the exception reached here.
+            var step = tracker.Step;
+            Report(progress, step, DeployStepStatus.Cancelled, string.Empty);
+            log?.Invoke("deploy: cancelled by the user; running tool process trees were terminated.");
+            return new DeployOutcome(false, step, "deploy_cancelled",
+                "The deploy was cancelled by the user.", null, null, null, games, Retryable: true, Cancelled: true);
+        }
     }
 
     /// <summary>One actionable message for a missing Windows LLVM/3dsrecomp payload.</summary>
@@ -640,6 +661,22 @@ public sealed class DeployOrchestrator
                 _displayName + ": " + value.Message,
                 BuildPercent(_index, _total, value.Percent),
                 _titleId));
+    }
+
+    /// <summary>Forwards progress to the UI and remembers the last step for cancellation reporting.</summary>
+    private sealed class StepTrackingProgress : IProgress<DeployProgress>
+    {
+        private readonly IProgress<DeployProgress>? _inner;
+
+        public StepTrackingProgress(IProgress<DeployProgress>? inner) => _inner = inner;
+
+        public DeployStepKind Step { get; private set; } = DeployStepKind.Build;
+
+        public void Report(DeployProgress value)
+        {
+            Step = value.Step;
+            _inner?.Report(value);
+        }
     }
 
     private sealed class PushProgressAdapter : IProgress<PushProgress>

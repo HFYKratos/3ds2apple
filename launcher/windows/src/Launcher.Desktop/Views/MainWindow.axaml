@@ -189,6 +189,7 @@
           <StackPanel Orientation="Horizontal" Spacing="10">
             <Button Content="{Binding L.DeployAction}" Command="{Binding DeployCommand}" Classes="primary" IsVisible="{Binding !IsDeployFailed}" />
             <Button Content="{Binding L.DeployRetry}" Command="{Binding DeployCommand}" Classes="primary" IsVisible="{Binding IsDeployFailed}" />
+            <Button Content="{Binding L.DeployStop}" Command="{Binding StopDeployCommand}" Classes="ghost" IsVisible="{Binding IsDeployRunning}" />
             <ProgressBar Width="320" Height="8" Value="{Binding ProgressValue}" IsVisible="{Binding IsDeployRunning}" VerticalAlignment="Center" />
           </StackPanel>
 
@@ -231,6 +232,12 @@
               <TextBlock Text="{Binding DeployErrorFix}" Classes="caption" />
               <TextBlock Text="{Binding DeployStepName}" Classes="caption" />
               <TextBlock Text="{Binding L.DeployFailedHelp}" Classes="caption" />
+            </StackPanel>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding IsDeployCancelled}">
+            <StackPanel Spacing="4">
+              <TextBlock Text="{Binding L.DeployCancelledTitle}" Classes="h2" Foreground="{DynamicResource AppWarningBrush}" />
+              <TextBlock Text="{Binding L.DeployCancelledBody}" Classes="muted" />
             </StackPanel>
           </Border>
 

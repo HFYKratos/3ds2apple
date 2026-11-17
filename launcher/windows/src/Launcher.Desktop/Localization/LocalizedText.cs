@@ -68,6 +68,12 @@ public sealed class LocalizedText
     public string DeployLogShow => Loc.T("deploy.logShow");
     public string DeployLogHide => Loc.T("deploy.logHide");
 
+    // Deploy stop / cancellation (task-25).
+    public string DeployStop => Loc.T("deploy.stop");
+    public string DeployStopping => Loc.T("deploy.stopping");
+    public string DeployCancelledTitle => Loc.T("deploy.cancelledTitle");
+    public string DeployCancelledBody => Loc.T("deploy.cancelledBody");
+
     // Deploy prerequisites (task-20): one green/red status light per row.
     public string DeployPrereqTitle => Loc.T("deploy.prereq.title");
     public string DeployPrereqRefresh => Loc.T("deploy.prereq.refresh");

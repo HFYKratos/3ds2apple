@@ -10,6 +10,9 @@ namespace ThreeDsTwoApple.Launcher.App.Views;
 
 public partial class MainWindow : Window
 {
+    private bool _shutdownInProgress;
+    private bool _closeAllowed;
+
     public MainWindow()
     {
         AvaloniaXamlLoader.Load(this);
@@ -17,6 +20,45 @@ public partial class MainWindow : Window
     }
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;
+
+    /// <summary>
+    /// Closing the launcher while a Deploy is running must not leave a background
+    /// 3dsrecomp/clang/lld/devpush/plumesign process behind: cancel the pipeline, wait for
+    /// it to unwind (ProcessRunner kills the running stage's process tree), force-kill any
+    /// tree still tracked, and only then let the window close.
+    /// </summary>
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        base.OnClosing(e);
+        if (_closeAllowed || ViewModel is not { } viewModel || !viewModel.HasActiveWork)
+        {
+            return;
+        }
+        e.Cancel = true;
+        if (_shutdownInProgress)
+        {
+            return;
+        }
+        _shutdownInProgress = true;
+        _ = ShutdownThenCloseAsync(viewModel);
+    }
+
+    private async Task ShutdownThenCloseAsync(MainViewModel viewModel)
+    {
+        try
+        {
+            await viewModel.ShutdownAsync(TimeSpan.FromSeconds(12));
+        }
+        catch (Exception exception)
+        {
+            viewModel.Log("shutdown cleanup failed: " + exception.Message);
+        }
+        finally
+        {
+            _closeAllowed = true;
+            Close();
+        }
+    }
 
     private void OnOpened(object? sender, EventArgs e)
     {

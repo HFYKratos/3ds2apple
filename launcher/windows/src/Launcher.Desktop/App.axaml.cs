@@ -33,6 +33,16 @@ public partial class App : Application
                 {
                     viewModel.ShowDeploy();
                 }
+                else if (string.Equals(view, "deploy-running", StringComparison.OrdinalIgnoreCase))
+                {
+                    viewModel.ShowDeploy();
+                    viewModel.ShowDeployRunningForSmoke();
+                }
+                else if (string.Equals(view, "deploy-cancelled", StringComparison.OrdinalIgnoreCase))
+                {
+                    viewModel.ShowDeploy();
+                    viewModel.ShowDeployCancelledForSmoke();
+                }
                 // Headless smoke run (CI/Xvfb): build the whole visual tree, render a few
                 // frames, report and exit. Never used by the shipped launcher.
                 DispatcherTimer.RunOnce(

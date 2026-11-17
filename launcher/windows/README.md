@@ -14,8 +14,12 @@ is deleted; the local 3dsrecomp + LLVM/LLD build is the only path and the single
 exe no longer embeds `builder-windows.exe` (~1.24 MB smaller).
 The 0.1.2 checkout also adds Library **Build now / Build all** with a recorded
 build-compatibility cache (see below) and removes every device identifier from the
-UI, log and diagnostics export. This checkout compiles cleanly (0 errors, warnings as
-errors) and its **198 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
+UI, log and diagnostics export. The current development checkout adds a Deploy
+**Stop** action (cancels the running step and terminates its tool process tree) and
+window-close cleanup (a running deploy is stopped and its 3dsrecomp/clang/lld/
+devpush/plumesign processes are terminated before the launcher exits), and merges the
+two duplicate "not built yet" Library strings into one status line. This checkout compiles cleanly (0 errors, warnings as
+errors) and its **212 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
 `--self-test` on Linux/WSL with the embedded payload (32 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a minimal Settings gear; it is
 localized (English / 简体中文) and uses the iOS app icon. The user-facing package is a ZIP
@@ -66,7 +70,9 @@ travels as an internal devpush/plumesign command argument.
    remove, and pre-build games: **Build now** on one card or **Build all** in the header
    compiles the GamePack ahead of a deploy and shows progress + the recorded cache state.
    Cards show the title, publisher, ROM size, GamePack size/state and the build-cache
-   label (`Built · cache b1a2b3c4` or the exact reason a rebuild is needed). SHA-256
+   label (`Built · cache b1a2b3c4` or the exact reason a rebuild is needed); a game
+   that was never built shows one combined status line (Deploy compiles it
+   automatically, Build now compiles it ahead of time) instead of two near-duplicates. SHA-256
    values stay in the verification/log output and are not shown as raw digests in the UI.
    Install/push actions stay on the Deploy page.
 2. **Deploy**: the page opens with a prerequisite panel — five green/red status lights
@@ -87,6 +93,12 @@ travels as an internal devpush/plumesign command argument.
      Documents/Games/<TITLEID>/ via the device bridge (devpush contract v1) using the
      **actual installed bundle id**, with size/SHA verification and read-back.
    - mark done ("可以在手机上玩了") only after every selected game verified.
+     While the chain runs a **Stop** button stops it: the cancellation token reaches
+     compile/compose/install/push/verify, the running step's whole process tree is
+     terminated (Windows falls back to `taskkill /T /F`), the stopped step is marked
+     "Cancelled" and the page returns to a deployable state; compiled packs are kept
+     for the next attempt. Closing the launcher window during a deploy runs the same
+     cleanup before the window closes, so no background compiler/signer survives.
 3. **Settings** (gear): language, Apple ID / Open Impactor, device status/refresh, logs
    (show/export/open/self-test), about. The language picker keeps showing the current
    language after a switch (labels refresh in place; the persisted key format is
@@ -138,8 +150,8 @@ older than 0.1.2 have no marker yet: they are rebuilt once on the next Deploy or
         SelfTest.cs                     --self-test host check
         Localization/Localization.cs    English + zh-Hans UI catalogue, OS detection, override
         Distribution/DistributionLayout.cs  embedded payload inventory + first-run extraction
-        Tools/                          ProcessRunner, PackCli (inspect/add/list/catalog/record/verify),
-                                        ToolLocator
+        Tools/                          ProcessRunner + process-tree killer/shutdown registry, PackCli
+                                        (inspect/add/list/catalog/record/verify), ToolLocator
         Deploy/DeployOrchestrator.cs            one-click Build->Compose->Install->Push->Verify chain + injected interfaces
         Deploy/ComposedIpaVerifier.cs           hard gate: all real packs + non-empty schema-2 catalogue before signing
         BuildPipeline/IpaComposer.cs            shell template + packs + GameCatalog -> installable IPA
@@ -159,7 +171,8 @@ older than 0.1.2 have no marker yet: they are rebuilt once on the next Deploy or
       Hardware/                           logical/physical cores + RAM probe for the compile line
       src/Launcher.Desktop/             Avalonia UI (Program, App, MainWindow, view model,
                                         Localization/LocalizedText, Assets/app.ico + placeholder)
-      tests/ThreeDsTwoApple.Launcher.Core.Tests/   198 xUnit tests (incl. DeployFlowTests + BuildCacheTests + ComposedIpaVerifierTests)
+      tests/ThreeDsTwoApple.Launcher.Core.Tests/   212 xUnit tests (incl. DeployFlowTests + DeployCancellationTests +
+                                                  ProcessRunnerTests + BuildCacheTests + ComposedIpaVerifierTests)
       vendor/impactor/             PINS.json + MIT / MPL-2.0 licence texts + source note
       shell/                            shell template IPA placement + manifest example (unchanged):
                                         the template is ROM-free and pinned; packs are injected at install time

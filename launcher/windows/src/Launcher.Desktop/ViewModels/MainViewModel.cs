@@ -87,7 +87,7 @@ public sealed class GameRow : ObservableObject
     public bool IsPushed => Entry.PushedAt is not null;
 
     public string PackLine => Entry.Pack is null
-        ? Loc.T("library.card.notBuilt")
+        ? string.Empty
         : Entry.Pack.IsPlaceholder
             ? Loc.T("library.card.pack.placeholder", FormatBytes(Entry.Pack.Bytes))
             : Loc.T("library.card.pack.built", FormatBytes(Entry.Pack.Bytes));
@@ -271,6 +271,7 @@ public sealed class DeployStepRow : ObservableObject
         DeployStepStatus.Running => Loc.T("deploy.step.running"),
         DeployStepStatus.Succeeded => Loc.T("deploy.step.succeeded"),
         DeployStepStatus.Failed => Loc.T("deploy.step.failed"),
+        DeployStepStatus.Cancelled => Loc.T("deploy.step.cancelled"),
         DeployStepStatus.Skipped => Loc.T("deploy.step.skipped"),
         _ => Loc.T("deploy.step.pending"),
     };
@@ -414,6 +415,8 @@ public sealed class MainViewModel : ObservableObject
     private string _deployErrorTitle = string.Empty;
     private string _deployErrorDetail = string.Empty;
     private string _deployErrorFix = string.Empty;
+    private CancellationTokenSource? _deployCancellation;
+    private TaskCompletionSource? _deployCompletion;
     private double _progressValue;
     private LocalizedText _localized = new();
     private LanguageChoice? _selectedLanguage;
@@ -438,6 +441,7 @@ public sealed class MainViewModel : ObservableObject
         OpenSettingsCommand = new RelayCommand(OpenSettings);
         CloseSettingsCommand = new RelayCommand(CloseSettings);
         DeployCommand = new AsyncRelayCommand(() => RunDeployAsync(), () => CanDeploy);
+        StopDeployCommand = new RelayCommand(StopDeploy, () => CanStopDeploy);
         BuildAllCommand = new AsyncRelayCommand(() => BuildAllGamesAsync(), () => !IsBusy && Games.Count > 0);
         SelectAllCommand = new RelayCommand(() => SetAllSelected(true));
         SelectNoneCommand = new RelayCommand(() => SetAllSelected(false));
@@ -487,6 +491,7 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand OpenSettingsCommand { get; }
     public RelayCommand CloseSettingsCommand { get; }
     public AsyncRelayCommand DeployCommand { get; }
+    public RelayCommand StopDeployCommand { get; }
     public AsyncRelayCommand BuildAllCommand { get; }
     public RelayCommand SelectAllCommand { get; }
     public RelayCommand SelectNoneCommand { get; }
@@ -799,7 +804,7 @@ public sealed class MainViewModel : ObservableObject
     {
         if (entry.Pack is null || entry.Pack.IsPlaceholder)
         {
-            return (Loc.T("library.buildStatus.notBuilt"), false);
+            return (Loc.T("library.card.notBuilt"), false);
         }
         var artifact = entry.Build;
         if (artifact is null || string.IsNullOrWhiteSpace(artifact.BuildCompatVersion))
@@ -940,6 +945,7 @@ public sealed class MainViewModel : ObservableObject
         "running" => Loc.T("deploy.state.running"),
         "done" => Loc.T("deploy.state.done"),
         "failed" => Loc.T("deploy.state.failed"),
+        "cancelled" => Loc.T("deploy.state.cancelled"),
         _ => Loc.T("deploy.state.idle"),
     };
 
@@ -950,6 +956,17 @@ public sealed class MainViewModel : ObservableObject
     public bool IsDeployDone => _deployState == "done";
 
     public bool IsDeployFailed => _deployState == "failed";
+
+    public bool IsDeployCancelled => _deployState == "cancelled";
+
+    /// <summary>True while the running deploy can still be stopped (no stop requested yet).</summary>
+    public bool CanStopDeploy => _deployState == "running" && _deployCancellation is { IsCancellationRequested: false };
+
+    /// <summary>True while a deploy task is in flight; the window close handler waits on it.</summary>
+    public bool HasRunningDeploy => _deployCompletion is not null;
+
+    /// <summary>True while any tool-spawning operation runs (deploy, Library build or import).</summary>
+    public bool HasActiveWork => HasRunningDeploy || IsLibraryBuildRunning || IsImportRunning;
 
     /// <summary>"n of 5 prerequisites ready" (or a checking label before the first probe).</summary>
     public string DeployPrereqSummary => DeployPrerequisites.Count == 0
@@ -1030,6 +1047,8 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsDeployRunning));
         OnPropertyChanged(nameof(IsDeployDone));
         OnPropertyChanged(nameof(IsDeployFailed));
+        OnPropertyChanged(nameof(IsDeployCancelled));
+        RaiseCommandStates();
     }
 
     public async Task RunDeployAsync()
@@ -1057,6 +1076,11 @@ public sealed class MainViewModel : ObservableObject
         SetDeployRunning();
         Log("[deploy] hardware: " + _hardware.Describe());
         SetBusy(true, L.DeployRunning);
+        var cancellation = new CancellationTokenSource();
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _deployCancellation = cancellation;
+        _deployCompletion = completion;
+        RaiseCommandStates();
         try
         {
             var templateIpa = Path.Combine(_services.ShellDirectory, _shell.FileName);
@@ -1067,8 +1091,15 @@ public sealed class MainViewModel : ObservableObject
                 DeviceUdid: _device?.Udid,
                 RebuildExistingPacks: false);
             var progress = new Progress<DeployProgress>(ApplyDeployProgress);
-            var outcome = await orchestrator.RunAsync(request, progress, line => Log("[deploy] " + line)).ConfigureAwait(true);
+            var outcome = await orchestrator.RunAsync(request, progress, line => Log("[deploy] " + line), cancellation.Token).ConfigureAwait(true);
             ApplyDeployOutcome(outcome);
+        }
+        catch (OperationCanceledException)
+        {
+            // The orchestrator normally turns a stop into a Cancelled outcome; this is the
+            // belt-and-braces path if a stage throws directly.
+            Log("deploy stopped: the running step observed the stop request.");
+            ApplyDeployCancelled();
         }
         catch (Exception exception)
         {
@@ -1077,6 +1108,10 @@ public sealed class MainViewModel : ObservableObject
         }
         finally
         {
+            _deployCancellation = null;
+            cancellation.Dispose();
+            completion.TrySetResult();
+            _deployCompletion = null;
             SetBusy(false, Loc.T("status.ready"));
             await RefreshLibraryAsync().ConfigureAwait(true);
             await RefreshStatusAsync().ConfigureAwait(true);
@@ -1110,6 +1145,11 @@ public sealed class MainViewModel : ObservableObject
             var row = DeployGames.FirstOrDefault(item => string.Equals(item.TitleID, game.TitleID, StringComparison.OrdinalIgnoreCase));
             row?.Refresh();
         }
+        if (outcome.Cancelled)
+        {
+            ApplyDeployCancelled();
+            return;
+        }
         if (outcome.Success)
         {
             _deployState = "done";
@@ -1139,6 +1179,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsDeployRunning));
         OnPropertyChanged(nameof(IsDeployDone));
         OnPropertyChanged(nameof(IsDeployFailed));
+        OnPropertyChanged(nameof(IsDeployCancelled));
         OnPropertyChanged(nameof(DeployMessage));
         OnPropertyChanged(nameof(DeployStepName));
         RaiseCommandStates();
@@ -1161,12 +1202,94 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsDeployRunning));
         OnPropertyChanged(nameof(IsDeployDone));
         OnPropertyChanged(nameof(IsDeployFailed));
+        OnPropertyChanged(nameof(IsDeployCancelled));
         OnPropertyChanged(nameof(DeployMessage));
         OnPropertyChanged(nameof(DeployStepName));
         OnPropertyChanged(nameof(DeployErrorTitle));
         OnPropertyChanged(nameof(DeployErrorDetail));
         OnPropertyChanged(nameof(DeployErrorFix));
         RaiseCommandStates();
+    }
+
+    /// <summary>Stop the running deploy: cancel the current stage and terminate its process tree.</summary>
+    public void StopDeploy()
+    {
+        var cancellation = _deployCancellation;
+        if (cancellation is null || cancellation.IsCancellationRequested)
+        {
+            return;
+        }
+        Log("deploy: stop requested; cancelling the running step and terminating its tool processes.");
+        DeployMessage = L.DeployStopping;
+        OnPropertyChanged(nameof(DeployMessage));
+        StatusText = L.DeployStopping;
+        cancellation.Cancel();
+        RaiseCommandStates();
+    }
+
+    /// <summary>Show the stopped state and let the user deploy again; built packs stay cached.</summary>
+    private void ApplyDeployCancelled()
+    {
+        _deployState = "cancelled";
+        ProgressValue = 0;
+        DeployMessage = L.DeployCancelledBody;
+        DeployStepName = string.Empty;
+        DeployErrorTitle = string.Empty;
+        DeployErrorDetail = string.Empty;
+        DeployErrorFix = string.Empty;
+        foreach (var row in DeploySteps)
+        {
+            if (row.IsRunning)
+            {
+                row.Update(DeployStepStatus.Cancelled, string.Empty);
+            }
+        }
+        StatusText = L.DeployCancelledTitle;
+        Log("deploy cancelled: the running step was stopped and its tool process trees were terminated. Built GamePacks are kept; press Deploy selected to start again.");
+        OnPropertyChanged(nameof(DeployState));
+        OnPropertyChanged(nameof(DeployStateLabel));
+        OnPropertyChanged(nameof(IsDeployIdle));
+        OnPropertyChanged(nameof(IsDeployRunning));
+        OnPropertyChanged(nameof(IsDeployDone));
+        OnPropertyChanged(nameof(IsDeployFailed));
+        OnPropertyChanged(nameof(IsDeployCancelled));
+        OnPropertyChanged(nameof(DeployMessage));
+        OnPropertyChanged(nameof(DeployStepName));
+        OnPropertyChanged(nameof(DeployErrorTitle));
+        OnPropertyChanged(nameof(DeployErrorDetail));
+        OnPropertyChanged(nameof(DeployErrorFix));
+        RaiseCommandStates();
+    }
+
+    /// <summary>
+    /// Window-close cleanup: cancel a running deploy, wait for the orchestrator to unwind
+    /// (ProcessRunner kills the running stage's process tree), then force-kill any tool
+    /// process tree that is still tracked. The window only closes after this finishes.
+    /// </summary>
+    public async Task ShutdownAsync(TimeSpan timeout)
+    {
+        var completion = _deployCompletion;
+        if (completion is null)
+        {
+            LauncherProcessRegistry.KillAll(new ProcessTreeKiller(), Log);
+            return;
+        }
+        Log("shutdown: stopping the running deploy before exit.");
+        StopDeploy();
+        var finished = await Task.WhenAny(completion.Task, Task.Delay(timeout)).ConfigureAwait(true) == completion.Task;
+        if (!finished)
+        {
+            Log("shutdown: the deploy did not stop within " + (int)timeout.TotalSeconds + "s; terminating the remaining tool process trees.");
+        }
+        var killed = LauncherProcessRegistry.KillAll(new ProcessTreeKiller(), Log);
+        if (killed > 0)
+        {
+            Log("shutdown: terminated " + killed + " remaining tool process tree(s).");
+        }
+        if (!finished)
+        {
+            await Task.WhenAny(completion.Task, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(true);
+        }
     }
 
     // --- settings / status -------------------------------------------------
@@ -1374,6 +1497,37 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowDiagnostics));
         OnPropertyChanged(nameof(DiagnosticsToggleLabel));
     }
+
+    /// <summary>Developer-only `--ui-smoke` hook: render the Deploy page in its running state.</summary>
+    internal void ShowDeployRunningForSmoke()
+    {
+        SetDeployRunning();
+        // A live (never cancelled) source keeps the Stop button enabled in the capture;
+        // this is a screenshot-only hook and no deploy task exists.
+        _deployCancellation = new CancellationTokenSource();
+        SetBusy(true, L.DeployRunning);
+        RaiseCommandStates();
+        ProgressValue = 46;
+        foreach (var row in DeploySteps)
+        {
+            switch (row.Kind)
+            {
+                case DeployStepKind.Build:
+                    row.Update(DeployStepStatus.Succeeded, "GamePack ready");
+                    break;
+                case DeployStepKind.Compose:
+                    row.Update(DeployStepStatus.Succeeded, "Verified 1 pack + schema-2 catalogue");
+                    break;
+                case DeployStepKind.Install:
+                    row.Update(DeployStepStatus.Running, "Signing and installing the app with the bundled Impactor/plumesign…");
+                    break;
+            }
+        }
+        DeployStepName = DeploySteps.FirstOrDefault(row => row.IsRunning)?.Label ?? string.Empty;
+    }
+
+    /// <summary>Developer-only `--ui-smoke` hook: render the stopped Deploy state and its banner.</summary>
+    internal void ShowDeployCancelledForSmoke() => ApplyDeployCancelled();
 
     public void ToggleDeployLog()
     {
@@ -1601,7 +1755,7 @@ public sealed class MainViewModel : ObservableObject
         }
         foreach (var command in new System.Windows.Input.ICommand[]
                  {
-                     DeployCommand, BuildAllCommand, RefreshDevicesCommand, RefreshPrerequisitesCommand, RefreshStatusCommand,
+                     DeployCommand, StopDeployCommand, BuildAllCommand, RefreshDevicesCommand, RefreshPrerequisitesCommand, RefreshStatusCommand,
                      RefreshReadinessCommand, OpenImpactorCommand,
                  })
         {
