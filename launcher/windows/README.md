@@ -17,9 +17,8 @@ unit/integration tests pass**. The packaged single-file exe runs its clean-folde
 `--self-test` on Linux/WSL with the embedded payload (32 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a minimal Settings gear; it is
 localized (English / 简体中文) and uses the iOS app icon. The user-facing package is a ZIP
-with exactly one self-contained exe (the 0.1.1 package: 148,965,268 B, SHA-256
-`189c8215…51d03b`; the earlier pre-reset 0.2.5 package was 148,817,314 B, SHA-256
-`b9b2a0b0…52f0d7`).
+with exactly one self-contained exe (the rebuilt 0.1.1 package: 148,958,820 B,
+SHA-256 `a9484c7a…936d6e86`; the withdrawn first 0.1.1 package was 148,965,268 B).
 Synthetic (non-game) UI captures are in `docs/ui/v4-*.png` (the Windows UI is unchanged in
 0.1.1). The Windows 11 device path (import, local compile, Impactor signing, devpush and
 launch) was verified by the maintainers on the 0.1.0 build; the 0.1.1 metadata additions
@@ -47,7 +46,8 @@ re-checked by the shell), `launcherVersion` and `pushedAt`. `schemaVersion` stay
 
 Shell-template identity is validated before signing: version >= 0.1.0, build >= 1
 (manifest and Info.plist), bundle catalogue schema 2 + empty for the template, no
-Roms/. The shipped template is **0.1.1 / build 1** (rebuilt from current main for the 0.1.1 release;
+Roms/. The shipped template is **0.1.1 / build 1** (5,628,924 B, SHA-256
+`a7b26136…3ad97a70`; rebuilt from current main for the 0.1.1 rebuild;
 the pre-reset template was 0.2.2 build 10) and additionally contains
 `Frameworks/MoltenVK.framework` (GPU renderer + Metal HUD); `IpaComposer` copies
 every non-GamePack template entry, so the framework survives composition and is signed
