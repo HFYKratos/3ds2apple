@@ -203,8 +203,9 @@ The shell can be driven headlessly without tapping:
   accepted; an absolute path must stay inside the app container).
 - `-openAOTTitleID <TITLEID>` starts that library game 0.5 s after the home
   page appears, through the same path a card tap uses.
-- `-openLayoutPage` opens Settings → Layout (the screen layout modes and the
-  control/screen layout editors) straight away, for headless screenshots.
+- `-openLayoutPage` opens the screen layout page (Settings → Display → Screen
+  layout: the screen layout modes and the entry to the screen layout editor)
+  straight away, for headless screenshots.
 - `-openLayoutEditor control|screen` opens one of the two layout editors
   directly, for headless screenshots of the editors themselves.
 
@@ -223,7 +224,7 @@ data: never commit them, and remove the fixture from the container when done.
 
 | Setting | Values | Behaviour |
 |---|---|---|
-| Screen layout | Automatic (default), preset, custom (Metal), free layout (software) | Immediately for the three Metal modes, from the next game load for the free layout. Settings → Controls → Screen and control layout opens the Layout page. **Automatic** keeps the pre-existing behaviour (stacked in portrait, large top in landscape); **preset** pins one of the five classic arrangements; **custom (Metal)** adds a uniform scale and offset to a preset, saved per orientation; **free layout** places each screen at its own rectangle and therefore runs on the readback path (see "Editable layouts"). The Metal modes are drawn by the `CAMetalLayer` presenter; the layer's drawable becomes the arrangement's own pixels (400×480 stacked, 720×240 side by side, 400×240 / 320×240 for a single screen). |
+| Screen layout | Automatic (default), preset, custom (Metal), free layout (software) | Immediately for the three Metal modes, from the next game load for the free layout. Settings → Display → **Screen layout** opens the screen layout page (arrangement mode, base arrangement, Metal scale/offset and the entry to the free screen layout editor). **Automatic** keeps the pre-existing behaviour (stacked in portrait, large top in landscape); **preset** pins one of the five classic arrangements; **custom (Metal)** adds a uniform scale and offset to a preset, saved per orientation; **free layout** places each screen at its own rectangle and therefore runs on the readback path (see "Editable layouts"). The Metal modes are drawn by the `CAMetalLayer` presenter; the layer's drawable becomes the arrangement's own pixels (400×480 stacked, 720×240 side by side, 400×240 / 320×240 for a single screen). |
 | Screen rotation | Upright, 90° clockwise, upside down, 90° counter-clockwise | Immediately. Turns the screens inside their area, e.g. the stacked console becomes two columns (480×400) a quarter turn clockwise. The touchscreen is mapped back into the screen's own pixels. |
 | Aspect ratio | Fit (native), 4:3, Stretch | Immediately. Fit keeps the arrangement's shape; 4:3 fits the picture inside a 4:3 area with black bars; Stretch fills the game view's space and deliberately distorts the picture. |
 | Integer scaling | On / off | Immediately, with Fit and 4:3 (Stretch ignores it): each 3DS pixel maps to a whole number of screen pixels and the layer magnifies with nearest-pixel filtering. |
@@ -246,14 +247,16 @@ once. Fast-forward is silent: see "Fast-forward" below.
 
 The opacity slider scales the on-screen controls' transparency; haptics adds a
 light impact on each button press. The controller row shows the connected
-`GCController` name. Settings → Controls → **Screen and control layout** opens
-the Layout page, where both the screen arrangement and the on-screen controls are
-edited (the next sections).
+`GCController` name. Settings → Controls → **Control layout** opens the control
+layout editor; the screen side lives under Settings → Display → **Screen layout**
+(the next section).
 
 ## Editable layouts (controls and screens)
 
 Requirement 7 (complete virtual controls) and requirement 8 (screen layout
-presets plus a custom layout) are implemented in the Layout page:
+presets plus a custom layout) are split over two pages: Settings → Controls →
+**Control layout** for the on-screen controls and Settings → Display →
+**Screen layout** for the two screens:
 
 - **Controls.** The overlay draws the full New 3DS set: D-pad, A/B/X/Y, L/R,
   ZL/ZR, Start/Select, the Circle Pad and the C-stick. The "Control layout" page
@@ -597,7 +600,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `ControlLayoutEditorView.swift` | "Control layout" editor: direct manipulation on a scaled real game view (drag with alignment guides, pinch/corner-handle resize, per-control opacity, undo, resets, immediate persistence). |
 | `CustomScreenLayout.swift` | Free screen layout model (archive v2 with the ratio-lock flag and version 1 migration) plus `CustomScreenGeometry`: native-aspect presets, per-orientation screen rectangles, rotation, integer scaling. |
 | `ScreenLayoutEditorView.swift` | "Screen layout" editor: real picture stage preview, drag/pinch/corner-handle resize, edge snapping, Lock ratio, presets, show/hide, undo and resets. |
-| `LayoutSettingsView.swift` | The combined Layout page: screen layout mode, Metal scale/offset, entries to both editors and resets. |
+| `ScreenLayoutSettingsView.swift` | The screen layout page under Settings → Display: screen layout mode, base arrangement, Metal scale/offset, the entry to the free screen layout editor and the screen resets. Settings → Controls opens `ControlLayoutEditorView` directly. |
 | `GameControllerInput.swift` | GameController-to-3DS button mapping. |
 | `AudioOutput.swift` | Ring buffer and AVAudioEngine output (volume, mute, buffer duration). |
 | `FrameTiming.swift` | Per-phase frame timing for the diagnostics report and the fast-forward auto-fallback. |

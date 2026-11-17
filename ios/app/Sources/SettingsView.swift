@@ -3,7 +3,9 @@
 //  3ds2apple
 //
 //  Settings page: display, audio, controls, performance, storage and About.
-//  The display rows are shared with the in-game quick settings sheet.
+//  The Display section opens the full screen layout page and the Controls
+//  section opens the control layout editor; the rotation/aspect/resolution rows
+//  also appear in the in-game quick settings sheet.
 //
 //  The settings live in AppSettings; every control writes through a binding that
 //  also stores the new value in UserDefaults. Rows are written directly in the
@@ -86,10 +88,10 @@ struct SettingsView: View {
 
     private var displaySection: some View {
         Section {
-            Picker("Screen layout", selection: persistedBinding(settings, \.screenLayout)) {
-                ForEach(ScreenLayout.allCases) { layout in
-                    Text(layout.title).tag(layout)
-                }
+            NavigationLink {
+                ScreenLayoutSettingsView(settings: settings)
+            } label: {
+                Text("Screen layout")
             }
             Picker("Screen rotation", selection: persistedBinding(settings, \.screenRotation)) {
                 ForEach(ScreenRotation.allCases) { rotation in
@@ -168,9 +170,9 @@ struct SettingsView: View {
             }
             Toggle("Haptic feedback on button press", isOn: persistedBinding(settings, \.haptics))
             NavigationLink {
-                LayoutSettingsView(settings: settings)
+                ControlLayoutEditorView(settings: settings, orientation: .portrait)
             } label: {
-                Text("Screen and control layout")
+                Text("Control layout")
             }
             infoRow("Controller", model.controllerName ?? L10n.tr("Not connected"))
         } header: {

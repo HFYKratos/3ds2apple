@@ -513,10 +513,7 @@
 "Vertical offset" = "Vertical offset";
 "Reset scale and position" = "Reset scale and position";
 "Edit free layout" = "Edit free layout";
-"Edit portrait controls" = "Edit portrait controls";
-"Edit landscape controls" = "Edit landscape controls";
 "How it works" = "How it works";
-"Screen and control layout" = "Screen and control layout";
 "Control layout" = "Control layout";
 "Custom screen layout" = "Custom screen layout";
 "Reset this control" = "Reset this control";
@@ -538,9 +535,7 @@
 "The free layout uses the software readback display path, so it can be slower than the Metal presets. It applies from the next game load. Touch input follows the lower screen's rectangle." = "The free layout uses the software readback display path, so it can be slower than the Metal presets. It applies from the next game load. Touch input follows the lower screen's rectangle.";
 "Rotation, aspect ratio, integer scaling and resolution keep their meaning in every mode." = "Rotation, aspect ratio, integer scaling and resolution keep their meaning in every mode.";
 "The Metal presenter still draws the base arrangement; this only zooms and moves the whole picture on the layer. Enlarging past 100% shows the same render resolution, so it gets softer. Saved separately for portrait and landscape." = "The Metal presenter still draws the base arrangement; this only zooms and moves the whole picture on the layer. Enlarging past 100% shows the same render resolution, so it gets softer. Saved separately for portrait and landscape.";
-"Portrait and landscape keep separate control layouts. The editor can move, resize and fade every control, including the Circle Pad and the C-stick, and restore the defaults." = "Portrait and landscape keep separate control layouts. The editor can move, resize and fade every control, including the Circle Pad and the C-stick, and restore the defaults.";
 "Presets and Custom (Metal) draw through the CAMetalLayer presenter: full speed, and every phone rotates, scales and filters the picture the same way. Free layout trades that Metal path for exact per-screen placement, because the presenter only knows its own arrangements; the game picture then comes from the readback path the app also uses when Metal is unavailable." = "Presets and Custom (Metal) draw through the CAMetalLayer presenter: full speed, and every phone rotates, scales and filters the picture the same way. Free layout trades that Metal path for exact per-screen placement, because the presenter only knows its own arrangements; the game picture then comes from the readback path the app also uses when Metal is unavailable.";
-"Reset all layouts to defaults" = "Reset all layouts to defaults";
 
 
 /* --- 0.1.2 settings-ui (task-15): dynamic resolution caption, About page, trimmed HUD reasons --- */
@@ -604,4 +599,6 @@
 "Free screen layout runs on the software readback path, so it can be slower; it applies from the next game load." = "Free screen layout runs on the software readback path, so it can be slower; it applies from the next game load.";
 "The game applies the screen rotation; this editor arranges the upright screens." = "The game applies the screen rotation; this editor arranges the upright screens.";
 
+/* --- 0.1.2 layout split (task-22): screen layout under Display, control layout under Controls --- */
 
+"Reset screen layout to defaults" = "Reset screen layout to defaults";

@@ -32,7 +32,7 @@ struct ContentView: View {
 
     /// The layout page a `-openLayoutPage` / `-openLayoutEditor` launch opens.
     private enum LayoutLaunch: String, Identifiable {
-        case settings
+        case screenLayout
         case controlEditorPortrait
         case controlEditorLandscape
         case screenEditorPortrait
@@ -58,8 +58,8 @@ struct ContentView: View {
         .sheet(item: $layoutLaunch) { launch in
             NavigationStack {
                 switch launch {
-                case .settings:
-                    LayoutSettingsView(settings: settings)
+                case .screenLayout:
+                    ScreenLayoutSettingsView(settings: settings)
                 case .controlEditorPortrait:
                     ControlLayoutEditorView(settings: settings, orientation: .portrait)
                 case .controlEditorLandscape:
@@ -84,7 +84,7 @@ struct ContentView: View {
             DebugLaunch.startIfRequested(model: model, library: library)
             // Headless screenshot of the layout pages; inert otherwise.
             switch DebugLaunch.requestedLayoutPage {
-            case .settings: layoutLaunch = .settings
+            case .screenLayout: layoutLaunch = .screenLayout
             case .controlEditorPortrait: layoutLaunch = .controlEditorPortrait
             case .controlEditorLandscape: layoutLaunch = .controlEditorLandscape
             case .screenEditorPortrait: layoutLaunch = .screenEditorPortrait

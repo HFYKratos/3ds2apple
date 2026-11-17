@@ -517,10 +517,7 @@
 "Vertical offset" = "垂直偏移";
 "Reset scale and position" = "重置缩放与位置";
 "Edit free layout" = "编辑自由布局";
-"Edit portrait controls" = "编辑竖屏按键";
-"Edit landscape controls" = "编辑横屏按键";
 "How it works" = "工作原理";
-"Screen and control layout" = "屏幕与按键布局";
 "Control layout" = "控件布局";
 "Custom screen layout" = "自定义屏幕布局";
 "Reset this control" = "重置此控件";
@@ -542,9 +539,7 @@
 "The free layout uses the software readback display path, so it can be slower than the Metal presets. It applies from the next game load. Touch input follows the lower screen's rectangle." = "自由布局使用软件回读显示路径，可能比 Metal 预设慢。它在下次载入游戏时生效。触屏输入会跟随下屏矩形。";
 "Rotation, aspect ratio, integer scaling and resolution keep their meaning in every mode." = "旋转、宽高比、整数缩放和分辨率在所有模式下含义不变。";
 "The Metal presenter still draws the base arrangement; this only zooms and moves the whole picture on the layer. Enlarging past 100% shows the same render resolution, so it gets softer. Saved separately for portrait and landscape." = "Metal presenter 仍绘制基础排列；这里只是整幅画面的缩放与移动。放大超过 100% 时渲染分辨率不变，画面会变糊。竖屏与横屏分别保存。";
-"Portrait and landscape keep separate control layouts. The editor can move, resize and fade every control, including the Circle Pad and the C-stick, and restore the defaults." = "竖屏与横屏分别保存按键布局。编辑器可移动、缩放、调整每个控件的透明度（含摇杆与 C 杆），并可恢复默认。";
 "Presets and Custom (Metal) draw through the CAMetalLayer presenter: full speed, and every phone rotates, scales and filters the picture the same way. Free layout trades that Metal path for exact per-screen placement, because the presenter only knows its own arrangements; the game picture then comes from the readback path the app also uses when Metal is unavailable." = "预设与「自定义（Metal）」通过 CAMetalLayer presenter 绘制：全速运行，旋转、缩放与过滤在所有机型上一致。自由布局为了精确摆放两块屏幕而放弃该 Metal 路径，因为 presenter 只认识自己的几种排列；此时游戏画面走应用在 Metal 不可用时也会使用的回读路径。";
-"Reset all layouts to defaults" = "重置所有布局为默认";
 
 
 /* --- 0.1.2 settings-ui（task-15）：动态分辨率说明、关于页、精简的 HUD 原因 --- */
@@ -608,4 +603,6 @@
 "Free screen layout runs on the software readback path, so it can be slower; it applies from the next game load." = "自由屏幕布局走软件回读路径，可能更慢；下次载入游戏时生效。";
 "The game applies the screen rotation; this editor arranges the upright screens." = "屏幕旋转在游戏中生效；本编辑器按未旋转的画布排列。";
 
+/* --- 0.1.2 布局入口拆分（task-22）：屏幕布局在 设置→显示、按键布局在 设置→控制 --- */
 
+"Reset screen layout to defaults" = "重置屏幕布局为默认";

@@ -1,16 +1,16 @@
 //
-//  LayoutSettingsView.swift
+//  ScreenLayoutSettingsView.swift
 //  3ds2apple
 //
-//  The entry point for both layout features (user requirements 7 + 8, reworked
-//  for 0.1.2): the screen arrangement (presets, the Metal custom zoom/position,
-//  and the free per-screen layout) and the editable on-screen controls.
+//  The screen layout page under Settings -> Display (split out of the old
+//  combined "Screen and control layout" page for 0.1.2): the arrangement mode
+//  (Automatic / Preset / Custom (Metal) / Free layout), the base arrangement,
+//  the Metal custom scale/offset and the entry to the full screen layout editor.
 //
-//  The page itself only picks a mode and opens the two full-screen editors; the
-//  editing happens there, on a scaled copy of the real game view of this device
-//  (see GameViewGeometry.swift and the two editors). The Settings row that opens
-//  this page is "Screen and control layout", and the page title now says the
-//  same instead of just "Layout".
+//  The control layout lives on its own page under Settings -> Controls
+//  (ControlLayoutEditorView); this page only owns the screen side. The editing
+//  itself happens in ScreenLayoutEditorView, on a scaled copy of the real
+//  picture stage of this device (see GameViewGeometry.swift).
 //
 //  Three screen modes keep the fast path fast:
 //  - Automatic / Preset / Custom (Metal) all present through the CAMetalLayer;
@@ -24,7 +24,7 @@
 import Foundation
 import SwiftUI
 
-struct LayoutSettingsView: View {
+struct ScreenLayoutSettingsView: View {
     @ObservedObject var settings: AppSettings
 
     @State private var orientation: ControlLayoutOrientation = .portrait
@@ -33,10 +33,9 @@ struct LayoutSettingsView: View {
         Form {
             screensSection
             adjustmentSection
-            controlsSection
             aboutSection
         }
-        .navigationTitle(L10n.tr("Screen and control layout"))
+        .navigationTitle(L10n.tr("Screen layout"))
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -140,47 +139,17 @@ struct LayoutSettingsView: View {
         )
     }
 
-    // MARK: - Controls
-
-    private var controlsSection: some View {
-        Section {
-            NavigationLink {
-                ControlLayoutEditorView(settings: settings, orientation: .portrait)
-            } label: {
-                Label(L10n.tr("Edit portrait controls"), systemImage: "rectangle.portrait")
-            }
-            NavigationLink {
-                ControlLayoutEditorView(settings: settings, orientation: .landscape)
-            } label: {
-                Label(L10n.tr("Edit landscape controls"), systemImage: "rectangle")
-            }
-            Button(L10n.tr("Reset both control layouts"), role: .destructive) {
-                for value in ControlLayoutOrientation.allCases {
-                    settings.setControlLayout(.standard(for: value), for: value)
-                }
-                settings.persist()
-            }
-        } header: {
-            Text("On-screen controls")
-        } footer: {
-            Text(L10n.tr("Portrait and landscape keep separate control layouts. The editor can move, resize and fade every control, including the Circle Pad and the C-stick, and restore the defaults."))
-        }
-    }
-
     // MARK: - About
 
     private var aboutSection: some View {
         Section {
             hint(L10n.tr("Presets and Custom (Metal) draw through the CAMetalLayer presenter: full speed, and every phone rotates, scales and filters the picture the same way. Free layout trades that Metal path for exact per-screen placement, because the presenter only knows its own arrangements; the game picture then comes from the readback path the app also uses when Metal is unavailable."))
-            Button(L10n.tr("Reset all layouts to defaults"), role: .destructive) {
+            Button(L10n.tr("Reset screen layout to defaults"), role: .destructive) {
                 settings.screenLayoutMode = .automatic
                 settings.screenLayout = .stacked
                 settings.screenAdjustmentPortrait = .standard
                 settings.screenAdjustmentLandscape = .standard
                 settings.customScreenLayout = .standard()
-                for value in ControlLayoutOrientation.allCases {
-                    settings.setControlLayout(.standard(for: value), for: value)
-                }
                 settings.persist()
             }
         } header: {

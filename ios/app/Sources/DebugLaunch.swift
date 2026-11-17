@@ -16,8 +16,8 @@
 //        invalid title logs why and leaves the home page untouched.
 //
 //    -openLayoutPage
-//        Open Settings -> Layout right away (screen layout modes + the control
-//        and screen layout editors), for headless screenshots of that page.
+//        Open the screen layout page (Settings -> Display -> Screen layout)
+//        right away, for headless screenshots of the screen layout modes.
 //        Inert in normal launches.
 //
 //    -gamesRoot <path>
@@ -46,8 +46,9 @@ enum DebugLaunch {
     /// Launch argument: `-gamesRoot <path>` (relative to Documents, or an
     /// absolute path inside the app container).
     static let gamesRootArgument = "-gamesRoot"
-    /// Launch argument: `-openLayoutPage` opens Settings -> Layout straight
-    /// away, for headless screenshots of the control/screen layout editors.
+    /// Launch argument: `-openLayoutPage` opens the screen layout page
+    /// (Settings -> Display -> Screen layout) straight away, for headless
+    /// screenshots.
     static let layoutPageArgument = "-openLayoutPage"
     /// Launch argument: `-openLayoutEditor control|screen` opens one editor
     /// directly, for headless screenshots of the new 0.1.2 editors.
@@ -55,7 +56,7 @@ enum DebugLaunch {
 
     /// A layout page a headless launch asked to open.
     enum LayoutPage: String {
-        case settings
+        case screenLayout
         case controlEditorPortrait = "control"
         case controlEditorLandscape = "control-landscape"
         case screenEditorPortrait = "screen"
@@ -63,7 +64,7 @@ enum DebugLaunch {
     }
 
     /// Which layout page to open right away, for headless screenshots; nil in
-    /// normal launches. `-openLayoutPage` opens the Settings page,
+    /// normal launches. `-openLayoutPage` opens the screen layout page,
     /// `-openLayoutEditor control` or `-openLayoutEditor screen` opens an
     /// editor directly.
     static var requestedLayoutPage: LayoutPage? {
@@ -76,7 +77,7 @@ enum DebugLaunch {
             default: break
             }
         }
-        return opensLayoutPage ? .settings : nil
+        return opensLayoutPage ? .screenLayout : nil
     }
 
     /// Whether the launch asked for the Layout page (screenshot automation).
