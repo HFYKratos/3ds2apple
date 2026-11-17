@@ -31,11 +31,11 @@ Each library card is built from what the launcher already read out of the ROM at
 
 The on-screen pad is the complete New 3DS set: D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a real analog Circle Pad and the New 3DS C-stick. The Circle Pad reports true analog values (-1 to 1 per axis, with a small dead zone so a resting finger reads exactly 0) instead of acting as a second D-pad, and the C-stick works the same way. A hardware controller's left stick feeds the Circle Pad and its right stick feeds the C-stick; L2/R2 map to ZL/ZR, and several fingers can hold buttons and drag the sticks at the same time.
 
-Every control can be dragged, resized and faded - or reset - in **Settings -> Controls -> Screen and control layout**, with separate portrait and landscape profiles. The editor changes position, size and opacity only: which 3DS button a control reports is fixed (no remapping in this build). The C-stick needs a game that uses the New 3DS nub, and a shell built with the current runtime (`scripts/build-zakuro-ios.sh` from source has it).
+Every control can be dragged, resized and faded - or reset - in **Settings -> Controls -> Control layout**, with separate portrait and landscape profiles. The editor changes position, size and opacity only: which 3DS button a control reports is fixed (no remapping in this build). The C-stick needs a game that uses the New 3DS nub, and a shell built with the current runtime (`scripts/build-zakuro-ios.sh` from source has it).
 
 ## Four screen layouts
 
-The same Layout page arranges the two 3DS screens four ways:
+The **Screen layout** page (**Settings -> Display -> Screen layout**) arranges the two 3DS screens four ways:
 
 - **Automatic** (the default) keeps the original behaviour: stacked in portrait, the large top screen in landscape.
 - **Preset** pins one of the five classic arrangements: stacked, side by side, large top, upper screen only, lower screen only.
@@ -90,7 +90,7 @@ On a physical iPhone, Pokémon Y run through the Windows launcher path measures 
 ### Phone data, saves and limits
 
 - Game data lives in `Documents/Games/<TITLEID>/` (visible in the Files app); saves and save states live in the app container.
-- The on-screen controls and the four screen layouts are edited under **Settings -> Controls -> Screen and control layout**; the control layout and the three Metal screen modes apply immediately, the free layout from the next game load.
+- The on-screen controls are edited under **Settings -> Controls -> Control layout**; the four screen layouts are edited under **Settings -> Display -> Screen layout**. The control layout and the three Metal screen modes apply immediately, the free layout from the next game load.
 - A free Apple ID allows 3 apps per device and about 7 days of signing; deploy again to refresh. A paid developer account removes those limits.
 - Uninstalling the app removes its data; your ROMs on the computer are never touched.
 

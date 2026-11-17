@@ -73,7 +73,7 @@ struct ControlLayoutEditorView: View {
             if let selected {
                 inspector(for: selected)
             } else {
-                Text(L10n.tr("Tap a control to select it, then drag it in the preview or use the sliders below."))
+                Text(L10n.tr("Tap a control to select it, then drag it in the preview or use the sliders below. Several fingers can press different controls at the same time during a game."))
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
