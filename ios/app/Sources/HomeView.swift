@@ -5,12 +5,13 @@
 //  Landing page: the game library and the settings entry. A game has two
 //  halves: its AOT pack is part of the signed app and listed in the bundle
 //  GameCatalog.json, while its game data (the user's ROM) is pushed by the
-//  desktop launcher into Documents/Games/<TITLEID>/. Each card shows the title,
-//  when it was last played and the state: AOT (ready), Checking (verifying the
-//  pushed ROM hash), Data missing (launcher push not done yet) or Error (a
-//  broken push). When the launcher pushed the ROM's SMDH metadata the card
-//  also shows the real cover icon, the publisher and the game-data size.
-//  Tapping a card starts it or explains exactly what is wrong.
+//  desktop launcher into Documents/Games/<TITLEID>/. Each card is the game's
+//  SMDH icon in a square art area — the exported icon is 48×48, so the art
+//  keeps its native 1:1 aspect — followed by the title, publisher, game-data
+//  size, when it was last played and the state: AOT (ready), Checking
+//  (verifying the pushed ROM hash), Data missing (launcher push not done yet)
+//  or Error (a broken push). Tapping a card starts it or explains exactly what
+//  is wrong. There is no explanatory paragraph under the grid.
 //
 //  A fresh shell with an empty catalog shows the empty state: the AOT packs and
 //  the game data both come from the 3ds2apple desktop launcher, not from
@@ -121,12 +122,6 @@ struct HomeView: View {
                         gameCard(entry)
                     }
                 }
-                if library.entries.contains(where: { $0.hasPushedData }) {
-                    Text("Each game's AOT code is part of this app; its game data is pushed into this app's Documents/Games folder by the desktop launcher.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
 
             libraryNotice
@@ -146,32 +141,42 @@ struct HomeView: View {
         return Button {
             model.start(entry)
         } label: {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 7) {
                 cover(for: entry, state: state)
-                Text(entry.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2, reservesSpace: true)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                if let publisher = entry.publisher {
-                    Text(publisher)
+                // The info block is one tight leading-aligned stack under the
+                // square art: title (two lines reserved so a longer title cannot
+                // push the publisher/size rows around), publisher, size and
+                // last-played. Every row truncates instead of widening the card.
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(entry.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2, reservesSpace: true)
+                        .multilineTextAlignment(.leading)
+                        .allowsTightening(true)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    if let publisher = entry.publisher {
+                        Text(publisher)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .accessibilityIdentifier("game-card-publisher")
+                    }
+                    Text(cardMetaText(for: entry))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                        .accessibilityIdentifier("game-card-publisher")
+                        .truncationMode(.tail)
+                        .accessibilityIdentifier("game-card-meta")
+                    if entry.isLegacyBundled {
+                        Text(L10n.tr("From the previous build"))
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .lineLimit(1)
+                    }
                 }
-                Text(cardMetaText(for: entry))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .accessibilityIdentifier("game-card-meta")
-                if entry.isLegacyBundled {
-                    Text(L10n.tr("From the previous build"))
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                        .lineLimit(1)
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(10)
             .background(cardBackground)
@@ -232,9 +237,12 @@ struct HomeView: View {
 
     // MARK: - Card contents
 
-    /// Card cover: the launcher-pushed SMDH icon (`cover.png`), else the
-    /// build's bundle cover, else the deterministic gradient placeholder with a
-    /// controller glyph. No game art ships in the app.
+    /// Card art: the launcher-pushed SMDH icon (`cover.png`, 48×48 and square),
+    /// else the build's bundle cover, else the deterministic gradient
+    /// placeholder with a controller glyph. The art area is square for the same
+    /// reason: the only artwork a game exports is its 1:1 SMDH icon, so a 16:9
+    /// banner would letterbox it. The gradient is still the placeholder and the
+    /// thin frame around the icon. No game art ships in the app.
     private func cover(for entry: GameEntry, state: (label: String, tint: Color)) -> some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(
@@ -244,7 +252,7 @@ struct HomeView: View {
                     endPoint: .bottomTrailing
                 )
             )
-            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+            .aspectRatio(1, contentMode: .fit)
             .overlay { coverArt(for: entry) }
             .overlay(alignment: .topTrailing) {
                 badge(label: state.label, tint: state.tint)
@@ -253,9 +261,12 @@ struct HomeView: View {
             .accessibilityHidden(true)
     }
 
-    /// Real ROM icon when one is available; the 48x48 SMDH PNG is tiny and
-    /// read synchronously. A missing or unreadable cover keeps the placeholder,
-    /// so a push without `cover.png` still renders a usable card.
+    /// The icon at its native 1:1 aspect: `scaledToFit` inside the square art
+    /// area (never `scaledToFill`, which would crop a non-square file), enlarged
+    /// to fill the area with a tiny inset so the gradient frame stays visible.
+    /// The corner radius and shadow make the enlarged 48×48 PNG read as a cover;
+    /// a missing or unreadable cover keeps the placeholder, so a push without
+    /// `cover.png` still renders a usable card.
     @ViewBuilder
     private func coverArt(for entry: GameEntry) -> some View {
         if let url = entry.coverURL, let image = UIImage(contentsOfFile: url.path) {
@@ -263,12 +274,12 @@ struct HomeView: View {
                 .resizable()
                 .interpolation(.high)
                 .scaledToFit()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(6)
-                .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .shadow(color: .black.opacity(0.20), radius: 2, y: 1)
+                .padding(5)
         } else {
             Image(systemName: "gamecontroller.fill")
-                .font(.system(size: 28, weight: .semibold))
+                .font(.system(size: 32, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.9))
         }
     }
@@ -305,13 +316,19 @@ struct HomeView: View {
         return L10n.format("Last played %@", StorageFormat.relativeDate(lastPlayed))
     }
 
+    /// Corner state badge. The art area is the icon itself now rather than a
+    /// gradient banner, so the badge sits on a material capsule to stay legible
+    /// on top of bright cover art; it still stays inside a fixed-size capsule.
     private func badge(label: String, tint: Color) -> some View {
         Text(label)
             .font(.system(size: 9, weight: .semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .foregroundStyle(tint)
-            .background(Capsule().fill(tint.opacity(0.16)))
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(tint.opacity(0.35), lineWidth: 0.5))
             .accessibilityLabel(label)
     }
 

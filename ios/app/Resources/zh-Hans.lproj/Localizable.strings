@@ -461,7 +461,6 @@
 "No games in this build yet" = "此构建中还没有游戏";
 "Games are added with the 3ds2apple desktop launcher: it builds a version of this app that contains the game's AOT pack and installs it, then pushes the game's data into this app. Games appear here once the data push completes." = "游戏需要通过 3ds2apple 桌面启动器添加：启动器会构建包含该游戏 AOT 包的本应用版本并安装，然后把游戏数据推送进本应用。数据推送完成后，游戏会显示在这里。";
 "Pushed game data lives in Documents/Games/<TITLEID>/ and stays across app updates. The same folder is visible in the Files app under On My iPhone → 3ds2apple." = "推送的游戏数据保存在 Documents/Games/<TITLEID>/，应用更新后仍然保留。“文件”App 的“我的 iPhone → 3ds2apple”中可以看到同一文件夹。";
-"Each game's AOT code is part of this app; its game data is pushed into this app's Documents/Games folder by the desktop launcher." = "每个游戏的 AOT 代码都是本应用的一部分；游戏数据由桌面启动器推送到本应用的 Documents/Games 文件夹。";
 "Each game's AOT code is part of this app; the desktop launcher pushes the game data into this app's Documents/Games folder over USB or Wi-Fi. The Files app shows the same folder under On My iPhone → 3ds2apple." = "每个游戏的 AOT 代码都是本应用的一部分；桌面启动器通过 USB 或 Wi-Fi 把游戏数据推送到本应用的 Documents/Games 文件夹。“文件”App 的“我的 iPhone → 3ds2apple”中可以看到同一文件夹。";
 "The pushed game data of “%@” cannot be read any more. Push it again with the desktop launcher." = "“%@”的已推送游戏数据已无法读取。请用桌面启动器重新推送。";
 "The launcher has not pushed the game data of “%@” yet. Install the build from the desktop launcher, then let it push the game's data into Documents/Games/%@." = "启动器尚未推送“%@”的游戏数据。请先安装桌面启动器生成的构建，再让它把游戏数据推送到 Documents/Games/%@。";

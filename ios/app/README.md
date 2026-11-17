@@ -22,7 +22,7 @@ views do not carry duplicated strings.
 
 | Page | Contents |
 |---|---|
-| **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`; each card shows the game's own SMDH cover icon (launcher-pushed `cover.png`, else the build's bundled cover, else a placeholder), the title for the app language, the publisher and the pushed game size, plus last-played state and a per-card state badge (**AOT** / **Checking** / **Data missing** / **Error**). Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Refresh button and pull-to-refresh rescan Documents. The empty state explains the desktop launcher. No on-phone import. Settings entry. |
+| **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`. Each card has a square art area at the icon's native 1:1 aspect: the game's own SMDH cover art (launcher-pushed `cover.png`, else the build's bundled cover, else the gradient placeholder) is enlarged to fill it with a small inset and a rounded, shadowed edge, and the per-card state badge (**AOT** / **Checking** / **Data missing** / **Error** / **No AOT**) sits in its corner. Under the art the card is deliberately compact: the title for the app language (up to two lines, truncated), the publisher, then the pushed game size · last-played state. There is **no explanatory paragraph under the grid**. iPhone shows two columns, iPad three. Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Refresh button and pull-to-refresh rescan Documents. The empty state explains the desktop launcher. No on-phone import. Settings entry. |
 | **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), on-screen controls, the optional FPS counter and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. The FPS counter sits in the portrait title bar or in a slim landscape strip in the top safe area, outside the 3DS picture and clear of every control. |
 | **Settings** | Display, Audio, Controls, Performance (fast-forward, system Metal HUD, FPS counter), Storage and About sections. |
 | **Save Manager** | The battery save files of the current game (size, date, export as ZIP, import, delete), the three instant save-state slots (save, load, delete) and the container usage. |
@@ -151,10 +151,13 @@ falling back to `displayName`, then the catalog name, then the title ID.
 `publisher` and `region` (SMDH region lockout: `EU`, `US`, `EU+AU`,
 `region-free`) are optional and simply omitted when unknown; `cover` is
 `"cover.png"` when the icon was pushed. `rom.size` is cross-checked against the
-real file during the scan and the card shows that size (formatted MB/GB).
+real file during the scan and the card shows that size (formatted MB/GB). The
+card's art area is square (1:1) in every state, matching the 48×48 SMDH icon the
+launcher exports: the icon is enlarged to fill it and is never stretched or
+cropped, so the cover never sits in a 16:9 banner.
 Older launchers that push none of these fields stay fully compatible: the card
 falls back to the catalog `displayName`, hides the publisher row and draws the
-gradient placeholder instead of an icon.
+square gradient placeholder instead of an icon.
 
 The shell validates the pushed game data in two passes:
 
@@ -522,7 +525,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `App.swift` | SwiftUI entry point; cache directory, logging and the app delegate. |
 | `ApplicationDelegate.swift` | UIKit delegate used for the orientation preference. |
 | `ContentView.swift` | Root router: home page or game for the current session phase; applies settings to the session. |
-| `HomeView.swift` | Home page: the Documents/Games library grid, last-played dates, per-card state badge (AOT / Checking / Error), the exact per-game validation error on tap, the launcher empty state, refresh control, settings entry. |
+| `HomeView.swift` | Home page: the Documents/Games library grid (two columns on iPhone, three on iPad; square 1:1 SMDH cover art with the per-card state badge in the corner; compact title/publisher/size/last-played text; no explanatory paragraph under the grid), last-played dates, the exact per-game validation error on tap, the launcher empty state, refresh control, settings entry. |
 | `GameView.swift` | Running game: responsive portrait/landscape layout, screens, status line, on-screen controls, the optional FPS counter, in-game menu. |
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, reset, display settings, save manager, diagnostics, exit) and quick toggles. |
 | `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. |
