@@ -1,4 +1,5 @@
 using ThreeDsTwoApple.Launcher.Core.Tools;
+using ThreeDsTwoApple.Launcher.Core.Util;
 
 namespace ThreeDsTwoApple.Launcher.Core.Signing;
 
@@ -94,8 +95,11 @@ public sealed class PlumeSignRunner
         var output = new System.Text.StringBuilder();
         void Emit(string line)
         {
-            output.AppendLine(line);
-            onLogLine?.Invoke(line);
+            // plumesign/Impactor output can echo a device UDID or serial number; sanitize it
+            // before it reaches the launcher log, the per-run log file and diagnostics export.
+            var safe = Privacy.SanitizeLogLine(line);
+            output.AppendLine(safe);
+            onLogLine?.Invoke(safe);
         }
 
         var arguments = BuildSignArguments(request);
@@ -153,8 +157,10 @@ public sealed class PlumeSignRunner
         var output = new System.Text.StringBuilder();
         void Emit(string line)
         {
-            output.AppendLine(line);
-            onLogLine?.Invoke(line);
+            // Same privacy rule as the signing run: device identifiers never reach a log.
+            var safe = Privacy.SanitizeLogLine(line);
+            output.AppendLine(safe);
+            onLogLine?.Invoke(safe);
         }
         var process = await _runner.RunAsync(
             new ProcessRequest(_plumeSignPath, BuildDeviceInstallArguments(appPath, deviceNumber), Timeout: TimeSpan.FromMinutes(5)),

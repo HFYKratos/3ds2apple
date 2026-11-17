@@ -214,7 +214,9 @@ public sealed class LauncherWorkspace
     public void AppendLog(string line)
     {
         var path = Path.Combine(LogsDirectory, $"launcher-{DateTimeOffset.Now:yyyyMMdd}.log");
-        var entry = $"{DateTimeOffset.Now:yyyy-MM-dd'T'HH:mm:ss.fffzzz} {line}{Environment.NewLine}";
+        // Launcher logs/diagnostics must never contain a device identifier; the UI passes
+        // non-identifying descriptions already and this is the Core-level safety net.
+        var entry = $"{DateTimeOffset.Now:yyyy-MM-dd'T'HH:mm:ss.fffzzz} {Privacy.SanitizeLogLine(line)}{Environment.NewLine}";
         lock (_logLock)
         {
             File.AppendAllText(path, entry);

@@ -39,7 +39,10 @@ public sealed record PackBuildOutcome(
     PackRecord? Pack,
     string? ErrorCode,
     string? ErrorMessage,
-    string? BuildName)
+    string? BuildName,
+    BuildCompatibility? Compatibility = null,
+    string? RomSha256 = null,
+    long? RomBytes = null)
 {
     public static PackBuildOutcome Failure(string code, string message) => new(false, false, null, null, code, message, null);
 }

@@ -88,7 +88,19 @@ public sealed class DeployFlowTests
         public CollectingProgress Progress { get; } = new();
     }
 
-    private static Pipeline CreatePipeline(TempDir temp, params LibraryEntry[] entries)
+    private static Pipeline CreatePipeline(TempDir temp, params LibraryEntry[] entries) =>
+        CreatePipelineCore(temp, null, entries);
+
+    private static Pipeline CreatePipelineWithCompatibility(
+        TempDir temp,
+        IBuildCompatibilityProvider compatibility,
+        params LibraryEntry[] entries) =>
+        CreatePipelineCore(temp, compatibility, entries);
+
+    private static Pipeline CreatePipelineCore(
+        TempDir temp,
+        IBuildCompatibilityProvider? compatibility,
+        params LibraryEntry[] entries)
     {
         var workspace = LauncherWorkspace.Open(Path.Combine(temp.Path, "workspace"));
         foreach (var entry in entries)
@@ -100,9 +112,23 @@ public sealed class DeployFlowTests
         var composer = new FakeComposer();
         var installer = new FakeInstaller { BundleId = InstalledBundleId };
         var pusher = new FakePusher();
-        var orchestrator = new DeployOrchestrator(workspace, Shell(), temp.Path, build, composer, installer, pusher);
+        var orchestrator = new DeployOrchestrator(workspace, Shell(), temp.Path, build, composer, installer, pusher, compatibility);
         return new Pipeline(orchestrator, workspace, temp, build, composer, installer, pusher, TemplateIpa(temp));
     }
+
+    /// <summary>Build record exactly matching the current ROM, used by the cache-reuse tests.</summary>
+    private static BuildArtifact Artifact(LibraryEntry entry, BuildCompatibility compatibility) => new()
+    {
+        BuildCompatVersion = compatibility.BuildCompatVersion,
+        BuildCompatShort = compatibility.ShortVersion,
+        RomSha256 = TestHash.Sha256Hex(entry.RomPath),
+        RomBytes = new FileInfo(entry.RomPath).Length,
+        RomLastWriteUtc = File.GetLastWriteTimeUtc(entry.RomPath),
+        PackSha256 = entry.Pack?.Sha256 ?? string.Empty,
+        PackBytes = entry.Pack?.Bytes ?? 0,
+        LauncherVersion = "0.1.0",
+        BuiltAt = DateTimeOffset.UtcNow,
+    };
 
     private static DeployRequest Request(Pipeline pipeline, params string[] titleIds) =>
         new(titleIds, pipeline.TemplatePath, BundleIdOverride: null, DeviceUdid: null);
@@ -245,6 +271,89 @@ public sealed class DeployFlowTests
         Assert.Empty(pipeline.Installer.InstalledIpas);
     }
 
+    [Fact]
+    public async Task DeployReusesTheCacheOnlyWhenCompatAndRomShaMatch()
+    {
+        using var temp = new TempDir();
+        var compatibility = new StaticBuildCompatibilityProvider();
+        var entry = Entry(TitleA, "Cached game", temp, withRealPack: true);
+        entry.Build = Artifact(entry, compatibility.Compatibility);
+        var pipeline = CreatePipelineWithCompatibility(temp, compatibility, entry);
+
+        var outcome = await pipeline.Orchestrator.RunAsync(Request(pipeline, TitleA), pipeline.Progress);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.Empty(pipeline.Build.Requests);
+    }
+
+    [Fact]
+    public async Task DeployRebuildsWhenTheRomShaChanged()
+    {
+        using var temp = new TempDir();
+        var compatibility = new StaticBuildCompatibilityProvider();
+        var entry = Entry(TitleA, "Changed ROM", temp, withRealPack: true);
+        // The build record matches the original ROM; the user then replaces the ROM file
+        // (different content/size), so the recorded SHA-256 can no longer be trusted.
+        entry.Build = Artifact(entry, compatibility.Compatibility);
+        File.WriteAllBytes(entry.RomPath, new byte[] { 9, 9, 9 });
+        var pipeline = CreatePipelineWithCompatibility(temp, compatibility, entry);
+
+        var outcome = await pipeline.Orchestrator.RunAsync(Request(pipeline, TitleA), pipeline.Progress);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.Single(pipeline.Build.Requests);
+        Assert.Equal(TestHash.Sha256Hex(entry.RomPath), pipeline.Workspace.Find(TitleA)!.Build!.RomSha256);
+    }
+
+    [Fact]
+    public async Task DeployRebuildsWhenTheBuildRecipeChanged()
+    {
+        using var temp = new TempDir();
+        var compatibility = new StaticBuildCompatibilityProvider(clangVersion: "22.0.0");
+        var entry = Entry(TitleA, "Old recipe", temp, withRealPack: true);
+        entry.Build = Artifact(entry, BuildCompatibility.Create("1.0.0", "21.1.8", "21.1.8"));
+        var pipeline = CreatePipelineWithCompatibility(temp, compatibility, entry);
+
+        var outcome = await pipeline.Orchestrator.RunAsync(Request(pipeline, TitleA), pipeline.Progress);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.Single(pipeline.Build.Requests);
+    }
+
+    [Fact]
+    public async Task DeployRebuildsALegacyPackWithoutACompatibilityMarker()
+    {
+        using var temp = new TempDir();
+        var compatibility = new StaticBuildCompatibilityProvider();
+        var entry = Entry(TitleA, "Legacy pack", temp, withRealPack: true);
+        var pipeline = CreatePipelineWithCompatibility(temp, compatibility, entry);
+
+        var outcome = await pipeline.Orchestrator.RunAsync(Request(pipeline, TitleA), pipeline.Progress);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.Single(pipeline.Build.Requests);
+    }
+
+    [Fact]
+    public async Task DeployRecordsTheBuildMarkerAndRomShaAfterCompiling()
+    {
+        using var temp = new TempDir();
+        var compatibility = new StaticBuildCompatibilityProvider();
+        var entry = Entry(TitleA, "New game", temp, withRealPack: false);
+        var pipeline = CreatePipelineWithCompatibility(temp, compatibility, entry);
+        pipeline.Build.Compatibility = compatibility.Compatibility;
+
+        var outcome = await pipeline.Orchestrator.RunAsync(Request(pipeline, TitleA), pipeline.Progress);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        var built = pipeline.Workspace.Find(TitleA)!;
+        Assert.NotNull(built.Build);
+        Assert.Equal(compatibility.Compatibility.BuildCompatVersion, built.Build!.BuildCompatVersion);
+        Assert.Equal(TestHash.Sha256Hex(entry.RomPath), built.Build.RomSha256);
+        Assert.Equal(LauncherInfo.Version, built.Build.LauncherVersion);
+        Assert.True(built.Build.PackBytes > 0);
+    }
+
     // --- fakes ----------------------------------------------------------
 
     internal sealed class CollectingProgress : IProgress<DeployProgress>
@@ -259,6 +368,7 @@ public sealed class DeployFlowTests
         public List<PackBuildRequest> Requests { get; } = new();
         public string? FailCode { get; set; }
         public bool Installable { get; set; } = true;
+        public BuildCompatibility? Compatibility { get; set; }
 
         public string Name => "fake local build";
 
@@ -282,7 +392,10 @@ public sealed class DeployFlowTests
                 new PackRecord(new string('b', 64), new FileInfo(packPath).Length, "gamepack-macho"),
                 null,
                 null,
-                "fake-" + request.TitleID));
+                "fake-" + request.TitleID,
+                Compatibility,
+                TestHash.Sha256Hex(request.RomPath),
+                new FileInfo(request.RomPath).Length));
         }
     }
 

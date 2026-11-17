@@ -15,11 +15,14 @@ using ThreeDsTwoApple.Launcher.Core.Localization;
 
 namespace ThreeDsTwoApple.Launcher.App.ViewModels;
 
-/// <summary>One card in the Library: ROM icon / name / state / publisher + remove (no build/install/push buttons).</summary>
+/// <summary>One card in the Library: ROM icon / name / state / publisher, build-cache state,
+/// "Build now" (pre-build ahead of Deploy) and remove. Install/push stay on the Deploy page.</summary>
 public sealed class GameRow : ObservableObject
 {
     private readonly MainViewModel _owner;
     private string _state = "imported";
+    private string _buildStatusText = string.Empty;
+    private bool _isBuildCurrent;
     private Avalonia.Media.Imaging.Bitmap? _cover;
     private string? _coverSourcePath;
 
@@ -28,6 +31,7 @@ public sealed class GameRow : ObservableObject
         _owner = owner;
         Entry = entry;
         RemoveCommand = new AsyncRelayCommand(() => _owner.RemoveGameAsync(this), () => !_owner.IsBusy);
+        BuildCommand = new AsyncRelayCommand(() => _owner.BuildGameAsync(this), () => !_owner.IsBusy);
         Refresh();
     }
 
@@ -92,12 +96,32 @@ public sealed class GameRow : ObservableObject
 
     public AsyncRelayCommand RemoveCommand { get; }
 
+    /// <summary>"Build now": compile this game's GamePack ahead of a deploy (or reuse the cache).</summary>
+    public AsyncRelayCommand BuildCommand { get; }
+
+    public string BuildNowLabel => Loc.T("library.buildNow");
+
+    /// <summary>Built/cache label or the exact rebuild reason (recorded buildCompatVersion + ROM fingerprint).</summary>
+    public string BuildStatusText
+    {
+        get => _buildStatusText;
+        private set => SetProperty(ref _buildStatusText, value);
+    }
+
+    /// <summary>true when the GamePack matches the current build recipe and the recorded ROM fingerprint.</summary>
+    public bool IsBuildCurrent
+    {
+        get => _isBuildCurrent;
+        private set => SetProperty(ref _isBuildCurrent, value);
+    }
+
     public void Refresh()
     {
         State = Entry.Pack is null
             ? Entry.State
             : Entry.Pack.IsPlaceholder ? "preview" : "built";
         RefreshCover();
+        RefreshBuildStatus();
         OnPropertyChanged(nameof(StateLabel));
         OnPropertyChanged(nameof(PackLine));
         OnPropertyChanged(nameof(DisplayName));
@@ -112,9 +136,22 @@ public sealed class GameRow : ObservableObject
         OnPropertyChanged(nameof(TitleIdLine));
         OnPropertyChanged(nameof(RomLine));
         OnPropertyChanged(nameof(RemoveLabel));
+        OnPropertyChanged(nameof(BuildNowLabel));
     }
 
-    public void RaiseCommandStates() => RemoveCommand.RaiseCanExecuteChanged();
+    public void RaiseCommandStates()
+    {
+        RemoveCommand.RaiseCanExecuteChanged();
+        BuildCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>Recompute the cache label; cheap (size/mtime only, never reads the ROM).</summary>
+    private void RefreshBuildStatus()
+    {
+        var status = _owner.DescribeBuild(Entry);
+        BuildStatusText = status.Text;
+        IsBuildCurrent = status.Current;
+    }
 
     /// <summary>Load the ROM icon once per package path; a broken/missing PNG keeps the placeholder.</summary>
     private void RefreshCover()
@@ -347,8 +384,10 @@ public sealed class ToolRow : ObservableObject
 
 /// <summary>
 /// v2 view model: exactly two top-level sections (Library, Deploy) plus a minimal
-/// Settings overlay. Library imports/lists/removes games; Deploy selects one or many
-/// and runs one chained action (compile -> compose -> sign/install -> push -> verify).
+/// Settings overlay. Library imports/lists/removes games and can pre-build a GamePack
+/// ("Build now"/"Build all") ahead of a deploy, reusing the cache when the recorded
+/// buildCompatVersion + ROM SHA-256 still match; Deploy selects one or many and runs one
+/// chained action (compile -> compose -> sign/install -> push -> verify).
 /// Build mode / tool paths / bundle id / UDID controls are gone: tools are auto-detected.
 /// </summary>
 public sealed class MainViewModel : ObservableObject
@@ -380,6 +419,8 @@ public sealed class MainViewModel : ObservableObject
     private LanguageChoice? _selectedLanguage;
     private UiLanguagePreference _languagePreference = UiLanguagePreference.System;
     private readonly HardwareProfile _hardware = HardwareProbe.Current;
+    private BuildCompatibility? _buildCompatibility;
+    private bool _libraryBuildRunning;
 
     public MainViewModel() : this(LauncherServices.Create())
     {
@@ -397,6 +438,7 @@ public sealed class MainViewModel : ObservableObject
         OpenSettingsCommand = new RelayCommand(OpenSettings);
         CloseSettingsCommand = new RelayCommand(CloseSettings);
         DeployCommand = new AsyncRelayCommand(() => RunDeployAsync(), () => CanDeploy);
+        BuildAllCommand = new AsyncRelayCommand(() => BuildAllGamesAsync(), () => !IsBusy && Games.Count > 0);
         SelectAllCommand = new RelayCommand(() => SetAllSelected(true));
         SelectNoneCommand = new RelayCommand(() => SetAllSelected(false));
         RefreshDevicesCommand = new AsyncRelayCommand(() => RefreshDevicesAsync(), () => !IsBusy);
@@ -445,6 +487,7 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand OpenSettingsCommand { get; }
     public RelayCommand CloseSettingsCommand { get; }
     public AsyncRelayCommand DeployCommand { get; }
+    public AsyncRelayCommand BuildAllCommand { get; }
     public RelayCommand SelectAllCommand { get; }
     public RelayCommand SelectNoneCommand { get; }
     public AsyncRelayCommand RefreshDevicesCommand { get; }
@@ -554,6 +597,26 @@ public sealed class MainViewModel : ObservableObject
     public bool IsLibraryEmpty => Games.Count == 0;
 
     public string GameCountText => Loc.T("library.count", Games.Count);
+
+    public string BuildAllLabel => L.LibraryBuildAll;
+
+    /// <summary>true while a Library "Build now"/"Build all" batch is compiling.</summary>
+    public bool IsLibraryBuildRunning
+    {
+        get => _libraryBuildRunning;
+        private set
+        {
+            if (SetProperty(ref _libraryBuildRunning, value))
+            {
+                OnPropertyChanged(nameof(IsLibraryBuildProgressVisible));
+            }
+        }
+    }
+
+    public bool IsLibraryBuildProgressVisible => _libraryBuildRunning;
+
+    /// <summary>Current local-build recipe identity; null until the toolchain probe finished.</summary>
+    public BuildCompatibility? CurrentBuildCompatibility => _buildCompatibility;
 
     /// <summary>Automatic startup self-check result (green/red status light in the status bar).</summary>
     public bool IsReadinessReady => _readinessState == "ready";
@@ -723,6 +786,141 @@ public sealed class MainViewModel : ObservableObject
         _services.Workspace.SaveState();
         await RefreshLibraryAsync().ConfigureAwait(true);
         Log($"removed {title} from the launcher library (the ROM file itself was not touched).");
+    }
+
+    // --- library "Build now" + build cache ---------------------------------
+
+    /// <summary>
+    /// Library card build state: "Built · cache bXXXX", or the exact reason a rebuild is
+    /// needed (no marker yet / build recipe changed / ROM changed). Cheap: only the ROM
+    /// file size + last-write time are checked here; Deploy/Build now re-hash when needed.
+    /// </summary>
+    public (string Text, bool Current) DescribeBuild(LibraryEntry entry)
+    {
+        if (entry.Pack is null || entry.Pack.IsPlaceholder)
+        {
+            return (Loc.T("library.buildStatus.notBuilt"), false);
+        }
+        var artifact = entry.Build;
+        if (artifact is null || string.IsNullOrWhiteSpace(artifact.BuildCompatVersion))
+        {
+            return (Loc.T("library.buildStatus.noRecord"), false);
+        }
+        if (_buildCompatibility is not null
+            && !string.Equals(artifact.BuildCompatVersion, _buildCompatibility.BuildCompatVersion, StringComparison.Ordinal))
+        {
+            return (Loc.T("library.buildStatus.rebuildCompat"), false);
+        }
+        if (RomFingerprintChanged(entry, artifact))
+        {
+            return (Loc.T("library.buildStatus.rebuildRom"), false);
+        }
+        var label = string.IsNullOrWhiteSpace(artifact.BuildCompatShort)
+            ? BuildCompatibility.ShortLabel(artifact.BuildCompatVersion)
+            : artifact.BuildCompatShort;
+        return (Loc.T("library.buildStatus.built", label), true);
+    }
+
+    private static bool RomFingerprintChanged(LibraryEntry entry, BuildArtifact artifact)
+    {
+        try
+        {
+            var info = new FileInfo(entry.RomPath);
+            if (!info.Exists)
+            {
+                return true;
+            }
+            if (artifact.RomBytes > 0 && info.Length != artifact.RomBytes)
+            {
+                return true;
+            }
+            return artifact.RomLastWriteUtc is { } recorded && info.LastWriteTimeUtc != recorded.UtcDateTime;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>Library card "Build now": compile (or reuse) this one game's GamePack.</summary>
+    public async Task BuildGameAsync(GameRow row)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+        await BuildEntriesAsync(new[] { row.Entry }).ConfigureAwait(true);
+    }
+
+    /// <summary>Library "Build all": compile (or reuse) every imported game in order.</summary>
+    public Task BuildAllGamesAsync() =>
+        IsBusy ? Task.CompletedTask : BuildEntriesAsync(Games.Select(row => row.Entry).ToList());
+
+    private async Task BuildEntriesAsync(IReadOnlyList<LibraryEntry> entries)
+    {
+        if (entries.Count == 0)
+        {
+            return;
+        }
+        var service = _services.CreateLibraryBuildService();
+        IsLibraryBuildRunning = true;
+        SetBusy(true, Loc.T("status.building"));
+        ProgressValue = 0;
+        try
+        {
+            var progress = new Progress<BuildProgress>(value =>
+            {
+                if (value.Percent is { } percent)
+                {
+                    ProgressValue = Math.Clamp(percent, 0, 100);
+                }
+                if (!string.IsNullOrWhiteSpace(value.Message))
+                {
+                    StatusText = value.Message!;
+                }
+            });
+            var report = await service.BuildAsync(
+                entries,
+                entry => GameNames.Resolve(entry.DisplayNames, entry.DisplayName, Loc.CurrentTag),
+                progress,
+                line => Log("[build] " + line)).ConfigureAwait(true);
+            ProgressValue = 100;
+            StatusText = Loc.T("status.buildSummary", report.BuiltCount, report.ReusedCount, report.FailedCount);
+            foreach (var failed in report.Items.Where(item => !item.Success))
+            {
+                Log("build failed (" + failed.TitleID + "): " + (failed.ErrorMessage ?? failed.ErrorCode));
+            }
+            foreach (var reused in report.Items.Where(item => item.Success && item.Reused))
+            {
+                Log("build: " + reused.TitleID + " reused the cached GamePack");
+            }
+        }
+        catch (Exception exception)
+        {
+            Log("build failed: " + exception.Message);
+            StatusText = Loc.T("status.buildFailed");
+        }
+        finally
+        {
+            IsLibraryBuildRunning = false;
+            SetBusy(false, Loc.T("status.ready"));
+            await ResolveBuildCompatibilityAsync().ConfigureAwait(true);
+            await RefreshLibraryAsync().ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>Probe the local build recipe (toolchain ABI + versions) for the cache labels.</summary>
+    private async Task ResolveBuildCompatibilityAsync()
+    {
+        try
+        {
+            _buildCompatibility = await _services.BuildCompatibility.ResolveAsync().ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            _buildCompatibility = null;
+            Log("build compatibility probe failed: " + exception.Message);
+        }
     }
 
     // --- deploy ------------------------------------------------------------
@@ -1087,9 +1285,10 @@ public sealed class MainViewModel : ObservableObject
                 devices = muxDevices.Select(device => new DeviceInfo(device.Udid, null, null, null, device.ConnectionType, Paired: true)).ToList();
             }
             _device = devices.FirstOrDefault();
+            // Non-identifying device row: the UDID stays internal (deploy commands only).
             DeviceStatus = _device is null
                 ? L.DeployDeviceNone
-                : Loc.T("deploy.device", Privacy.RedactUdid(_device.Udid) + " (" + _device.Connection + ")");
+                : Loc.T("deploy.device", Privacy.DescribeDevice(_device.Model, _device.Connection, _device.IosVersion));
             _services.Workspace.State.LastDeviceUdid = _device?.Udid;
             _services.Workspace.SaveState();
             Log(DeviceStatus);
@@ -1259,6 +1458,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ReadinessLabel));
         OnPropertyChanged(nameof(ReadinessDetail));
         OnPropertyChanged(nameof(GameCountText));
+        OnPropertyChanged(nameof(BuildAllLabel));
         OnPropertyChanged(nameof(DeploySelectedCountText));
         OnPropertyChanged(nameof(DeployStateLabel));
         OnPropertyChanged(nameof(DeployMessage));
@@ -1341,7 +1541,10 @@ public sealed class MainViewModel : ObservableObject
 
     public void Log(string message)
     {
-        var line = $"{DateTimeOffset.Now:HH:mm:ss} {message}";
+        // Logs and the diagnostics export must never contain a device UDID/usbmux id/serial:
+        // call sites pass non-identifying descriptions and this is the UI-level safety net.
+        var safe = Privacy.SanitizeLogLine(message);
+        var line = $"{DateTimeOffset.Now:HH:mm:ss} {safe}";
         LogLines.Add(line);
         if (LogLines.Count > 4000)
         {
@@ -1349,7 +1552,7 @@ public sealed class MainViewModel : ObservableObject
         }
         try
         {
-            _services.Workspace.AppendLog(message);
+            _services.Workspace.AppendLog(safe);
         }
         catch (IOException)
         {
@@ -1361,6 +1564,7 @@ public sealed class MainViewModel : ObservableObject
     {
         try
         {
+            await ResolveBuildCompatibilityAsync().ConfigureAwait(true);
             await RefreshLibraryAsync().ConfigureAwait(true);
             await RefreshStatusAsync().ConfigureAwait(true);
             _shell = await _services.LoadShellAsync().ConfigureAwait(true);
@@ -1397,7 +1601,7 @@ public sealed class MainViewModel : ObservableObject
         }
         foreach (var command in new System.Windows.Input.ICommand[]
                  {
-                     DeployCommand, RefreshDevicesCommand, RefreshPrerequisitesCommand, RefreshStatusCommand,
+                     DeployCommand, BuildAllCommand, RefreshDevicesCommand, RefreshPrerequisitesCommand, RefreshStatusCommand,
                      RefreshReadinessCommand, OpenImpactorCommand,
                  })
         {

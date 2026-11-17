@@ -3,6 +3,7 @@ using ThreeDsTwoApple.Launcher.Core.LauncherState;
 using ThreeDsTwoApple.Launcher.Core.Localization;
 using ThreeDsTwoApple.Launcher.Core.Models;
 using ThreeDsTwoApple.Launcher.Core.Signing;
+using ThreeDsTwoApple.Launcher.Core.Util;
 
 namespace ThreeDsTwoApple.Launcher.Core.Deploy;
 
@@ -189,7 +190,13 @@ public sealed class DeployOrchestrator
     private readonly IComposedIpaComposer? _composer;
     private readonly IAppIpaInstaller? _installer;
     private readonly IGameDataPusher? _pusher;
+    private readonly IBuildCompatibilityProvider? _buildCompatibility;
 
+    /// <param name="buildCompatibility">
+    /// Optional so the pipeline stays constructible with pure fakes; the launcher always
+    /// supplies it (see <c>LauncherServices.CreateDeployOrchestrator</c>). With it, a pack
+    /// is reused only when the recorded buildCompatVersion AND ROM SHA-256 still match.
+    /// </param>
     public DeployOrchestrator(
         LauncherWorkspace workspace,
         ShellManifest? shell,
@@ -197,7 +204,8 @@ public sealed class DeployOrchestrator
         IPackBuildProvider? buildProvider,
         IComposedIpaComposer? composer,
         IAppIpaInstaller? installer,
-        IGameDataPusher? pusher)
+        IGameDataPusher? pusher,
+        IBuildCompatibilityProvider? buildCompatibility = null)
     {
         _workspace = workspace;
         _shell = shell;
@@ -206,6 +214,7 @@ public sealed class DeployOrchestrator
         _composer = composer;
         _installer = installer;
         _pusher = pusher;
+        _buildCompatibility = buildCompatibility;
     }
 
     /// <summary>True when every component needed to even attempt a deploy is present.</summary>
@@ -258,15 +267,23 @@ public sealed class DeployOrchestrator
             cancellationToken.ThrowIfCancellationRequested();
             var entry = selected[index];
             var displayName = LauncherGameDataPusher.DisplayName(entry);
-            var packPath = ResolveExistingPackPath(entry);
-            if (!request.RebuildExistingPacks && packPath is not null)
+            var cached = await ResolveCachedBuildAsync(entry, request.RebuildExistingPacks, cancellationToken).ConfigureAwait(false);
+            var packPath = cached.PackPath;
+            if (packPath is not null)
             {
-                log?.Invoke("build: " + entry.TitleID + " (" + displayName + ") already built; reusing " + packPath);
+                log?.Invoke("build: " + entry.TitleID + " (" + displayName + ") reusing the cached GamePack ("
+                            + (cached.CompatibilityShort ?? entry.Build?.BuildCompatShort ?? "?")
+                            + ", ROM sha256 " + BuildCachePolicy.ShortHash(entry.Build?.RomSha256 ?? cached.RomSha256)
+                            + "): " + cached.Detail);
                 Report(progress, DeployStepKind.Build, DeployStepStatus.Running,
-                    displayName + ": already built, reusing the pack", BuildPercent(index, selected.Count, 100), entry.TitleID);
+                    displayName + ": already built, reusing the cached GamePack", BuildPercent(index, selected.Count, 100), entry.TitleID);
             }
             else
             {
+                if (cached.Detail is not null)
+                {
+                    log?.Invoke("build: " + entry.TitleID + " (" + displayName + ") needs a rebuild: " + cached.Detail);
+                }
                 if (_buildProvider is null)
                 {
                     return Fail(progress, DeployStepKind.Build, "local_build_unavailable",
@@ -306,6 +323,7 @@ public sealed class DeployOrchestrator
                 entry.BuiltAt = DateTimeOffset.UtcNow;
                 entry.LastBuildName = outcome.BuildName;
                 entry.LastError = null;
+                entry.Build = await CaptureBuildArtifactAsync(entry, outcome, cancellationToken).ConfigureAwait(false);
                 _workspace.SaveState();
                 log?.Invoke("build: " + entry.TitleID + " ok -> " + entry.PackPath);
                 packPath = entry.PackPath;
@@ -514,6 +532,50 @@ public sealed class DeployOrchestrator
     public const string LocalBuildFix =
         "This launcher needs 3dsrecomp.exe and the official LLVM 21.1.8 tools (clang.exe, llvm-ar.exe, ld64.lld.exe, lib/clang/21/include). "
         + "Install LLVM 21.1.8 for Windows x86_64 and build 3dsrecomp once, or place both under the launcher's distribution Bin/ (Bin/3dsrecomp.exe and Bin/llvm/), then press Retry.";
+
+    /// <summary>
+    /// Reuse decision for one selected game: only a recorded buildCompatVersion + ROM
+    /// SHA-256 match (and a pack file that still exists) allows skipping the rebuild.
+    /// </summary>
+    private async Task<CachedBuild> ResolveCachedBuildAsync(LibraryEntry entry, bool forceRebuild, CancellationToken cancellationToken)
+    {
+        if (forceRebuild)
+        {
+            return new CachedBuild(null, null, null, "a rebuild was requested");
+        }
+        var packPath = ResolveExistingPackPath(entry);
+        if (_buildCompatibility is null)
+        {
+            // Compatibility injection is optional so the pipeline stays testable with pure
+            // fakes; the shipped launcher always supplies a real provider.
+            return packPath is null
+                ? new CachedBuild(null, null, null, "no built GamePack exists")
+                : new CachedBuild(packPath, entry.Build?.BuildCompatShort, entry.Build?.RomSha256, "the existing GamePack is reused");
+        }
+        if (!File.Exists(entry.RomPath))
+        {
+            return new CachedBuild(null, null, null, "the ROM file is missing");
+        }
+        var compatibility = await _buildCompatibility.ResolveAsync(cancellationToken).ConfigureAwait(false);
+        var romSha256 = BuildFingerprint.MatchesUnchangedRom(entry.Build, entry.RomPath)
+            ? entry.Build!.RomSha256
+            : await FileHashes.Sha256Async(entry.RomPath, cancellationToken).ConfigureAwait(false);
+        var decision = BuildCachePolicy.Evaluate(entry.Build, compatibility.BuildCompatVersion, romSha256, packPath);
+        return decision.Reuse
+            ? new CachedBuild(packPath, compatibility.ShortVersion, romSha256, decision.Detail)
+            : new CachedBuild(null, compatibility.ShortVersion, romSha256, decision.Detail);
+    }
+
+    /// <summary>Record the buildCompatVersion marker + ROM SHA-256 in the workspace state.</summary>
+    private async Task<BuildArtifact> CaptureBuildArtifactAsync(LibraryEntry entry, PackBuildOutcome outcome, CancellationToken cancellationToken)
+    {
+        var compatibility = _buildCompatibility is null
+            ? null
+            : await _buildCompatibility.ResolveAsync(cancellationToken).ConfigureAwait(false);
+        return await BuildArtifacts.CaptureAsync(outcome, compatibility, entry.RomPath, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+    }
+
+    private sealed record CachedBuild(string? PackPath, string? CompatibilityShort, string? RomSha256, string Detail);
 
     private string? ResolveExistingPackPath(LibraryEntry entry)
     {

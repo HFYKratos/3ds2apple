@@ -61,6 +61,13 @@ public sealed class LauncherServices
     /// <summary>Resolved local-build toolchain (3dsrecomp + LLVM/LLD); null when unresolved.</summary>
     public LocalToolchain? LocalTools { get; private set; }
 
+    /// <summary>
+    /// Identity of the current local build recipe (recomp/shim/pack ABI + clang/ld64
+    /// versions), probed once per process. The build cache stores this marker with every
+    /// GamePack and only reuses a pack whose marker and ROM SHA-256 both still match.
+    /// </summary>
+    public IBuildCompatibilityProvider BuildCompatibility { get; private set; } = null!;
+
     public ImpactorBundle Impactor { get; }
 
     public UsbMuxClient Mux { get; } = new();
@@ -97,6 +104,7 @@ public sealed class LauncherServices
         var plumeSignPath = _locator.FindPlumeSign();
         PlumeSign = plumeSignPath is null ? null : new PlumeSignRunner(_runner, plumeSignPath, _workspace.LogsDirectory);
         LocalTools = LocalToolchainResolver.Resolve(_locator);
+        BuildCompatibility = new ToolchainBuildCompatibilityProvider(_runner, LocalTools);
     }
 
     private DevPushClient? BuildDevPush()
@@ -134,7 +142,7 @@ public sealed class LauncherServices
         // offers. It is always created; a missing toolchain is reported by the provider
         // as ONE actionable build failure (Retry on the Deploy page), never as a silent
         // fallback to a placeholder or a remote macOS host.
-        PackBuildMode.LocalWinbuild => Pack is null ? null : new LocalWinbuildPackProvider(LocalTools, Pack, _runner),
+        PackBuildMode.LocalWinbuild => Pack is null ? null : new LocalWinbuildPackProvider(LocalTools, Pack, _runner, compatibility: BuildCompatibility),
         _ => null,
     };
 
@@ -149,7 +157,11 @@ public sealed class LauncherServices
         CreateDeployBuildProvider(),
         CreateComposer(),
         CreateShellInstallService(),
-        CreatePushService() is { } push ? new LauncherGameDataPusher(push) : null);
+        CreatePushService() is { } push ? new LauncherGameDataPusher(push) : null,
+        BuildCompatibility);
+
+    /// <summary>"Build now" service for the Library page (one game or every imported game).</summary>
+    public LibraryBuildService CreateLibraryBuildService() => new(_workspace, CreateDeployBuildProvider(), BuildCompatibility);
 
     /// <summary>
     /// Deploy pre-check: the five green/red prerequisites the Deploy page shows before the
@@ -196,7 +208,7 @@ public sealed class LauncherServices
                 muxTimeout.CancelAfter(TimeSpan.FromSeconds(4));
                 var muxDevices = await Mux.ListDevicesAsync(TimeSpan.FromSeconds(3), muxTimeout.Token).ConfigureAwait(false);
                 deviceSummaries.AddRange(muxDevices.Where(device => device.IsUsb)
-                    .Select(device => device.ConnectionType + " · " + Privacy.RedactUdid(device.Udid)));
+                    .Select(device => Privacy.DescribeDevice(null, device.ConnectionType)));
             }
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested
                                                && exception is LauncherToolException or OperationCanceledException or IOException or UnauthorizedAccessException)

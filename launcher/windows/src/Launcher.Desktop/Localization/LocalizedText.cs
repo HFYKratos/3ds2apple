@@ -33,6 +33,10 @@ public sealed class LocalizedText
     public string LibraryRefresh => Loc.T("library.refresh");
     public string LibraryMore => Loc.T("library.more");
 
+    // Library "Build now" / build-cache labels (task-21).
+    public string LibraryBuildNow => Loc.T("library.buildNow");
+    public string LibraryBuildAll => Loc.T("library.buildAll");
+
     // Deploy
     public string DeployTitle => Loc.T("deploy.title");
     public string DeploySubtitle => Loc.T("deploy.subtitle");

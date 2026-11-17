@@ -79,6 +79,43 @@ public sealed class LibraryEntry
     public DateTimeOffset? BuiltAt { get; set; }
     public DateTimeOffset? PushedAt { get; set; }
     public List<string> PushedFiles { get; set; } = new();
+
+    /// <summary>
+    /// Recorded identity of the last successful local build: the
+    /// <c>buildCompatVersion</c> marker and the ROM SHA-256. Deploy/"Build now" reuse
+    /// the GamePack only when both still match. This lives in state.json (user data),
+    /// never in the launcher log.
+    /// </summary>
+    public BuildArtifact? Build { get; set; }
+}
+
+/// <summary>Recorded build identity for one GamePack (see <see cref="LibraryEntry.Build"/>).</summary>
+public sealed class BuildArtifact
+{
+    /// <summary>Canonical local-build recipe marker (recomp/shim/pack ABI + toolchain versions).</summary>
+    public string BuildCompatVersion { get; set; } = string.Empty;
+
+    /// <summary>Short label derived from <see cref="BuildCompatVersion"/> for the UI.</summary>
+    public string BuildCompatShort { get; set; } = string.Empty;
+
+    /// <summary>SHA-256 of the ROM the GamePack was built from.</summary>
+    public string RomSha256 { get; set; } = string.Empty;
+
+    public long RomBytes { get; set; }
+
+    /// <summary>ROM last-write time when the build ran; used as a cheap change hint.</summary>
+    public DateTimeOffset? RomLastWriteUtc { get; set; }
+
+    public string PackSha256 { get; set; } = string.Empty;
+
+    public long PackBytes { get; set; }
+
+    public string? BuildName { get; set; }
+
+    /// <summary>Launcher version that produced the pack (informational only, not compatibility).</summary>
+    public string LauncherVersion { get; set; } = string.Empty;
+
+    public DateTimeOffset BuiltAt { get; set; }
 }
 
 /// <summary>A phone listed by the device bridge (<c>devpush devices --json</c>).</summary>
@@ -92,7 +129,11 @@ public sealed record DeviceInfo(
 {
     public bool IsUsb => string.Equals(Connection, "usb", StringComparison.OrdinalIgnoreCase);
 
-    public string Display => $"{Name ?? Model ?? "iPhone/iPad"} ({IosVersion ?? "?"}) · {Privacy.RedactUdid(Udid)} · {Connection}{(Paired ? string.Empty : " · not paired")}";
+    /// <summary>
+    /// Non-identifying description for logs/UI ("iPhone 15 Pro (USB)"). The UDID and
+    /// the user's device name stay internal; only the internal device operations use them.
+    /// </summary>
+    public string Display => Privacy.DescribeDevice(Model, Connection, IosVersion);
 }
 
 /// <summary>Result of <c>devpush app-attr --bundle-id ... --json</c>.</summary>

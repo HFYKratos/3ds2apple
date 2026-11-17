@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using ThreeDsTwoApple.Launcher.Core.Models;
 using ThreeDsTwoApple.Launcher.Core.Tools;
+using ThreeDsTwoApple.Launcher.Core.Util;
 
 namespace ThreeDsTwoApple.Launcher.Core.BuildPipeline;
 
@@ -174,6 +175,7 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
     private readonly LocalToolchain? _tools;
     private readonly PackCli? _packCli;
     private readonly IProcessRunner _runner;
+    private readonly IBuildCompatibilityProvider? _compatibility;
     private readonly Func<string, bool> _fileExists;
     private readonly Func<string, bool> _directoryExists;
 
@@ -182,13 +184,15 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
         PackCli? packCli,
         IProcessRunner runner,
         Func<string, bool>? fileExists = null,
-        Func<string, bool>? directoryExists = null)
+        Func<string, bool>? directoryExists = null,
+        IBuildCompatibilityProvider? compatibility = null)
     {
         _tools = tools;
         _packCli = packCli;
         _runner = runner;
         _fileExists = fileExists ?? File.Exists;
         _directoryExists = directoryExists ?? Directory.Exists;
+        _compatibility = compatibility;
     }
 
     public string Name => "Local build (3dsrecomp + open-source LLVM/LLD on this PC)";
@@ -322,9 +326,13 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
             return PackBuildOutcome.Failure(RecordFailedCode, "The recorded pack cannot be read back: " + error.Message);
         }
         var packRecord = new PackRecord(Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(), bytes.LongLength, "gamepack-macho");
+        var (romSha256, romBytes) = await FileHashes.Sha256WithSizeAsync(request.RomPath, cancellationToken).ConfigureAwait(false);
+        var compatibility = _compatibility is null
+            ? null
+            : await _compatibility.ResolveAsync(cancellationToken).ConfigureAwait(false);
         progress?.Report(new BuildProgress("done", 100, "Real GamePack built locally"));
-        log?.Invoke($"Local build done: {dylibPath} ({packRecord.Bytes} bytes, sha256 {packRecord.Sha256})");
-        return new PackBuildOutcome(true, true, dylibPath, packRecord, null, null, buildName);
+        log?.Invoke($"Local build done: {dylibPath} ({packRecord.Bytes} bytes, sha256 {packRecord.Sha256}, compat {(compatibility?.ShortVersion ?? "?")}, rom sha256 {BuildCachePolicy.ShortHash(romSha256)})");
+        return new PackBuildOutcome(true, true, dylibPath, packRecord, null, null, buildName, compatibility, romSha256, romBytes);
     }
 
     private void OnRecompLine(string line, IProgress<BuildProgress>? progress, Action<string>? log)

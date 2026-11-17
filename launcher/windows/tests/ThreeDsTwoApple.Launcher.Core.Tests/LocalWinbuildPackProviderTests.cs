@@ -129,7 +129,7 @@ public sealed class LocalWinbuildPackProviderTests
             return new ProcessResult(1, string.Empty, "unexpected tool " + request.FileName, false, true);
         });
         var packCli = new PackCli(runner, toolchain.PackCliPath!, Path.Combine(temp.Path, "out"));
-        var provider = new LocalWinbuildPackProvider(toolchain, packCli, runner);
+        var provider = new LocalWinbuildPackProvider(toolchain, packCli, runner, compatibility: new StaticBuildCompatibilityProvider());
         var progress = new List<BuildProgress>();
         var outcome = await provider.BuildAsync(Request(temp, rom), new Progress<BuildProgress>(progress.Add), null);
 
@@ -143,6 +143,11 @@ public sealed class LocalWinbuildPackProviderTests
         Assert.Equal(4, runner.Requests.Count); // recomp, shim compile, link, record
         Assert.Contains(progress, step => step.Stage == "recomp");
         Assert.Contains(progress, step => step.Stage == "done");
+        // The build records the compatibility marker + the ROM SHA-256 for the cache.
+        Assert.NotNull(outcome.Compatibility);
+        Assert.Contains("clang=21.1.8", outcome.Compatibility!.BuildCompatVersion);
+        Assert.Equal(TestHash.Sha256Hex(rom), outcome.RomSha256);
+        Assert.Equal(new FileInfo(rom).Length, outcome.RomBytes);
     }
 
     [Fact]

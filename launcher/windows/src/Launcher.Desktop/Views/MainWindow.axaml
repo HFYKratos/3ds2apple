@@ -39,7 +39,9 @@
 
     <!-- Content -->
     <Grid Grid.Row="1" Margin="20,16,20,8">
-      <!-- 1. Library: import / list / remove. No build-install-push actions here. -->
+      <!-- 1. Library: import / list / remove + pre-build ("Build now" / "Build all").
+           Cards show the recorded buildCompatVersion label or the exact rebuild reason.
+           Deploy still compiles/reuses; install/push actions live only on Deploy. -->
       <ScrollViewer IsVisible="{Binding IsLibrarySection}">
         <StackPanel Spacing="14" MaxWidth="1060" HorizontalAlignment="Stretch">
           <StackPanel Spacing="3">
@@ -51,7 +53,9 @@
                No path box, no name override, no explanatory card. Imported games render below. -->
           <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
             <Button Content="{Binding L.LibraryImportAction}" Click="BrowseRomClicked" Classes="primary" />
+            <Button Content="{Binding BuildAllLabel}" Command="{Binding BuildAllCommand}" Classes="ghost" />
             <ProgressBar Width="260" Value="{Binding ProgressValue}" IsVisible="{Binding IsImportRunning}" VerticalAlignment="Center" />
+            <ProgressBar Width="260" Value="{Binding ProgressValue}" IsVisible="{Binding IsLibraryBuildProgressVisible}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding GameCountText}" Classes="caption" VerticalAlignment="Center" />
           </StackPanel>
 
@@ -82,10 +86,16 @@
                     </Grid>
                     <StackPanel Grid.Row="1" Margin="0,12,0,0" Spacing="4">
                       <TextBlock Text="{Binding PackLine}" FontSize="12" Foreground="{DynamicResource AppAccentBrush}" TextWrapping="Wrap" />
+                      <!-- Build status: cache label when current (accent) or the exact rebuild reason (warning). -->
+                      <TextBlock Text="{Binding BuildStatusText}" FontSize="11" TextWrapping="Wrap"
+                                 Foreground="{DynamicResource AppAccentBrush}" IsVisible="{Binding IsBuildCurrent}" />
+                      <TextBlock Text="{Binding BuildStatusText}" FontSize="11" TextWrapping="Wrap"
+                                 Foreground="{DynamicResource AppWarningBrush}" IsVisible="{Binding !IsBuildCurrent}" />
                       <TextBlock Text="{Binding TitleIdLine}" Classes="caption" />
                       <TextBlock Text="{Binding RomLine}" Classes="caption" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,14,0,0">
+                      <Button Content="{Binding BuildNowLabel}" Command="{Binding BuildCommand}" Classes="primary" ToolTip.Tip="{Binding BuildStatusText}" />
                       <Button Content="{Binding RemoveLabel}" Command="{Binding RemoveCommand}" Classes="ghost" />
                     </StackPanel>
                   </Grid>

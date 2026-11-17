@@ -400,6 +400,15 @@ public static class LanguageCatalog
         ("layout.localAppData", "LocalAppData fallback (the launcher folder is read-only)"),
         ("layout.explicit", "explicit override"),
         ("layout.temp", "temporary fallback folder"),
+        // --- task-21: Library "Build now" + build-cache labels (append-only scope; en/zh stay in sync). ---
+        ("library.buildNow", "Build now"),
+        ("library.buildAll", "Build all"),
+        ("library.buildStatus.built", "Built · cache {0}"),
+        ("library.buildStatus.notBuilt", "Not built yet — Build now compiles it ahead of Deploy."),
+        ("library.buildStatus.noRecord", "Built · no cache marker yet (next build recompiles)"),
+        ("library.buildStatus.rebuildCompat", "Rebuild needed · build method changed"),
+        ("library.buildStatus.rebuildRom", "Rebuild needed · ROM changed"),
+        ("status.buildSummary", "Build finished: {0} built, {1} reused, {2} failed."),
     });
 
     public static IReadOnlyDictionary<string, string> ChineseSimplified { get; } = Build(new (string Key, string Text)[]
@@ -656,6 +665,15 @@ public static class LanguageCatalog
         ("layout.localAppData", "回退到 LocalAppData（启动器目录不可写）"),
         ("layout.explicit", "手动指定"),
         ("layout.temp", "回退到临时目录"),
+        // --- task-21：游戏库“立即构建”+ 构建缓存标签（仅追加；中英 key 保持同步）。---
+        ("library.buildNow", "立即构建"),
+        ("library.buildAll", "全部构建"),
+        ("library.buildStatus.built", "已构建 · 缓存 {0}"),
+        ("library.buildStatus.notBuilt", "尚未构建 —— “立即构建”可在部署前提前编译。"),
+        ("library.buildStatus.noRecord", "已构建 · 暂无缓存标记（下次将重新编译）"),
+        ("library.buildStatus.rebuildCompat", "需重新构建 · 构建方式已变更"),
+        ("library.buildStatus.rebuildRom", "需重新构建 · ROM 已变更"),
+        ("status.buildSummary", "构建完成：新建 {0} 个，复用 {1} 个，失败 {2} 个。"),
     });
 
     private static IReadOnlyDictionary<string, string> Build((string Key, string Text)[] entries)

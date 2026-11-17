@@ -2,8 +2,11 @@
 
 > These renders are from the 0.1.0 launcher (product version 0.1.0 build 1;
 > the previous 0.2.x numbering is retired). They predate the 0.1.2 Deploy
-> prerequisite lights and language-picker fix; 0.1.2 developer UI captures go to
-> the gitignored out/ui-smoke/ folder.
+> prerequisite lights, language-picker fix and Library build-now/build-cache UI;
+> 0.1.2 developer UI captures (including the synthetic-fixture Library renders
+> `library-build-cache-en.png` / `library-build-cache-zh.png` showing
+> "Built · cache b…" and the two rebuild reasons) go to the gitignored
+> out/ui-smoke/ folder.
 
 ## v4 polish (task-39, 2026-11-16)
 

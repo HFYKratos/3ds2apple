@@ -1,6 +1,9 @@
 using System.IO.Compression;
 using System.Text;
+using ThreeDsTwoApple.Launcher.Core.LauncherState;
+using ThreeDsTwoApple.Launcher.Core.Models;
 using ThreeDsTwoApple.Launcher.Core.Signing;
+using ThreeDsTwoApple.Launcher.Core.Tools;
 using ThreeDsTwoApple.Launcher.Core.Util;
 using Xunit;
 
@@ -175,23 +178,111 @@ public sealed class IpaTemplateInspectorTests
 
 public sealed class PrivacyTests
 {
+    private const string Udid = "00008030-001A2B3C4D5E6F70";
+
     [Fact]
-    public void RedactsLongUdid()
+    public void DeviceDescriptionIsNonIdentifying()
     {
-        const string udid = "00008030-001A2B3C4D5E6F70";
-        var redacted = Privacy.RedactUdid(udid);
-        Assert.StartsWith("00008030", redacted);
-        Assert.EndsWith("6F70", redacted);
-        Assert.DoesNotContain("001A2B3C4D5E", redacted);
-        Assert.NotEqual(udid, redacted);
+        // The description helpers do not even accept an identifier; only the internal
+        // DeviceInfo.Udid field (never logged) carries it.
+        Assert.Equal("iPhone 15 Pro (USB)", Privacy.DescribeDevice("iPhone 15 Pro", "usb"));
+        Assert.Equal("iPhone/iPad (USB)", Privacy.DescribeDevice(null, "usb"));
+        Assert.Equal("iPhone 15 Pro (Wi-Fi)", Privacy.DescribeDevice("iPhone 15 Pro", "network"));
+        Assert.Equal("iPhone 15 Pro (USB, iOS 18.2)", Privacy.DescribeDevice("iPhone 15 Pro", "usb", "18.2"));
+
+        var device = new DeviceInfo(Udid, "Kratos iPhone", "iPhone 15 Pro", "18.2", "usb", Paired: true);
+        var display = device.Display;
+        Assert.Equal("iPhone 15 Pro (USB, iOS 18.2)", display);
+        Assert.DoesNotContain(Udid, display, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("00008030", display, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("6F70", display, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Kratos iPhone", display, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void HandlesShortAndEmpty()
+    public void SanitizeLogLineRemovesEveryUdidShape()
     {
-        Assert.Equal("?", Privacy.RedactUdid(null));
-        Assert.Equal("?", Privacy.RedactUdid(""));
-        Assert.DoesNotContain("123456789012", Privacy.RedactUdid("123456789012"));
-        Assert.Contains(" · usb", Privacy.RedactDevice("00008030-001A2B3C4D5E6F70", "usb"));
+        var modern = Privacy.SanitizeLogLine("device " + Udid + " connected");
+        Assert.Contains(Privacy.DevicePlaceholder, modern);
+        Assert.DoesNotContain("00008030", modern, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("001A2B3C4D5E6F70", modern, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("6F70", modern, StringComparison.OrdinalIgnoreCase);
+
+        const string legacyUdid = "0123456789ABCDEF0123456789ABCDEF01234567";
+        var legacy = Privacy.SanitizeLogLine("legacy device " + legacyUdid);
+        Assert.DoesNotContain(legacyUdid, legacy, StringComparison.OrdinalIgnoreCase);
+
+        // The pre-0.1.2 launcher logged the "first8…last4" mask; it must not reappear either.
+        var maskedInput = Udid[..8] + "…" + Udid[^4..];
+        var masked = Privacy.SanitizeLogLine("udid " + maskedInput);
+        Assert.DoesNotContain(Udid[..8], masked, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Udid[^4..], masked, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(maskedInput, masked, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SanitizeLogLineRemovesUsbMuxIdEcidAndSerial()
+    {
+        const string text = "usbmux id 42 ecid: 1234567890123 serial=F2LZ12345678 UDID: " + Udid;
+        var sanitized = Privacy.SanitizeLogLine(text);
+        Assert.Contains(Privacy.DevicePlaceholder, sanitized);
+        Assert.DoesNotContain("usbmux id 42", sanitized, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("1234567890123", sanitized, StringComparison.Ordinal);
+        Assert.DoesNotContain("F2LZ12345678", sanitized, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("00008030", sanitized, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SanitizeLogLineKeepsTitleIdsAndHashes()
+    {
+        // Title IDs and SHA-256 digests are not device identifiers and must stay readable
+        // for support/verification work.
+        const string line = "titleID 0004000000055E00 pack sha256 a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
+        Assert.Equal(line, Privacy.SanitizeLogLine(line));
+        Assert.Equal(string.Empty, Privacy.SanitizeLogLine(null));
+    }
+}
+
+/// <summary>
+/// Defence in depth: even if a third-party tool prints a device identifier, the two
+/// launcher log sinks (the daily workspace log and each plumesign run log) scrub it.
+/// </summary>
+public sealed class PrivacyLogSinkTests
+{
+    private const string Udid = "00008030-001A2B3C4D5E6F70";
+
+    [Fact]
+    public void WorkspaceDailyLogSanitizesDeviceIdentifiers()
+    {
+        using var temp = new TempDir();
+        var workspace = LauncherWorkspace.Open(temp.Path);
+        workspace.AppendLog("device " + Udid + " usbmux id 7 ecid=1234567890123 serial=F2LZ12345678");
+
+        var log = File.ReadAllText(workspace.CurrentLogPath);
+        Assert.DoesNotContain(Udid, log, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("00008030", log, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("usbmux id 7", log, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("1234567890123", log, StringComparison.Ordinal);
+        Assert.DoesNotContain("F2LZ12345678", log, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(Privacy.DevicePlaceholder, log);
+        Assert.Contains("device", log, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PlumeSignRunLogSanitizesDeviceIdentifiers()
+    {
+        using var temp = new TempDir();
+        var runner = new FakeProcessRunner(_ => new ProcessResult(0,
+            "Device " + Udid + " usbmux id 7 serial=F2LZ12345678\nInstallation complete", string.Empty, false, true));
+        var signer = new PlumeSignRunner(runner, "/fake/plumesign", Path.Combine(temp.Path, "logs"));
+        var result = await signer.RunAsync(new PlumeSignRequest(Path.Combine(temp.Path, "in.ipa"), Path.Combine(temp.Path, "out.ipa"), "com.example.app"));
+
+        Assert.True(result.Success, result.Log);
+        var log = await File.ReadAllTextAsync(result.LogPath);
+        Assert.DoesNotContain(Udid, log, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("00008030", log, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("F2LZ12345678", log, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(Privacy.DevicePlaceholder, log);
+        Assert.DoesNotContain(Udid, result.Log, StringComparison.OrdinalIgnoreCase);
     }
 }

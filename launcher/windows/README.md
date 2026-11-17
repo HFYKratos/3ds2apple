@@ -12,8 +12,10 @@ cover and keeps an existing built GamePack (a user-supplied cover is never overw
 The legacy Build Agent path (`builder/{agent,cli,linux,windows}`, `MacAgent*` providers)
 is deleted; the local 3dsrecomp + LLVM/LLD build is the only path and the single-file
 exe no longer embeds `builder-windows.exe` (~1.24 MB smaller).
-This checkout compiles cleanly (0 errors, warnings as errors) and its **163
-unit/integration tests pass**. The packaged single-file exe runs its clean-folder
+The 0.1.2 checkout also adds Library **Build now / Build all** with a recorded
+build-compatibility cache (see below) and removes every device identifier from the
+UI, log and diagnostics export. This checkout compiles cleanly (0 errors, warnings as
+errors) and its **198 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
 `--self-test` on Linux/WSL with the embedded payload (32 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a minimal Settings gear; it is
 localized (English / 简体中文) and uses the iOS app icon. The user-facing package is a ZIP
@@ -52,15 +54,21 @@ Roms/. The shipped template is **0.1.2 / build 1** (5,800,569 B, SHA-256
 the pre-reset template was 0.2.2 build 10) and additionally contains
 `Frameworks/MoltenVK.framework` (GPU renderer + Metal HUD); `IpaComposer` copies
 every non-GamePack template entry, so the framework survives composition and is signed
-with the app. Device UDIDs are redacted in all UI/log output.
+with the app. Device identifiers (UDID, usbmux id, serial number, ECID) are never
+written to the UI, the launcher log or the diagnostics export: UI/log text uses a
+non-identifying description such as `iPhone (USB)`, and a full identifier only ever
+travels as an internal devpush/plumesign command argument.
 
 ## What it does
 
 1. **Library**: import a decrypted .3ds/.cci you own. Only headers are read (title ID,
    product code, name) by the existing 3ds2apple-pack CLI; the ROM is not copied. List,
-   rename or remove games — there are deliberately no build/install/push buttons here.
-   Cards show the title, publisher, ROM size and GamePack size/state; the SHA-256 stays
-   in the verification/log output and is not shown in the UI.
+   remove, and pre-build games: **Build now** on one card or **Build all** in the header
+   compiles the GamePack ahead of a deploy and shows progress + the recorded cache state.
+   Cards show the title, publisher, ROM size, GamePack size/state and the build-cache
+   label (`Built · cache b1a2b3c4` or the exact reason a rebuild is needed). SHA-256
+   values stay in the verification/log output and are not shown as raw digests in the UI.
+   Install/push actions stay on the Deploy page.
 2. **Deploy**: the page opens with a prerequisite panel — five green/red status lights
    (iPhone/iPad connected over USB, signing tools pinned to the Impactor v2.7.2 SHA-256,
    local build toolchain, devpush device bridge, shell template) with one short fix hint
@@ -83,9 +91,27 @@ with the app. Device UDIDs are redacted in all UI/log output.
    (show/export/open/self-test), about. The language picker keeps showing the current
    language after a switch (labels refresh in place; the persisted key format is
    unchanged). Build mode, tool paths, UDID and bundle-id overrides are no longer user
-   settings — bundled tools are auto-detected.
+   settings — bundled tools are auto-detected, and the device UDID is internal only
+   (never displayed or logged).
 
 No ROM, key, IPA, generated C or Apple credential is stored in this repository.
+
+### Build cache: what makes a GamePack reusable
+
+Each successful local build records a **`buildCompatVersion`** marker plus the ROM
+SHA-256 in `state.json` (user data, never in a log). The marker is composed of the
+recompiler ABI/generation, GamePack dylib ABI, hand-written shim ABI, catalogue and
+GameInfo schema versions, and the probed clang/ld64.lld versions. Deploy and both
+"Build now"/"Build all" reuse a cached GamePack **only when the marker and the ROM
+SHA-256 both still match** the current state; a launcher or shell update with an
+unchanged build recipe keeps the cache, while a toolchain/shim/schema change or a
+changed ROM forces a rebuild. The ROM is re-hashed whenever its size or last-write
+time changed; the Library card only compares that cheap fingerprint and the recorded
+marker, so no multi-GB ROM is read just to draw the card. The marker is deliberately
+independent of the launcher and shell versions, so updating the launcher or the shell
+template with an unchanged recipe keeps every GamePack. Packs built by a launcher
+older than 0.1.2 have no marker yet: they are rebuilt once on the next Deploy or
+"Build now", after which the cache applies normally.
 
 ## Stack
 
@@ -93,9 +119,9 @@ No ROM, key, IPA, generated C or Apple credential is stored in this repository.
   launcher uses; our code is original — S2Arm is an Apache-2.0 reference only).
 - Projects: ThreeDsTwoApple.Launcher.Core (no UI: tool clients, contracts, batch
   Deploy pipeline + composed-IPA verifier, IPA composition, signing, push, localization
-  catalog, embedded single-file payload) /
+  catalog, embedded single-file payload, build-compatibility cache) /
   ThreeDsTwoApple.Launcher.Desktop (Avalonia shell) /
-  ThreeDsTwoApple.Launcher.Core.Tests (163 xUnit tests).
+  ThreeDsTwoApple.Launcher.Core.Tests (198 xUnit tests).
 - All external work goes through CLI tools passed as argument arrays (never a
   shell string): 3ds2apple-pack, devpush, the official plumesign.
   The launcher never re-implements ROM parsing, the AOT compile/link,
@@ -118,7 +144,9 @@ No ROM, key, IPA, generated C or Apple credential is stored in this repository.
         Deploy/ComposedIpaVerifier.cs           hard gate: all real packs + non-empty schema-2 catalogue before signing
         BuildPipeline/IpaComposer.cs            shell template + packs + GameCatalog -> installable IPA
         BuildPipeline/LocalWinbuildPackProvider.cs  3dsrecomp + LLVM/LLD local build (the only Deploy path)
-        BuildPipeline/BuildProviders.cs         Preview placeholder provider (not offered by the v2 UI)
+        BuildPipeline/BuildCompatibility.cs     buildCompatVersion marker + build-cache reuse policy
+        BuildPipeline/LibraryBuildService.cs    Library "Build now"/"Build all" (same cache rules as Deploy)
+        BuildPipeline/BuildProviders.cs         build provider contract + preview placeholder (not offered by the v2 UI)
         BuildPipeline/GamePackInspector.cs      Mach-O check so only real AOT packs are installed
         BuildPipeline/BuildSlug.cs              deterministic ASCII build slug for the local build
         Signing/                        Impactor pins/verifier, plumesign runner, error catalog,
@@ -131,7 +159,7 @@ No ROM, key, IPA, generated C or Apple credential is stored in this repository.
       Hardware/                           logical/physical cores + RAM probe for the compile line
       src/Launcher.Desktop/             Avalonia UI (Program, App, MainWindow, view model,
                                         Localization/LocalizedText, Assets/app.ico + placeholder)
-      tests/ThreeDsTwoApple.Launcher.Core.Tests/   146 xUnit tests (incl. DeployFlowTests + ComposedIpaVerifierTests)
+      tests/ThreeDsTwoApple.Launcher.Core.Tests/   198 xUnit tests (incl. DeployFlowTests + BuildCacheTests + ComposedIpaVerifierTests)
       vendor/impactor/             PINS.json + MIT / MPL-2.0 licence texts + source note
       shell/                            shell template IPA placement + manifest example (unchanged):
                                         the template is ROM-free and pinned; packs are injected at install time

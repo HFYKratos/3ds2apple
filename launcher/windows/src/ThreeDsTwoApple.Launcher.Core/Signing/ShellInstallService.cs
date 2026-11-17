@@ -195,7 +195,8 @@ public sealed class ShellInstallService : IAppIpaInstaller
         {
             return new ShellInstallOutcome(false, bundleId, null, AppleErrorCatalog.Lookup("device_not_found")!, null);
         }
-        log?.Invoke("Device: " + Privacy.RedactUdid(device.Udid) + " (usbmux id " + device.DeviceId.ToString() + ", " + device.ConnectionType + ")");
+        // Non-identifying device row: the UDID/serial/usbmux id stay internal command arguments.
+        log?.Invoke("Device: " + Privacy.DescribeDevice(null, device.ConnectionType) + " selected for signing and install.");
         log?.Invoke("Signing the whole IPA with the official plumesign (Apple ID from Impactor); nested Frameworks dylibs are covered by this signature…");
 
         var signedDirectory = Path.Combine(_workDirectory, "signed");
