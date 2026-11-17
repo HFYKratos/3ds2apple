@@ -699,7 +699,9 @@ game looks frozen on its last frame. The app answers it:
   the applet's buttons left to right, and — while the confirming rule rejects the
   text — a localized line saying why the last button is disabled. The card scrolls
   above the system keyboard, so portrait and landscape both work; the keyboard
-  comes up automatically.
+  comes up automatically. On China-region iPhones the first focus can make iOS
+  show a one-time wireless-data permission alert; see the known-issue section
+  below.
 - **Validation.** The confirming button is enabled only when the text passes the
   applet's rule, mirrored exactly (`Request::accepts` in Zakuro's keyboard
   service): `anything`, `notEmpty`, `notEmptyNotBlank`, `notBlank`,
@@ -722,6 +724,37 @@ game looks frozen on its last frame. The app answers it:
   overlay with it; a request is published once, not on every polled frame; an
   unreadable JSON document is closed with the leftmost button instead of freezing
   the title; the typed text is never written to the log, only its length.
+
+## Known issue: China-region iOS asks to allow wireless data on the first text input
+
+On a China-region (国行) iPhone, the first time the app puts a system text input
+on screen — the 3DS software-keyboard overlay's text field becoming first
+responder is the only place this app does it — iOS may show the one-time
+「允许 3ds2apple 使用无线数据？」 alert (关闭 / 无线局域网 / 无线局域网与蜂窝数据).
+This is a known iOS system bug, not a request from the app:
+
+- **The app has no networking code.** No `URLSession`, no `Network.framework`, no
+  `CFNetwork`; the built binary has no `socket`/`connect`/`getaddrinfo`/`nw_*`
+  symbols, no `NSLocalNetworkUsageDescription`/`NSBonjourServices` and no network
+  entitlements. iOS Settings reports 0 cellular data for the app. (Zakuro's only
+  TCP code is its desktop netplay room; the iOS build never starts it.)
+- **The alert comes from UIKit's own text-input setup.** On China-region devices,
+  making the text field the first responder starts
+  `com.apple.assistant.dictation` and a `nw_path_evaluator_start` from
+  SystemConfiguration; CommCenter attributes that path check to the app's PID and
+  shows the first-network-use prompt. The device log has no `nw_connection`, no
+  URL and no traffic.
+- **It is a reported system issue.** Apple Developer Forums thread 822198 lists it
+  as a known issue, and other developers reproduce it on iOS 26.5/27 with an empty
+  project containing a single `UITextField` (<https://www.v2ex.com/t/1230881>).
+  The only complete workaround is to leave the system text-input path entirely
+  (a self-drawn keyboard), which this product does not do because it would lose
+  the system IME.
+
+**What to do:** choose **不允许** (Don't Allow) or **仅限无线局域网** (WLAN only) — the
+game, the 3DS keyboard overlay and every other feature keep working, because the
+app never uses the network. iOS may show the prompt again after reinstalling the
+app; it is a per-installation system permission, not an app setting.
 
 ## ROM handling
 
