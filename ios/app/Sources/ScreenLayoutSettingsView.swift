@@ -2,23 +2,19 @@
 //  ScreenLayoutSettingsView.swift
 //  3ds2apple
 //
-//  The screen layout page under Settings -> Display (split out of the old
-//  combined "Screen and control layout" page for 0.1.2): the arrangement mode
-//  (Automatic / Preset / Custom (Metal) / Free layout), the base arrangement,
-//  the Metal custom scale/offset and the entry to the full screen layout editor.
+//  The screen layout page under Settings -> Display (0.1.3 simplification).
 //
-//  The control layout lives on its own page under Settings -> Controls
-//  (ControlLayoutEditorView); this page only owns the screen side. The editing
-//  itself happens in ScreenLayoutEditorView, on a scaled copy of the real
-//  picture stage of this device (see GameViewGeometry.swift).
+//  Exactly two choices are exposed:
+//  - Default: the automatic arrangement (stacked screens in portrait, the large
+//    upper screen in landscape), drawn by the Metal presenter.
+//  - Custom: a hand-placed layout per device orientation. Choosing Custom opens
+//    the full-screen editor for the direction the device is in right now - that
+//    editor is the only screen-layout surface left (no mode, preset or
+//    "only one screen" choices). It runs on the software readback path.
 //
-//  Three screen modes keep the fast path fast:
-//  - Automatic / Preset / Custom (Metal) all present through the CAMetalLayer;
-//    the custom one only adds a uniform scale and offset on the layer, which the
-//    presenter never sees, so the GPU path is unchanged.
-//  - Free layout (software) places each screen anywhere; the upstream Zakuro
-//    presenter has no arbitrary arrangement, so this mode runs the readback
-//    display path. It is opt-in and the page says so.
+//  The screen layout page stays a normal Settings page; the editing itself
+//  happens in ScreenLayoutEditorView, full screen, on a scaled copy of the real
+//  game view of this device (see GameViewGeometry.swift).
 //
 
 import Foundation
@@ -27,114 +23,58 @@ import SwiftUI
 struct ScreenLayoutSettingsView: View {
     @ObservedObject var settings: AppSettings
 
-    @State private var orientation: ControlLayoutOrientation = .portrait
+    @State private var isEditorPresented = false
 
     var body: some View {
         Form {
-            screensSection
-            adjustmentSection
+            choiceSection
             aboutSection
         }
         .navigationTitle(L10n.tr("Screen layout"))
         .navigationBarTitleDisplayMode(.inline)
+        .fullScreenCover(isPresented: $isEditorPresented) {
+            ScreenLayoutEditorView(settings: settings)
+        }
     }
 
-    // MARK: - Screens
+    // MARK: - Choice
 
-    private var screensSection: some View {
+    private var choiceSection: some View {
         Section {
-            Picker("Screen layout", selection: persistedBinding(settings, \.screenLayoutMode)) {
+            Picker(L10n.tr("Screen layout"), selection: choiceBinding) {
                 ForEach(ScreenLayoutMode.allCases) { mode in
                     Text(mode.title).tag(mode)
                 }
             }
-            if settings.screenLayoutMode != .automatic {
-                Picker("Base arrangement", selection: persistedBinding(settings, \.screenLayout)) {
-                    ForEach(ScreenLayout.allCases) { layout in
-                        Text(layout.title).tag(layout)
-                    }
-                }
-            }
-            hint(settings.screenLayoutMode.detail)
-            if settings.screenLayoutMode == .freeform {
-                NavigationLink {
-                    ScreenLayoutEditorView(settings: settings)
+            .accessibilityIdentifier("screen-layout-choice")
+            if settings.screenLayoutMode == .custom {
+                Button {
+                    isEditorPresented = true
                 } label: {
                     Label(L10n.tr("Edit screen layout"), systemImage: "rectangle.3.group")
                 }
-                hint(L10n.tr("Free screen layout runs on the software readback path, so it can be slower; it applies from the next game load."))
+                .accessibilityIdentifier("screen-layout-edit")
             }
+            hint(settings.screenLayoutMode.detail)
         } header: {
-            Text("Screens")
+            Text(L10n.tr("Screens"))
         } footer: {
-            Text(L10n.tr("Rotation, aspect ratio, integer scaling and resolution keep their meaning in every mode."))
+            Text(L10n.tr("Rotation, aspect ratio and integer scaling keep their meaning in both choices."))
         }
     }
 
-    // MARK: - Metal custom zoom/position
-
-    @ViewBuilder
-    private var adjustmentSection: some View {
-        if settings.screenLayoutMode == .customMetal {
-            Section {
-                Picker("Orientation", selection: $orientation) {
-                    ForEach(ControlLayoutOrientation.allCases) { value in
-                        Text(value.title).tag(value)
-                    }
-                }
-                .pickerStyle(.segmented)
-                adjustmentSlider(L10n.tr("Scale"),
-                                 keyPath: \.scale,
-                                 range: 0.50...1.50,
-                                 format: "%.2f")
-                adjustmentSlider(L10n.tr("Horizontal offset"),
-                                 keyPath: \.offsetX,
-                                 range: -0.30...0.30,
-                                 format: "%+.2f")
-                adjustmentSlider(L10n.tr("Vertical offset"),
-                                 keyPath: \.offsetY,
-                                 range: -0.30...0.30,
-                                 format: "%+.2f")
-                Button(L10n.tr("Reset scale and position")) {
-                    settings.setScreenAdjustment(.standard, for: orientation)
-                    settings.persist()
-                }
-            } header: {
-                Text("Custom scale and position")
-            } footer: {
-                Text(L10n.tr("The Metal presenter still draws the base arrangement; this only zooms and moves the whole picture on the layer. Enlarging past 100% shows the same render resolution, so it gets softer. Saved separately for portrait and landscape."))
-            }
-        }
-    }
-
-    private func adjustmentSlider(_ title: String,
-                                  keyPath: WritableKeyPath<MetalScreenAdjustment, Double>,
-                                  range: ClosedRange<Double>,
-                                  format: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(title)
-                Spacer(minLength: 8)
-                Text(String(format: format,
-                            settings.screenAdjustment(for: orientation)[keyPath: keyPath]))
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
-            }
-            Slider(value: adjustmentBinding(keyPath, for: orientation), in: range)
-        }
-    }
-
-    private func adjustmentBinding(
-        _ keyPath: WritableKeyPath<MetalScreenAdjustment, Double>,
-        for orientation: ControlLayoutOrientation
-    ) -> Binding<Double> {
+    /// Choosing Custom opens the editor for the current direction immediately;
+    /// there is no other screen-layout screen in the app any more.
+    private var choiceBinding: Binding<ScreenLayoutMode> {
         Binding(
-            get: { settings.screenAdjustment(for: orientation)[keyPath: keyPath] },
-            set: { value in
-                var adjustment = settings.screenAdjustment(for: orientation)
-                adjustment[keyPath: keyPath] = value
-                settings.setScreenAdjustment(adjustment, for: orientation)
+            get: { settings.screenLayoutMode },
+            set: { newValue in
+                guard newValue != settings.screenLayoutMode else { return }
+                settings.screenLayoutMode = newValue
                 settings.persist()
+                if newValue == .custom {
+                    DispatchQueue.main.async { isEditorPresented = true }
+                }
             }
         )
     }
@@ -143,17 +83,16 @@ struct ScreenLayoutSettingsView: View {
 
     private var aboutSection: some View {
         Section {
-            hint(L10n.tr("Presets and Custom (Metal) draw through the CAMetalLayer presenter: full speed, and every phone rotates, scales and filters the picture the same way. Free layout trades that Metal path for exact per-screen placement, because the presenter only knows its own arrangements; the game picture then comes from the readback path the app also uses when Metal is unavailable."))
+            hint(L10n.tr("Custom screen layouts run on the software readback path, so they can be slower; a change applies from the next game load."))
             Button(L10n.tr("Reset screen layout to defaults"), role: .destructive) {
-                settings.screenLayoutMode = .automatic
-                settings.screenLayout = .stacked
-                settings.screenAdjustmentPortrait = .standard
-                settings.screenAdjustmentLandscape = .standard
+                settings.screenLayoutMode = .standard
                 settings.customScreenLayout = .standard()
                 settings.persist()
             }
         } header: {
-            Text("How it works")
+            Text(L10n.tr("How it works"))
+        } footer: {
+            Text(L10n.tr("Portrait and landscape keep their own custom layouts."))
         }
     }
 

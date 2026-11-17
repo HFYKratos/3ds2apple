@@ -190,6 +190,25 @@ struct GameViewDeviceMetrics: Equatable {
     }
 }
 
+extension GameViewDeviceMetrics {
+    /// The direction the interface is in right now. The layout editors open for
+    /// this direction and edit only its layout, because portrait and landscape
+    /// keep separate rectangles/profiles.
+    static var currentLayoutOrientation: ControlLayoutOrientation {
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first else {
+            return .portrait
+        }
+        switch scene.interfaceOrientation {
+        case .landscapeLeft, .landscapeRight:
+            return .landscape
+        default:
+            return .portrait
+        }
+    }
+}
+
 // MARK: - Preview geometry
 
 /// The pieces of the running game screen the layout editors draw, in device
@@ -315,13 +334,13 @@ extension GameViewPreviewGeometry {
     /// Where the two 3DS screens go inside the picture stage, mirroring what
     /// GameView draws (readback geometry; the Metal presenter lays the same
     /// arrangement out in its drawable). Used by the editors to draw the screens
-    /// behind the controls / around the free screen layout.
+    /// behind the controls / around the custom screen layout.
     static func screenViewports(in stage: CGSize,
                                 settings: AppSettings,
                                 orientation: ControlLayoutOrientation,
                                 displayScale: CGFloat) -> (top: CGRect?, bottom: CGRect?) {
         guard stage.width >= 1, stage.height >= 1 else { return (nil, nil) }
-        if settings.usesFreeformScreenLayout {
+        if settings.usesCustomScreenLayout {
             return CustomScreenGeometry.viewports(
                 available: stage,
                 placement: settings.customScreenLayout.placement(for: orientation),
@@ -485,7 +504,7 @@ enum ControlLayoutSnapping {
 
 // MARK: - Screen rectangle snapping
 
-/// Snapping for the free screen layout editor: a dragged/resized screen snaps to
+/// Snapping for the custom screen layout editor: a dragged/resized screen snaps to
 /// the picture stage edges and to the other screen, with guide lines.
 enum ScreenLayoutSnapping {
     /// Snapping distance in picture-stage points.

@@ -2,28 +2,26 @@
 //  ScreenLayoutEditorView.swift
 //  3ds2apple
 //
-//  The "Screen layout" editor for the free per-screen layout (user requirement
-//  8, reworked for 0.1.2 after "the proportions are completely wrong"): the
-//  preview is the real picture stage of this device and the two screens are
-//  drawn at the console's own pixel shape (upper 400x240 = 5:3, lower
-//  320x240 = 4:3).
+//  The full-screen custom screen layout editor (0.1.3 simplification).
 //
-//  What changed from the old editor:
-//  - The preview uses the real picture-stage aspect instead of a form-width
-//    box; a screen dragged to the stage edge lands on the edge in the game.
-//  - Drag a screen to move it, pinch to scale it about its centre, drag the
-//    corner handle to resize it. Movement snaps to the stage edges/centre and
-//    to the other screen, with dashed guide lines.
-//  - One-tap presets (stacked, side by side, upper only, lower only); the
-//    "custom" chip lights up when the rectangles match none of them.
-//  - "Lock ratio" (persisted, archive version 2) keeps the console's screen
-//    shape while moving/resizing; turning it on fixes the current rectangles.
-//  - Show/hide each screen, undo, reset one orientation or both.
-//  - Edits are applied immediately; Done just closes the page.
+//  There is one editor and no other choices: the Settings page opens it for the
+//  direction the device is in right now (portrait edits the portrait layout,
+//  landscape the landscape one), and the canvas is the whole screen. The canvas
+//  mirrors the running game view (GameViewGeometry.swift): the real safe area,
+//  the portrait title bar, the picture stage, the portrait control pad and the
+//  landscape overlay. The current on-screen control layout is drawn over the
+//  picture, translucent and non-interactive, so the screens can be placed
+//  between or away from the controls.
 //
-//  The page still says the free layout runs on the software readback path,
-//  because the upstream Zakuro presenter only knows its five arrangements; see
-//  CustomScreenLayout.swift and ios/app/README.md.
+//  Gestures: drag a screen to move it, pinch to shrink/enlarge it, drag the
+//  corner handle to resize it. Movement snaps to the stage edges/centre and to
+//  the other screen with dashed guides. Undo, lock ratio and reset (this
+//  direction or both) are on the bottom bar; every change is saved immediately.
+//
+//  The custom layout still runs on the software readback path - the upstream
+//  Zakuro presenter only knows its fixed arrangements - so it applies from the
+//  next game load. Archive: CustomScreenLayout version 2 (v1 is migrated on
+//  read); see CustomScreenLayout.swift and ios/app/README.md.
 //
 
 import Foundation
@@ -34,22 +32,30 @@ struct ScreenLayoutEditorView: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    /// The direction this editor edits. Fixed when the page opens: portrait and
+    /// landscape keep separate saved layouts.
     @State private var orientation: ControlLayoutOrientation
     @State private var draft: CustomScreenLayout
     @State private var selection: ScreenKind = .upper
     @State private var metrics: GameViewDeviceMetrics = .current()
     @State private var undoStack: [CustomScreenLayout] = []
 
+    // Gesture bookkeeping: a gesture always applies its total translation to the
+    // rectangle captured when it started, never to the already-moved one.
     @State private var moveBase: ScreenRect?
     @State private var resizeBase: ScreenRect?
     @State private var pinchBase: ScreenRect?
 
+    // Snapping guides (stage points).
     @State private var guideXs: [CGFloat] = []
     @State private var guideYs: [CGFloat] = []
 
-    init(settings: AppSettings, orientation: ControlLayoutOrientation = .portrait) {
+    /// `orientation` nil means "the direction the device is held in right now".
+    /// The headless screenshot launch passes one explicitly.
+    init(settings: AppSettings, orientation: ControlLayoutOrientation? = nil) {
         self.settings = settings
-        _orientation = State(initialValue: orientation)
+        let target = orientation ?? GameViewDeviceMetrics.currentLayoutOrientation
+        _orientation = State(initialValue: target)
         _draft = State(initialValue: settings.customScreenLayout)
     }
 
@@ -80,150 +86,51 @@ struct ScreenLayoutEditorView: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
-            orientationPicker
-            presetPicker
-            preview
-            bottomPanel
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 6)
-        .padding(.bottom, 8)
-        .navigationTitle(L10n.tr("Screen layout"))
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(L10n.tr("Done")) { dismiss() }
-            }
-        }
-        .onAppear {
-            metrics = .current()
-            draft = settings.customScreenLayout
-        }
-    }
-
-    // MARK: - Orientation
-
-    private var orientationPicker: some View {
-        Picker("Orientation", selection: orientationBinding) {
-            ForEach(ControlLayoutOrientation.allCases) { value in
-                Text(value.title).tag(value)
-            }
-        }
-        .pickerStyle(.segmented)
-        .accessibilityIdentifier("screen-layout-orientation")
-    }
-
-    private var orientationBinding: Binding<ControlLayoutOrientation> {
-        Binding(
-            get: { orientation },
-            set: { newValue in
-                guard newValue != orientation else { return }
-                commit()
-                orientation = newValue
-                draft = settings.customScreenLayout
-                selection = .upper
-                undoStack = []
-                guideXs = []
-                guideYs = []
-            }
-        )
-    }
-
-    // MARK: - Presets
-
-    private var presetPicker: some View {
-        let current = currentPreset
-        return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(ScreenLayoutPreset.allCases) { preset in
-                    Button {
-                        applyPreset(preset)
-                    } label: {
-                        Text(preset.title)
-                            .font(.caption2.weight(current == preset ? .semibold : .regular))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
-                            .background(
-                                Capsule().fill(current == preset
-                                    ? Color.accentColor.opacity(0.30)
-                                    : Color.white.opacity(0.08))
-                            )
-                            .overlay(
-                                Capsule().strokeBorder(
-                                    current == preset
-                                        ? Color.accentColor
-                                        : Color.white.opacity(0.12),
-                                    lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.primary)
-                    .disabled(preset == .custom)
-                    .accessibilityIdentifier("screen-preset-\(preset.rawValue)")
-                }
-            }
-            .padding(.horizontal, 1)
-        }
-        .frame(height: 34)
-    }
-
-    private var currentPreset: ScreenLayoutPreset {
-        let placement = draft.placement(for: orientation)
-        for preset in [ScreenLayoutPreset.stacked, .sideBySide, .upperOnly, .lowerOnly] {
-            let expected = CustomScreenLayout.preset(preset, containerAspect: canvasAspect)
-            if matches(placement, expected) {
-                return preset
-            }
-        }
-        return .custom
-    }
-
-    private func matches(_ lhs: CustomScreenPlacement, _ rhs: CustomScreenPlacement) -> Bool {
-        lhs.showsTop == rhs.showsTop
-            && lhs.showsBottom == rhs.showsBottom
-            && rectMatches(lhs.top, rhs.top)
-            && rectMatches(lhs.bottom, rhs.bottom)
-    }
-
-    private func rectMatches(_ lhs: ScreenRect, _ rhs: ScreenRect) -> Bool {
-        abs(lhs.x - rhs.x) < 0.01
-            && abs(lhs.y - rhs.y) < 0.01
-            && abs(lhs.width - rhs.width) < 0.01
-            && abs(lhs.height - rhs.height) < 0.01
-    }
-
-    private func applyPreset(_ preset: ScreenLayoutPreset) {
-        guard preset != .custom else { return }
-        pushUndo()
-        var layout = draft
-        let placement = layout.placement(applying: preset,
-                                         for: orientation,
-                                         containerAspect: canvasAspect)
-        layout.setPlacement(placement, for: orientation)
-        draft = layout
-        selection = preset.showsOnly ?? .upper
-        commit()
-    }
-
-    // MARK: - Preview
-
-    private var preview: some View {
         GeometryReader { proxy in
-            let scaler = GameViewPreviewScaler(available: proxy.size,
-                                              metrics: metrics,
-                                              orientation: orientation)
             ZStack(alignment: .topLeading) {
-                Color.clear
-                deviceFrame(scaler)
-                mockChrome(scaler)
-                stageView(scaler)
+                Color.black
+                canvas(available: proxy.size)
+                VStack(spacing: 8) {
+                    topBar
+                    Spacer(minLength: 8)
+                    bottomBar
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
-            .contentShape(Rectangle())
-            .simultaneousGesture(pinchGesture)
-            .accessibilityIdentifier("screen-layout-preview")
         }
+        .background(Color.black.ignoresSafeArea())
+        .onAppear(perform: refresh)
+    }
+
+    private func refresh() {
+        metrics = .current()
+        // Heal an older archive that hid a screen: the simplified editor only
+        // knows "both screens shown", and the value is saved on the next edit.
+        draft = settings.customScreenLayout.withDefaultsFilled()
+        undoStack = []
+        selection = .upper
+    }
+
+    // MARK: - Canvas
+
+    private func canvas(available: CGSize) -> some View {
+        let scaler = GameViewPreviewScaler(available: available,
+                                          metrics: metrics,
+                                          orientation: orientation,
+                                          padding: 8)
+        return ZStack(alignment: .topLeading) {
+            Color.clear
+            deviceFrame(scaler)
+            mockChrome(scaler)
+            stageView(scaler)
+            controlOverlay(scaler)
+        }
+        .frame(width: available.width, height: available.height)
+        .contentShape(Rectangle())
+        .simultaneousGesture(pinchGesture)
+        .accessibilityIdentifier("screen-layout-preview")
     }
 
     private func deviceFrame(_ scaler: GameViewPreviewScaler) -> some View {
@@ -239,6 +146,9 @@ struct ScreenLayoutEditorView: View {
             .position(x: rect.midX, y: rect.midY)
     }
 
+    /// The parts of the game view around the picture stage: the portrait title
+    /// bar and the reserved portrait control pad (the controls themselves are
+    /// drawn by `controlOverlay`).
     @ViewBuilder
     private func mockChrome(_ scaler: GameViewPreviewScaler) -> some View {
         if let topBar = geometry.topBarRect {
@@ -265,12 +175,48 @@ struct ScreenLayoutEditorView: View {
                     .strokeBorder(Color.white.opacity(0.10),
                                   style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 Text(L10n.tr("Control area"))
-                    .font(.system(size: max(min(pad.height * 0.16, 8), 5), weight: .medium))
+                    .font(.system(size: max(min(pad.height * 0.14, 8), 5), weight: .medium))
                     .foregroundColor(.white.opacity(0.30))
             }
             .frame(width: pad.width, height: pad.height)
             .position(x: pad.midX, y: pad.midY)
         }
+    }
+
+    /// The translucent current control layout: the reference the user places the
+    /// picture against. Not interactive, so every gesture reaches the screens.
+    private func controlOverlay(_ scaler: GameViewPreviewScaler) -> some View {
+        let container = geometry.controlContainerRect
+        let profile = settings.controlLayout(for: orientation)
+        return ZStack(alignment: .topLeading) {
+            Color.clear
+            ForEach(ControlElement.allCases) { element in
+                let frame = element.frame(for: profile.placement(for: element),
+                                         in: container.size)
+                let center = scaler.point(CGPoint(x: container.minX + frame.center.x,
+                                                  y: container.minY + frame.center.y))
+                let width = max(scaler.length(frame.width), 6)
+                let height = max(scaler.length(frame.height), 6)
+                RoundedRectangle(cornerRadius: min(width, height) * 0.42, style: .continuous)
+                    .fill(Color.white.opacity(0.10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: min(width, height) * 0.42,
+                                         style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.38), lineWidth: 0.7)
+                    )
+                    .overlay(
+                        Text(element.symbol)
+                            .font(.system(size: max(min(height * 0.36, 10), 5),
+                                          weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.55))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                    )
+                    .frame(width: width, height: height)
+                    .position(center)
+            }
+        }
+        .allowsHitTesting(false)
     }
 
     private func stageView(_ scaler: GameViewPreviewScaler) -> some View {
@@ -301,12 +247,10 @@ struct ScreenLayoutEditorView: View {
         let placement = draft.placement(for: orientation)
         return ZStack(alignment: .topLeading) {
             Color.clear
-            if placement.showsTop {
-                editableScreen(.upper, source: placement.top, canvas: canvas, scale: scale)
-            }
-            if placement.showsBottom {
-                editableScreen(.lower, source: placement.bottom, canvas: canvas, scale: scale)
-            }
+            // Both screens are always shown in the simplified editor; the model
+            // heals the old "only one screen" flags on read.
+            editableScreen(.upper, source: placement.top, canvas: canvas, scale: scale)
+            editableScreen(.lower, source: placement.bottom, canvas: canvas, scale: scale)
             guideLines(preview: preview, scale: scale)
         }
         .frame(width: preview.width, height: preview.height)
@@ -366,11 +310,30 @@ struct ScreenLayoutEditorView: View {
         }
     }
 
-    // MARK: - Bottom panel
+    // MARK: - Bars
 
-    private var bottomPanel: some View {
+    private var topBar: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(L10n.tr("Screen layout"))
+                    .font(.footnote.weight(.semibold))
+                Text(L10n.format("Editing the %@ layout", orientation.title))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            Spacer(minLength: 8)
+            Button(L10n.tr("Done")) { dismiss() }
+                .font(.footnote.weight(.semibold))
+                .accessibilityIdentifier("screen-editor-done")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
+    }
+
+    private var bottomBar: some View {
         VStack(spacing: 8) {
-            Text(L10n.tr("Free screen layout runs on the software readback path, so it can be slower; it applies from the next game load."))
+            Text(L10n.tr("Drag to move, pinch to scale. The controls are shown for reference."))
                 .font(.caption2)
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -382,41 +345,19 @@ struct ScreenLayoutEditorView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            HStack(spacing: 10) {
-                Picker("Screen", selection: $selection) {
-                    Text(L10n.tr("Upper screen")).tag(ScreenKind.upper)
-                    Text(L10n.tr("Lower screen")).tag(ScreenKind.lower)
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 220)
-                Spacer(minLength: 4)
-                Toggle(L10n.tr("Lock ratio"), isOn: keepsAspectBinding)
-                    .font(.caption)
-                    .fixedSize()
-                    .accessibilityIdentifier("screen-lock-ratio")
-            }
-            HStack(spacing: 18) {
-                Button {
-                    toggleShown(.upper)
-                } label: {
-                    Label(L10n.tr("Upper screen"), systemImage: showsUpper ? "eye" : "eye.slash")
-                        .labelStyle(.iconOnly)
-                }
-                .accessibilityLabel(Text(L10n.tr("Show upper screen")))
-                Button {
-                    toggleShown(.lower)
-                } label: {
-                    Label(L10n.tr("Lower screen"), systemImage: showsLower ? "eye" : "eye.slash")
-                        .labelStyle(.iconOnly)
-                }
-                .accessibilityLabel(Text(L10n.tr("Show lower screen")))
-                Spacer()
+            HStack(spacing: 14) {
                 Button {
                     undo()
                 } label: {
                     Label(L10n.tr("Undo"), systemImage: "arrow.uturn.backward")
                 }
                 .disabled(undoStack.isEmpty)
+                Toggle(isOn: keepsAspectBinding) {
+                    Label(L10n.tr("Lock ratio"), systemImage: "lock")
+                }
+                .fixedSize()
+                .accessibilityIdentifier("screen-lock-ratio")
+                Spacer(minLength: 4)
                 Menu {
                     Button(L10n.tr("Reset screen layout"), role: .destructive) {
                         resetOrientation()
@@ -430,10 +371,10 @@ struct ScreenLayoutEditorView: View {
             }
             .font(.caption)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
-
-    private var showsUpper: Bool { draft.placement(for: orientation).showsTop }
-    private var showsLower: Bool { draft.placement(for: orientation).showsBottom }
 
     // MARK: - Bindings
 
@@ -476,10 +417,8 @@ struct ScreenLayoutEditorView: View {
         let placement = draft.placement(for: orientation)
         var other: CGRect?
         switch kind {
-        case .upper:
-            if placement.showsBottom { other = placement.bottom.cgRect(in: canvas) }
-        case .lower:
-            if placement.showsTop { other = placement.top.cgRect(in: canvas) }
+        case .upper: other = placement.bottom.cgRect(in: canvas)
+        case .lower: other = placement.top.cgRect(in: canvas)
         }
         let snapped = ScreenLayoutSnapping.snap(rect: rect, canvas: canvas, other: other)
         guideXs = snapped.guidesX
@@ -545,6 +484,8 @@ struct ScreenLayoutEditorView: View {
         draft = layout
     }
 
+    /// Pinch over the canvas shrinks/enlarges the selected screen about its
+    /// centre (tap a screen to select it).
     private var pinchGesture: some Gesture {
         MagnificationGesture()
             .onChanged { factor in
@@ -584,26 +525,6 @@ struct ScreenLayoutEditorView: View {
 
     // MARK: - Actions
 
-    private func toggleShown(_ kind: ScreenKind) {
-        var layout = draft
-        var placement = layout.placement(for: orientation)
-        let showsTop = placement.showsTop
-        let showsBottom = placement.showsBottom
-        switch kind {
-        case .upper:
-            if showsTop && !showsBottom { return }
-            placement.showsTop.toggle()
-        case .lower:
-            if showsBottom && !showsTop { return }
-            placement.showsBottom.toggle()
-        }
-        pushUndo()
-        layout.setPlacement(placement, for: orientation)
-        draft = layout
-        selection = kind
-        commit()
-    }
-
     private func pushUndo() {
         if undoStack.last != draft {
             undoStack.append(draft)
@@ -620,6 +541,11 @@ struct ScreenLayoutEditorView: View {
     }
 
     private func commit() {
+        // Hand editing a custom screen layout is exactly the Custom choice; the
+        // Settings page also switches it before opening the editor.
+        if settings.screenLayoutMode != .custom {
+            settings.screenLayoutMode = .custom
+        }
         settings.customScreenLayout = draft
         settings.persist()
     }
@@ -630,7 +556,6 @@ struct ScreenLayoutEditorView: View {
         layout.setPlacement(CustomScreenLayout.defaultPlacement(for: orientation),
                             for: orientation)
         draft = layout
-        selection = .upper
         commit()
     }
 
@@ -640,7 +565,6 @@ struct ScreenLayoutEditorView: View {
         settings.customScreenLayout = layout
         settings.persist()
         draft = layout
-        selection = .upper
         undoStack = []
     }
 }

@@ -48,7 +48,6 @@
 "Battery saves and instant save slots" = "Battery saves and instant save slots";
 "Battery saves are written by the game runtime into Documents/data/<game>. Instant save slots are stored in Documents/states/<game>. Both stay on this device." = "Battery saves are written by the game runtime into Documents/data/<game>. Instant save slots are stored in Documents/states/<game>. Both stay on this device.";
 "Battery saves are written by the game; instant slots are snapshots of the whole console. Everything stays on this device." = "Battery saves are written by the game; instant slots are snapshots of the whole console. Everything stays on this device.";
-"Both screens in one row: upper on the left, lower on the right. Fits a landscape screen." = "Both screens in one row: upper on the left, lower on the right. Fits a landscape screen.";
 "Buffer size" = "Buffer size";
 "Button remapping" = "Button remapping";
 "CADisplayLink · %ld Hz" = "CADisplayLink · %ld Hz";
@@ -165,7 +164,6 @@
 "Loading %@…" = "Loading %@…";
 "Loading a state restores that point and continues the same game session." = "Loading a state restores that point and continues the same game session.";
 "Low latency" = "Low latency";
-"Lower screen only" = "Lower screen only";
 "Lowered automatically from %@ because frames stayed below 20 fps." = "Lowered automatically from %@ because frames stayed below 20 fps.";
 "MoltenVK (Apache-2.0): Vulkan over Metal, used by the presented renderer." = "MoltenVK (Apache-2.0): Vulkan over Metal, used by the presented renderer.";
 "More" = "More";
@@ -195,8 +193,6 @@
 "On-screen controls" = "On-screen controls";
 "On: the HUD is shown over the presented Metal layer." = "On: the HUD is shown over the presented Metal layer.";
 "On: the first frames of each load run behind a “Preparing graphics” screen until they stop spiking (at most 5 s). Later pipelines can still compile on first use." = "On: the first frames of each load run behind a “Preparing graphics” screen until they stop spiking (at most 5 s). Later pipelines can still compile on first use.";
-"Only the lower (touch) screen." = "Only the lower (touch) screen.";
-"Only the upper (3D) screen. The game's touchscreen is not shown." = "Only the upper (3D) screen. The game's touchscreen is not shown.";
 "Orientation" = "Orientation";
 "Overlay opacity" = "Overlay opacity";
 "Packing battery saves into a ZIP archive…" = "Packing battery saves into a ZIP archive…";
@@ -238,7 +234,6 @@
 "Settings" = "Settings";
 "Show on-screen controls" = "Show on-screen controls";
 "Show FPS counter" = "Show FPS counter";
-"Side by side" = "Side by side";
 "Simplified Chinese (system language)" = "Simplified Chinese (system language)";
 "Skip" = "Skip";
 "Skipped %ld archive metadata entries." = "Skipped %ld archive metadata entries.";
@@ -248,7 +243,6 @@
 "Slot %ld is too large to be a save state." = "Slot %ld is too large to be a save state.";
 "Slot %ld · %@" = "Slot %ld · %@";
 "Stable" = "Stable";
-"Stacked" = "Stacked";
 "Start a game before loading a state." = "Start a game before loading a state.";
 "Start a game before saving a state." = "Start a game before saving a state.";
 "Start a game before using save states." = "Start a game before using save states.";
@@ -303,8 +297,6 @@
 "This game has no linked AOT code in this build. It will run in the interpreter and may be slow." = "This game has no linked AOT code in this build. It will run in the interpreter and may be slow.";
 "Tools" = "Tools";
 "Unsupported file “%@”. Choose a decrypted .3ds or .cci ROM." = "Unsupported file “%@”. Choose a decrypted .3ds or .cci ROM.";
-"Upper screen above the lower one, as on the console. Fits a portrait screen; with 90° rotation it becomes two columns." = "Upper screen above the lower one, as on the console. Fits a portrait screen; with 90° rotation it becomes two columns.";
-"Upper screen only" = "Upper screen only";
 "Upright" = "Upright";
 "Upside down" = "Upside down";
 "Version" = "Version";
@@ -350,8 +342,6 @@
 "“%@” is removed from this device. This cannot be undone." = "“%@” is removed from this device. This cannot be undone.";
 "“%@” is too large to import." = "“%@” is too large to import.";
 "“%@” is too large to include in a save-data archive." = "“%@” is too large to include in a save-data archive.";
-"Large top screen" = "Large top screen";
-"Large upper screen with the lower one small at its lower right. The landscape default." = "Large upper screen with the lower one small at its lower right. The landscape default.";
 
 /* --- AOT-only shell: built games in the catalog, no device import, no interpreter --- */
 "AOT" = "AOT";
@@ -489,52 +479,15 @@
 "Select button" = "Select button";
 "Circle Pad" = "Circle Pad";
 "C-stick" = "C-stick";
-"Layout" = "Layout";
-"Preview" = "Preview";
 "Size" = "Size";
 "Opacity" = "Opacity";
-"Width" = "Width";
-"Height" = "Height";
-"Selected control" = "Selected control";
-"Selected screen" = "Selected screen";
 "Upper screen" = "Upper screen";
 "Lower screen" = "Lower screen";
-"Show upper screen" = "Show upper screen";
-"Show lower screen" = "Show lower screen";
-"Keep the 3DS screen shape" = "Keep the 3DS screen shape";
-"Horizontal position" = "Horizontal position";
-"Vertical position" = "Vertical position";
-"Style" = "Style";
-"Base arrangement" = "Base arrangement";
-"Custom scale and position" = "Custom scale and position";
-"Scale" = "Scale";
-"Horizontal offset" = "Horizontal offset";
-"Vertical offset" = "Vertical offset";
-"Reset scale and position" = "Reset scale and position";
-"Edit free layout" = "Edit free layout";
 "How it works" = "How it works";
 "Control layout" = "Control layout";
-"Custom screen layout" = "Custom screen layout";
 "Reset this control" = "Reset this control";
 "Reset this orientation" = "Reset this orientation";
 "Reset both control layouts" = "Reset both control layouts";
-"Reset custom screen layout" = "Reset custom screen layout";
-"Preset" = "Preset";
-"Custom (Metal)" = "Custom (Metal)";
-"Free layout (software)" = "Free layout (software)";
-"The portrait layout is the pad area under the screens; the landscape layout covers the whole game view. The default portrait layout does not cover the screens." = "The portrait layout is the pad area under the screens; the landscape layout covers the whole game view. The default portrait layout does not cover the screens.";
-"Tap a control to select it, then drag it in the preview or use the sliders below. Several fingers can press different controls at the same time during a game." = "Tap a control to select it, then drag it in the preview or use the sliders below. Several fingers can press different controls at the same time during a game.";
-"Tap a control in the preview to select it." = "Tap a control in the preview to select it.";
-"Portrait and landscape keep separate screen positions, like the control layouts. Each rectangle is a fraction of the game view, so it scales with the device." = "Portrait and landscape keep separate screen positions, like the control layouts. Each rectangle is a fraction of the game view, so it scales with the device.";
-"Drag a screen to move it. Drag the corner handle to resize it. A custom layout uses the readback display path, so it can be slower than the Metal presenter, and it applies from the next game load." = "Drag a screen to move it. Drag the corner handle to resize it. A custom layout uses the readback display path, so it can be slower than the Metal presenter, and it applies from the next game load.";
-"Follows the device: stacked screens in portrait, the large upper screen in landscape. The Metal presenter draws it." = "Follows the device: stacked screens in portrait, the large upper screen in landscape. The Metal presenter draws it.";
-"One of the classic arrangements in both orientations. The Metal presenter draws it." = "One of the classic arrangements in both orientations. The Metal presenter draws it.";
-"A classic arrangement plus a uniform scale and offset, saved separately for portrait and landscape. Still drawn by the Metal presenter." = "A classic arrangement plus a uniform scale and offset, saved separately for portrait and landscape. Still drawn by the Metal presenter.";
-"Places each screen anywhere. Runs on the software readback path because the Metal presenter has no arbitrary arrangement." = "Places each screen anywhere. Runs on the software readback path because the Metal presenter has no arbitrary arrangement.";
-"The free layout uses the software readback display path, so it can be slower than the Metal presets. It applies from the next game load. Touch input follows the lower screen's rectangle." = "The free layout uses the software readback display path, so it can be slower than the Metal presets. It applies from the next game load. Touch input follows the lower screen's rectangle.";
-"Rotation, aspect ratio, integer scaling and resolution keep their meaning in every mode." = "Rotation, aspect ratio, integer scaling and resolution keep their meaning in every mode.";
-"The Metal presenter still draws the base arrangement; this only zooms and moves the whole picture on the layer. Enlarging past 100% shows the same render resolution, so it gets softer. Saved separately for portrait and landscape." = "The Metal presenter still draws the base arrangement; this only zooms and moves the whole picture on the layer. Enlarging past 100% shows the same render resolution, so it gets softer. Saved separately for portrait and landscape.";
-"Presets and Custom (Metal) draw through the CAMetalLayer presenter: full speed, and every phone rotates, scales and filters the picture the same way. Free layout trades that Metal path for exact per-screen placement, because the presenter only knows its own arrangements; the game picture then comes from the readback path the app also uses when Metal is unavailable." = "Presets and Custom (Metal) draw through the CAMetalLayer presenter: full speed, and every phone rotates, scales and filters the picture the same way. Free layout trades that Metal path for exact per-screen placement, because the presenter only knows its own arrangements; the game picture then comes from the readback path the app also uses when Metal is unavailable.";
 
 
 /* --- 0.1.2 settings-ui (task-15): dynamic resolution caption, About page, trimmed HUD reasons --- */
@@ -584,23 +537,19 @@
 
 "Undo" = "Undo";
 "Control area" = "Control area";
-"Screen" = "Screen";
 "Edit screen layout" = "Edit screen layout";
-"Default stacked" = "Default stacked";
-"Upper only" = "Upper only";
-"Lower only" = "Lower only";
 "Custom" = "Custom";
 "Lock ratio" = "Lock ratio";
 "Upper screen %@" = "Upper screen %@";
 "Lower screen %@" = "Lower screen %@";
 "Reset screen layout" = "Reset screen layout";
 "Reset both screen layouts" = "Reset both screen layouts";
-"Free screen layout runs on the software readback path, so it can be slower; it applies from the next game load." = "Free screen layout runs on the software readback path, so it can be slower; it applies from the next game load.";
 "The game applies the screen rotation; this editor arranges the upright screens." = "The game applies the screen rotation; this editor arranges the upright screens.";
 
 /* --- 0.1.2 layout split (task-22): screen layout under Display, control layout under Controls --- */
 
 "Reset screen layout to defaults" = "Reset screen layout to defaults";
+
 /* --- 0.1.3 library deletion (ios-lib-actions, task-26) --------------------
    Scope: delete-game. Home-page card menu, second confirmation and result
    banner. The AOT pack is part of the signed app, so deleting removes the
@@ -618,3 +567,23 @@
 "the folder “%@” is not inside Documents/Games." = "the folder “%@” is not inside Documents/Games.";
 "“%@” is outside its expected folder; not deleted." = "“%@” is outside its expected folder; not deleted.";
 "Deleted games stay hidden until the desktop launcher pushes their game data again." = "Deleted games stay hidden until the desktop launcher pushes their game data again.";
+
+
+/* --- 0.1.3 layout simplification (task-27): Default / Custom plus full-screen editors --- */
+
+"Default" = "Default";
+"Default keeps the automatic arrangement: the screens stacked in portrait and the large upper screen in landscape. The Metal presenter draws it." = "Default keeps the automatic arrangement: the screens stacked in portrait and the large upper screen in landscape. The Metal presenter draws it.";
+"Custom places each screen by hand, one layout for each device direction. Choosing Custom opens the full-screen editor for the direction the device is in now; the screen runs on the software readback path, so it can be slower." = "Custom places each screen by hand, one layout for each device direction. Choosing Custom opens the full-screen editor for the direction the device is in now; the screen runs on the software readback path, so it can be slower.";
+"Default uses the shipped positions of every control, so nothing covers the picture in portrait." = "Default uses the shipped positions of every control, so nothing covers the picture in portrait.";
+"Custom lets you move and resize each control. Choosing Custom opens the full-screen editor for the direction the device is in now, with the current screen layout drawn behind the controls; each direction keeps its own layout." = "Custom lets you move and resize each control. Choosing Custom opens the full-screen editor for the direction the device is in now, with the current screen layout drawn behind the controls; each direction keeps its own layout.";
+"Edit control layout" = "Edit control layout";
+"Reset control layout to defaults" = "Reset control layout to defaults";
+"Rotation, aspect ratio and integer scaling keep their meaning in both choices." = "Rotation, aspect ratio and integer scaling keep their meaning in both choices.";
+"Custom screen layouts run on the software readback path, so they can be slower; a change applies from the next game load." = "Custom screen layouts run on the software readback path, so they can be slower; a change applies from the next game load.";
+"Portrait and landscape keep their own custom layouts." = "Portrait and landscape keep their own custom layouts.";
+"Portrait and landscape keep their own control layouts." = "Portrait and landscape keep their own control layouts.";
+"The overlay opacity under Controls applies to both choices." = "The overlay opacity under Controls applies to both choices.";
+"Editing the %@ layout" = "Editing the %@ layout";
+"Drag to move, pinch to scale. The controls are shown for reference." = "Drag to move, pinch to scale. The controls are shown for reference.";
+"Tap a control, then drag or pinch it. The screens show the current screen layout." = "Tap a control, then drag or pinch it. The screens show the current screen layout.";
+

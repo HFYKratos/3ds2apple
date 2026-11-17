@@ -11,10 +11,11 @@
 //  - landscape: the editable overlay drawn over the whole game view (left
 //    Circle Pad + D-pad, right A/B/X/Y + C-stick, L/ZL/Select/Start/R/ZR in the
 //    top bar). Both orientations use the user's layout profile, so no button has
-//    to cover a screen. The display settings pick the layout (automatic preset /
-//    custom Metal zoom / free layout), the rotation and how the picture fills
-//    its area; the CAMetalLayer presenter draws it unless the free layout asks
-//    for the readback path.
+//    to cover a screen. The screen layout is either the automatic arrangement
+//    (stacked in portrait, large upper screen in landscape) or the custom
+//    per-screen layout; only the custom one asks for the readback path. The
+//    rotation and how the picture fills its area come from the display settings
+//    in both choices; the CAMetalLayer presenter draws the automatic one.
 //
 //  The only in-game performance readout is the FPS counter (Settings →
 //  Performance): it sits in the portrait top bar or in a slim strip in the
@@ -126,7 +127,6 @@ struct GameView: View {
                 currentOrientation = newValue ? .landscape : .portrait
                 syncPresentedLayout(newValue)
             }
-            .onChange(of: settings.screenLayout) { _ in syncPresentedLayout(isLandscape) }
             .onChange(of: settings.screenLayoutMode) { _ in syncPresentedLayout(isLandscape) }
         }
         .preferredColorScheme(.dark)
@@ -234,15 +234,11 @@ struct GameView: View {
         .accessibilityIdentifier("screens-area")
     }
 
-    /// Landscape uses the large-top arrangement (large upper screen, small
-    /// lower one at its lower right) by default, like a Manic-style skin. A
-    /// layout the user picked explicitly is honoured in both orientations.
-    private var landscapeLayout: ScreenLayout {
-        settings.effectiveScreenLayout(isLandscape: true)
-    }
-
+    /// The automatic arrangement: the console's stacked screens in portrait and
+    /// the large upper screen in landscape. The custom layout is drawn by the
+    /// readback path instead of the presenter (see CustomScreenLayout.swift).
     private func syncPresentedLayout(_ isLandscape: Bool) {
-        let layout = isLandscape ? landscapeLayout : settings.screenLayout
+        let layout = settings.effectiveScreenLayout(isLandscape: isLandscape)
         if model.screenLayout != layout {
             model.setScreenLayout(layout)
         }
@@ -266,7 +262,7 @@ struct GameView: View {
 
     private var landscapeContent: some View {
         ZStack {
-            screenStage(layout: landscapeLayout)
+            screenStage(layout: settings.effectiveScreenLayout(isLandscape: true))
                 .padding(.horizontal, GameViewLayout.landscapeStagePadding)
                 .padding(.vertical, GameViewLayout.landscapeStagePadding)
                 .accessibilityIdentifier("screens-area")
@@ -426,22 +422,11 @@ struct GameView: View {
     /// the box. Touch is mapped to 3DS touchscreen pixels by the runtime with the
     /// same layout the presenter uses.
     private func presentedSurface(view: MetalScreenView, size: CGSize) -> some View {
-        // Custom (Metal) mode zooms and moves the whole presented picture inside
-        // its box. The presenter above is untouched: only the layer's SwiftUI
-        // frame changes, so the GPU path stays exactly as fast as a preset.
-        let adjustment = settings.screenLayoutMode == .customMetal
-            ? settings.screenAdjustment(for: currentOrientation)
-            : .standard
-        let scaled = CGSize(width: max(size.width * adjustment.scale, 1),
-                            height: max(size.height * adjustment.scale, 1))
-        let offset = CGSize(width: size.width * adjustment.offsetX,
-                            height: size.height * adjustment.offsetY)
-        return MetalScreenRepresentable(view: view)
-            .frame(width: scaled.width, height: scaled.height)
+        MetalScreenRepresentable(view: view)
+            .frame(width: size.width, height: size.height)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay { metalFirstFramePlaceholder }
             .overlay { presentedTouchOverlay }
-            .offset(offset)
             .accessibilityIdentifier("metal-screen")
     }
 
@@ -454,11 +439,11 @@ struct GameView: View {
         let stretch = settings.screenAspect == .stretch
         let layoutBox: CGSize
         let viewports: (top: CGRect?, bottom: CGRect?)
-        if settings.usesFreeformScreenLayout {
-            // Free layout: one rectangle per screen, placed by the same geometry
-            // the Settings editor previews. This mode is the readback path's
-            // reason to exist (see CustomScreenLayout.swift); every other mode
-            // keeps the Metal presenter.
+        if settings.usesCustomScreenLayout {
+            // Custom layout: one rectangle per screen, placed by the same
+            // geometry the Settings editor previews. This choice is the readback
+            // path's reason to exist (see CustomScreenLayout.swift); the Default
+            // choice keeps the Metal presenter.
             layoutBox = area
             viewports = CustomScreenGeometry.viewports(
                 available: area,
@@ -585,7 +570,7 @@ struct GameView: View {
         switch settings.screenAspect {
         case .fit:
             return ScreenGeometry.contentAspect(
-                layout: settings.screenLayout,
+                layout: settings.effectiveScreenLayout(isLandscape: false),
                 rotation: settings.screenRotation
             )
         case .fourThree, .stretch:

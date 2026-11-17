@@ -17,8 +17,13 @@
 //
 //    -openLayoutPage
 //        Open the screen layout page (Settings -> Display -> Screen layout)
-//        right away, for headless screenshots of the screen layout modes.
-//        Inert in normal launches.
+//        right away, for headless screenshots of the simplified Default/Custom
+//        page. Inert in normal launches.
+//
+//    -openLayoutEditor screen|control[-landscape]
+//        Open one of the two full-screen layout editors directly, for headless
+//        screenshots. 0.1.3 editors edit the direction the device is in; the
+//        `-landscape` variants force that direction for screenshots.
 //
 //    -gamesRoot <path>
 //        Scan this folder instead of Documents/Games. A relative path resolves
@@ -50,8 +55,8 @@ enum DebugLaunch {
     /// (Settings -> Display -> Screen layout) straight away, for headless
     /// screenshots.
     static let layoutPageArgument = "-openLayoutPage"
-    /// Launch argument: `-openLayoutEditor control|screen` opens one editor
-    /// directly, for headless screenshots of the new 0.1.2 editors.
+    /// Launch argument: `-openLayoutEditor screen|control` opens one of the
+    /// full-screen layout editors directly, for headless screenshots.
     static let layoutEditorArgument = "-openLayoutEditor"
 
     /// A layout page a headless launch asked to open.

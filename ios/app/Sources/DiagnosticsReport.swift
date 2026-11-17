@@ -132,7 +132,7 @@ enum DiagnosticsExporter {
     /// layout/rotation, e.g. "480x400" for the stacked console turned sideways.
     private static func nativePixelSizeDescription(settings: AppSettings) -> String {
         let size = ScreenGeometry.nativePixelSize(
-            layout: settings.screenLayout,
+            layout: settings.effectiveScreenLayout(isLandscape: false),
             rotation: settings.screenRotation
         )
         return "\(Int(size.width))x\(Int(size.height))"
@@ -229,11 +229,10 @@ enum DiagnosticsExporter {
         controls_opacity=\(String(format: "%.2f", settings.controlsOpacity))
         haptics=\(settings.haptics ? 1 : 0)
         screen_layout_mode=\(settings.screenLayoutMode.rawValue)
-        free_screen_layout=\(settings.usesFreeformScreenLayout ? 1 : 0)
-        control_layout_portrait_version=\(settings.controlLayout(for: .portrait).version)
-        control_layout_landscape_version=\(settings.controlLayout(for: .landscape).version)
-        metal_adjustment_portrait=\(String(format: "%.2f/%.2f/%.2f", settings.screenAdjustment(for: .portrait).scale, settings.screenAdjustment(for: .portrait).offsetX, settings.screenAdjustment(for: .portrait).offsetY))
-        metal_adjustment_landscape=\(String(format: "%.2f/%.2f/%.2f", settings.screenAdjustment(for: .landscape).scale, settings.screenAdjustment(for: .landscape).offsetX, settings.screenAdjustment(for: .landscape).offsetY))
+        custom_screen_layout=\(settings.usesCustomScreenLayout ? 1 : 0)
+        control_layout_mode=\(settings.controlLayoutMode.rawValue)
+        control_layout_portrait_version=\(settings.storedControlLayout(for: .portrait).version)
+        control_layout_landscape_version=\(settings.storedControlLayout(for: .landscape).version)
         playback_speed=\(settings.playbackSpeed.rawValue)
         playback_speed_effective=\(model.effectivePlaybackSpeed)
         playback_speed_auto_reduced=\(model.playbackSpeedAutoReduced ? 1 : 0)

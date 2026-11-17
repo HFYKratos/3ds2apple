@@ -30,14 +30,21 @@
 //
 //  0.1.2 (archive version 2):
 //  - Each placement remembers whether the editor keeps the console's screen
-//    shape ("Lock screen ratio"). The shipped default now also uses the real
-//    screen shapes (upper 400x240 = 5:3, lower 320x240 = 4:3) instead of the
-//    old rough rectangles, and the editor offers the four standard arrangements
-//    as one-tap presets.
+//    shape ("Lock screen ratio"). The shipped default uses the real screen
+//    shapes (upper 400x240 = 5:3, lower 320x240 = 4:3) instead of the old rough
+//    rectangles.
 //  - Version 1 archives are migrated on read: a layout the user customised is
 //    kept exactly as it was (rectangles, shown screens) and only gains the
 //    ratio-lock flag (true); the old untouched default rectangles are upgraded
 //    to the new native-aspect default, because those are not a user layout.
+//
+//  0.1.3 (still archive version 2; same Codable shape):
+//  - The UI exposes only Default / Custom, so the editor no longer has presets
+//    or "upper only" / "lower only": both screens are always shown and the
+//    stored show flags are healed to true on read.
+//  - The shipped landscape default became the large-top arrangement (the same
+//    picture the Default choice shows) instead of side by side; an untouched
+//    0.1.2 default is upgraded, a user layout is kept.
 //
 
 import CoreGraphics
@@ -183,38 +190,6 @@ struct CustomScreenPlacement: Codable, Equatable {
     }
 }
 
-/// One of the standard free layouts the screen editor can apply with one tap.
-/// "Custom" means "keep the current rectangles" - it is the state a layout is
-/// in when none of the four presets matches it.
-enum ScreenLayoutPreset: String, CaseIterable, Identifiable {
-    case stacked
-    case sideBySide
-    case upperOnly
-    case lowerOnly
-    case custom
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .stacked: return L10n.tr("Default stacked")
-        case .sideBySide: return L10n.tr("Side by side")
-        case .upperOnly: return L10n.tr("Upper only")
-        case .lowerOnly: return L10n.tr("Lower only")
-        case .custom: return L10n.tr("Custom")
-        }
-    }
-
-    /// Whether the preset hides one of the screens (nil = shows both).
-    var showsOnly: ScreenKind? {
-        switch self {
-        case .upperOnly: return .upper
-        case .lowerOnly: return .lower
-        default: return nil
-        }
-    }
-}
-
 /// Both orientations of the custom screen layout, with a format version so an
 /// older app can heal a newer saved profile (see `withDefaultsFilled`).
 struct CustomScreenLayout: Codable, Equatable {
@@ -257,19 +232,14 @@ struct CustomScreenLayout: Codable, Equatable {
     /// Every rectangle clamped into the stage. Missing fields cannot happen with
     /// synthesized Codable, so this only has to repair out-of-range values
     /// written by an older build or a bug.
+    ///
+    /// 0.1.3 no longer offers "upper only" / "lower only", so both screens are
+    /// always shown here; 0.1.2 archives that hid one screen heal to both. The
+    /// flags stay in the Codable shape so v2 archives keep decoding.
     func withDefaultsFilled() -> CustomScreenLayout {
-        CustomScreenLayout(version: Self.currentVersion,
-                           portrait: portrait.clamped(),
-                           landscape: landscape.clamped())
-    }
-
-    /// The shipped v2 default: stacked screens in portrait, side by side in
-    /// landscape, both at the console's own screen shapes.
-    static func standard() -> CustomScreenLayout {
-        var layout = CustomScreenLayout(
-            portrait: defaultPlacement(for: .portrait),
-            landscape: defaultPlacement(for: .landscape)
-        )
+        var layout = CustomScreenLayout(version: Self.currentVersion,
+                                        portrait: portrait.clamped(),
+                                        landscape: landscape.clamped())
         layout.portrait.showsTop = true
         layout.portrait.showsBottom = true
         layout.landscape.showsTop = true
@@ -277,127 +247,100 @@ struct CustomScreenLayout: Codable, Equatable {
         return layout
     }
 
+    /// The shipped 0.1.3 default: stacked screens in portrait and the large
+    /// upper screen with the small lower one at its lower right in landscape -
+    /// the same picture the Default choice shows, so switching to Custom starts
+    /// from what the game already looks like.
+    static func standard() -> CustomScreenLayout {
+        CustomScreenLayout(
+            portrait: defaultPlacement(for: .portrait),
+            landscape: defaultPlacement(for: .landscape)
+        )
+    }
+
     /// The shipped default placement for one orientation (native aspect, both
     /// screens shown).
     static func defaultPlacement(for orientation: ControlLayoutOrientation) -> CustomScreenPlacement {
         switch orientation {
         case .portrait:
-            return preset(.stacked, containerAspect: referencePortraitAspect)
+            return stackedPlacement(containerAspect: referencePortraitAspect)
         case .landscape:
-            return preset(.sideBySide, containerAspect: referenceLandscapeAspect)
+            return largeTopPlacement(containerAspect: referenceLandscapeAspect)
         }
     }
 
-    /// Applies a preset for one orientation. "Custom" keeps the current
-    /// placement as it is.
-    func placement(applying preset: ScreenLayoutPreset,
-                   for orientation: ControlLayoutOrientation,
-                   containerAspect: CGFloat) -> CustomScreenPlacement {
-        guard preset != .custom else { return placement(for: orientation) }
-        return Self.preset(preset, containerAspect: containerAspect)
-    }
-
-    /// Calculates the rectangles of a preset for a picture stage of
-    /// `containerAspect` (width / height, in points). Every rectangle keeps the
-    /// console screen's pixel shape, and the pair is fitted inside the stage.
-    static func preset(_ preset: ScreenLayoutPreset,
-                       containerAspect: CGFloat) -> CustomScreenPlacement {
+    /// Portrait default: upper screen above the lower one, both at the console's
+    /// own screen shapes.
+    private static func stackedPlacement(containerAspect: CGFloat) -> CustomScreenPlacement {
         let margin = 0.02
         let gap = 0.02
-        switch preset {
-        case .stacked:
-            var topWidth = 0.94
-            var bottomWidth = 0.84
-            var topHeight = heightFraction(width: topWidth,
-                                           containerAspect: containerAspect,
-                                           screenAspect: CustomScreenGeometry.nativeAspect(for: .upper))
-            var bottomHeight = heightFraction(width: bottomWidth,
-                                              containerAspect: containerAspect,
-                                              screenAspect: CustomScreenGeometry.nativeAspect(for: .lower))
-            let available = max(1 - margin * 2 - gap, 0.2)
-            if topHeight + bottomHeight > available {
-                let scale = available / (topHeight + bottomHeight)
-                topWidth *= scale
-                bottomWidth *= scale
-                topHeight *= scale
-                bottomHeight *= scale
-            }
-            let top = ScreenRect(x: (1 - topWidth) / 2,
-                                 y: margin,
-                                 width: topWidth,
-                                 height: topHeight)
-            let bottom = ScreenRect(x: (1 - bottomWidth) / 2,
-                                    y: 1 - margin - bottomHeight,
-                                    width: bottomWidth,
-                                    height: bottomHeight)
-            return CustomScreenPlacement(top: top, bottom: bottom,
-                                         showsTop: true, showsBottom: true,
-                                         keepsNativeAspect: true)
-        case .sideBySide:
-            var height = 0.88
-            var topWidth = widthFraction(height: height,
-                                         containerAspect: containerAspect,
-                                         screenAspect: CustomScreenGeometry.nativeAspect(for: .upper))
-            var bottomWidth = widthFraction(height: height,
-                                            containerAspect: containerAspect,
-                                            screenAspect: CustomScreenGeometry.nativeAspect(for: .lower))
-            let available = max(1 - margin * 2 - gap, 0.2)
-            if topWidth + bottomWidth > available {
-                let scale = available / (topWidth + bottomWidth)
-                topWidth *= scale
-                bottomWidth *= scale
-                height *= scale
-            }
-            let top = ScreenRect(x: margin,
-                                 y: (1 - height) / 2,
-                                 width: topWidth,
-                                 height: height)
-            let bottom = ScreenRect(x: 1 - margin - bottomWidth,
-                                    y: (1 - height) / 2,
-                                    width: bottomWidth,
-                                    height: height)
-            return CustomScreenPlacement(top: top, bottom: bottom,
-                                         showsTop: true, showsBottom: true,
-                                         keepsNativeAspect: true)
-        case .upperOnly:
-            var width = 1 - margin * 2
-            var height = heightFraction(width: width,
-                                        containerAspect: containerAspect,
-                                        screenAspect: CustomScreenGeometry.nativeAspect(for: .upper))
-            let available = 1 - margin * 2
-            if height > available {
-                let scale = available / height
-                width *= scale
-                height = available
-            }
-            let rect = ScreenRect(x: (1 - width) / 2,
-                                  y: (1 - height) / 2,
-                                  width: width,
-                                  height: height)
-            return CustomScreenPlacement(top: rect, bottom: rect,
-                                         showsTop: true, showsBottom: false,
-                                         keepsNativeAspect: true)
-        case .lowerOnly:
-            var width = 1 - margin * 2
-            var height = heightFraction(width: width,
-                                        containerAspect: containerAspect,
-                                        screenAspect: CustomScreenGeometry.nativeAspect(for: .lower))
-            let available = 1 - margin * 2
-            if height > available {
-                let scale = available / height
-                width *= scale
-                height = available
-            }
-            let rect = ScreenRect(x: (1 - width) / 2,
-                                  y: (1 - height) / 2,
-                                  width: width,
-                                  height: height)
-            return CustomScreenPlacement(top: rect, bottom: rect,
-                                         showsTop: false, showsBottom: true,
-                                         keepsNativeAspect: true)
-        case .custom:
-            return defaultPlacement(for: .portrait)
+        var topWidth = 0.94
+        var bottomWidth = 0.84
+        var topHeight = heightFraction(width: topWidth,
+                                       containerAspect: containerAspect,
+                                       screenAspect: CustomScreenGeometry.nativeAspect(for: .upper))
+        var bottomHeight = heightFraction(width: bottomWidth,
+                                          containerAspect: containerAspect,
+                                          screenAspect: CustomScreenGeometry.nativeAspect(for: .lower))
+        let available = max(1 - margin * 2 - gap, 0.2)
+        if topHeight + bottomHeight > available {
+            let scale = available / (topHeight + bottomHeight)
+            topWidth *= scale
+            bottomWidth *= scale
+            topHeight *= scale
+            bottomHeight *= scale
         }
+        let top = ScreenRect(x: (1 - topWidth) / 2,
+                             y: margin,
+                             width: topWidth,
+                             height: topHeight)
+        let bottom = ScreenRect(x: (1 - bottomWidth) / 2,
+                                y: 1 - margin - bottomHeight,
+                                width: bottomWidth,
+                                height: bottomHeight)
+        return CustomScreenPlacement(top: top, bottom: bottom,
+                                     showsTop: true, showsBottom: true,
+                                     keepsNativeAspect: true)
+    }
+
+    /// Landscape default: one large upper screen, the lower screen small at its
+    /// lower right corner (the automatic arrangement drawn by the presenter).
+    /// The widths are chosen so the two native-aspect rectangles do not collide
+    /// in a landscape stage.
+    private static func largeTopPlacement(containerAspect: CGFloat) -> CustomScreenPlacement {
+        let margin = 0.03
+        var topWidth = 0.50
+        var bottomWidth = 0.20
+        var topHeight = heightFraction(width: topWidth,
+                                       containerAspect: containerAspect,
+                                       screenAspect: CustomScreenGeometry.nativeAspect(for: .upper))
+        let bottomHeight = heightFraction(width: bottomWidth,
+                                          containerAspect: containerAspect,
+                                          screenAspect: CustomScreenGeometry.nativeAspect(for: .lower))
+        // Never let the large screen leave the stage vertically.
+        let maximumTopHeight = max(1 - margin * 2, 0.2)
+        if topHeight > maximumTopHeight {
+            let scale = maximumTopHeight / topHeight
+            topWidth *= scale
+            topHeight *= scale
+        }
+        let maximumTopWidth = max(1 - margin * 2, 0.2)
+        if topWidth > maximumTopWidth {
+            let scale = maximumTopWidth / topWidth
+            topWidth *= scale
+            topHeight *= scale
+        }
+        let top = ScreenRect(x: (1 - topWidth) / 2,
+                             y: margin,
+                             width: topWidth,
+                             height: topHeight)
+        let bottom = ScreenRect(x: 1 - margin - bottomWidth,
+                                y: 1 - margin - bottomHeight,
+                                width: bottomWidth,
+                                height: bottomHeight)
+        return CustomScreenPlacement(top: top, bottom: bottom,
+                                     showsTop: true, showsBottom: true,
+                                     keepsNativeAspect: true)
     }
 
     /// Height fraction of a native-aspect screen with a given width fraction.
@@ -435,12 +378,19 @@ struct CustomScreenLayout: Codable, Equatable {
     /// screen shapes. A layout the user customised is kept exactly; only the
     /// untouched shipped defaults are replaced by the native-aspect default.
     func migrated() -> CustomScreenLayout {
-        guard version < CustomScreenLayout.currentVersion else { return withDefaultsFilled() }
         var layout = self
-        if Self.matchesShippedVersion1Default(layout.portrait, orientation: .portrait) {
-            layout.portrait = Self.defaultPlacement(for: .portrait)
+        if version < 2 {
+            if Self.matchesShippedVersion1Default(layout.portrait, orientation: .portrait) {
+                layout.portrait = Self.defaultPlacement(for: .portrait)
+            }
+            if Self.matchesShippedVersion1Default(layout.landscape, orientation: .landscape) {
+                layout.landscape = Self.defaultPlacement(for: .landscape)
+            }
         }
-        if Self.matchesShippedVersion1Default(layout.landscape, orientation: .landscape) {
+        // 0.1.3 replaced the shipped v2 landscape default (side by side) with the
+        // large-top arrangement the Default choice shows. Only the untouched
+        // shipped default is upgraded; a layout the user moved is kept exactly.
+        if Self.matchesShippedVersion2LandscapeDefault(layout.landscape) {
             layout.landscape = Self.defaultPlacement(for: .landscape)
         }
         layout.version = CustomScreenLayout.currentVersion
@@ -463,6 +413,37 @@ struct CustomScreenLayout: Codable, Equatable {
             expectedBottom = ScreenRect(x: 0.46, y: 0.50, width: 0.18, height: 0.33)
         }
         guard placement.showsTop, placement.showsBottom else { return false }
+        return matches(placement.top, expectedTop) && matches(placement.bottom, expectedBottom)
+    }
+
+    /// The landscape rectangles `CustomScreenLayout.standard()` shipped in 0.1.1
+    /// and 0.1.2: the two screens side by side at their native shapes.
+    private static func matchesShippedVersion2LandscapeDefault(_ placement: CustomScreenPlacement) -> Bool {
+        guard placement.showsTop, placement.showsBottom else { return false }
+        let margin = 0.02
+        let gap = 0.02
+        var height = 0.88
+        var topWidth = widthFraction(height: height,
+                                     containerAspect: referenceLandscapeAspect,
+                                     screenAspect: CustomScreenGeometry.nativeAspect(for: .upper))
+        var bottomWidth = widthFraction(height: height,
+                                        containerAspect: referenceLandscapeAspect,
+                                        screenAspect: CustomScreenGeometry.nativeAspect(for: .lower))
+        let available = max(1 - margin * 2 - gap, 0.2)
+        if topWidth + bottomWidth > available {
+            let scale = available / (topWidth + bottomWidth)
+            topWidth *= scale
+            bottomWidth *= scale
+            height *= scale
+        }
+        let expectedTop = ScreenRect(x: margin,
+                                     y: (1 - height) / 2,
+                                     width: topWidth,
+                                     height: height)
+        let expectedBottom = ScreenRect(x: 1 - margin - bottomWidth,
+                                        y: (1 - height) / 2,
+                                        width: bottomWidth,
+                                        height: height)
         return matches(placement.top, expectedTop) && matches(placement.bottom, expectedBottom)
     }
 

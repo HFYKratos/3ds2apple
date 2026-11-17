@@ -28,17 +28,20 @@ struct ContentView: View {
     @StateObject private var localization = LocalizationStore.shared
     @Environment(\.scenePhase) private var scenePhase
     /// Headless screenshot hooks for the layout pages; never set in normal use.
-    @State private var layoutLaunch: LayoutLaunch?
+    @State private var opensScreenLayoutPage = false
+    @State private var layoutEditorLaunch: LayoutEditorLaunch?
 
-    /// The layout page a `-openLayoutPage` / `-openLayoutEditor` launch opens.
-    private enum LayoutLaunch: String, Identifiable {
-        case screenLayout
-        case controlEditorPortrait
-        case controlEditorLandscape
-        case screenEditorPortrait
-        case screenEditorLandscape
+    /// A full-screen layout editor a `-openLayoutEditor` launch opens directly,
+    /// for headless screenshots. Every editor opens for one device direction.
+    private struct LayoutEditorLaunch: Identifiable {
+        enum Kind {
+            case screen
+            case control
+        }
 
-        var id: String { rawValue }
+        let id = UUID()
+        let kind: Kind
+        let orientation: ControlLayoutOrientation
     }
 
     /// Explicit internal init: the stored properties are private and App.swift
@@ -55,20 +58,17 @@ struct ContentView: View {
         }
         // A locale change while the app runs re-reads the localized texts.
         .id(localization.revision)
-        .sheet(item: $layoutLaunch) { launch in
+        .sheet(isPresented: $opensScreenLayoutPage) {
             NavigationStack {
-                switch launch {
-                case .screenLayout:
-                    ScreenLayoutSettingsView(settings: settings)
-                case .controlEditorPortrait:
-                    ControlLayoutEditorView(settings: settings, orientation: .portrait)
-                case .controlEditorLandscape:
-                    ControlLayoutEditorView(settings: settings, orientation: .landscape)
-                case .screenEditorPortrait:
-                    ScreenLayoutEditorView(settings: settings, orientation: .portrait)
-                case .screenEditorLandscape:
-                    ScreenLayoutEditorView(settings: settings, orientation: .landscape)
-                }
+                ScreenLayoutSettingsView(settings: settings)
+            }
+        }
+        .fullScreenCover(item: $layoutEditorLaunch) { launch in
+            switch launch.kind {
+            case .screen:
+                ScreenLayoutEditorView(settings: settings, orientation: launch.orientation)
+            case .control:
+                ControlLayoutEditorView(settings: settings, orientation: launch.orientation)
             }
         }
         .onAppear {
@@ -84,12 +84,18 @@ struct ContentView: View {
             DebugLaunch.startIfRequested(model: model, library: library)
             // Headless screenshot of the layout pages; inert otherwise.
             switch DebugLaunch.requestedLayoutPage {
-            case .screenLayout: layoutLaunch = .screenLayout
-            case .controlEditorPortrait: layoutLaunch = .controlEditorPortrait
-            case .controlEditorLandscape: layoutLaunch = .controlEditorLandscape
-            case .screenEditorPortrait: layoutLaunch = .screenEditorPortrait
-            case .screenEditorLandscape: layoutLaunch = .screenEditorLandscape
-            case nil: break
+            case .screenLayout:
+                opensScreenLayoutPage = true
+            case .controlEditorPortrait:
+                layoutEditorLaunch = LayoutEditorLaunch(kind: .control, orientation: .portrait)
+            case .controlEditorLandscape:
+                layoutEditorLaunch = LayoutEditorLaunch(kind: .control, orientation: .landscape)
+            case .screenEditorPortrait:
+                layoutEditorLaunch = LayoutEditorLaunch(kind: .screen, orientation: .portrait)
+            case .screenEditorLandscape:
+                layoutEditorLaunch = LayoutEditorLaunch(kind: .screen, orientation: .landscape)
+            case nil:
+                break
             }
         }
         .onChange(of: scenePhase) { newPhase in
@@ -125,14 +131,11 @@ struct ContentView: View {
         .onChange(of: settings.renderScale) { scale in
             model.applyRenderScale(CGFloat(scale))
         }
-        .onChange(of: settings.screenLayout) { layout in
-            model.setScreenLayout(layout)
-        }
         .onChange(of: settings.screenRotation) { rotation in
             model.setScreenRotation(rotation)
         }
         .onChange(of: settings.screenLayoutMode) { _ in
-            model.setReadbackPresentationRequired(settings.usesFreeformScreenLayout)
+            model.setReadbackPresentationRequired(settings.usesCustomScreenLayout)
         }
         .onChange(of: settings.integerScale) { enabled in
             model.setIntegerScaling(enabled)
@@ -165,13 +168,13 @@ struct ContentView: View {
         model.setAudioVolume(Float(settings.audioVolume))
         model.setAudioBufferDuration(settings.audioBuffer.duration)
         model.setFrameRateCap(settings.frameCap.rawValue)
-        model.setScreenLayout(settings.screenLayout)
+        model.setScreenLayout(settings.effectiveScreenLayout(isLandscape: false))
         model.setScreenRotation(settings.screenRotation)
         model.setIntegerScaling(settings.integerScale)
         model.applyRenderScale(CGFloat(settings.renderScale))
         model.setPlaybackSpeed(settings.playbackSpeed.rawValue)
         model.setSystemMetalHUD(settings.systemMetalHUD)
-        model.setReadbackPresentationRequired(settings.usesFreeformScreenLayout)
+        model.setReadbackPresentationRequired(settings.usesCustomScreenLayout)
     }
 
     // MARK: - Diagnostics

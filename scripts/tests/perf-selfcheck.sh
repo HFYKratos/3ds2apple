@@ -235,14 +235,22 @@ check "per-orientation control profiles exist" contains ios/app/Sources/AppSetti
 check "runtime overlay draws the editable layout" contains ios/app/Sources/VirtualControlsView.swift 'struct VirtualControlsView'
 check "analog stick reports a vector (not D-pad bits)" contains ios/app/Sources/VirtualControlsView.swift 'onCirclePad'
 check "layout editor can move, resize and reset" contains ios/app/Sources/ControlLayoutEditorView.swift 'Reset this control'
-check "layout page is linked from Settings" contains ios/app/Sources/SettingsView.swift 'LayoutSettingsView'
+check "control layout page is linked from Settings" contains ios/app/Sources/SettingsView.swift 'ControlLayoutSettingsView'
+check "control layout page exposes only Default / Custom" contains ios/app/Sources/AppSettings.swift 'enum ControlLayoutMode'
+check "control layout page opens the editor for the current direction" contains ios/app/Sources/ControlLayoutSettingsView.swift 'ControlLayoutEditorView(settings: settings)'
+check "control editor is full screen and edits the current direction" contains ios/app/Sources/ControlLayoutEditorView.swift 'currentLayoutOrientation'
+check "control editor overlays the current screen layout" contains ios/app/Sources/ControlLayoutEditorView.swift 'screenViewports'
 check "GameView uses the editable overlay in both orientations" \
   bash -c 'n=$(grep -c "VirtualControlsView(" ios/app/Sources/GameView.swift); [ "$n" -ge 2 ]'
-check "free screen layout model exists" contains ios/app/Sources/CustomScreenLayout.swift 'struct CustomScreenLayout'
-check "free screen layout geometry handles the 90 degree turn" contains ios/app/Sources/CustomScreenLayout.swift 'case .counterClockwise:'
-check "free screen layout editor exists" test -f ios/app/Sources/ScreenLayoutEditorView.swift
-check "free layout forces the readback presentation path" contains ios/app/Sources/ROMSession.swift 'readbackPresentationRequired'
-check "Metal custom zoom/position keeps the Metal layer" contains ios/app/Sources/GameView.swift 'screenLayoutMode == .customMetal'
+check "custom screen layout model exists" contains ios/app/Sources/CustomScreenLayout.swift 'struct CustomScreenLayout'
+check "custom screen layout archive stays version 2" contains ios/app/Sources/CustomScreenLayout.swift 'static let currentVersion = 2'
+check "custom screen layout geometry handles the 90 degree turn" contains ios/app/Sources/CustomScreenLayout.swift 'case .counterClockwise:'
+check "custom screen layout editor exists" test -f ios/app/Sources/ScreenLayoutEditorView.swift
+check "screen layout page exposes only Default / Custom" contains ios/app/Sources/AppSettings.swift 'enum ScreenLayoutMode'
+check "screen layout page opens the editor for the current direction" contains ios/app/Sources/ScreenLayoutSettingsView.swift 'ScreenLayoutEditorView(settings: settings)'
+check "screen editor is full screen and edits the current direction" contains ios/app/Sources/ScreenLayoutEditorView.swift 'currentLayoutOrientation'
+check "screen editor overlays the current control layout" contains ios/app/Sources/ScreenLayoutEditorView.swift 'settings.controlLayout(for: orientation)'
+check "custom layout forces the readback presentation path" contains ios/app/Sources/ROMSession.swift 'readbackPresentationRequired'
 check "C-stick ABI is declared" contains ios/ZakuroBridge.h 'void zk_set_cstick('
 check "C-stick ABI is implemented" contains ios/zakuro-ios/src/lib.rs 'pub extern "C" fn zk_set_cstick'
 check "C-stick is pushed before every console frame" \
@@ -254,7 +262,7 @@ check "en strings cover the split layout pages" \
 check "zh-Hans strings cover the split layout pages" \
   bash -c 'grep -q "^\"Screen layout\" = \"屏幕布局\"" ios/app/Resources/zh-Hans.lproj/Localizable.strings && grep -q "^\"Control layout\" = \"控件布局\"" ios/app/Resources/zh-Hans.lproj/Localizable.strings'
 check "no GPL project text copied into the new layout code" \
-  bash -c '! grep -riE "azahar|citra" ios/app/Sources/ControlLayout.swift ios/app/Sources/VirtualControlsView.swift ios/app/Sources/CustomScreenLayout.swift ios/app/Sources/ControlLayoutEditorView.swift ios/app/Sources/ScreenLayoutEditorView.swift ios/app/Sources/ScreenLayoutSettingsView.swift'
+  bash -c '! grep -riE "azahar|citra" ios/app/Sources/ControlLayout.swift ios/app/Sources/VirtualControlsView.swift ios/app/Sources/CustomScreenLayout.swift ios/app/Sources/ControlLayoutEditorView.swift ios/app/Sources/ScreenLayoutEditorView.swift ios/app/Sources/ScreenLayoutSettingsView.swift ios/app/Sources/ControlLayoutSettingsView.swift'
 
 section 'Repository hygiene'
 if git status --porcelain | grep -E '^(.. )?(ROM/|IPA/|build/)' >/dev/null 2>&1; then

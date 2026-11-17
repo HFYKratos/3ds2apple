@@ -2,31 +2,25 @@
 //  ControlLayoutEditorView.swift
 //  3ds2apple
 //
-//  The "Control layout" editor (user requirement 7, reworked for 0.1.2 after
-//  "adjusting the layout is too awkward and the proportions are completely
-//  wrong"): a direct-manipulation editor drawn on the real game view.
+//  The full-screen on-screen control layout editor (0.1.3 simplification).
 //
-//  What changed from the old editor:
-//  - The preview is no longer an abstract container with a made-up aspect. It
-//    is the running game screen of this device (same safe area, same paddings,
-//    same pad height; see GameViewGeometry.swift), scaled down to fit the page.
-//    A control dragged in the preview therefore lands where the runtime draws
-//    it, also on an iPad where the old 1.6:1 preview was nowhere near the real
-//    pad shape.
-//  - Controls can be dragged anywhere in the container (the old normalised
-//    clamp made the edges unreachable), with snapping to the container's
-//    edges/centre and to the other controls, and alignment guides.
-//  - Resize by pinching anywhere in the preview or by dragging the corner
-//    handle of the selected control, and by the size slider; opacity has its
-//    own slider per control.
-//  - The selected control is highlighted; every change can be undone, and one
-//    control, one orientation or both can be reset.
-//  - Edits are applied to AppSettings immediately (there is nothing to lose by
-//    leaving the page), so the Save button is gone and Done just closes.
+//  The Settings page opens it for the direction the device is in right now
+//  (portrait edits the portrait profile, landscape the landscape one); there is
+//  no orientation picker and no other mode. The canvas is the whole screen and
+//  mirrors the running game view (GameViewGeometry.swift), including the
+//  current screen layout: the two 3DS pictures are drawn behind the controls,
+//  translucent, so a control can be placed between or away from them.
 //
-//  The model (positions normalised to the container, size as a fraction of the
-//  shorter side, per-control opacity) and the Codable profile format are
-//  unchanged, so layouts saved by 0.1.1 keep working.
+//  Drag a control to move it (guides snap it to the container edges/centre and
+//  to the other controls), pinch it or drag its corner handle to resize it, and
+//  use the size/opacity sliders for the selected control. Undo and reset (one
+//  control, this direction or both) are one tap away; every change is saved
+//  immediately in the Custom profile.
+//
+//  The model is unchanged from 0.1.2 - positions normalised to the container,
+//  size as a fraction of the shorter side, per-control opacity, versioned
+//  Codable profiles (UI.controlLayoutPortrait / ...Landscape) - so layouts saved
+//  by 0.1.2 keep working.
 //
 
 import Foundation
@@ -38,6 +32,8 @@ struct ControlLayoutEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.displayScale) private var displayScale
 
+    /// The direction this editor edits. Fixed when the page opens: portrait and
+    /// landscape have separate profiles.
     @State private var orientation: ControlLayoutOrientation
     @State private var draft: ControlLayoutProfile
     @State private var selected: ControlElement?
@@ -54,10 +50,13 @@ struct ControlLayoutEditorView: View {
     @State private var guideX: CGFloat?
     @State private var guideY: CGFloat?
 
-    init(settings: AppSettings, orientation: ControlLayoutOrientation = .portrait) {
+    /// `orientation` nil means "the direction the device is held in right now".
+    /// The headless screenshot launch passes one explicitly.
+    init(settings: AppSettings, orientation: ControlLayoutOrientation? = nil) {
         self.settings = settings
-        _orientation = State(initialValue: orientation)
-        _draft = State(initialValue: settings.controlLayout(for: orientation))
+        let target = orientation ?? GameViewDeviceMetrics.currentLayoutOrientation
+        _orientation = State(initialValue: target)
+        _draft = State(initialValue: settings.controlLayout(for: target))
     }
 
     private var geometry: GameViewPreviewGeometry {
@@ -67,82 +66,51 @@ struct ControlLayoutEditorView: View {
     private var containerSize: CGSize { geometry.controlContainerRect.size }
 
     var body: some View {
-        VStack(spacing: 10) {
-            orientationPicker
-            preview
-            if let selected {
-                inspector(for: selected)
-            } else {
-                Text(L10n.tr("Tap a control to select it, then drag it in the preview or use the sliders below. Several fingers can press different controls at the same time during a game."))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            actionBar
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 6)
-        .padding(.bottom, 8)
-        .navigationTitle(L10n.tr("Control layout"))
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(L10n.tr("Done")) { dismiss() }
-            }
-        }
-        .onAppear {
-            metrics = .current()
-            draft = settings.controlLayout(for: orientation)
-        }
-    }
-
-    // MARK: - Orientation
-
-    private var orientationPicker: some View {
-        Picker("Orientation", selection: orientationBinding) {
-            ForEach(ControlLayoutOrientation.allCases) { value in
-                Text(value.title).tag(value)
-            }
-        }
-        .pickerStyle(.segmented)
-        .accessibilityIdentifier("control-layout-orientation")
-    }
-
-    private var orientationBinding: Binding<ControlLayoutOrientation> {
-        Binding(
-            get: { orientation },
-            set: { newValue in
-                guard newValue != orientation else { return }
-                commit()
-                orientation = newValue
-                draft = settings.controlLayout(for: newValue)
-                selected = nil
-                undoStack = []
-                guideX = nil
-                guideY = nil
-            }
-        )
-    }
-
-    // MARK: - Preview
-
-    private var preview: some View {
         GeometryReader { proxy in
-            let scaler = GameViewPreviewScaler(available: proxy.size,
-                                              metrics: metrics,
-                                              orientation: orientation)
             ZStack(alignment: .topLeading) {
-                Color.clear
-                deviceFrame(scaler)
-                mockGameContent(scaler)
-                controls(scaler)
-                alignmentGuides(scaler)
+                Color.black
+                canvas(available: proxy.size)
+                VStack(spacing: 8) {
+                    topBar
+                    Spacer(minLength: 8)
+                    bottomPanel
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
-            .contentShape(Rectangle())
-            .simultaneousGesture(pinchGesture)
-            .accessibilityIdentifier("control-layout-preview")
         }
+        .background(Color.black.ignoresSafeArea())
+        .onAppear(perform: refresh)
+    }
+
+    private func refresh() {
+        metrics = .current()
+        draft = settings.controlLayout(for: orientation)
+        selected = nil
+        undoStack = []
+        guideX = nil
+        guideY = nil
+    }
+
+    // MARK: - Canvas
+
+    private func canvas(available: CGSize) -> some View {
+        let scaler = GameViewPreviewScaler(available: available,
+                                          metrics: metrics,
+                                          orientation: orientation,
+                                          padding: 8)
+        return ZStack(alignment: .topLeading) {
+            Color.clear
+            deviceFrame(scaler)
+            mockGameContent(scaler)
+            controls(scaler)
+            alignmentGuides(scaler)
+        }
+        .frame(width: available.width, height: available.height)
+        .contentShape(Rectangle())
+        .simultaneousGesture(pinchGesture)
+        .accessibilityIdentifier("control-layout-preview")
     }
 
     private func deviceFrame(_ scaler: GameViewPreviewScaler) -> some View {
@@ -158,11 +126,12 @@ struct ControlLayoutEditorView: View {
             .position(x: rect.midX, y: rect.midY)
     }
 
+    /// The running game view around the controls: the picture stage with the two
+    /// screens at the current screen layout (the reference for placing controls),
+    /// the portrait title bar and the editable control container.
     @ViewBuilder
     private func mockGameContent(_ scaler: GameViewPreviewScaler) -> some View {
         let stage = scaler.rect(geometry.screenStageRect)
-        // The 3DS picture: a black stage with the two screens at their real
-        // proportions (what the game will show under the controls).
         RoundedRectangle(cornerRadius: 10, style: .continuous)
             .fill(Color.black)
             .overlay(
@@ -179,16 +148,18 @@ struct ControlLayoutEditorView: View {
             displayScale: displayScale
         )
         mockScreen(viewports.top,
+                   isUpper: true,
                    label: L10n.tr("Upper screen"),
                    stage: geometry.screenStageRect,
                    scaler: scaler)
         mockScreen(viewports.bottom,
+                   isUpper: false,
                    label: L10n.tr("Lower screen"),
                    stage: geometry.screenStageRect,
                    scaler: scaler)
 
-        // The portrait title bar (title / FPS / pause) is part of the game view
-        // and reserves space the controls must stay out of.
+        // The portrait title bar is part of the game view; controls must stay out
+        // of it.
         if let topBar = geometry.topBarRect {
             let bar = scaler.rect(topBar)
             HStack(spacing: 4) {
@@ -210,7 +181,7 @@ struct ControlLayoutEditorView: View {
             .position(x: bar.midX, y: bar.midY)
         }
 
-        // The editable control container: the exact box the runtime overlay gets.
+        // The exact box the runtime overlay gets.
         let container = scaler.rect(geometry.controlContainerRect)
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(Color.white.opacity(0.035))
@@ -223,8 +194,11 @@ struct ControlLayoutEditorView: View {
             .position(x: container.midX, y: container.midY)
     }
 
+    /// One 3DS screen placeholder at the current screen layout. It is reference
+    /// only: the controls are what the editor moves.
     @ViewBuilder
     private func mockScreen(_ viewport: CGRect?,
+                            isUpper: Bool,
                             label: String,
                             stage: CGRect,
                             scaler: GameViewPreviewScaler) -> some View {
@@ -234,14 +208,18 @@ struct ControlLayoutEditorView: View {
             let rect = CGRect(x: origin.x, y: origin.y,
                               width: viewport.width * scaler.scale,
                               height: viewport.height * scaler.scale)
+            let fill = isUpper
+                ? Color(red: 0.20, green: 0.36, blue: 0.52)
+                : Color(red: 0.30, green: 0.26, blue: 0.44)
             ZStack {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color(red: 0.14, green: 0.17, blue: 0.22))
+                    .fill(fill.opacity(0.38))
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.5)
+                    .strokeBorder(Color.white.opacity(0.22), lineWidth: 0.5)
                 Text(label)
-                    .font(.system(size: max(min(rect.width, rect.height) * 0.16, 9), weight: .medium))
-                    .foregroundColor(.white.opacity(0.45))
+                    .font(.system(size: max(min(rect.width, rect.height) * 0.16, 9),
+                                  weight: .medium))
+                    .foregroundColor(.white.opacity(0.50))
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
             }
@@ -304,12 +282,62 @@ struct ControlLayoutEditorView: View {
         }
     }
 
-    /// The real container size in points, so the preview's proportions can be
-    /// checked against the game view (also on an iPad, where the old abstract
-    /// 1.6:1 preview was misleading).
-    private var containerSizeLabel: String {
-        L10n.tr("Control area") + " " +
-            "\(Int(containerSize.width.rounded())) × \(Int(containerSize.height.rounded())) pt"
+    // MARK: - Bars
+
+    private var topBar: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(L10n.tr("Control layout"))
+                    .font(.footnote.weight(.semibold))
+                Text(L10n.format("Editing the %@ layout", orientation.title))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            Spacer(minLength: 8)
+            Button(L10n.tr("Done")) { dismiss() }
+                .font(.footnote.weight(.semibold))
+                .accessibilityIdentifier("control-editor-done")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
+    }
+
+    private var bottomPanel: some View {
+        VStack(spacing: 8) {
+            if let selected {
+                inspector(for: selected)
+            } else {
+                Text(L10n.tr("Tap a control, then drag or pinch it. The screens show the current screen layout."))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack(spacing: 14) {
+                Button {
+                    undo()
+                } label: {
+                    Label(L10n.tr("Undo"), systemImage: "arrow.uturn.backward")
+                }
+                .disabled(undoStack.isEmpty)
+                Spacer(minLength: 4)
+                Menu {
+                    Button(L10n.tr("Reset this orientation"), role: .destructive) {
+                        resetOrientation()
+                    }
+                    Button(L10n.tr("Reset both control layouts"), role: .destructive) {
+                        resetBoth()
+                    }
+                } label: {
+                    Label(L10n.tr("Reset"), systemImage: "arrow.counterclockwise")
+                }
+            }
+            .font(.caption)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     // MARK: - Inspector
@@ -322,7 +350,7 @@ struct ControlLayoutEditorView: View {
                 Text(element.accessibilityTitle)
                     .font(.footnote)
                     .foregroundColor(.secondary)
-                Spacer()
+                Spacer(minLength: 4)
                 Button {
                     resetSelected(element)
                 } label: {
@@ -347,11 +375,6 @@ struct ControlLayoutEditorView: View {
                           if editing { pushUndo() } else { commit() }
                       })
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(white: 0.12))
-        )
     }
 
     private func sliderRow(_ title: String,
@@ -399,32 +422,6 @@ struct ControlLayoutEditorView: View {
 
     // MARK: - Actions
 
-    private var actionBar: some View {
-        HStack(spacing: 16) {
-            Button {
-                undo()
-            } label: {
-                Label(L10n.tr("Undo"), systemImage: "arrow.uturn.backward")
-            }
-            .disabled(undoStack.isEmpty)
-            Spacer()
-            Text(containerSizeLabel)
-                .font(.caption2.monospacedDigit())
-                .foregroundColor(.secondary)
-            Menu {
-                Button(L10n.tr("Reset this orientation"), role: .destructive) {
-                    resetOrientation()
-                }
-                Button(L10n.tr("Reset both control layouts"), role: .destructive) {
-                    resetBoth()
-                }
-            } label: {
-                Label(L10n.tr("Reset"), systemImage: "arrow.counterclockwise")
-            }
-        }
-        .font(.footnote)
-    }
-
     private func pushUndo() {
         if undoStack.last != draft {
             undoStack.append(draft)
@@ -442,6 +439,11 @@ struct ControlLayoutEditorView: View {
     }
 
     private func commit() {
+        // Hand editing the controls is exactly the Custom choice; the Settings
+        // page also switches it before opening the editor.
+        if settings.controlLayoutMode != .custom {
+            settings.controlLayoutMode = .custom
+        }
         settings.setControlLayout(draft, for: orientation)
         settings.persist()
     }

@@ -50,7 +50,6 @@
 "Battery saves and instant save slots" = "电池存档与即时存档位";
 "Battery saves are written by the game runtime into Documents/data/<game>. Instant save slots are stored in Documents/states/<game>. Both stay on this device." = "电池存档由游戏运行时写入 Documents/data/<game>。即时存档位保存在 Documents/states/<game>。两者都只留在这台设备上。";
 "Battery saves are written by the game; instant slots are snapshots of the whole console. Everything stays on this device." = "电池存档由游戏写入；即时存档是整个主机的快照。所有内容都留在本设备上。";
-"Both screens in one row: upper on the left, lower on the right. Fits a landscape screen." = "两块屏幕并排：上屏在左、下屏在右，适合横屏。";
 "Buffer size" = "缓冲区大小";
 "Button remapping" = "按键重映射";
 "CADisplayLink · %ld Hz" = "CADisplayLink · %ld Hz";
@@ -169,7 +168,6 @@
 "Loading %@…" = "正在载入 %@…";
 "Loading a state restores that point and continues the same game session." = "载入存档会恢复到该时间点并继续当前游戏会话。";
 "Low latency" = "低延迟";
-"Lower screen only" = "仅下屏";
 "Lowered automatically from %@ because frames stayed below 20 fps." = "由于帧率持续低于 20 fps，已从 %@ 自动下调。";
 "MoltenVK (Apache-2.0): Vulkan over Metal, used by the presented renderer." = "MoltenVK（Apache-2.0）：Vulkan over Metal，供呈现渲染器使用。";
 "More" = "更多";
@@ -199,8 +197,6 @@
 "On-screen controls" = "屏幕按键";
 "On: the HUD is shown over the presented Metal layer." = "开启：HUD 显示在呈现的 Metal 图层上。";
 "On: the first frames of each load run behind a “Preparing graphics” screen until they stop spiking (at most 5 s). Later pipelines can still compile on first use." = "开启：每次载入的前若干帧会显示“正在准备图形”界面，直到帧时间不再出现尖峰（最多 5 秒）。之后的管线仍可能在首次使用时编译。";
-"Only the lower (touch) screen." = "仅显示下屏（触摸屏）。";
-"Only the upper (3D) screen. The game's touchscreen is not shown." = "仅显示上屏（3D），不显示游戏的触摸屏。";
 "Orientation" = "方向";
 "Overlay opacity" = "按键透明度";
 "Packing battery saves into a ZIP archive…" = "正在把电池存档打包为 ZIP…";
@@ -243,7 +239,6 @@
 "Settings" = "设置";
 "Show on-screen controls" = "显示屏幕按键";
 "Show FPS counter" = "显示帧率";
-"Side by side" = "左右并排";
 "Simplified Chinese (system language)" = "简体中文（跟随系统语言）";
 "Skip" = "跳过";
 "Skipped %ld archive metadata entries." = "已跳过 %ld 个归档元数据项。";
@@ -253,7 +248,6 @@
 "Slot %ld is too large to be a save state." = "存档位 %ld 太大，不可能是有效的即时存档。";
 "Slot %ld · %@" = "存档位 %ld · %@";
 "Stable" = "稳定";
-"Stacked" = "上下叠放";
 "Start a game before loading a state." = "请先开始游戏再载入存档状态。";
 "Start a game before saving a state." = "请先开始游戏再保存存档状态。";
 "Start a game before using save states." = "请先开始游戏再使用即时存档。";
@@ -308,8 +302,6 @@
 "This game has no linked AOT code in this build. It will run in the interpreter and may be slow." = "此构建没有为该游戏链接 AOT 代码，将以解释器运行，速度可能较慢。";
 "Tools" = "工具";
 "Unsupported file “%@”. Choose a decrypted .3ds or .cci ROM." = "不支持的文件“%@”。请选择解密后的 .3ds 或 .cci ROM。";
-"Upper screen above the lower one, as on the console. Fits a portrait screen; with 90° rotation it becomes two columns." = "上屏在上、下屏在下，和主机一样。适合竖屏；旋转 90° 后变成左右两列。";
-"Upper screen only" = "仅上屏";
 "Upright" = "正置";
 "Upside down" = "倒置";
 "Version" = "版本";
@@ -355,8 +347,6 @@
 "“%@” is removed from this device. This cannot be undone." = "“%@”已从本设备删除。此操作无法撤销。";
 "“%@” is too large to import." = "“%@”太大，无法导入。";
 "“%@” is too large to include in a save-data archive." = "“%@”太大，无法放入存档数据压缩包。";
-"Large top screen" = "大画面上屏";
-"Large upper screen with the lower one small at its lower right. The landscape default." = "上屏放大、下屏缩小放在右下角；横屏默认布局。";
 
 /* --- 纯 AOT 壳：游戏由电脑构建并随 catalog 安装，手机端不导入、不使用解释器 --- */
 "AOT · linked" = "AOT · 已链接";
@@ -493,52 +483,15 @@
 "Select button" = "选择键";
 "Circle Pad" = "摇杆（Circle Pad）";
 "C-stick" = "C 杆";
-"Layout" = "布局";
-"Preview" = "预览";
 "Size" = "大小";
 "Opacity" = "不透明度";
-"Width" = "宽度";
-"Height" = "高度";
-"Selected control" = "选中的控件";
-"Selected screen" = "选中的屏幕";
 "Upper screen" = "上屏";
 "Lower screen" = "下屏";
-"Show upper screen" = "显示上屏";
-"Show lower screen" = "显示下屏";
-"Keep the 3DS screen shape" = "保持 3DS 屏幕比例";
-"Horizontal position" = "水平位置";
-"Vertical position" = "垂直位置";
-"Style" = "样式";
-"Base arrangement" = "基础排列";
-"Custom scale and position" = "自定义缩放与位置";
-"Scale" = "缩放";
-"Horizontal offset" = "水平偏移";
-"Vertical offset" = "垂直偏移";
-"Reset scale and position" = "重置缩放与位置";
-"Edit free layout" = "编辑自由布局";
 "How it works" = "工作原理";
 "Control layout" = "控件布局";
-"Custom screen layout" = "自定义屏幕布局";
 "Reset this control" = "重置此控件";
 "Reset this orientation" = "重置此方向";
 "Reset both control layouts" = "重置两个方向的按键布局";
-"Reset custom screen layout" = "重置自定义屏幕布局";
-"Preset" = "预设";
-"Custom (Metal)" = "自定义（Metal）";
-"Free layout (software)" = "自由布局（软件）";
-"The portrait layout is the pad area under the screens; the landscape layout covers the whole game view. The default portrait layout does not cover the screens." = "竖屏布局是屏幕下方的按键区；横屏布局覆盖整个游戏画面。默认竖屏布局不会遮挡屏幕。";
-"Tap a control to select it, then drag it in the preview or use the sliders below. Several fingers can press different controls at the same time during a game." = "点按一个控件选中它，然后在预览中拖动它，或使用下方滑块。游戏中可以多根手指同时按不同控件。";
-"Tap a control in the preview to select it." = "在预览中点按控件即可选中。";
-"Portrait and landscape keep separate screen positions, like the control layouts. Each rectangle is a fraction of the game view, so it scales with the device." = "竖屏与横屏分别保存屏幕位置，和按键布局一样。每个矩形都是游戏画面的比例，因此会随设备缩放。";
-"Drag a screen to move it. Drag the corner handle to resize it. A custom layout uses the readback display path, so it can be slower than the Metal presenter, and it applies from the next game load." = "拖动屏幕可移动位置，拖动角上的手柄可调整大小。自定义布局使用回读显示路径，可能比 Metal presenter 慢，并在下次载入游戏时生效。";
-"Follows the device: stacked screens in portrait, the large upper screen in landscape. The Metal presenter draws it." = "跟随设备方向：竖屏上下排列，横屏大上屏。由 Metal presenter 绘制。";
-"One of the classic arrangements in both orientations. The Metal presenter draws it." = "两个方向都使用选定的经典排列。由 Metal presenter 绘制。";
-"A classic arrangement plus a uniform scale and offset, saved separately for portrait and landscape. Still drawn by the Metal presenter." = "在经典排列上整体缩放和偏移，竖屏与横屏分别保存。仍由 Metal presenter 绘制。";
-"Places each screen anywhere. Runs on the software readback path because the Metal presenter has no arbitrary arrangement." = "可任意摆放两块屏幕。因为 Metal presenter 不支持任意排列，所以走软件回读路径。";
-"The free layout uses the software readback display path, so it can be slower than the Metal presets. It applies from the next game load. Touch input follows the lower screen's rectangle." = "自由布局使用软件回读显示路径，可能比 Metal 预设慢。它在下次载入游戏时生效。触屏输入会跟随下屏矩形。";
-"Rotation, aspect ratio, integer scaling and resolution keep their meaning in every mode." = "旋转、宽高比、整数缩放和分辨率在所有模式下含义不变。";
-"The Metal presenter still draws the base arrangement; this only zooms and moves the whole picture on the layer. Enlarging past 100% shows the same render resolution, so it gets softer. Saved separately for portrait and landscape." = "Metal presenter 仍绘制基础排列；这里只是整幅画面的缩放与移动。放大超过 100% 时渲染分辨率不变，画面会变糊。竖屏与横屏分别保存。";
-"Presets and Custom (Metal) draw through the CAMetalLayer presenter: full speed, and every phone rotates, scales and filters the picture the same way. Free layout trades that Metal path for exact per-screen placement, because the presenter only knows its own arrangements; the game picture then comes from the readback path the app also uses when Metal is unavailable." = "预设与「自定义（Metal）」通过 CAMetalLayer presenter 绘制：全速运行，旋转、缩放与过滤在所有机型上一致。自由布局为了精确摆放两块屏幕而放弃该 Metal 路径，因为 presenter 只认识自己的几种排列；此时游戏画面走应用在 Metal 不可用时也会使用的回读路径。";
 
 
 /* --- 0.1.2 settings-ui（task-15）：动态分辨率说明、关于页、精简的 HUD 原因 --- */
@@ -588,23 +541,19 @@
 
 "Undo" = "撤销";
 "Control area" = "按键区";
-"Screen" = "屏幕";
 "Edit screen layout" = "编辑屏幕布局";
-"Default stacked" = "默认堆叠";
-"Upper only" = "仅上屏";
-"Lower only" = "仅下屏";
 "Custom" = "自定义";
 "Lock ratio" = "锁定比例";
 "Upper screen %@" = "上屏 %@";
 "Lower screen %@" = "下屏 %@";
 "Reset screen layout" = "重置屏幕布局";
 "Reset both screen layouts" = "重置两个方向的屏幕布局";
-"Free screen layout runs on the software readback path, so it can be slower; it applies from the next game load." = "自由屏幕布局走软件回读路径，可能更慢；下次载入游戏时生效。";
 "The game applies the screen rotation; this editor arranges the upright screens." = "屏幕旋转在游戏中生效；本编辑器按未旋转的画布排列。";
 
 /* --- 0.1.2 布局入口拆分（task-22）：屏幕布局在 设置→显示、按键布局在 设置→控制 --- */
 
 "Reset screen layout to defaults" = "重置屏幕布局为默认";
+
 /* --- 0.1.3 游戏库删除（ios-lib-actions，task-26） ------------------------
    作用域：delete-game。主页卡片菜单、二次确认与结果提示。AOT 包属于已签名
    应用，因此删除只移除游戏数据、存档与该游戏状态，并从游戏库隐藏该标题，
@@ -621,3 +570,23 @@
 "the folder “%@” is not inside Documents/Games." = "文件夹“%@”不在 Documents/Games 中。";
 "“%@” is outside its expected folder; not deleted." = "“%@”不在预期的文件夹中，未删除。";
 "Deleted games stay hidden until the desktop launcher pushes their game data again." = "已删除的游戏会保持隐藏，直到桌面启动器再次推送它的游戏数据。";
+
+
+/* --- 0.1.3 布局简化（task-27）：默认 / 自定义 + 全屏编辑器 --- */
+
+"Default" = "默认";
+"Default keeps the automatic arrangement: the screens stacked in portrait and the large upper screen in landscape. The Metal presenter draws it." = "默认保持自动排列：竖屏上下叠放，横屏大上屏，由 Metal presenter 绘制。";
+"Custom places each screen by hand, one layout for each device direction. Choosing Custom opens the full-screen editor for the direction the device is in now; the screen runs on the software readback path, so it can be slower." = "自定义可手动摆放两块屏幕，竖屏与横屏各保存一套。选择“自定义”会直接打开当前设备方向的全屏编辑器；自定义屏幕布局走软件回读路径，可能更慢。";
+"Default uses the shipped positions of every control, so nothing covers the picture in portrait." = "默认使用内置的按键位置，竖屏时不会遮挡画面。";
+"Custom lets you move and resize each control. Choosing Custom opens the full-screen editor for the direction the device is in now, with the current screen layout drawn behind the controls; each direction keeps its own layout." = "自定义可移动并缩放每个按键。选择“自定义”会直接打开当前设备方向的全屏编辑器，并把当前屏幕布局画在按键下方作对照；每个方向各保存一套。";
+"Edit control layout" = "编辑按键布局";
+"Reset control layout to defaults" = "重置按键布局为默认";
+"Rotation, aspect ratio and integer scaling keep their meaning in both choices." = "两种选择下，旋转、宽高比与整数缩放的含义保持不变。";
+"Custom screen layouts run on the software readback path, so they can be slower; a change applies from the next game load." = "自定义屏幕布局走软件回读路径，可能更慢；修改在下次载入游戏时生效。";
+"Portrait and landscape keep their own custom layouts." = "竖屏与横屏各自保存自定义布局。";
+"Portrait and landscape keep their own control layouts." = "竖屏与横屏各自保存按键布局。";
+"The overlay opacity under Controls applies to both choices." = "“控制”页的覆盖层不透明度对两种选择都生效。";
+"Editing the %@ layout" = "正在编辑%@布局";
+"Drag to move, pinch to scale. The controls are shown for reference." = "拖动移动，双指捏合缩放。屏幕上的按键仅作对照。";
+"Tap a control, then drag or pinch it. The screens show the current screen layout." = "点按选中按键后可拖动或捏合缩放。屏幕显示当前屏幕布局。";
+

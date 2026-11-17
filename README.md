@@ -31,18 +31,16 @@ Each library card is built from what the launcher already read out of the ROM at
 
 The on-screen pad is the complete New 3DS set: D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a real analog Circle Pad and the New 3DS C-stick. The Circle Pad reports true analog values (-1 to 1 per axis, with a small dead zone so a resting finger reads exactly 0) instead of acting as a second D-pad, and the C-stick works the same way. A hardware controller's left stick feeds the Circle Pad and its right stick feeds the C-stick; L2/R2 map to ZL/ZR, and several fingers can hold buttons and drag the sticks at the same time.
 
-Every control can be dragged, resized and faded - or reset - in **Settings -> Controls -> Control layout**, with separate portrait and landscape profiles. The editor changes position, size and opacity only: which 3DS button a control reports is fixed (no remapping in this build). The C-stick needs a game that uses the New 3DS nub, and a shell built with the current runtime (`scripts/build-zakuro-ios.sh` from source has it).
+Every control can be moved, resized and faded - or reset - in **Settings -> Controls -> Control layout**: the page offers **Default** (the shipped positions) and **Custom**, and choosing Custom opens the full-screen editor for the direction the device is in now, with the current screen layout drawn behind the controls. Portrait and landscape keep separate profiles. The editor changes position, size and opacity only: which 3DS button a control reports is fixed (no remapping in this build). The C-stick needs a game that uses the New 3DS nub, and a shell built with the current runtime (`scripts/build-zakuro-ios.sh` from source has it).
 
-## Four screen layouts
+## Screen layouts: Default and Custom
 
-The **Screen layout** page (**Settings -> Display -> Screen layout**) arranges the two 3DS screens four ways:
+The **Screen layout** page (**Settings -> Display -> Screen layout**) offers exactly two choices:
 
-- **Automatic** (the default) keeps the original behaviour: stacked in portrait, the large top screen in landscape.
-- **Preset** pins one of the five classic arrangements: stacked, side by side, large top, upper screen only, lower screen only.
-- **Custom (Metal)** takes a preset and adds a uniform scale and offset to the whole picture, still drawn by the `CAMetalLayer` presenter.
-- **Free layout (software)** places each screen at its own rectangle. It is opt-in, the page warns that it is slower, and it switches the session to the software readback path because the Metal presenter only knows the five fixed arrangements; it applies from the next game load.
+- **Default** keeps the automatic arrangement: the screens stacked in portrait and the large upper screen in landscape. The `CAMetalLayer` presenter draws it.
+- **Custom** places each screen at its own rectangle. Choosing Custom opens a full-screen editor for the direction the device is in now - portrait edits the portrait layout, landscape the landscape one - with the current on-screen controls drawn over the picture so the screens can be placed between or away from them. Each direction keeps its own layout and the editor can reset it. It switches the session to the software readback path because the Metal presenter only knows the five fixed arrangements, and it applies from the next game load.
 
-The Custom (Metal) zoom/position and the free layout are saved per orientation, and each editor can reset to the default. Rotation, aspect ratio, integer scaling and render resolution keep their meaning in every mode.
+Rotation, aspect ratio, integer scaling and render resolution keep their meaning in both choices.
 
 ## What the phone shows while you play
 
@@ -64,7 +62,7 @@ On a physical iPhone, one retail title run through the Windows launcher path mea
 
 | Platform | Support |
 |---|---|
-| **iPhone / iPad** | iOS 16 and later. One app holds the library, in-game menu, the full editable New 3DS control set, four screen layouts, save states and the FPS counter. |
+| **iPhone / iPad** | iOS 16 and later. One app holds the library, in-game menu, the full editable New 3DS control set, Default/Custom screen layouts, save states and the FPS counter. |
 | **Windows** | Windows 10/11 x64. One self-contained launcher executable; builds, signs, installs and pushes without a Mac. |
 | **macOS** | macOS 13+ (Intel + Apple silicon). SwiftUI launcher using Xcode signing; the package is not self-contained yet and device install is not verified by the maintainers. |
 | **Build host** | Windows (bundled LLVM/LLD) or macOS (Apple clang + Xcode). |
@@ -90,7 +88,7 @@ On a physical iPhone, one retail title run through the Windows launcher path mea
 ### Phone data, saves and limits
 
 - Game data lives in `Documents/Games/<TITLEID>/` (visible in the Files app); saves and save states live in the app container.
-- The on-screen controls are edited under **Settings -> Controls -> Control layout**; the four screen layouts are edited under **Settings -> Display -> Screen layout**. The control layout and the three Metal screen modes apply immediately, the free layout from the next game load.
+- The on-screen controls are edited under **Settings -> Controls -> Control layout**; the screen layout under **Settings -> Display -> Screen layout**. Each page offers Default and Custom, and Custom opens the full-screen editor for the current device direction. Default applies immediately; a custom screen layout applies from the next game load.
 - A free Apple ID allows 3 apps per device and about 7 days of signing; deploy again to refresh. A paid developer account removes those limits.
 - Uninstalling the app removes its data; your ROMs on the computer are never touched.
 
@@ -143,7 +141,7 @@ licenses/          third-party license texts (Impactor MIT, apple-codesign MPL-2
 ## Honest boundaries
 
 - **Compatibility is per game.** Some titles may fail to boot or render incorrectly; reports with the title ID are welcome - see [Issue reports and performance data](#issue-reports-and-performance-data).
-- **Free layout is a performance trade-off.** It runs on the software readback path (the Metal presenter only knows the five fixed arrangements), applies from the next game load and is slower than the other three modes, which stay on the GPU path.
+- **A custom screen layout is a performance trade-off.** It runs on the software readback path (the Metal presenter only knows the five fixed arrangements), applies from the next game load and is slower than the Default choice, which stays on the GPU path.
 - **The C-stick depends on the game.** It is reported through the New 3DS nub API; a title that never reads the nub ignores it, and a shell built from an older runtime does not provide it.
 - **A mainland-China iPhone can ask for "wireless data" on the first text input.** This is a known iOS quirk: when the system text input first appears (for example the in-game keyboard overlay) UIKit's own dictation/network path check is attributed to the app, so iOS shows its "allow wireless data" alert. 3ds2apple makes no network requests and its cellular data usage stays at 0 - choose *Don't Allow* or *Wi-Fi only* and everything keeps working (a reinstall can show the alert again). Details in [ios/app/README.md](ios/app/README.md).
 - **Older installs and older pushes keep working.** `GameInfo.json` only gained optional fields (schema version stays 1), so game data pushed by a 0.1.0 launcher still validates and plays - until you redeploy, the card has no publisher, no real SMDH icon and no size. An app updated from 0.1.0 keeps its library and saves.

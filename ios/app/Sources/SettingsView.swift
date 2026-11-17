@@ -3,9 +3,10 @@
 //  3ds2apple
 //
 //  Settings page: display, audio, controls, performance, storage and About.
-//  The Display section opens the full screen layout page and the Controls
-//  section opens the control layout editor; the rotation/aspect/resolution rows
-//  also appear in the in-game quick settings sheet.
+//  The Display section opens the screen layout page (Default / Custom) and the
+//  Controls section opens the control layout page (Default / Custom; the
+//  custom choice opens the full-screen editor); the rotation/aspect/resolution
+//  rows also appear in the in-game quick settings sheet.
 //
 //  The settings live in AppSettings; every control writes through a binding that
 //  also stores the new value in UserDefaults. Rows are written directly in the
@@ -170,7 +171,7 @@ struct SettingsView: View {
             }
             Toggle("Haptic feedback on button press", isOn: persistedBinding(settings, \.haptics))
             NavigationLink {
-                ControlLayoutEditorView(settings: settings, orientation: .portrait)
+                ControlLayoutSettingsView(settings: settings)
             } label: {
                 Text("Control layout")
             }
@@ -389,12 +390,16 @@ struct QuickDisplaySettingsView: View {
                 Section {
                     Picker(
                         "Screen layout",
-                        selection: persistedBinding(settings, \.screenLayout)
+                        selection: persistedBinding(settings, \.screenLayoutMode)
                     ) {
-                        ForEach(ScreenLayout.allCases) { layout in
-                            Text(layout.title).tag(layout)
+                        ForEach(ScreenLayoutMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
                         }
                     }
+                    Text(settings.screenLayoutMode.detail)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     Picker(
                         "Screen rotation",
                         selection: persistedBinding(settings, \.screenRotation)
