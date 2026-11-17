@@ -13,6 +13,16 @@
 //  or Error (a broken push). Tapping a card starts it or explains exactly what
 //  is wrong. There is no explanatory paragraph under the grid.
 //
+//  Each card also has a "..." menu that deletes the game after a second
+//  confirmation: the pushed game data (ROM, GameInfo.json, cover), the battery
+//  saves, the instant save states, the play history and the per-game settings
+//  are removed, and the title is hidden from the library until the desktop
+//  launcher pushes its data again. The AOT pack itself is inside the signed
+//  app and cannot be removed at run time.
+//
+//  The library rescans Documents/Games at launch, whenever the app returns to
+//  the foreground and on pull-to-refresh; there is no refresh button.
+//
 //  A fresh shell with an empty catalog shows the empty state: the AOT packs and
 //  the game data both come from the 3ds2apple desktop launcher, not from
 //  anything the app downloads or imports.
@@ -36,6 +46,13 @@ struct HomeView: View {
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
+    /// The game the delete confirmation is about; nil while the alert is closed.
+    @State private var pendingDeletion: GameEntry?
+    @State private var isDeleteConfirmationPresented = false
+    /// Result of the last deletion (a dismissible banner above the library).
+    @State private var deletionStatus: String?
+    @State private var deletionError: String?
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -48,11 +65,22 @@ struct HomeView: View {
                 .frame(maxWidth: 760)
                 .frame(maxWidth: .infinity)
             }
+            // Pull-to-refresh is a gesture, not a button: the library also
+            // rescans by itself at launch and when the app returns to the
+            // foreground (ContentView's onAppear / scenePhase hooks).
             .refreshable { library.refresh() }
             .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: HomeRoute.self) { _ in
                 SettingsView(settings: settings, model: model)
+            }
+            .alert(deleteConfirmationTitle, isPresented: $isDeleteConfirmationPresented) {
+                Button(L10n.tr("Delete"), role: .destructive) {
+                    if let entry = pendingDeletion { delete(entry) }
+                }
+                Button(L10n.tr("Cancel"), role: .cancel) { pendingDeletion = nil }
+            } message: {
+                Text(deleteConfirmationMessage)
             }
         }
     }
@@ -70,19 +98,6 @@ struct HomeView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
-            Button {
-                library.refresh()
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 42, height: 42)
-                    .background(.background, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .disabled(model.isRuntimeActive)
-            .accessibilityLabel(L10n.tr("Refresh library"))
-            .accessibilityIdentifier("library-refresh")
             NavigationLink(value: HomeRoute.settings) {
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 18, weight: .semibold))
@@ -136,55 +151,135 @@ struct HomeView: View {
         return Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: count)
     }
 
+    /// One library card: the cover and info block start the game, and the
+    /// "..." menu in the art's top-leading corner deletes it.
     private func gameCard(_ entry: GameEntry) -> some View {
         let state = cardState(entry)
-        return Button {
-            model.start(entry)
-        } label: {
-            VStack(alignment: .leading, spacing: 7) {
-                cover(for: entry, state: state)
-                // The info block is one tight leading-aligned stack under the
-                // square art: title (two lines reserved so a longer title cannot
-                // push the publisher/size rows around), publisher, size and
-                // last-played. Every row truncates instead of widening the card.
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(entry.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(2, reservesSpace: true)
-                        .multilineTextAlignment(.leading)
-                        .allowsTightening(true)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                    if let publisher = entry.publisher {
-                        Text(publisher)
+        return ZStack(alignment: .topLeading) {
+            Button {
+                model.start(entry)
+            } label: {
+                VStack(alignment: .leading, spacing: 7) {
+                    cover(for: entry, state: state)
+                    // The info block is one tight leading-aligned stack under the
+                    // square art: title (two lines reserved so a longer title cannot
+                    // push the publisher/size rows around), publisher, size and
+                    // last-played. Every row truncates instead of widening the card.
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(entry.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(2, reservesSpace: true)
+                            .multilineTextAlignment(.leading)
+                            .allowsTightening(true)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                        if let publisher = entry.publisher {
+                            Text(publisher)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .accessibilityIdentifier("game-card-publisher")
+                        }
+                        Text(cardMetaText(for: entry))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                            .accessibilityIdentifier("game-card-publisher")
+                            .accessibilityIdentifier("game-card-meta")
+                        if entry.isLegacyBundled {
+                            Text(L10n.tr("From the previous build"))
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                                .lineLimit(1)
+                        }
                     }
-                    Text(cardMetaText(for: entry))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .accessibilityIdentifier("game-card-meta")
-                    if entry.isLegacyBundled {
-                        Text(L10n.tr("From the previous build"))
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
-                            .lineLimit(1)
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(cardBackground)
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            .padding(10)
-            .background(cardBackground)
-            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .buttonStyle(.plain)
+            .disabled(model.isRuntimeActive)
+            .accessibilityIdentifier("game-card")
+            deleteMenu(for: entry)
+                .padding(8)
         }
-        .buttonStyle(.plain)
-        .disabled(model.isRuntimeActive)
-        .accessibilityIdentifier("game-card")
+    }
+
+    /// The card's delete entry: a "..." menu over the cover art. The deletion
+    /// itself asks a second time (the alert), so a mis-tap cannot remove a game.
+    private func deleteMenu(for entry: GameEntry) -> some View {
+        Menu {
+            Button(role: .destructive) {
+                requestDeletion(entry)
+            } label: {
+                Label("Delete Game", systemImage: "trash")
+            }
+            .accessibilityIdentifier("game-delete-action")
+        } label: {
+            Image(systemName: "ellipsis.circle.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.primary)
+                .background(.regularMaterial, in: Circle())
+        }
+        .accessibilityLabel(L10n.tr("Game actions"))
+        .accessibilityIdentifier("game-delete-menu")
+    }
+
+    /// Second confirmation title: the exact game name, so the user can see that
+    /// the confirmation belongs to the card they picked.
+    private var deleteConfirmationTitle: String {
+        guard let entry = pendingDeletion else { return L10n.tr("Delete this game?") }
+        return L10n.format("Delete “%@”?", entry.title)
+    }
+
+    /// The full delete semantics, in the dialog: data, saves and settings go,
+    /// the packed AOT code stays inside the signed app.
+    private var deleteConfirmationMessage: String {
+        guard let entry = pendingDeletion else { return "" }
+        return L10n.format(
+            "The game data of “%@” is removed from this device, together with its battery saves, instant save states, play history and per-game settings. This cannot be undone. The AOT pack is part of the installed app, so the game stays hidden from the library; the desktop launcher pushing its data again makes it appear again.",
+            entry.title
+        )
+    }
+
+    private func requestDeletion(_ entry: GameEntry) {
+        pendingDeletion = entry
+        isDeleteConfirmationPresented = true
+    }
+
+    /// Runs after the second confirmation. A runtime that still owns the game is
+    /// released first (the home page normally shows only while nothing is
+    /// loaded), so the ROM file cannot be read while it is unlinked.
+    private func delete(_ entry: GameEntry) {
+        pendingDeletion = nil
+        deletionStatus = nil
+        deletionError = nil
+        guard !model.isRuntimeActive else {
+            model.unload { self.performDeletion(entry) }
+            return
+        }
+        performDeletion(entry)
+    }
+
+    private func performDeletion(_ entry: GameEntry) {
+        library.deleteGame(titleID: entry.titleID) { result in
+            switch result {
+            case .success(let summary):
+                var message = L10n.format("“%@” was deleted from this device.", summary.title)
+                if !summary.warnings.isEmpty {
+                    message += " " + L10n.format(
+                        "Some of the game's files could not be deleted: %@",
+                        summary.warnings.joined(separator: " ")
+                    )
+                }
+                deletionStatus = message
+            case .failure(let error):
+                deletionError = error.localizedDescription
+            }
+        }
     }
 
     /// What the badge says and its colour: green AOT means the game can start;
@@ -228,6 +323,13 @@ struct HomeView: View {
                 .foregroundStyle(Color.secondary.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+            if library.hiddenGameCount > 0 {
+                Text("Deleted games stay hidden until the desktop launcher pushes their game data again.")
+                    .font(.caption2)
+                    .foregroundStyle(Color.secondary.opacity(0.8))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(26)
         .frame(maxWidth: .infinity)
@@ -350,6 +452,26 @@ struct HomeView: View {
 
     @ViewBuilder
     private var statusMessages: some View {
+        if let deletionStatus {
+            noticeCard(
+                icon: "trash",
+                tint: .secondary,
+                title: L10n.tr("Game deleted"),
+                message: deletionStatus,
+                dismiss: { self.deletionStatus = nil }
+            )
+            .accessibilityIdentifier("game-deleted")
+        }
+        if let deletionError {
+            noticeCard(
+                icon: "exclamationmark.triangle.fill",
+                tint: .red,
+                title: L10n.tr("Could not delete the game"),
+                message: deletionError,
+                dismiss: { self.deletionError = nil }
+            )
+            .accessibilityIdentifier("game-delete-error")
+        }
         if let notice = model.notice {
             // An AOT-only refusal is an error (the game did not run): red octagon.
             // A fixable hint (data not pushed yet, ...) stays an orange warning.

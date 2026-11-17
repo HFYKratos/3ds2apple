@@ -676,20 +676,29 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
 
     /// Releases the runtime handle and returns to the home page. The game stays
     /// selected so its save data can still be managed from the Save Manager.
-    func unload() {
+    /// `completion` runs on the main queue once the handle is destroyed, so a
+    /// caller (the delete-game path) can remove the ROM file safely.
+    func unload(completion: (() -> Void)? = nil) {
         stopFrameLoop()
         stopAudio()
         inputState.clearAll()
         isPaused = false
         runtimeQueue.async { [weak self] in
-            guard let self else { return }
+            guard let self else {
+                DispatchQueue.main.async { completion?() }
+                return
+            }
             self.destroySystem()
             DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
+                guard let self else {
+                    completion?()
+                    return
+                }
                 self.clearScreens()
                 self.warmUp = GraphicsWarmUpStatus()
                 self.aotStatus = .notLoaded
                 self.setPhase(.idle)
+                completion?()
             }
         }
     }

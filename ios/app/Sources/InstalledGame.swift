@@ -109,7 +109,7 @@ enum GameValidationIssue: Hashable {
                 titleID)
         case .folderMissing(let folder):
             return L10n.format(
-                "The game data folder “%@” is no longer in Documents/Games. Refresh the library.", folder)
+                "The game data folder “%@” is no longer in Documents/Games. Pull down on the library to refresh it.", folder)
         }
     }
 }

@@ -17,8 +17,9 @@
 //  missing (launcher push not done yet) or Error (broken push). A fresh shell
 //  with an empty catalog simply shows the launcher empty state.
 //
-//  The only device state is Documents/Library/playHistory.json (title id ->
-//  last played time, written atomically) plus the pushed game data.
+//  The device state is Documents/Library/playHistory.json (title id -> last
+//  played time), Documents/Library/removedGames.json (titles the user deleted
+//  in the app) and the pushed game data, all written atomically.
 //
 
 import Combine
@@ -214,6 +215,60 @@ struct PlayHistory: Codable {
     }
 }
 
+/// Documents/Library/removedGames.json: games the user deleted on this device.
+///
+/// A game's AOT pack is compiled into the signed app bundle and listed in the
+/// bundle's GameCatalog.json, so deleting cannot remove it at run time. Deleting
+/// a game removes everything the app owns instead (ROM, GameInfo.json, pushed
+/// cover, battery saves, instant save states, play history, per-game settings)
+/// and records the title id here so the bundled catalog entry stays hidden.
+/// Pushing the game's data again with the desktop launcher brings it back.
+struct RemovedGames: Codable {
+    static let supportedSchemaVersion = 1
+
+    var schemaVersion: Int
+    /// Removal time per title ID (ISO 8601 on disk).
+    var removed: [String: Date]
+
+    init(schemaVersion: Int = RemovedGames.supportedSchemaVersion,
+         removed: [String: Date] = [:]) {
+        self.schemaVersion = schemaVersion
+        self.removed = removed
+    }
+}
+
+/// What one game deletion removed; the home page shows the result.
+struct GameDeletionSummary {
+    /// Display title of the deleted game, for the confirmation banner.
+    let title: String
+    /// Bytes removed from Documents/Games (ROM, GameInfo.json, pushed cover).
+    let gameDataBytes: UInt64
+    /// Bytes removed from the game's battery-save folder.
+    let saveDataBytes: UInt64
+    /// Bytes removed from the game's instant save-state folder.
+    let saveStateBytes: UInt64
+    /// Files that could not be removed although the game itself was deleted.
+    let warnings: [String]
+}
+
+/// Errors from the delete-game path.
+enum GameDeletionError: LocalizedError {
+    /// The title id is not in the library any more.
+    case unknownGame(String)
+    /// The pushed game data (the folder in Documents/Games) could not be
+    /// removed; the game stays in the library and the deletion can be retried.
+    case gameDataNotRemoved(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .unknownGame:
+            return L10n.tr("That game is not in the library any more.")
+        case .gameDataNotRemoved(let detail):
+            return L10n.format("Could not delete the game's data: %@", detail)
+        }
+    }
+}
+
 /// A one-line library banner (unreadable Documents/Games folder). Per-game
 /// problems live on the cards.
 struct LibraryNotice: Identifiable, Equatable {
@@ -234,8 +289,12 @@ final class GameLibrary: ObservableObject {
     @Published private(set) var entries: [GameEntry] = []
     /// A banner about the library itself (unreadable Documents/Games folder).
     @Published private(set) var notice: LibraryNotice?
+    /// Catalog games hidden because the user deleted them on this device.
+    @Published private(set) var hiddenGameCount = 0
 
     private var history = PlayHistory()
+    /// Games deleted in the app; persisted in Documents/Library/removedGames.json.
+    private var removed = RemovedGames()
     private let fileManager = FileManager.default
     /// SHA-256 results already computed this app run, keyed by title id.
     private var verificationCache: [String: (fingerprint: String, state: GameValidationState)] = [:]
@@ -259,6 +318,11 @@ final class GameLibrary: ObservableObject {
 
     static var playHistoryURL: URL {
         libraryDirectory.appendingPathComponent("playHistory.json", isDirectory: false)
+    }
+
+    /// Documents/Library/removedGames.json: the local record of deleted games.
+    static var removedGamesURL: URL {
+        libraryDirectory.appendingPathComponent("removedGames.json", isDirectory: false)
     }
 
     // MARK: - Queries
@@ -286,7 +350,7 @@ final class GameLibrary: ObservableObject {
     // MARK: - Mutations (main queue)
 
     /// Rescans Documents/Games. Called at launch, when the app returns to the
-    /// foreground and from the home page's refresh control, because the desktop
+    /// foreground and from the home page's pull-to-refresh, because the desktop
     /// launcher can push game data while the app is not in front.
     func refresh() {
         if Thread.isMainThread {
@@ -329,6 +393,178 @@ final class GameLibrary: ObservableObject {
         verificationWaiters[normalized, default: []].append(completion)
     }
 
+    // MARK: - Deletion (main queue)
+
+    /// Deletes one game from this device.
+    ///
+    /// Removes the pushed game data (ROM, GameInfo.json, pushed cover), the
+    /// battery saves and instant save states of the game's save namespace, the
+    /// play history and the per-game state (graphics warm-up marker, cover).
+    /// The AOT pack is part of the signed app, so the title is recorded in
+    /// Documents/Library/removedGames.json and hidden from the library instead;
+    /// the launcher pushing the data again brings it back.
+    ///
+    /// Filesystem work runs on a background queue; the completion (and the
+    /// library update) runs on the main queue. The caller must release a running
+    /// runtime first: the home page only offers deletion while no game is
+    /// loaded, and stops one that is somehow still active before calling this.
+    func deleteGame(titleID: String, completion: @escaping (Result<GameDeletionSummary, Error>) -> Void) {
+        let normalized = titleID.uppercased()
+        guard let entry = entry(titleID: normalized) else {
+            completion(.failure(GameDeletionError.unknownGame(normalized)))
+            return
+        }
+        let title = entry.title
+        let namespace = entry.saveNamespace
+        let pushedDirectory = entry.pushedData?.directoryURL
+        let folderName = entry.pushedData?.folderName ?? normalized
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let outcome = self.removeFiles(title: title,
+                                          titleID: normalized,
+                                          namespace: namespace,
+                                          pushedDirectory: pushedDirectory,
+                                          folderName: folderName)
+            DispatchQueue.main.async {
+                switch outcome {
+                case .failure(let error):
+                    AppLog.log(
+                        "[3ds2apple] library: could not delete %@: %@",
+                        normalized,
+                        error.localizedDescription
+                    )
+                    completion(.failure(error))
+                case .success(let summary):
+                    self.forgetGame(titleID: normalized)
+                    AppLog.log(
+                        "[3ds2apple] library: deleted %@ (%@): game data %llu B, saves %llu B, save states %llu B",
+                        summary.title,
+                        normalized,
+                        summary.gameDataBytes,
+                        summary.saveDataBytes,
+                        summary.saveStateBytes
+                    )
+                    for warning in summary.warnings {
+                        AppLog.log("[3ds2apple] library: delete warning for %@: %@", normalized, warning)
+                    }
+                    completion(.success(summary))
+                }
+            }
+        }
+    }
+
+    /// Removes the files a game owns. Every path is checked to be a direct child
+    /// of its root before anything is removed, so a hand-made manifest or a
+    /// crashed state can never delete another game's files.
+    private func removeFiles(title: String,
+                             titleID: String,
+                             namespace: String,
+                             pushedDirectory: URL?,
+                             folderName: String) -> Result<GameDeletionSummary, Error> {
+        var warnings: [String] = []
+
+        // 1) Pushed game data: Documents/Games/<TITLEID>/ (ROM, GameInfo, cover).
+        let gamesRoot = DocumentsGames.rootURL
+        let gameDirectory = pushedDirectory
+            ?? gamesRoot.appendingPathComponent(folderName, isDirectory: true)
+        let isGamesChild = gameDirectory.standardizedFileURL
+            .deletingLastPathComponent().standardizedFileURL.path
+            == gamesRoot.standardizedFileURL.path
+        guard isGamesChild,
+              GameCatalog.normalizedTitleID(gameDirectory.lastPathComponent) != nil else {
+            return .failure(GameDeletionError.gameDataNotRemoved(
+                L10n.format("the folder “%@” is not inside Documents/Games.",
+                            gameDirectory.lastPathComponent)
+            ))
+        }
+        var gameDataBytes: UInt64 = 0
+        if fileManager.fileExists(atPath: gameDirectory.path) {
+            gameDataBytes = Self.directorySize(gameDirectory)
+            do {
+                try fileManager.removeItem(at: gameDirectory)
+            } catch {
+                return .failure(GameDeletionError.gameDataNotRemoved(error.localizedDescription))
+            }
+        }
+
+        // 2) Battery saves: Documents/data/<save namespace>/.
+        let saveDataBytes = removeTree(SaveDataStore.batterySaveDirectory(namespace: namespace),
+                                       inside: StorageInspector.dataURL,
+                                       warnings: &warnings)
+        // 3) Instant save states: Documents/states/<save namespace>/.
+        let saveStateBytes = removeTree(SaveStateSupport.statesDirectory(namespace: namespace),
+                                        inside: SaveStateSupport.statesRootURL,
+                                        warnings: &warnings)
+        // 4) Per-game settings: the graphics warm-up marker of this ROM.
+        GraphicsWarmUpMarker.clear(romKey: titleID)
+
+        return .success(GameDeletionSummary(
+            title: title,
+            gameDataBytes: gameDataBytes,
+            saveDataBytes: saveDataBytes,
+            saveStateBytes: saveStateBytes,
+            warnings: warnings
+        ))
+    }
+
+    /// Removes one game folder that must be a direct child of `root`; a path
+    /// outside it is never touched (it may belong to another game).
+    private func removeTree(_ url: URL,
+                            inside root: URL,
+                            warnings: inout [String]) -> UInt64 {
+        let standardized = url.standardizedFileURL
+        let isChild = standardized.deletingLastPathComponent().standardizedFileURL.path
+            == root.standardizedFileURL.path
+        guard isChild else {
+            warnings.append(L10n.format("“%@” is outside its expected folder; not deleted.",
+                                        url.lastPathComponent))
+            return 0
+        }
+        guard fileManager.fileExists(atPath: standardized.path) else { return 0 }
+        let bytes = Self.directorySize(standardized)
+        do {
+            try fileManager.removeItem(at: standardized)
+            return bytes
+        } catch {
+            warnings.append(L10n.format("Could not delete “%@”: %@",
+                                        url.lastPathComponent,
+                                        error.localizedDescription))
+            return 0
+        }
+    }
+
+    /// Applies the in-memory half of a successful deletion on the main queue:
+    /// hides the entry, drops the play history and persists both records.
+    private func forgetGame(titleID: String) {
+        notifyWaiters(titleID: titleID, state: .invalid([.folderMissing(titleID)]))
+        verificationCache.removeValue(forKey: titleID)
+        verificationInFlight.remove(titleID)
+        removed.removed[titleID] = Date()
+        hiddenGameCount += 1
+        persist(removed: removed)
+        history.lastPlayed.removeValue(forKey: titleID)
+        persistHistory()
+        entries.removeAll { $0.titleID == titleID }
+    }
+
+    /// Recursive size of one directory, used for the deletion log and banner.
+    private static func directorySize(_ url: URL) -> UInt64 {
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return 0
+        }
+        var bytes: UInt64 = 0
+        for case let item as URL in enumerator {
+            guard let values = try? item.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true else { continue }
+            bytes += UInt64(max(values.fileSize ?? 0, 0))
+        }
+        return bytes
+    }
+
     // MARK: - Preview
 
     /// UI preview only (UI test fixture): illustrates the
@@ -337,6 +573,7 @@ final class GameLibrary: ObservableObject {
     func installPreviewLibrary(_ catalog: GameCatalog, playTimes: [String: Date] = [:]) {
         history = PlayHistory(schemaVersion: PlayHistory.supportedSchemaVersion, lastPlayed: playTimes)
         notice = nil
+        hiddenGameCount = 0
         entries = catalog.games.map { game in
             GameEntry(titleID: game.titleID,
                       title: game.displayName,
@@ -361,6 +598,7 @@ final class GameLibrary: ObservableObject {
     // MARK: - Loading
 
     private func load() {
+        removed = readRemovedGames() ?? RemovedGames()
         var loadedHistory = readPlayHistory()
         if loadedHistory == nil {
             // First launch after an older shell: keep the play dates the user
@@ -403,18 +641,47 @@ final class GameLibrary: ObservableObject {
             dataByTitle[game.titleID] = game
         }
 
-        if catalog.games.isEmpty {
-            entries = []
+        // A title the user deleted in the app stays hidden while the signed
+        // catalog still lists its AOT pack. Pushing the game's data again is how
+        // it comes back: an existing push clears the local removal record.
+        let restored = catalog.games.filter {
+            dataByTitle[$0.titleID] != nil && removed.removed[$0.titleID] != nil
+        }
+        for game in restored {
+            removed.removed.removeValue(forKey: game.titleID)
             AppLog.log(
-                "[3ds2apple] library: the app bundle has no GameCatalog.json entries (base shell with no games)"
+                "[3ds2apple] library: %@ was pushed again; showing it in the library again",
+                game.titleID
             )
+        }
+        if !restored.isEmpty {
+            persist(removed: removed)
+        }
+        let visibleGames = catalog.games.filter { game in
+            dataByTitle[game.titleID] != nil || removed.removed[game.titleID] == nil
+        }
+        let hiddenCount = catalog.games.count - visibleGames.count
+        hiddenGameCount = hiddenCount
+
+        if visibleGames.isEmpty {
+            entries = []
+            if hiddenCount > 0 {
+                AppLog.log(
+                    "[3ds2apple] library: every catalog game (%ld) is deleted on this device",
+                    hiddenCount
+                )
+            } else {
+                AppLog.log(
+                    "[3ds2apple] library: the app bundle has no GameCatalog.json entries (base shell with no games)"
+                )
+            }
         } else {
-            entries = catalog.games.map { game in
+            entries = visibleGames.map { game in
                 GameEntry(game: game,
                           pushedData: dataByTitle[game.titleID],
                           lastPlayedAt: history.lastPlayed[game.titleID])
             }
-            let known = Set(catalog.games.map { $0.titleID })
+            let known = Set(visibleGames.map { $0.titleID })
             for titleID in dataByTitle.keys where !known.contains(titleID) {
                 AppLog.log(
                     "[3ds2apple] library: Documents/Games has data for %@ but this build has no AOT pack for it; ignored",
@@ -501,6 +768,36 @@ final class GameLibrary: ObservableObject {
     private func notifyWaiters(titleID: String, state: GameValidationState) {
         guard let waiters = verificationWaiters.removeValue(forKey: titleID) else { return }
         for waiter in waiters { waiter(state) }
+    }
+
+    // MARK: - Removed-game persistence
+
+    private func persist(removed: RemovedGames) {
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            let data = try encoder.encode(removed)
+            try AtomicFileWriter.write(data, to: Self.removedGamesURL)
+        } catch {
+            AppLog.log("[3ds2apple] library: could not save removedGames.json: %@", error.localizedDescription)
+        }
+    }
+
+    private func readRemovedGames() -> RemovedGames? {
+        let url = Self.removedGamesURL
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        do {
+            let data = try Data(contentsOf: url)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            var loaded = try decoder.decode(RemovedGames.self, from: data)
+            loaded.removed = loaded.removed.filter { GameCatalog.normalizedTitleID($0.key) != nil }
+            return loaded
+        } catch {
+            AppLog.log("[3ds2apple] library: could not read removedGames.json: %@", error.localizedDescription)
+            return nil
+        }
     }
 
     // MARK: - Play history persistence

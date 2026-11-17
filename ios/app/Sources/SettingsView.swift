@@ -257,11 +257,13 @@ struct SettingsView: View {
             } label: {
                 moreRowLabel("Save Manager", systemImage: "externaldrive.fill")
             }
+            .accessibilityIdentifier("settings-save-manager")
             Button {
                 exportDiagnostics()
             } label: {
                 moreRowLabel("Export logs", systemImage: "square.and.arrow.up.fill")
             }
+            .accessibilityIdentifier("settings-export-logs")
             if let diagnosticsHint {
                 Text(diagnosticsHint)
                     .font(.caption)
@@ -275,6 +277,7 @@ struct SettingsView: View {
             } label: {
                 moreRowLabel("About", systemImage: "info.circle.fill")
             }
+            .accessibilityIdentifier("settings-about")
         } header: {
             Text("More")
         }
@@ -288,17 +291,21 @@ struct SettingsView: View {
             .foregroundColor(.secondary)
             .fixedSize(horizontal: false, vertical: true)
     }
-    /// Label for a row in the More section. A plain Button tints its whole
-    /// label, which made "Export logs" look different from the two
-    /// NavigationLinks around it; the filled symbol's tint and the primary text
-    /// colour are set explicitly so all three rows read as one group (item 7).
+    /// Label for a row in the More section. All three rows (Save Manager,
+    /// Export logs, About) must look identical whatever row type they use, so
+    /// they share this one explicit composition: the accent-coloured icon and
+    /// the primary text colour, independent of the Form's default Button /
+    /// NavigationLink tint (0.1.3 item 4: the Export logs icon was blue while
+    /// the two navigation rows were not).
     private func moreRowLabel(_ title: LocalizedStringKey, systemImage: String) -> some View {
-        Label {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.body)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 24, alignment: .center)
             Text(title)
                 .foregroundStyle(.primary)
-        } icon: {
-            Image(systemName: systemImage)
-                .foregroundStyle(Color.accentColor)
+            Spacer(minLength: 0)
         }
     }
     /// One settings row: the control, with an optional one-line hint directly

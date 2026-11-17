@@ -397,7 +397,6 @@
 "Installed games" = "Installed games";
 "Legacy game files" = "Legacy game files";
 "No games on this iPhone yet" = "No games on this iPhone yet";
-"Refresh library" = "Refresh library";
 "This game cannot be started" = "This game cannot be started";
 "This game's files are still being checked. Try again when the check finishes." = "This game's files are still being checked. Try again when the check finishes.";
 "%ld games" = "%ld games";
@@ -433,7 +432,7 @@
 "The game data is %ld bytes but GameInfo.json records %ld. Re-push the game with the launcher." = "The game data is %ld bytes but GameInfo.json records %ld. Re-push the game with the launcher.";
 "The game data's SHA-256 does not match the manifest (expected %@, got %@). Re-push the game with the launcher." = "The game data's SHA-256 does not match the manifest (expected %@, got %@). Re-push the game with the launcher.";
 "Could not read “%@” to check it: %@" = "Could not read “%@” to check it: %@";
-"The game folder “%@” is no longer in Documents/Games. Refresh the library." = "The game folder “%@” is no longer in Documents/Games. Refresh the library.";
+"The game folder “%@” is no longer in Documents/Games. Pull down on the library to refresh it." = "The game folder “%@” is no longer in Documents/Games. Pull down on the library to refresh it.";
 
 /* --- Catalog + pushed game data: AOT packs inside the IPA, ROM in Documents/Games --- */
 "Data missing" = "Data missing";
@@ -451,7 +450,7 @@
 "The game data is %ld bytes but GameInfo.json records %ld. Push the game data again with the launcher." = "The game data is %ld bytes but GameInfo.json records %ld. Push the game data again with the launcher.";
 "The game data's SHA-256 does not match the manifest (expected %@, got %@). Push the game data again with the launcher." = "The game data's SHA-256 does not match the manifest (expected %@, got %@). Push the game data again with the launcher.";
 "The game data of %@ has not been pushed yet. Install the build from the desktop launcher, then let it push the game's data." = "The game data of %@ has not been pushed yet. Install the build from the desktop launcher, then let it push the game's data.";
-"The game data folder “%@” is no longer in Documents/Games. Refresh the library." = "The game data folder “%@” is no longer in Documents/Games. Refresh the library.";
+"The game data folder “%@” is no longer in Documents/Games. Pull down on the library to refresh it." = "The game data folder “%@” is no longer in Documents/Games. Pull down on the library to refresh it.";
 /* --- 0.1.0 runtime badge, AOT diagnostics and Metal HUD state --- */
 "AOT …" = "AOT …";
 "AOT missing" = "AOT missing";
@@ -602,3 +601,20 @@
 /* --- 0.1.2 layout split (task-22): screen layout under Display, control layout under Controls --- */
 
 "Reset screen layout to defaults" = "Reset screen layout to defaults";
+/* --- 0.1.3 library deletion (ios-lib-actions, task-26) --------------------
+   Scope: delete-game. Home-page card menu, second confirmation and result
+   banner. The AOT pack is part of the signed app, so deleting removes the
+   game data, saves and per-game state and hides the bundled title until the
+   launcher pushes the game data again. */
+"Delete Game" = "Delete Game";
+"Game actions" = "Game actions";
+"Delete this game?" = "Delete this game?";
+"The game data of “%@” is removed from this device, together with its battery saves, instant save states, play history and per-game settings. This cannot be undone. The AOT pack is part of the installed app, so the game stays hidden from the library; the desktop launcher pushing its data again makes it appear again." = "The game data of “%@” is removed from this device, together with its battery saves, instant save states, play history and per-game settings. This cannot be undone. The AOT pack is part of the installed app, so the game stays hidden from the library; the desktop launcher pushing its data again makes it appear again.";
+"Game deleted" = "Game deleted";
+"“%@” was deleted from this device." = "“%@” was deleted from this device.";
+"Some of the game's files could not be deleted: %@" = "Some of the game's files could not be deleted: %@";
+"That game is not in the library any more." = "That game is not in the library any more.";
+"Could not delete the game's data: %@" = "Could not delete the game's data: %@";
+"the folder “%@” is not inside Documents/Games." = "the folder “%@” is not inside Documents/Games.";
+"“%@” is outside its expected folder; not deleted." = "“%@” is outside its expected folder; not deleted.";
+"Deleted games stay hidden until the desktop launcher pushes their game data again." = "Deleted games stay hidden until the desktop launcher pushes their game data again.";

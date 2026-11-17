@@ -89,13 +89,13 @@ struct SaveManagerView: View {
         .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
         .navigationTitle("Save Manager")
         .navigationBarTitleDisplayMode(.inline)
+        // No refresh toolbar button: the page re-reads the game's files when it
+        // opens, whenever the library changes and after every action (see
+        // refresh()). The app also rescans Documents/Games when it returns to
+        // the foreground.
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") { dismiss() }
-            }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button { refresh() } label: { Image(systemName: "arrow.clockwise") }
-                    .accessibilityIdentifier("save-manager-refresh")
             }
         }
         .onAppear {
@@ -226,6 +226,9 @@ struct SaveManagerView: View {
             .accessibilityIdentifier("save-manager-game-picker")
             if library.entries.isEmpty {
                 emptyHint("No games in this build yet")
+                if library.hiddenGameCount > 0 {
+                    emptyHint("Deleted games stay hidden until the desktop launcher pushes their game data again.")
+                }
             }
         }
     }

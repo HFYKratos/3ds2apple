@@ -22,10 +22,10 @@ views do not carry duplicated strings.
 
 | Page | Contents |
 |---|---|
-| **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`. Each card has a square art area at the icon's native 1:1 aspect: the game's own SMDH cover art (launcher-pushed `cover.png`, else the build's bundled cover, else the gradient placeholder) is enlarged to fill it with a small inset and a rounded, shadowed edge, and the per-card state badge (**AOT** / **Checking** / **Data missing** / **Error** / **No AOT**) sits in its corner. Under the art the card is deliberately compact: the title for the app language (up to two lines, truncated), the publisher, then the pushed game size · last-played state. There is **no explanatory paragraph under the grid**. iPhone shows two columns, iPad three. Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Refresh button and pull-to-refresh rescan Documents. The empty state explains the desktop launcher. No on-phone import. Settings entry. |
+| **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`. Each card has a square art area at the icon's native 1:1 aspect: the game's own SMDH cover art (launcher-pushed `cover.png`, else the build's bundled cover, else the gradient placeholder) is enlarged to fill it with a small inset and a rounded, shadowed edge, and the per-card state badge (**AOT** / **Checking** / **Data missing** / **Error** / **No AOT**) sits in its corner. Under the art the card is deliberately compact: the title for the app language (up to two lines, truncated), the publisher, then the pushed game size · last-played state. There is **no explanatory paragraph under the grid**. iPhone shows two columns, iPad three. Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Pull-to-refresh rescans Documents, and the library also rescans at launch and when the app returns to the foreground; there is no refresh button. Each card's `...` menu deletes the game after a second confirmation (see "Deleting a game" below). The empty state explains the desktop launcher. No on-phone import. Settings entry. |
 | **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), on-screen controls, the optional FPS counter and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. The FPS counter sits in the portrait title bar or in a slim landscape strip in the top safe area, outside the 3DS picture and clear of every control. When a title starts the 3DS software keyboard, a full-screen keyboard overlay collects the text and the applet's buttons while the frame loop is stopped; answering resumes the game. |
 | **Settings** | Display, Audio, Controls, Performance (fast-forward, system Metal HUD, FPS counter), Storage and About sections. |
-| **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. |
+| **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. The page re-reads the selected game's files when it opens, when the library changes and after every action; there is no refresh button. |
 | **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the FPS appears only while a game is loaded; everything else stays in the log and the diagnostics. |
 | **In-game menu** | Opened from the pause button over the game: pause/resume, quick toggles (on-screen controls, mute, 1×/2×/4× fast-forward), Save State / Load State (slot 1), Reset, Display settings, Save Manager, Diagnostics, Exit. |
 
@@ -65,6 +65,16 @@ on-screen controls, so no input or audio advances behind it.
   battery saves as a ZIP archive through the share sheet, import a ZIP archive or
   single save files back, and delete individual files. Import and delete are
   disabled while a game is running.
+- Deleting a game: the Home page card's `...` menu asks a second time and then
+  removes the game from this device — its pushed game data
+  (`Documents/Games/<TITLEID>/`: ROM, `GameInfo.json`, pushed cover), its battery
+  saves (`Documents/data/<save namespace>/`), its instant save states
+  (`Documents/states/<save namespace>/`), its play history and its per-game
+  settings/cover override. **This cannot be undone.** The AOT pack is part of the
+  signed app and cannot be removed at run time, so the title is hidden from the
+  library instead and pushing the game's data again with the desktop launcher
+  brings it back. The Home page and the Save Manager update immediately; there is
+  no refresh button.
 - Free-running frame loop capped at 60 Hz (or 30 Hz) and decoupled from the
   display refresh.
 - Fast-forward at 1× / 2× / 4× from Settings and the in-game menu: each
@@ -164,7 +174,8 @@ square gradient placeholder instead of an icon.
 
 The shell validates the pushed game data in two passes:
 
-1. **Scan** (fast; at launch, on returning to the foreground and on refresh): the
+1. **Scan** (fast; at launch, when the app returns to the foreground and on
+   pull-to-refresh): the
    folder name is a title ID, `GameInfo.json` parses and matches the folder, and
    the game data exists as a non-empty regular file inside the folder with the
    recorded size.
@@ -193,6 +204,29 @@ An app updated from the previous self-contained build (games + ROM inside the
 bundle) keeps those bundle games playable from the bundled ROM until the
 launcher reinstalls with the pack and pushes the data; that path is the legacy
 fallback, not the launcher-first flow.
+
+### Deleting a game
+
+The `...` menu on a Home page card deletes that game after a second confirmation;
+nothing is removed until the dialog's **Delete** button is pressed. Deleting
+removes, in one go:
+
+| Data | Where |
+|---|---|
+| Pushed game data (ROM, `GameInfo.json`, pushed cover) | `Documents/Games/<TITLEID>/` |
+| Battery saves | `Documents/data/<save namespace>/` |
+| Instant save states | `Documents/states/<save namespace>/` |
+| Play history and the per-game settings/cover marker | `Documents/Library/playHistory.json`, the game's persisted settings |
+
+**This cannot be undone** — export the battery saves first (Save Manager →
+**Export ZIP…**) if they should be kept. The AOT pack is compiled into the signed
+app and cannot be removed at run time, so the title is recorded in
+`Documents/Library/removedGames.json` and hidden from the library (the Save
+Manager's game picker hides it too). Pushing the game's data again with the
+desktop launcher clears that record and the game appears again. The Home page and
+the Save Manager update immediately because both observe the same library. The
+Home page only offers the action while no game is running; a runtime that is
+somehow still active is stopped and released before the files are removed.
 
 ### Simulator fixture and debug launch arguments
 
@@ -436,6 +470,12 @@ enum labels, formatted numbers) goes through `L10n.tr()`/`L10n.format()`, which
 read the same tables, so there is one place per string rather than scattered
 duplicates. A missing translation falls back to the English key.
 
+New keys are appended at the end of both tables in a block for the change that
+added them; the English and Chinese tables must keep the same key set and the same
+format specifiers, and a key whose UI was removed is deleted from both (there is
+no in-app refresh button left to label, for example). `scripts/tests/` keeps a
+selfcheck per area; see the test scripts for the exact assertions.
+
 `L10n` resolves the language from `Bundle.preferredLocalizations`; adding a
 language means adding `Resources/<language>.lproj/Localizable.strings` (all keys
 must keep the same format specifiers). iOS restarts an app when the system
@@ -567,11 +607,11 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `App.swift` | SwiftUI entry point; cache directory, logging and the app delegate. |
 | `ApplicationDelegate.swift` | UIKit delegate used for the orientation preference. |
 | `ContentView.swift` | Root router: home page or game for the current session phase; applies settings to the session. |
-| `HomeView.swift` | Home page: the Documents/Games library grid (two columns on iPhone, three on iPad; square 1:1 SMDH cover art with the per-card state badge in the corner; compact title/publisher/size/last-played text; no explanatory paragraph under the grid), last-played dates, the exact per-game validation error on tap, the launcher empty state, refresh control, settings entry. |
+| `HomeView.swift` | Home page: the Documents/Games library grid (two columns on iPhone, three on iPad; square 1:1 SMDH cover art with the per-card state badge in the corner; compact title/publisher/size/last-played text; no explanatory paragraph under the grid), last-played dates, the exact per-game validation error on tap, the launcher empty state, a per-card `...` delete menu with its second confirmation and result banner, pull-to-refresh, settings entry. |
 | `GameView.swift` | Running game: responsive portrait/landscape layout, screens, status line, on-screen controls, the optional FPS counter, in-game menu and the 3DS software-keyboard overlay. |
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, reset, display settings, save manager, diagnostics, exit) and quick toggles. |
 | `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. |
-| `SaveManagerView.swift` | Game picker over the library, the selected game's battery save list (export as ZIP, import, delete) and its instant save-state slots (delete offline; save/load while that game runs), with progress and errors. |
+| `SaveManagerView.swift` | Game picker over the library, the selected game's battery save list (export as ZIP, import, delete) and its instant save-state slots (delete offline; save/load while that game runs), with progress and errors; re-reads the selected game's files on open, on library changes and after actions (no refresh button). |
 | `AboutView.swift` | Product page: app icon, name, version/build, project links, acknowledgements and legal notice; a compact runtime status card only while a game is loaded. |
 | `AppSettings.swift` | Persisted settings model (enums for layout, screen rotation, aspect, interface orientation, buffer size, frame cap, playback speed, Metal HUD and FPS-counter switches) and the UserDefaults keys. |
 | `DiagnosticsReport.swift` | Diagnostics report text, the shared diagnostics file type and screen geometry helpers. |
@@ -587,7 +627,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `GameInfo.swift` | The launcher's `Documents/Games/<TITLEID>/GameInfo.json` manifest (schema 1): authoritative display title, localized `displayNames`/`publisher`/`region` (optional SMDH base info), save namespace and pushed game-data size/SHA-256; the pack fields are informational metadata about the pack embedded in the IPA. |
 | `InstalledGame.swift` | Scans `Documents/Games` for pushed game data, validates it (folder/title ID, manifest, ROM presence/size/path containment), resolves the pushed `cover.png` and verifies the recorded SHA-256 in the background. |
 | `GameCatalog.swift` | The bundle `GameCatalog.json` schema (v2, v1 compatible): the build's game list plus per-game `packFile`/ABI/`registrationSymbol`. A base shell may ship an empty catalog. |
-| `GameLibrary.swift` | The library: bundle catalog joined with the pushed `Documents/Games` data, per-card title/publisher/size/cover (catalog fallback + placeholder), per-card states (AOT / Checking / Data missing / Error), background SHA-256 checks and `Documents/Library/playHistory.json`. No ROM importing. |
+| `GameLibrary.swift` | The library: bundle catalog joined with the pushed `Documents/Games` data, per-card title/publisher/size/cover (catalog fallback + placeholder), per-card states (AOT / Checking / Data missing / Error), background SHA-256 checks, `Documents/Library/playHistory.json` and `Documents/Library/removedGames.json` (games deleted on this device, hidden until the launcher pushes the data again); `deleteGame` removes a game's data, saves, save states and per-game state. No ROM importing. |
 | `AOTPackageLoader.swift` | Resolves/loads the per-game `GamePack.dylib` from the signed app bundle, validates title/ABI/registration symbols before use, hands the launch the pushed (or legacy bundled) ROM, documents the C ABI, and falls back to the statically linked single-game build. |
 | `DebugLaunch.swift` | Headless launch hooks: `-openAOTTitleID` (start a library game), `-gamesRoot` (scan a Simulator fixture folder instead of Documents/Games), `-openLayoutPage` / `-openLayoutEditor control\|screen` (layout screenshots). |
 | `LegacyGameData.swift` | One-time migration for apps updated from 0.1.x: cartridge lookup for the statically linked title, play times, and renaming ROM-named save folders to the title-id namespace. |
@@ -782,6 +822,7 @@ Two kinds of data stay on the device:
 |---|---|---|
 | Battery saves | `Documents/data/<save namespace>/` | The game's own save menu writes them; the Save Manager lists, exports, imports and deletes them. |
 | Instant save states | `Documents/states/<save namespace>/slot1.bin` … `slot3.bin` | Save State / Load State in the in-game menu (slot 1) and the Save Manager (all three slots). |
+| Deleted-game record | `Documents/Library/removedGames.json` | The Home page's delete action writes it; pushing the game's data again with the launcher clears it. |
 
 The save namespace is the title ID by default; a launcher may set `saveNamespace`
 in `GameInfo.json` (for example to share saves between two regional builds). The
@@ -795,6 +836,10 @@ Battery saves:
   opened from the in-game menu, starts on the running game; "No game" empties the
   page and Restore default selects the running game or the first one. Battery
   saves can be managed while the game is not running.
+- The page re-reads the selected game's files when it opens, whenever the library
+  changes (a game deleted on the Home page disappears from the picker) and after
+  every action. There is no refresh button: the app also rescans
+  `Documents/Games` when it returns to the foreground.
 - The Save Manager lists every file under the selected game's data directory with
   its size and modification date.
 - **Export battery saves as a ZIP…** packs those files into a ZIP archive and
