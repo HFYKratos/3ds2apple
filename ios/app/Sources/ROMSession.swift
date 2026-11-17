@@ -271,6 +271,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// unload/background). Used to tell a cold first run from a warmed one and
     /// exported in diagnostics.
     @Published private(set) var pipelineCacheStats = PipelineCacheStats.empty
+    /// Pipeline-cache files seen when the current load started: the cold/warm
+    /// state its first frames ran with. A hitch at a scene's first use is
+    /// compared against this (warm cache = cache hit instead of a compile).
+    @Published private(set) var pipelineCacheAtLoad = PipelineCacheStats.empty
     /// Emulation is paused (in-game menu open, or the user paused): the frame
     /// loop and the audio engine are stopped, the runtime handle stays.
     @Published private(set) var isPaused = false
@@ -364,6 +368,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private var framesSinceStats = 0
     /// FrameClock tick when the current 0.5 s stats window started.
     private var statsWindowStartTicks: UInt64 = 0
+    /// FrameClock tick the previous frame started at, for the frame-interval
+    /// phase (start to start, what the player sees). runtimeQueue only.
+    private var lastFrameStartTicks: UInt64 = 0
     /// Throttles the periodic `perf:` NSLog line (every 2 s).
     private var lastPerfLogTicks: UInt64 = 0
     private var didLogScreenReadFailure = false
@@ -1467,6 +1474,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             self.displayPath = displayPath
             self.hardwareStatus = hardwareStatus
             self.pipelineCacheStats = cacheAtLoad
+            self.pipelineCacheAtLoad = cacheAtLoad
             self.warmUp = GraphicsWarmUpStatus()
             self.setPhase(.loaded(name: launch.entry.title))
             self.startFrameLoop(warmUp: nil, romKey: launch.entry.titleID)
@@ -1579,6 +1587,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         framesRendered = 0
         framesSinceStats = 0
         statsWindowStartTicks = FrameClock.now()
+        lastFrameStartTicks = statsWindowStartTicks
         lastPerfLogTicks = statsWindowStartTicks
         didLogScreenReadFailure = false
         // Accumulators are runtimeQueue-owned, but the queue is idle here: no
@@ -1732,6 +1741,16 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private func renderFrame() -> Bool {
         guard let system else { return false }
         let frameStart = FrameClock.now()
+        // Start-to-start interval: what the player sees and the pacing baseline
+        // the stutter tracker needs. A gap it cannot explain from the previous
+        // frame's work is a scheduling stall, not this frame's cost.
+        let intervalTicks = lastFrameStartTicks > 0 && frameStart > lastFrameStartTicks
+            ? frameStart - lastFrameStartTicks
+            : 0
+        lastFrameStartTicks = frameStart
+        if intervalTicks > 0 {
+            timingWindow.record(.frameInterval, ticks: intervalTicks)
+        }
         let speed = playbackSpeedState.current
 
         // The only place that pushes input: same serial queue, immediately
@@ -1763,7 +1782,17 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         let runStart = FrameClock.now()
         let result = zk_run_frame(system)
         let runTicks = FrameClock.now() - runStart
+        // Split `run` into the software GPU's command walk and the emulated
+        // CPU/HLE work; `zk_perf` prints the same split per window as
+        // `gpu`/`non-gpu`, and the hitch attribution needs it per frame.
+        let gpuBusyMicros = zk_last_frame_gpu_busy_micros()
+        let gpuTicks = min(
+            runTicks,
+            FrameClock.ticks(seconds: Double(gpuBusyMicros) / 1_000_000.0)
+        )
         timingWindow.record(.runFrame, ticks: runTicks)
+        timingWindow.record(.runGPU, ticks: gpuTicks)
+        timingWindow.record(.runCPU, ticks: runTicks - gpuTicks)
         framesRendered += 1
 
         guard result == 0 else {
@@ -1819,6 +1848,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             frameStartTicks: frameStart,
             workTicks: totalTicks,
             runTicks: runTicks,
+            gpuTicks: gpuTicks,
             presentTicks: presentTicks,
             readTicks: readTicks,
             cgImageTicks: cgImageTicks,
@@ -2061,6 +2091,11 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             framesSinceStats = 0
             statsWindowStartTicks = now
         }
+        // The Metal path publishes no CGImages and a stats snapshot only every
+        // 0.5 s. A frame in between has nothing to hand the main queue: skip the
+        // hop (60 no-op blocks a second still wake the main thread and allocate
+        // a closure with the captured values on the runtime queue).
+        guard top != nil || bottom != nil || stats != nil else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if let top { self.topScreenImage = top }

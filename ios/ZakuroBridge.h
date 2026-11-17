@@ -487,6 +487,26 @@ int32_t zk_set_render_scale(uint32_t scale);
  */
 const char *zk_hardware_status(zk_system_t system);
 
+/* ------------------------------------------------------ frame diagnostics -- */
+
+/**
+ * Microseconds the software GPU's command-list walk took inside the last
+ * zk_run_frame() call, 0 before the first frame.
+ *
+ * zk_run_frame() advances one 3DS frame: emulated CPU/HLE work plus the
+ * software GPU's command walk, which records (and on a pipeline's first use
+ * creates) the Vulkan/Metal pipelines a scene needs. This call reports the
+ * walk's slice so a diagnostics report can tell a CPU-bound scene from a
+ * pipeline-compile hitch; the periodic `zk_perf` stderr line prints the same
+ * split as its `gpu` and `non-gpu` columns. The first frame after a load
+ * carries the boot cost, exactly like zk_last_frame_micros() (declared in
+ * ios/zakuro-ios/src/lib.rs only).
+ *
+ * Read it from the runtime's serial queue right after zk_run_frame(). The value
+ * is library-wide, so it is the last call's walk on that queue.
+ */
+uint64_t zk_last_frame_gpu_busy_micros(void);
+
 /* ------------------------------------------------ linked (AOT) diagnostics -- */
 
 /**

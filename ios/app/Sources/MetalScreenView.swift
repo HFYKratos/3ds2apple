@@ -95,6 +95,18 @@ final class MetalScreenView: UIView {
         // The presenter only renders into the drawable; reading it back as a
         // texture is not needed.
         metalLayer.framebufferOnly = true
+        // Presentation path, stated explicitly (0.1.2): MoltenVK already makes a
+        // three-image swapchain for this layer (the device log says "Created 3
+        // swapchain images", the iOS default of three drawables), so the
+        // emulated GPU's command walk gets one more frame of headroom before a
+        // present has to wait for CoreAnimation. Keep the transaction-less
+        // present path: `presentsWithTransaction = false` lets a present land
+        // without waiting for the next commit. Nothing here is written per
+        // frame, and `drawableSize` is only set when the layout or the render
+        // scale changes (see `updateDrawableSize(force:)`), so the frame loop
+        // does no CAMetalLayer property work.
+        metalLayer.maximumDrawableCount = 3
+        metalLayer.presentsWithTransaction = false
         // CoreAnimation stretches the drawable into the view's box: the box has
         // the picture's own shape for fit/4:3 (so this is a uniform scale) and
         // the whole available space in stretch mode (deliberate distortion).

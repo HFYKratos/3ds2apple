@@ -159,6 +159,7 @@ enum DiagnosticsExporter {
         let timing = model.frameStats.timing
         let stutter = model.frameStats.stutter
         let cache = model.pipelineCacheStats
+        let cacheAtLoad = model.pipelineCacheAtLoad
         let aot = model.aotDiagnostics
         let aotPercentText = aot.aotPercent.map { String(format: "%.2f", $0) } ?? "-"
         let interpretedPercentText = aot.interpretedPercent.map { String(format: "%.2f", $0) } ?? "-"
@@ -244,14 +245,22 @@ enum DiagnosticsExporter {
         pipeline_cache=\(cache.summary)
         pipeline_cache_files=\(cache.fileCount)
         pipeline_cache_bytes=\(cache.byteCount)
+        pipeline_cache_at_load=\(cacheAtLoad.summary)
+        pipeline_cache_at_load_files=\(cacheAtLoad.fileCount)
+        pipeline_cache_at_load_bytes=\(cacheAtLoad.byteCount)
         timing_ms_total=\(String(format: "%.2f/%.2f/%.2f", timing.renderTotal.average, timing.renderTotal.maximum, timing.renderTotal.last))
         timing_ms_run=\(String(format: "%.2f/%.2f/%.2f", timing.runFrame.average, timing.runFrame.maximum, timing.runFrame.last))
+        timing_ms_run_gpu=\(String(format: "%.2f/%.2f/%.2f", timing.runGPU.average, timing.runGPU.maximum, timing.runGPU.last))
+        timing_ms_run_cpu=\(String(format: "%.2f/%.2f/%.2f", timing.runCPU.average, timing.runCPU.maximum, timing.runCPU.last))
+        timing_ms_interval=\(String(format: "%.2f/%.2f/%.2f", timing.frameInterval.average, timing.frameInterval.maximum, timing.frameInterval.last))
         timing_ms_present=\(String(format: "%.2f/%.2f/%.2f", timing.present.average, timing.present.maximum, timing.present.last))
         timing_ms_read_top=\(String(format: "%.2f/%.2f/%.2f", timing.topScreenRead.average, timing.topScreenRead.maximum, timing.topScreenRead.last))
         timing_ms_read_bottom=\(String(format: "%.2f/%.2f/%.2f", timing.bottomScreenRead.average, timing.bottomScreenRead.maximum, timing.bottomScreenRead.last))
         timing_ms_cgimage=\(String(format: "%.2f/%.2f/%.2f", timing.cgImage.average, timing.cgImage.maximum, timing.cgImage.last))
         timing_ms_audio=\(String(format: "%.2f/%.2f/%.2f", timing.audioPump.average, timing.audioPump.maximum, timing.audioPump.last))
         timing_share_run_pct=\(share(timing.runFrame.average))
+        timing_share_run_gpu_pct=\(share(timing.runGPU.average))
+        timing_share_run_cpu_pct=\(share(timing.runCPU.average))
         timing_share_present_pct=\(share(timing.present.average))
         timing_share_read_pct=\(share(screenReadAvg))
         timing_share_audio_pct=\(share(timing.audioPump.average))
@@ -272,21 +281,25 @@ enum DiagnosticsExporter {
             String(format: "%.1f", stutter.share(for: phase))
         }
         var lines = [
-            "stutter_definition=presented frame interval or work item over 33.3 ms (>100 ms severe); attributed to its largest measured phase or to other (unaccounted wait/scheduling)",
+            "stutter_definition=a presented frame the work item or a scheduling gap held over 33.3 ms (>100 ms severe); the gap is start-to-start minus the previous frame's work, so one hitch counts once (run-gpu: software GPU command walk / pipeline-compile suspect; run-cpu: emulated CPU/HLE; other: scheduling gap)",
             "stutter_count=\(stutter.count)",
             "stutter_per_min=\(String(format: "%.2f", stutter.perMinute))",
             "stutter_severe_count=\(stutter.severeCount)",
             "stutter_worst_ms=\(String(format: "%.2f", stutter.worstMilliseconds))",
             "stutter_top_phase=\(stutter.count > 0 ? stutter.topPhase.label : "-")",
-            "stutter_phase_share=run:\(share(.run)),present:\(share(.present)),read:\(share(.read)),cgImage:\(share(.cgImage)),audio:\(share(.audio)),other:\(share(.other))",
-            "stutter_events=\(stutter.events.count) recent (t since loop start, ms = interval, work = measured work item, phase, presented frame)"
+            "stutter_gpu_walk_bound_frames=\(stutter.gpuWalkBoundFrames)",
+            "stutter_pipeline_compile_suspects=\(stutter.pipelineCompileSuspects)",
+            "stutter_phase_share=run-gpu:\(share(.runGPU)),run-cpu:\(share(.runCPU)),present:\(share(.present)),read:\(share(.read)),cgImage:\(share(.cgImage)),audio:\(share(.audio)),other:\(share(.other))",
+            "stutter_events=\(stutter.events.count) recent (t since loop start, interval = start to start, ms = how long the player was held up, work = measured work item, gpu = command walk inside it, phase, presented frame)"
         ]
         for event in stutter.events {
             lines.append(String(
-                format: "stutter_event=t=%.3fs ms=%.2f work=%.2f phase=%@ frame=%llu",
+                format: "stutter_event=t=%.3fs interval=%.2f ms=%.2f work=%.2f gpu=%.2f phase=%@ frame=%llu",
                 event.atMilliseconds / 1000.0,
+                event.intervalMilliseconds,
                 event.milliseconds,
                 event.workMilliseconds,
+                event.gpuBusyMilliseconds,
                 event.phase.label,
                 event.frame
             ))

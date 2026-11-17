@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # perf-selfcheck.sh - static/behaviour checks for the performance work
 # (task-36: the scripts/README.md performance contract, FPS readout/diagnostics,
-# AOT flags, MoltenVK hook).
+# AOT flags, MoltenVK hook; 0.1.2: hitch attribution, run GPU/CPU split).
 #
 # Runs on a plain Linux host: no Xcode, no clang, no ROM. It checks the
 # contracts this change introduced and the shell artifact it builds on.
@@ -114,6 +114,29 @@ for needle in 'GPL-2.0' 'reference only' 'any3ds' 'needs device' 'zk_perf' 'MVK_
 done
 check "scripts/README.md documents the experiment flags" \
   grep -Fq -- 'THREEDS2APPLE_AOT_OPT' scripts/README.md
+
+section 'Hitch attribution and run split (0.1.2)'
+check "C ABI declares the GPU-busy timer" contains ios/ZakuroBridge.h 'uint64_t zk_last_frame_gpu_busy_micros(void);'
+check "lib.rs exports the GPU-busy timer" contains ios/zakuro-ios/src/lib.rs 'pub extern "C" fn zk_last_frame_gpu_busy_micros() -> u64'
+check "perf.rs keeps a per-frame GPU-busy delta" contains ios/zakuro-ios/src/perf.rs 'LAST_FRAME_GPU_BUSY_MICROS'
+check "perf.rs reports the last frame's command walk" contains ios/zakuro-ios/src/perf.rs 'pub fn last_frame_gpu_busy_micros()'
+check "FrameTiming splits run into GPU and CPU" contains ios/app/Sources/FrameTiming.swift 'var runGPU = FramePhaseStats()'
+check "FrameTiming keeps the run CPU rest" contains ios/app/Sources/FrameTiming.swift 'var runCPU = FramePhaseStats()'
+check "FrameTiming records the frame interval" contains ios/app/Sources/FrameTiming.swift 'var frameInterval = FramePhaseStats()'
+check "stutter gap is measured from the previous frame's end" contains ios/app/Sources/FrameTiming.swift 'let gapTicks = intervalTicks > previousWorkTicks'
+check "stutter attribution splits the work item" contains ios/app/Sources/FrameTiming.swift 'runGpuTicks'
+check "pipeline-compile suspects are counted" contains ios/app/Sources/FrameTiming.swift 'pipelineCompileSuspects'
+check "ROMSession reads the GPU-busy timer after a frame" contains ios/app/Sources/ROMSession.swift 'zk_last_frame_gpu_busy_micros()'
+check "ROMSession records the frame interval" contains ios/app/Sources/ROMSession.swift 'timingWindow.record(.frameInterval'
+check "ROMSession snapshots the cache at load" contains ios/app/Sources/ROMSession.swift 'pipelineCacheAtLoad = cacheAtLoad'
+check "diagnostics split run into GPU and CPU" contains ios/app/Sources/DiagnosticsReport.swift 'timing_ms_run_gpu='
+check "diagnostics report the frame interval" contains ios/app/Sources/DiagnosticsReport.swift 'timing_ms_interval='
+check "diagnostics report the compile suspects" contains ios/app/Sources/DiagnosticsReport.swift 'stutter_pipeline_compile_suspects='
+check "diagnostics report the cache state at load" contains ios/app/Sources/DiagnosticsReport.swift 'pipeline_cache_at_load='
+check "diagnostics event has interval and gpu columns" contains ios/app/Sources/DiagnosticsReport.swift 'interval=%.2f ms=%.2f work=%.2f gpu=%.2f'
+check "CAMetalLayer keeps the three-drawable swapchain" contains ios/app/Sources/MetalScreenView.swift 'maximumDrawableCount = 3'
+check "README documents the 0.1.2 attribution" contains ios/app/README.md 'stutter_pipeline_compile_suspects='
+check "README documents the device A/B method" contains ios/app/README.md '### A/B a change on device'
 
 section 'Licence boundary'
 if grep -rlE 'any3ds' ios scripts tools --include='*.swift' --include='*.sh' --include='*.c' --include='*.rs' \

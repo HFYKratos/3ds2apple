@@ -811,30 +811,107 @@ The exported diagnostics header adds the build, device, session phase
 `app_language=`, `system_language=`), `warmup_enabled=0` with the
 `warmup_note=removed-in-0.1.1` marker (the first-load warm-up is gone; pipeline
 cache persistence is unchanged) and the `pipeline_cache*` fields (directory,
-file count, size, newest file), followed by the previous and current session
-logs. These values make renderer, presentation, scheduler, settings,
-fast-forward, language and warm-up changes measurable on device.
+file count, size, newest file). 0.1.2 adds the hitch-attribution fields:
+`timing_ms_run_gpu=`, `timing_ms_run_cpu=`, `timing_ms_interval=`,
+`timing_share_run_gpu_pct=`, `timing_share_run_cpu_pct=`,
+`pipeline_cache_at_load=` / `_files=` / `_bytes=`, plus the `stutter_*`
+additions documented under "Performance data capture" below. The previous and
+current session logs follow. These values make renderer, presentation,
+scheduler, settings, fast-forward, language and warm-up changes measurable on
+device.
 
 ## Performance data capture
 
 The shell records rolling stutter statistics while a game runs, so a hitch on a
 device can be reported without a debugger, a Mac or a cable. A stutter is one
-presented frame whose frame-to-frame interval or measured work item exceeded
-33.3 ms (two 60 Hz slots); a frame over 100 ms is counted as severe. Each
-stutter is attributed to the measured phase that took the largest share of it
-(`run`, `present`, `read`, `cgImage`, `audio`), or to `other` when the measured
-phases cannot explain the time - for example a frame block the scheduler ran
-late. The counters are session-wide; the report keeps the 20 most recent spikes
-with their relative time, interval, work item, phase and presented frame number.
+presented frame that the measured work item or a scheduling gap held for more
+than 33.3 ms (two 60 Hz slots); a frame over 100 ms is severe. The counters are
+session-wide; the report keeps the 20 most recent spikes with their relative
+time, start-to-start interval, held-up duration, work item, command-walk share,
+phase and presented frame number.
+
+### Hitch attribution (0.1.2)
+
+The phase attribution changed in 0.1.2 so the numbers answer "what costs the
+frame?" instead of "what was the interval?":
+
+- `run-gpu` is the software GPU's command-list walk inside `zk_run_frame` (the
+  `gpu` column of the periodic `zk_perf` line). A pipeline a scene first uses is
+  created during the walk and stalls the frame that waits for it, so a large
+  `run-gpu` spike is the pipeline-compile suspect.
+- `run-cpu` is the rest of `zk_run_frame`: emulated CPU and HLE services. A
+  scene whose `timing_ms_run_cpu` average is the largest column is CPU-bound;
+  raising the render scale or changing the CAMetalLayer cannot fix that.
+- `present` is `zk_present` (on the Metal path mostly the FIFO wait for the
+  display when the frame finished early; a long `present` maximum is a
+  swapchain/GPU stall, not a vsync wait).
+- `other` is now only the gap between the previous frame's end and this frame's
+  start (a frame block the scheduler ran late), not "start-to-start interval
+  minus this frame's work". The old definition blamed the frame *after* a long
+  frame for the long frame's work, so one hitch was reported twice (once as
+  `run`, once as `other`) and `stutter_count=`/`stutter_per_min=` were roughly
+  double the physical number. A 0.1.2 report legitimately shows about half the
+  stutter count of a 0.1.1 report for the same run; that is the dedup, not a
+  performance regression.
+- `stutter_gpu_walk_bound_frames=` counts frames whose command walk alone
+  overran the 60 Hz budget; `stutter_pipeline_compile_suspects=` counts severe
+  stutters attributed to `run-gpu` (the first-use compile signature).
+
+The header also splits the work item in the timing block (`timing_ms_run_gpu=`,
+`timing_ms_run_cpu=`, `timing_share_run_gpu_pct=`, `timing_share_run_cpu_pct=`)
+and adds `timing_ms_interval=` (start to start). `pipeline_cache_at_load=` /
+`_files=` / `_bytes=` record the cache state the load began with, which is the
+A/B baseline for compile hitches.
+
+`stutter_event=` lines now carry `interval=` (start to start), `ms=` (how long
+the player was held up), `work=` (measured work item) and `gpu=` (command walk
+inside it), so a cold-cache compile (`gpu` close to `ms`) is distinguishable
+from a CPU hitch (`work` large, `gpu` small). The 0.1.1 phase name `run` is gone
+from the export: anything that parsed the old `stutter_phase_share=` string needs
+the new `run-gpu` / `run-cpu` labels.
+
+#### What the 2026-11-17 Zelda/Mario device log showed
+
+- The severe hitches (562-930 ms on a cold cache, 100-180 ms on a warm one)
+  land on the windows where `draws` jumps and `zk_perf`'s `gpu` column covers
+  almost all of the frame time: first-use pipeline creation in the command walk,
+  inside `zk_run_frame` - not `present`, and not the pipeline-cache write (that
+  runs on the upstream compiler thread and is one 290 KB file per save).
+- Zelda's main-menu low-frame stretch (45-55 fps, `run` average 18-22 ms) had
+  `gpu` 4.5-5.7 ms and `cpu` 74-91% of real time in the same windows: it is
+  CPU-bound emulation, not the 3x render scale, present/vsync or the drawable.
+  The layer was already triple-buffered ("Created 3 swapchain images") and
+  nothing wrote CAMetalLayer properties per frame, so layer tuning cannot reach
+  60 fps there.
+- A cold pipeline cache makes a first session's scene compiles visible; the same
+  scene on a warm cache compiles much less. The cache is flushed by `zk_destroy`
+  (a clean Unload or a move to the background), so a force-quit while playing
+  loses the session's compiles and the next launch is cold again.
+
+#### A/B a change on device
+
+1. Reinstall (or delete the app's Caches), load the game and let the first
+   scene compile: record `pipeline_cache_at_load=`,
+   `timing_ms_run_gpu=` maximum, `stutter_pipeline_compile_suspects=` and the
+   worst `stutter_event=`.
+2. Play, Unload (or background) the game and check the log for
+   `pipeline cache after zk_destroy:`; load again. `pipeline_cache_at_load=`
+   must show the cache and the compile numbers must drop. A second session that
+   still compiles is a cache-persistence bug, not a renderer problem.
+3. For a CPU-bound scene (`timing_ms_run_cpu=` dominates) change one variable
+   per capture (render scale, frame cap) or use the `THREEDS2APPLE_MVK_CONFIG`
+   A/B in `scripts/README.md` §5.3; for a `run-gpu` spike compare cold vs warm
+   cache only.
 
 The diagnostics header carries the block `stutter_definition=`,
 `stutter_count=`, `stutter_per_min=`, `stutter_severe_count=`,
-`stutter_worst_ms=`, `stutter_top_phase=`, `stutter_phase_share=` and
-`stutter_events=`, followed by one `stutter_event=` line per spike. A frame
-costs two tick comparisons; nothing is written to disk while the game runs and
-the tracker takes no lock (it is read on the runtime queue at the existing
-0.5 s stats boundary). The same numbers are appended to the periodic `perf:`
-log line as `| stutter=<count> (<n>/min, worst <ms>, <top phase>)`.
+`stutter_worst_ms=`, `stutter_top_phase=`, `stutter_gpu_walk_bound_frames=`,
+`stutter_pipeline_compile_suspects=`, `stutter_phase_share=` and
+`stutter_events=`, followed by one `stutter_event=` line per spike. The frame
+path only does a few tick comparisons; nothing is written to disk while the
+game runs and the tracker takes no lock (it is read on the runtime queue at the
+existing 0.5 s stats boundary). The same numbers are appended to the periodic
+`perf:` log line as `| stutter=<count> (<n>/min, worst <ms>, <top phase>)`.
 
 ### Capture steps (2-3 minutes)
 
@@ -880,8 +957,9 @@ log line as `| stutter=<count> (<n>/min, worst <ms>, <top phase>)`.
   `system_metal_hud_plist=`;
 - FPS counter / warm-up state: `fps_counter=`, `warmup_enabled=` (always 0 since
   0.1.1, when the first-load warm-up was removed), `warmup_note=`;
-- the `stutter_*` block, plus the two `perf:` lines in the current-session log
-  around the hitch;
+- the `stutter_*` block (0.1.2 adds `stutter_gpu_walk_bound_frames=` and
+  `stutter_pipeline_compile_suspects=`) and `pipeline_cache_at_load=`, plus the
+  `perf:`/`zk_perf` lines in the current-session log around the hitch;
 - whether the hitch appeared on the first run after install or on later runs,
   and which non-default settings (frame cap, render scale, fast-forward, Metal
   HUD, FPS counter) were active.

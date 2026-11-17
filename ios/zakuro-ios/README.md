@@ -164,9 +164,17 @@ The app-side thresholds, log lines and diagnostics fields are documented in
 | `zk_hardware_status(system)` | One-line renderer + present status: host GPU with scale and whether the screens go straight to the Metal layer or are read back; requested-but-fell-back, or software. A NULL handle reports the last probe. Pointer is library-owned like `zk_recompiled_status` |
 
 Additional diagnostics used by the app's HUD/logs include
-`zk_last_frame_micros`, `zk_last_screen_read_micros`,
-`zk_last_audio_take_micros`, `zk_recompiled_status`, `zk_profiler_start` and
-`zk_profiler_hot_spots` (see `src/lib.rs`).
+`zk_last_frame_micros`, `zk_last_frame_gpu_busy_micros`,
+`zk_last_screen_read_micros`, `zk_last_audio_take_micros`,
+`zk_recompiled_status`, `zk_profiler_start` and `zk_profiler_hot_spots` (see
+`src/lib.rs`).
+
+`zk_last_frame_gpu_busy_micros()` is the software GPU's command-list walk inside
+the last `zk_run_frame()` (the `gpu` half of the `zk_perf` split); the rest of
+`zk_last_frame_micros()` is emulated CPU/HLE work. The shell reads it after
+every frame to split `run` in its diagnostics report, so a CPU-bound scene and a
+first-use pipeline compile are told apart on a device. It is declared in
+`ios/ZakuroBridge.h` because the app calls it.
 
 The hardware functions keep the same error contract as `zk_create`:
 `zk_hardware_probe` (no Vulkan device), `zk_set_vulkan_library` and

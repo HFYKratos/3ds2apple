@@ -35,8 +35,9 @@
 //!
 //! ## Performance diagnostics
 //!
-//! [`zk_last_frame_micros`], [`zk_last_screen_read_micros`] and
-//! [`zk_last_audio_take_micros`] time the frame loop's FFI calls, and every
+//! [`zk_last_frame_micros`], [`zk_last_frame_gpu_busy_micros`],
+//! [`zk_last_screen_read_micros`] and [`zk_last_audio_take_micros`] time the
+//! frame loop's FFI calls, and every
 //! [`perf::DEFAULT_LOG_INTERVAL`] frames the library prints a `zk_perf` line to
 //! stderr (visible in `idevicesyslog` without any Swift change) that splits
 //! frame time into emulated CPU, software GPU, screen read and audio. The
@@ -942,6 +943,20 @@ pub extern "C" fn zk_last_frame_micros() -> u64 {
     perf::last_frame_micros()
 }
 
+/// Microseconds the software GPU (the `gpu` column of the periodic `zk_perf`
+/// line) spent walking command lists inside the last [`zk_run_frame`], 0 before
+/// the first frame.
+///
+/// The app reads it after every frame to split `run` into the command walk and
+/// the emulated CPU/HLE time, so a device diagnostics report can tell a
+/// CPU-bound scene from a pipeline-compile spike. The rest of
+/// [`zk_last_frame_micros`] is that CPU/HLE work. The first frame after a load
+/// carries the boot cost, exactly like [`zk_last_frame_micros`].
+#[no_mangle]
+pub extern "C" fn zk_last_frame_gpu_busy_micros() -> u64 {
+    perf::last_frame_gpu_busy_micros()
+}
+
 /// 1 when this `System` is running 3dsrecomp code, 0 when the interpreter runs
 /// everything (no recompiled code for the title, or the loader refused it).
 ///
@@ -1385,7 +1400,8 @@ mod tests {
 
     use super::{
         clear_last_error, render_scale, set_last_error, store_render_scale, zk_create,
-        zk_hardware_status, zk_last_audio_take_micros, zk_last_error, zk_last_frame_micros,
+        zk_hardware_status, zk_last_audio_take_micros, zk_last_error,
+        zk_last_frame_gpu_busy_micros, zk_last_frame_micros,
         zk_last_screen_read_micros, zk_linked_code, zk_linked_program_id, zk_profiler_hot_spots,
         zk_profiler_start, zk_recompiled, zk_recompiled_status, zk_set_hardware_option,
         zk_set_hardware_renderer, zk_set_render_scale, zk_set_vulkan_library, DEFAULT_RENDER_SCALE,
@@ -1567,6 +1583,7 @@ mod tests {
         // No frame has run on this test's account, so nothing to report yet.
         // Other tests never call the frame entry points (there is no ROM).
         assert_eq!(zk_last_frame_micros(), 0);
+        assert_eq!(zk_last_frame_gpu_busy_micros(), 0);
         assert_eq!(zk_last_screen_read_micros(0), 0);
         assert_eq!(zk_last_screen_read_micros(1), 0);
         assert_eq!(zk_last_audio_take_micros(), 0);

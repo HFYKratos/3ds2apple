@@ -29,6 +29,15 @@ static LAST_FRAME_MICROS: AtomicU64 = AtomicU64::new(0);
 static LAST_SCREEN_READ_MICROS: [AtomicU64; 2] = [AtomicU64::new(0), AtomicU64::new(0)];
 /// Microseconds the last `zk_take_audio` call took.
 static LAST_AUDIO_TAKE_MICROS: AtomicU64 = AtomicU64::new(0);
+/// Microseconds the software GPU walked command lists inside the last
+/// `zk_run_frame` call: the same slice the periodic `zk_perf` line prints as
+/// `gpu`. The rest of the frame is emulated CPU / HLE work. 0 before the first
+/// frame; the first frame after a reset carries the boot cost like
+/// [`LAST_FRAME_MICROS`].
+static LAST_FRAME_GPU_BUSY_MICROS: AtomicU64 = AtomicU64::new(0);
+/// Cumulative `system.gpu.busy` at the previous recorded frame, so each frame
+/// reports its own slice instead of the running total.
+static GPU_BUSY_BASELINE_MICROS: AtomicU64 = AtomicU64::new(0);
 
 /// Logs Zakuro's own records (`log::info!`/`log::warn!`) to stderr.
 ///
@@ -160,6 +169,17 @@ pub fn record_frame(system: &System, duration: Duration, result: i32) {
     let elapsed_us = micros(duration);
     LAST_FRAME_MICROS.store(elapsed_us, Ordering::Relaxed);
 
+    // Split the frame into the software GPU's command walk and the rest
+    // (emulated CPU, HLE, audio). `System::gpu.busy` is cumulative, so keep a
+    // baseline and store this frame's delta; the first frame after a reset
+    // reports the boot cost, like the frame time itself.
+    let gpu_busy_total = micros(system.gpu.busy);
+    let gpu_busy_baseline = GPU_BUSY_BASELINE_MICROS.swap(gpu_busy_total, Ordering::Relaxed);
+    LAST_FRAME_GPU_BUSY_MICROS.store(
+        gpu_busy_total.saturating_sub(gpu_busy_baseline),
+        Ordering::Relaxed,
+    );
+
     let mut guard = lock_window();
     let Some(window) = guard.as_mut() else {
         // The first frame is worth its own line: it carries the boot cost.
@@ -226,12 +246,24 @@ pub fn reset() {
         cell.store(0, Ordering::Relaxed);
     }
     LAST_AUDIO_TAKE_MICROS.store(0, Ordering::Relaxed);
+    LAST_FRAME_GPU_BUSY_MICROS.store(0, Ordering::Relaxed);
+    GPU_BUSY_BASELINE_MICROS.store(0, Ordering::Relaxed);
     *lock_window() = None;
 }
 
 /// The last `zk_run_frame` duration in microseconds, 0 before the first frame.
 pub fn last_frame_micros() -> u64 {
     LAST_FRAME_MICROS.load(Ordering::Relaxed)
+}
+
+/// Microseconds the software GPU spent walking command lists inside the last
+/// `zk_run_frame` call, 0 before the first frame.
+///
+/// The rest of [`last_frame_micros`] is emulated CPU / HLE work, so the app can
+/// split `run` and tell a CPU-bound scene from a command-walk (pipeline
+/// compile) spike on a device.
+pub fn last_frame_gpu_busy_micros() -> u64 {
+    LAST_FRAME_GPU_BUSY_MICROS.load(Ordering::Relaxed)
 }
 
 /// The last `zk_read_screen` duration in microseconds, 0 before the first read.
@@ -381,6 +413,7 @@ mod tests {
         // No frame has run on this test's account, so nothing to report yet.
         // Other tests never call the frame entry points (there is no ROM).
         assert_eq!(last_frame_micros(), 0);
+        assert_eq!(last_frame_gpu_busy_micros(), 0);
         assert_eq!(last_screen_read_micros(0), 0);
         assert_eq!(last_screen_read_micros(1), 0);
         assert_eq!(last_audio_take_micros(), 0);
@@ -390,6 +423,7 @@ mod tests {
     fn reset_clears_the_measurements() {
         reset();
         assert_eq!(last_frame_micros(), 0);
+        assert_eq!(last_frame_gpu_busy_micros(), 0);
         assert_eq!(last_screen_read_micros(0), 0);
         assert_eq!(last_screen_read_micros(1), 0);
         assert_eq!(last_audio_take_micros(), 0);

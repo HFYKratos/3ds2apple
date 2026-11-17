@@ -11,6 +11,12 @@
 //  to the main queue with the frame stats, so the UI never touches the runtime
 //  handle or the timing accumulators.
 //
+//  0.1.2 splits `run` into the software GPU's command walk (`runGPU`, the `gpu`
+//  column of `zk_perf`) and the emulated CPU/HLE rest (`runCPU`), records the
+//  frame-to-frame interval, and fixes the stutter attribution: a long frame no
+//  longer counts a second time as `other` on the frame after it (`other` is now
+//  only the gap between the previous frame's end and this frame's start).
+//
 //  Clock: mach_absolute_time() — monotonic, never affected by wall-clock
 //  changes, and cheaper than Date()/CACurrentMediaTime() in a per-frame path.
 //  The timebase is converted to milliseconds once at display time, so the
@@ -86,8 +92,16 @@ struct FrameTimingSnapshot: Equatable {
     /// Entire renderFrame work item on the runtime queue up to publication:
     /// set_input + run + presentation + audio pump.
     var renderTotal = FramePhaseStats()
-    /// zk_run_frame() alone.
+    /// zk_run_frame() alone (emulated CPU/HLE work plus the software GPU's
+    /// command walk).
     var runFrame = FramePhaseStats()
+    /// The software GPU's command-list walk inside `zk_run_frame` (`zk_perf`'s
+    /// `gpu` column). A pipeline a scene first uses is created during the walk,
+    /// so a spike here is the pipeline-compile / command-walk suspect.
+    var runGPU = FramePhaseStats()
+    /// `zk_run_frame` without the command walk: emulated CPU and HLE services
+    /// (a CPU-bound scene grows this, not `runGPU`).
+    var runCPU = FramePhaseStats()
     /// zk_present() (A1: swapchain present; 0 on the CGImage path).
     var present = FramePhaseStats()
     /// zk_read_screen() for the upper 400x240 screen (CGImage path only).
@@ -98,20 +112,32 @@ struct FrameTimingSnapshot: Equatable {
     var cgImage = FramePhaseStats()
     /// zk_take_audio() + ring-buffer enqueue.
     var audioPump = FramePhaseStats()
+    /// Frame start to frame start: what the player sees, including the pacing
+    /// wait for the 60 Hz slot and any scheduling stall. Not summed into the
+    /// work-share columns (it overlaps the previous frame's work).
+    var frameInterval = FramePhaseStats()
 }
 
 /// One presented frame that ran long enough to be seen as a hitch.
 struct StutterEvent: Equatable {
     /// Milliseconds between the start of the frame loop and this frame.
     var atMilliseconds: Double = 0
-    /// Frame-to-frame interval: how long this frame took before the next one
-    /// started. This is the duration the player sees, and it includes a frame
-    /// block that was scheduled late.
+    /// Start-to-start interval: how long after the previous frame started this
+    /// one began. Reported for context only; it contains the previous frame's
+    /// work, so using it for the threshold would blame the frame after a long
+    /// frame again (one hitch counted twice, once as `run`, once as `other`).
+    var intervalMilliseconds: Double = 0
+    /// How long the player was actually held up: the larger of this frame's
+    /// measured work item and the unexplained gap between the previous frame's
+    /// end and this frame's start. The stutter threshold counts this value, so
+    /// one physical hitch produces one event.
     var milliseconds: Double = 0
     /// Measured `renderFrame` work item: set_input + run + presentation + audio.
-    /// `milliseconds - workMilliseconds` is time no phase accounted for
-    /// (scheduling); such a frame is attributed to `other`.
+    /// Its part above `gpuBusyMilliseconds` is emulated CPU/HLE work.
     var workMilliseconds: Double = 0
+    /// The software GPU's command walk inside the work item (`gpu` column of
+    /// `zk_perf`). New pipelines compile in the walk on first use.
+    var gpuBusyMilliseconds: Double = 0
     /// Phase with the largest measured share of this frame.
     var phase: StutterPhase = .other
     /// 1-based presented frame number since the loop started.
@@ -122,17 +148,25 @@ struct StutterEvent: Equatable {
 /// largest share of that frame. `other` covers time no phase accounted for
 /// (for example waiting for a CAMetalLayer drawable in `zk_present`).
 enum StutterPhase: Int, CaseIterable {
-    case run
+    /// The software GPU's command-list walk inside `zk_run_frame`. The first
+    /// use of new pipelines compiles in it and stalls the frame that waits for
+    /// them, so a spike here is the pipeline-compile suspect.
+    case runGPU
+    /// Emulated CPU / HLE work inside `zk_run_frame`: a CPU-bound scene.
+    case runCPU
     case present
     case read
     case cgImage
     case audio
+    /// Time no measured phase explains: the gap between the previous frame's
+    /// end and this frame's start (scheduling / pacing).
     case other
 
     /// Stable English label for the device log and the diagnostics report.
     var label: String {
         switch self {
-        case .run: return "run"
+        case .runGPU: return "run-gpu"
+        case .runCPU: return "run-cpu"
         case .present: return "present"
         case .read: return "read"
         case .cgImage: return "cgImage"
@@ -159,8 +193,15 @@ struct StutterSnapshot: Equatable {
     var perMinute: Double = 0
     /// Worst presented frame since the loop started, in milliseconds.
     var worstMilliseconds: Double = 0
+    /// Frames whose software GPU command walk alone overran the 60 Hz budget:
+    /// the scene is limited by the command walk, not by the guest CPU.
+    var gpuWalkBoundFrames: Int = 0
+    /// Severe stutters whose largest cost was the command walk: the first use
+    /// of a pipeline compiled during that frame and the walk waited for it.
+    /// Compare this count between a cold and a warm pipeline cache.
+    var pipelineCompileSuspects: Int = 0
     /// Stutter frames per attribution phase, indexed by `StutterPhase`.
-    var phaseCounts: [Int] = [0, 0, 0, 0, 0, 0]
+    var phaseCounts: [Int] = [Int](repeating: 0, count: StutterPhase.allCases.count)
     /// Most recent events, oldest first (at most `StutterTracker.maximumEvents`).
     var events: [StutterEvent] = []
 
@@ -206,6 +247,15 @@ struct StutterTracker {
     /// Tick the last presented frame started at; pauses between frames are not
     /// counted into the per-minute rate.
     private var lastFrameStartTicks: UInt64 = 0
+    /// Work ticks of the previous frame, so the unexplained gap is measured
+    /// from that frame's end and not from its start.
+    private var lastWorkTicks: UInt64 = 0
+    /// One 60 Hz frame budget in ticks, for the command-walk-bound counter.
+    private var budgetTicks: UInt64 = 0
+    /// Frames whose command walk overran `budgetTicks`, and severe stutters
+    /// attributed to the command walk (pipeline-compile suspects).
+    private var gpuWalkBoundFrames = 0
+    private var pipelineCompileSuspects = 0
     private var stutterTicks: UInt64 = 0
     private var severeTicks: UInt64 = 0
     private var count = 0
@@ -226,11 +276,15 @@ struct StutterTracker {
     mutating func start(at ticks: UInt64) {
         startedTicks = ticks
         lastFrameStartTicks = ticks
+        lastWorkTicks = 0
+        budgetTicks = FrameClock.ticks(seconds: 1.0 / 60.0)
         stutterTicks = FrameClock.ticks(seconds: StutterSnapshot.thresholdMilliseconds / 1000.0)
         severeTicks = FrameClock.ticks(seconds: StutterSnapshot.severeThresholdMilliseconds / 1000.0)
         count = 0
         severeCount = 0
         worstTicks = 0
+        gpuWalkBoundFrames = 0
+        pipelineCompileSuspects = 0
         recordedEvents = 0
         for index in phaseCounts.indices {
             phaseCounts[index] = 0
@@ -239,14 +293,17 @@ struct StutterTracker {
 
     /// Records one presented frame. runtimeQueue only.
     ///
-    /// A hitch is detected on the frame-to-frame interval (what the player
-    /// sees) and on the measured work item; the larger of the two is the
-    /// reported duration. A frame whose interval is much longer than its work
-    /// item is attributed to `other`: the phases cannot explain the wait (the
-    /// frame block was scheduled late or the runtime queue was busy).
+    /// A hitch is detected on the measured work item and on the gap between
+    /// the previous frame's end and this frame's start (a frame block the
+    /// scheduler ran late); the larger of the two is the reported duration.
+    /// The start-to-start interval is not used for the threshold: it contains
+    /// the previous frame's work, which used to count one long frame twice (as
+    /// `run`, then as `other` on the following frame). The unexplained gap is
+    /// what `other` reports, and it is measured from the previous frame's end.
     mutating func record(frameStartTicks: UInt64,
                          workTicks: UInt64,
                          runTicks: UInt64,
+                         gpuTicks: UInt64,
                          presentTicks: UInt64,
                          readTicks: UInt64,
                          cgImageTicks: UInt64,
@@ -255,26 +312,48 @@ struct StutterTracker {
         let intervalTicks = frameStartTicks > lastFrameStartTicks
             ? frameStartTicks - lastFrameStartTicks
             : workTicks
+        let previousWorkTicks = lastWorkTicks
         lastFrameStartTicks = frameStartTicks
-        let durationTicks = max(intervalTicks, workTicks)
+        lastWorkTicks = workTicks
+        // Time between the previous frame's end and this frame's start: the
+        // normal pacing wait for the 60 Hz slot, or a scheduling stall when it
+        // is long. The part above the work item is what `other` reports.
+        let gapTicks = intervalTicks > previousWorkTicks
+            ? intervalTicks - previousWorkTicks
+            : 0
+        let durationTicks = max(workTicks, gapTicks)
+        // Split the work item into the software GPU's command walk and the
+        // emulated CPU/HLE rest (the same split `zk_perf` prints per window).
+        let runGpuTicks = min(gpuTicks, runTicks)
+        let runCpuTicks = runTicks - runGpuTicks
+        if runGpuTicks > budgetTicks {
+            gpuWalkBoundFrames += 1
+        }
         guard durationTicks > stutterTicks else { return }
         count += 1
         if durationTicks > severeTicks { severeCount += 1 }
         if durationTicks > worstTicks { worstTicks = durationTicks }
-        // Attribute the hitch to the largest share: the measured phase with the
-        // most ticks, or the interval time the phases do not account for.
+        // Attribute the hitch to the largest share: command walk or emulated
+        // CPU inside the work item, a presentation/read/audio phase, or the
+        // scheduling gap no phase accounts for.
         var topPhase = StutterPhase.other
-        var topTicks = intervalTicks > workTicks ? intervalTicks - workTicks : 0
-        if runTicks > topTicks { topPhase = .run; topTicks = runTicks }
+        var topTicks = gapTicks
+        if runGpuTicks > topTicks { topPhase = .runGPU; topTicks = runGpuTicks }
+        if runCpuTicks > topTicks { topPhase = .runCPU; topTicks = runCpuTicks }
         if presentTicks > topTicks { topPhase = .present; topTicks = presentTicks }
         if readTicks > topTicks { topPhase = .read; topTicks = readTicks }
         if cgImageTicks > topTicks { topPhase = .cgImage; topTicks = cgImageTicks }
         if audioTicks > topTicks { topPhase = .audio; topTicks = audioTicks }
+        if topPhase == .runGPU, durationTicks > severeTicks {
+            pipelineCompileSuspects += 1
+        }
         phaseCounts[topPhase.rawValue] += 1
         events[recordedEvents % StutterTracker.maximumEvents] = StutterEvent(
             atMilliseconds: FrameClock.milliseconds(frameStartTicks - startedTicks),
+            intervalMilliseconds: FrameClock.milliseconds(intervalTicks),
             milliseconds: FrameClock.milliseconds(durationTicks),
             workMilliseconds: FrameClock.milliseconds(workTicks),
+            gpuBusyMilliseconds: FrameClock.milliseconds(runGpuTicks),
             phase: topPhase,
             frame: frame
         )
@@ -287,6 +366,8 @@ struct StutterTracker {
         snapshot.count = count
         snapshot.severeCount = severeCount
         snapshot.worstMilliseconds = FrameClock.milliseconds(worstTicks)
+        snapshot.gpuWalkBoundFrames = gpuWalkBoundFrames
+        snapshot.pipelineCompileSuspects = pipelineCompileSuspects
         snapshot.phaseCounts = phaseCounts
         let measuredSeconds = FrameClock.seconds(lastFrameStartTicks - startedTicks)
         snapshot.perMinute = measuredSeconds > 0 ? Double(count) / (measuredSeconds / 60.0) : 0
@@ -309,11 +390,16 @@ struct StutterTracker {
 enum FramePhase {
     case renderTotal
     case runFrame
+    case runGPU
+    case runCPU
     case present
     case topScreenRead
     case bottomScreenRead
     case cgImage
     case audioPump
+    /// Frame start to frame start: the pacing/scheduling baseline; recorded on
+    /// the same per-frame path as the work-item phases.
+    case frameInterval
 }
 
 /// Timing accumulator for one phase. runtimeQueue only (no locking needed).
@@ -373,21 +459,27 @@ struct PhaseTimingWindow {
 struct FrameTimingWindow {
     private var renderTotal = PhaseTimingWindow()
     private var runFrame = PhaseTimingWindow()
+    private var runGPU = PhaseTimingWindow()
+    private var runCPU = PhaseTimingWindow()
     private var present = PhaseTimingWindow()
     private var topScreenRead = PhaseTimingWindow()
     private var bottomScreenRead = PhaseTimingWindow()
     private var cgImage = PhaseTimingWindow()
     private var audioPump = PhaseTimingWindow()
+    private var frameInterval = PhaseTimingWindow()
 
     mutating func record(_ phase: FramePhase, ticks: UInt64) {
         switch phase {
         case .renderTotal: renderTotal.record(ticks)
         case .runFrame: runFrame.record(ticks)
+        case .runGPU: runGPU.record(ticks)
+        case .runCPU: runCPU.record(ticks)
         case .present: present.record(ticks)
         case .topScreenRead: topScreenRead.record(ticks)
         case .bottomScreenRead: bottomScreenRead.record(ticks)
         case .cgImage: cgImage.record(ticks)
         case .audioPump: audioPump.record(ticks)
+        case .frameInterval: frameInterval.record(ticks)
         }
     }
 
@@ -396,11 +488,14 @@ struct FrameTimingWindow {
         FrameTimingSnapshot(
             renderTotal: renderTotal.publish(),
             runFrame: runFrame.publish(),
+            runGPU: runGPU.publish(),
+            runCPU: runCPU.publish(),
             present: present.publish(),
             topScreenRead: topScreenRead.publish(),
             bottomScreenRead: bottomScreenRead.publish(),
             cgImage: cgImage.publish(),
-            audioPump: audioPump.publish()
+            audioPump: audioPump.publish(),
+            frameInterval: frameInterval.publish()
         )
     }
 
