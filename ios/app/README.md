@@ -26,7 +26,7 @@ views do not carry duplicated strings.
 | **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), on-screen controls, the optional FPS counter and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. The FPS counter sits in the portrait title bar or in a slim landscape strip in the top safe area, outside the 3DS picture and clear of every control. |
 | **Settings** | Display, Audio, Controls, Performance (fast-forward, system Metal HUD, FPS counter), Storage and About sections. |
 | **Save Manager** | The battery save files of the current game (size, date, export as ZIP, import, delete), the three instant save-state slots (save, load, delete) and the container usage. |
-| **About** | Version, runtime state, acknowledgements and licence. |
+| **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the FPS appears only while a game is loaded; everything else stays in the log and the diagnostics. |
 | **In-game menu** | Opened from the pause button over the game: pause/resume, quick toggles (on-screen controls, mute, 1×/2×/4× fast-forward), Save State / Load State (slot 1), Reset, Display settings, Save Manager, Diagnostics, Exit. |
 
 Opening the in-game menu pauses emulation: the frame loop and the audio engine
@@ -222,7 +222,7 @@ data: never commit them, and remove the fixture from the container when done.
 | Screen rotation | Upright, 90° clockwise, upside down, 90° counter-clockwise | Immediately. Turns the screens inside their area, e.g. the stacked console becomes two columns (480×400) a quarter turn clockwise. The touchscreen is mapped back into the screen's own pixels. |
 | Aspect ratio | Fit (native), 4:3, Stretch | Immediately. Fit keeps the arrangement's shape; 4:3 fits the picture inside a 4:3 area with black bars; Stretch fills the game view's space and deliberately distorts the picture. |
 | Integer scaling | On / off | Immediately, with Fit and 4:3 (Stretch ignores it): each 3DS pixel maps to a whole number of screen pixels and the layer magnifies with nearest-pixel filtering. |
-| Render resolution | 1× / 2× / 3× / 4× | The presenter's drawable is the arrangement's own pixels times the factor and CoreAnimation scales it to the screen; the swapchain is resized through `zk_presenter_resize` and the following frame presents at the new size. The internal resolution the host-GPU 3D renderer draws at is set with `zk_set_render_scale` and read when a system loads, so a running game keeps its old internal scale until it is reloaded or restarted. The software renderer always draws at 1×; higher factors cost GPU time and memory. |
+| Render resolution | 1× / 2× / 3× / 4× | The presenter's drawable is the arrangement's own pixels times the factor and CoreAnimation scales it to the screen; the swapchain is resized through `zk_presenter_resize` and the following frame presents at the new size. The internal resolution the host-GPU 3D renderer draws at is set with `zk_set_render_scale` and read when a system loads, so a running game keeps its old internal scale until it is reloaded or restarted. The software renderer always draws at 1×; higher factors cost GPU time and memory. The caption under the picker follows the selection and states its pixel size (1× = 400×240, 2× = 800×480, 3× = 1200×720, 4× = 1600×960). |
 | Orientation | Automatic / portrait / landscape | Immediately: the app restricts the supported orientations and asks the window scene to rotate. The in-game layout reflows for portrait/landscape. iOS still decides in some situations (for example during a phone call). |
 
 The 3DS screens stay upright in the app's interface, which iOS rotates with the
@@ -417,10 +417,9 @@ duplicates. A missing translation falls back to the English key.
 language means adding `Resources/<language>.lproj/Localizable.strings` (all keys
 must keep the same format specifiers). iOS restarts an app when the system
 language changes; `LocalizationStore` still watches for a locale change while the
-app runs and rebuilds the UI for new formatting. The Settings → About → Language
-row shows the table in use, and the exported diagnostics include
-`app_language=` / `system_language=`, so a device run proves which table iOS
-picked.
+app runs and rebuilds the UI for new formatting. The exported diagnostics
+include `app_language=` / `system_language=`, so a device run proves which
+table iOS picked.
 
 The device log and the diagnostics report keep their technical keys and values
 in English where they are meant for tooling; the UI text around them is
@@ -490,8 +489,8 @@ plutil -p build/Release-iphoneos/3ds2apple.app/zh-Hans.lproj/Localizable.strings
 If the bundle has no `.lproj` folders, the app still builds and runs in English,
 but no language switch happens; check that `xcodegen generate` picked up
 `Resources` (its output lists the files it added) and that the `.strings` files
-are valid UTF-8. The app's Settings → About → Language row and the diagnostics'
-`app_language=` field show which table iOS selected.
+are valid UTF-8. The diagnostics' `app_language=` field shows which table iOS
+selected.
 
 The app is built unsigned and signed later on the user's machine with Sideloadly
 or AltStore.
@@ -530,7 +529,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, reset, display settings, save manager, diagnostics, exit) and quick toggles. |
 | `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. |
 | `SaveManagerView.swift` | Battery save list (export as ZIP, import, delete) and the instant save-state slots (save, load, delete), with progress and errors. |
-| `AboutView.swift` | Version, runtime state, acknowledgements, licence, language in use. |
+| `AboutView.swift` | Product page: app icon, name, version/build, project links, acknowledgements and legal notice; a compact runtime status card only while a game is loaded. |
 | `AppSettings.swift` | Persisted settings model (enums for layout, screen rotation, aspect, interface orientation, buffer size, frame cap, playback speed, Metal HUD and FPS-counter switches) and the UserDefaults keys. |
 | `DiagnosticsReport.swift` | Diagnostics report text, the shared diagnostics file type and screen geometry helpers. |
 | `StorageInspector.swift` | Container folder sizes, save-data file list, pipeline-cache clearing, and `AtomicFileWriter` for temporary-file-then-rename writes. |
@@ -759,8 +758,8 @@ Instant save states:
   faster.
 - The system Metal HUD is on by default, but it only works when the build
   enables it (`MetalHudEnabled`), and only on the presented `CAMetalLayer` path
-  (so not on a software/readback load). The Settings hint and the diagnostics
-  report which condition is missing instead of pretending the switch worked.
+  (so not on a software/readback load). The Settings page shows the reason when
+  the switch cannot work, and the diagnostics report records it.
 - Only English and Simplified Chinese are included. Traditional Chinese and
   other languages use English.
 - iOS 16+ only; the app is not distributed through the App Store.

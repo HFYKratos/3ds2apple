@@ -33,6 +33,16 @@ func persistedBinding<T>(
     )
 }
 
+/// The caption under the resolution picker: the exact pixels the selected
+/// render factor produces, so it changes the moment the factor changes. 1x
+/// keeps the short "native 400×240" wording (item 5).
+private func resolutionCaption(for renderScale: Int) -> String {
+    guard renderScale > 1 else {
+        return L10n.tr("1x is the 3DS's native 400×240.")
+    }
+    return L10n.format("%ldx is %ld×%ld.", renderScale, 400 * renderScale, 240 * renderScale)
+}
+
 // MARK: - Settings page
 
 struct SettingsView: View {
@@ -91,11 +101,8 @@ struct SettingsView: View {
                     Text(aspect.title).tag(aspect)
                 }
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Toggle("Integer scaling", isOn: persistedBinding(settings, \.integerScale))
-                    .disabled(settings.screenAspect == .stretch)
-                hintText(L10n.tr("Whole-pixel scaling: every 3DS pixel becomes a whole block of screen pixels, so the picture stays sharp."))
-            }
+            Toggle("Integer scaling", isOn: persistedBinding(settings, \.integerScale))
+                .disabled(settings.screenAspect == .stretch)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Resolution")
                 Picker("Resolution", selection: persistedBinding(settings, \.renderScale)) {
@@ -106,7 +113,8 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                hintText(L10n.tr("1x is the 3DS's native 400×240."))
+                // The one caption this page keeps: it follows the picker.
+                hintText(resolutionCaption(for: settings.renderScale))
             }
             Picker("Orientation", selection: persistedBinding(settings, \.orientation)) {
                 ForEach(OrientationLock.allCases) { lock in
@@ -130,19 +138,16 @@ struct SettingsView: View {
                     .monospacedDigit()
             }
             Toggle("Mute", isOn: persistedBinding(settings, \.audioMuted))
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Buffer size")
-                    Spacer(minLength: 12)
-                    Picker("Buffer size", selection: persistedBinding(settings, \.audioBuffer)) {
-                        ForEach(AudioBufferSize.allCases) { size in
-                            Text(size.title).tag(size)
-                        }
+            HStack {
+                Text("Buffer size")
+                Spacer(minLength: 12)
+                Picker("Buffer size", selection: persistedBinding(settings, \.audioBuffer)) {
+                    ForEach(AudioBufferSize.allCases) { size in
+                        Text(size.title).tag(size)
                     }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
                 }
-                hintText(L10n.tr("A different buffer size restarts audio once while a game is running."))
+                .labelsHidden()
+                .pickerStyle(.menu)
             }
         } header: {
             Text("Audio")
@@ -165,7 +170,7 @@ struct SettingsView: View {
             NavigationLink {
                 LayoutSettingsView(settings: settings)
             } label: {
-                Label("Screen and control layout", systemImage: "rectangle.and.hand.point.up.left.fill")
+                Text("Screen and control layout")
             }
             infoRow("Controller", model.controllerName ?? L10n.tr("Not connected"))
         } header: {
@@ -188,39 +193,30 @@ struct SettingsView: View {
                 .labelsHidden()
                 if model.playbackSpeedAutoReduced {
                     hintText(autoReducedText)
-                } else if settings.playbackSpeed == .normal {
-                    hintText(L10n.tr("Fast-forward runs extra console frames per presented frame."))
                 }
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Toggle("System Metal HUD", isOn: persistedBinding(settings, \.systemMetalHUD))
-                    .accessibilityIdentifier("settings-system-metal-hud")
-                hintText(hudStatusText)
+            Toggle("System Metal HUD", isOn: persistedBinding(settings, \.systemMetalHUD))
+                .accessibilityIdentifier("settings-system-metal-hud")
+            if let hudUnavailableText {
+                hintText(hudUnavailableText)
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Toggle("Show FPS counter", isOn: persistedBinding(settings, \.showFPS))
-                    .accessibilityIdentifier("settings-fps-hud")
-                hintText(fpsStatusText)
-            }
+            Toggle("Show FPS counter", isOn: persistedBinding(settings, \.showFPS))
+                .accessibilityIdentifier("settings-fps-hud")
         } header: {
             Text("Performance")
         }
     }
-    /// What the HUD switch can actually do in this build and this session. The
-    /// switch only controls the live layer: the build must enable the HUD
-    /// (MetalHudEnabled) and the screens must be on the CAMetalLayer (no
-    /// software/readback load) for it to have anything to attach to.
-    private var hudStatusText: String {
+    /// The only HUD message left: why the switch cannot work right now. The
+    /// general explanation was removed with the other hints in 0.1.2; the
+    /// diagnostics report still records the full HUD state.
+    private var hudUnavailableText: String? {
         if !model.buildEnablesSystemMetalHUD {
-            return L10n.tr("This build does not enable the Metal HUD (MetalHudEnabled is missing from Info.plist), so the switch cannot show it. Rebuild the shell with scripts/build-ios-app.sh.")
+            return L10n.tr("This build does not enable the Metal HUD; rebuild the shell with scripts/build-ios-app.sh.")
         }
         if settings.systemMetalHUD && model.isRuntimeLoaded && !model.displayPath.usesMetalLayer {
-            return L10n.tr("The game is showing the CPU readback path, so the HUD has no Metal layer to attach to. This happens when the app has no MoltenVK.framework; deploy the launcher's 0.1.0+ shell template.")
+            return L10n.tr("The game is on the CPU readback path, so the HUD has no Metal layer to attach to.")
         }
-        if settings.systemMetalHUD {
-            return L10n.tr("On by default since 0.1.0. The HUD appears over a running game on the Metal layer; a Metal device that already existed at launch picks the switch up on the next launch.")
-        }
-        return L10n.tr("Turn on to show Apple's FPS / GPU HUD over a running game.")
+        return nil
     }
 
     // MARK: - Storage
@@ -235,10 +231,6 @@ struct SettingsView: View {
             }
             infoRow("App logs", StorageFormat.size(storage.logBytes))
             infoRow("Graphics pipeline cache", StorageFormat.size(storage.cacheBytes))
-            Text("Each game's AOT code is part of this app; the desktop launcher pushes the game data into this app's Documents/Games folder over USB or Wi-Fi. The Files app shows the same folder under On My iPhone → 3ds2apple.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
             Button("Clear graphics pipeline cache") {
                 isClearCacheConfirmationPresented = true
             }
@@ -261,12 +253,12 @@ struct SettingsView: View {
             NavigationLink {
                 SaveManagerView(model: model, saveStates: model.saveStates)
             } label: {
-                Label("Save Manager", systemImage: "externaldrive.fill")
+                moreRowLabel("Save Manager", systemImage: "externaldrive.fill")
             }
             Button {
                 exportDiagnostics()
             } label: {
-                Label("Export logs", systemImage: "square.and.arrow.up")
+                moreRowLabel("Export logs", systemImage: "square.and.arrow.up.fill")
             }
             if let diagnosticsHint {
                 Text(diagnosticsHint)
@@ -279,7 +271,7 @@ struct SettingsView: View {
             NavigationLink {
                 AboutView(model: model)
             } label: {
-                Label("About", systemImage: "info.circle.fill")
+                moreRowLabel("About", systemImage: "info.circle.fill")
             }
         } header: {
             Text("More")
@@ -293,6 +285,19 @@ struct SettingsView: View {
             .font(.caption)
             .foregroundColor(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+    /// Label for a row in the More section. A plain Button tints its whole
+    /// label, which made "Export logs" look different from the two
+    /// NavigationLinks around it; the filled symbol's tint and the primary text
+    /// colour are set explicitly so all three rows read as one group (item 7).
+    private func moreRowLabel(_ title: LocalizedStringKey, systemImage: String) -> some View {
+        Label {
+            Text(title)
+                .foregroundStyle(.primary)
+        } icon: {
+            Image(systemName: systemImage)
+                .foregroundStyle(Color.accentColor)
+        }
     }
     /// One settings row: the control, with an optional one-line hint directly
     /// underneath it (no extra divider row), so every hint in the page has the
@@ -313,15 +318,6 @@ struct SettingsView: View {
         }
     }
 
-    @ViewBuilder
-    private func settingRow<Control: View>(_ title: LocalizedStringKey,
-                                           @ViewBuilder control: () -> Control) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-            control()
-        }
-    }
-
     private func exportDiagnostics() {
         guard let export = DiagnosticsExporter.write(model: model, settings: settings) else { return }
         diagnosticsHint = export.documentsPath.map { "Saved to Documents/\($0)" }
@@ -336,23 +332,6 @@ struct SettingsView: View {
             "Lowered automatically from %@ because frames stayed below 20 fps.",
             L10n.speedLabel(settings.playbackSpeed.rawValue)
         )
-    }
-
-    /// What the in-game FPS readout shows and where it sits.
-    private var fpsStatusText: String {
-        L10n.tr("Shows the presented frames per second while a game is running; it sits outside the 3DS screens (portrait title bar, landscape top strip) and never covers the on-screen controls.")
-    }
-
-    private var versionText: String {
-        let info = Bundle.main.infoDictionary ?? [:]
-        let version = info["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info["CFBundleVersion"] as? String ?? "?"
-        return "\(version) (\(build))"
-    }
-
-    private var deviceText: String {
-        let device = UIDevice.current
-        return "\(device.model) · \(device.systemName) \(device.systemVersion)"
     }
 
     private func infoRow(_ title: LocalizedStringKey, _ value: String) -> some View {
@@ -423,17 +402,11 @@ struct QuickDisplaySettingsView: View {
                             Text(aspect.title).tag(aspect)
                         }
                     }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Toggle(
-                            "Integer scaling",
-                            isOn: persistedBinding(settings, \.integerScale)
-                        )
-                        .disabled(settings.screenAspect == .stretch)
-                        Text("Whole-pixel scaling: every 3DS pixel becomes a whole block of screen pixels, so the picture stays sharp.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    Toggle(
+                        "Integer scaling",
+                        isOn: persistedBinding(settings, \.integerScale)
+                    )
+                    .disabled(settings.screenAspect == .stretch)
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Resolution")
                         Picker(
@@ -447,7 +420,7 @@ struct QuickDisplaySettingsView: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        Text("1x is the 3DS's native 400×240.")
+                        Text(resolutionCaption(for: settings.renderScale))
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)

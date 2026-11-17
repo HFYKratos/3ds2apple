@@ -14,7 +14,6 @@
 "10 ms. The default." = "10 ms. The default.";
 "1x" = "1x";
 "1x is the 3DS's native 400×240." = "1x is the 3DS's native 400×240.";
-"1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads." = "1x is the 3DS's own 400×240. Higher is sharper and heavier; applies after the game reloads.";
 "20 ms. Fewer dropouts, slightly more delay." = "20 ms. Fewer dropouts, slightly more delay.";
 "2x" = "2x";
 "3D resolution" = "3D resolution";
@@ -29,7 +28,6 @@
 "90° counter-clockwise" = "90° counter-clockwise";
 "A backup is a ZIP archive of the files above; importing one merges its files back." = "A backup is a ZIP archive of the files above; importing one merges its files back.";
 "A backup is a ZIP archive of the files above. Importing one merges its files back into this game's save-data folder." = "A backup is a ZIP archive of the files above. Importing one merges its files back into this game's save-data folder.";
-"A different buffer size restarts audio once while a game is running." = "A different buffer size restarts audio once while a game is running.";
 "A save state is a snapshot of the whole console, taken between frames. Loading one restores that point, drops the audio buffered before it and continues the same game session." = "A save state is a snapshot of the whole console, taken between frames. Loading one restores that point, drops the audio buffered before it and continues the same game session.";
 "AOT code" = "AOT code";
 "AOT native · no CPU JIT · your ROMs stay on this device." = "AOT native · no CPU JIT · your ROMs stay on this device.";
@@ -45,7 +43,6 @@
 "Audio: %@" = "Audio: %@";
 "Automatic" = "Automatic";
 "Available when no game is running." = "Available when no game is running.";
-"Azahar / Citra (GPLv3, behaviour reference only): emulation semantics references. No GPL code is linked into this app." = "Azahar / Citra (GPLv3, behaviour reference only): emulation semantics references. No GPL code is linked into this app.";
 "Balanced" = "Balanced";
 "Battery saves" = "Battery saves";
 "Battery saves and instant save slots" = "Battery saves and instant save slots";
@@ -130,17 +127,14 @@
 "Export ZIP" = "Export ZIP";
 "Fast-forward" = "Fast-forward";
 "Fast-forward applies when the game resumes." = "Fast-forward applies when the game resumes.";
-"Fast-forward runs extra console frames per presented frame." = "Fast-forward runs extra console frames per presented frame.";
 "Fills the whole area, stretching the picture if its shape differs. The 3DS aspect ratio is not kept." = "Fills the whole area, stretching the picture if its shape differs. The 3DS aspect ratio is not kept.";
 "Fit" = "Fit";
 "Fits the picture inside a 4:3 area, the classic TV shape. The extra space becomes black bars." = "Fits the picture inside a 4:3 area, the classic TV shape. The extra space becomes black bars.";
 "Folder" = "Folder";
-"Frame loop" = "Frame loop";
 "Frames per second: %@" = "Frames per second: %@";
 "Game" = "Game";
 "Games are recompiled ahead of time on a Mac with your own game dump; the app runs the AOT code and never enables a CPU JIT." = "Games are recompiled ahead of time on a Mac with your own game dump; the app runs the AOT code and never enables a CPU JIT.";
 "Games run as native ARM64 code (AOT) — no CPU JIT. Your ROM and save data stay on this device." = "Games run as native ARM64 code (AOT) — no CPU JIT. Your ROM and save data stay on this device.";
-"Graphics" = "Graphics";
 "Graphics pipeline cache" = "Graphics pipeline cache";
 "Haptic feedback on button press" = "Haptic feedback on button press";
 "Import" = "Import";
@@ -215,7 +209,6 @@
 "Preparing graphics for %@…" = "Preparing graphics for %@…";
 "Preparing graphics…" = "Preparing graphics…";
 "Presentation" = "Presentation";
-"Project page" = "Project page";
 "Reading slot %ld (%@)…" = "Reading slot %ld (%@)…";
 "Ready to load the imported game." = "Ready to load the imported game.";
 "Reset" = "Reset";
@@ -246,7 +239,6 @@
 "Settings" = "Settings";
 "Show on-screen controls" = "Show on-screen controls";
 "Show FPS counter" = "Show FPS counter";
-"Shows the presented frames per second while a game is running; it sits outside the 3DS screens (portrait title bar, landscape top strip) and never covers the on-screen controls." = "Shows the presented frames per second while a game is running; it sits outside the 3DS screens (portrait title bar, landscape top strip) and never covers the on-screen controls.";
 "Side by side" = "Side by side";
 "Simplified Chinese (system language)" = "Simplified Chinese (system language)";
 "Skip" = "Skip";
@@ -318,12 +310,9 @@
 "Upside down" = "Upside down";
 "Version" = "Version";
 "Version %@ · build %@" = "Version %@ · build %@";
-"Version, runtime and acknowledgements" = "Version, runtime and acknowledgements";
 "Volume" = "Volume";
 "Waiting for first frame…" = "Waiting for first frame…";
-"Whole-pixel scaling: every 3DS pixel becomes a whole block of screen pixels, so the picture stays sharp." = "Whole-pixel scaling: every 3DS pixel becomes a whole block of screen pixels, so the picture stays sharp.";
 "Writing slot %ld…" = "Writing slot %ld…";
-"Your game" = "Your game";
 "ZIP64 archives are not supported." = "ZIP64 archives are not supported.";
 "Zakuro (MIT): 3DS runtime, services, GPU and interpreter fallback." = "Zakuro (MIT): 3DS runtime, services, GPU and interpreter fallback.";
 "audio: %@" = "audio: %@";
@@ -448,16 +437,11 @@
 "Could not read “%@” to check it: %@" = "Could not read “%@” to check it: %@";
 "The game folder “%@” is no longer in Documents/Games. Refresh the library." = "The game folder “%@” is no longer in Documents/Games. Refresh the library.";
 
-/* --- About: games come from the desktop launcher --- */
-"Games come from the 3ds2apple desktop launcher: it imports a game you own, builds its AOT pack on the computer and copies the game into this app. The app only runs AOT code and never enables a CPU JIT." = "Games come from the 3ds2apple desktop launcher: it imports a game you own, builds its AOT pack on the computer and copies the game into this app. The app only runs AOT code and never enables a CPU JIT.";
-"This app ships without any game data. Use the 3ds2apple desktop launcher to import a game you own; it installs this app and copies the game into Documents/Games, where the library finds it. The app has no ROMs, decryption keys, system files or game assets." = "This app ships without any game data. Use the 3ds2apple desktop launcher to import a game you own; it installs this app and copies the game into Documents/Games, where the library finds it. The app has no ROMs, decryption keys, system files or game assets.";
-
 /* --- Catalog + pushed game data: AOT packs inside the IPA, ROM in Documents/Games --- */
 "Data missing" = "Data missing";
 "No games in this build yet" = "No games in this build yet";
 "Games are added with the 3ds2apple desktop launcher: it builds a version of this app that contains the game's AOT pack and installs it, then pushes the game's data into this app. Games appear here once the data push completes." = "Games are added with the 3ds2apple desktop launcher: it builds a version of this app that contains the game's AOT pack and installs it, then pushes the game's data into this app. Games appear here once the data push completes.";
 "Pushed game data lives in Documents/Games/<TITLEID>/ and stays across app updates. The same folder is visible in the Files app under On My iPhone → 3ds2apple." = "Pushed game data lives in Documents/Games/<TITLEID>/ and stays across app updates. The same folder is visible in the Files app under On My iPhone → 3ds2apple.";
-"Each game's AOT code is part of this app; the desktop launcher pushes the game data into this app's Documents/Games folder over USB or Wi-Fi. The Files app shows the same folder under On My iPhone → 3ds2apple." = "Each game's AOT code is part of this app; the desktop launcher pushes the game data into this app's Documents/Games folder over USB or Wi-Fi. The Files app shows the same folder under On My iPhone → 3ds2apple.";
 "The pushed game data of “%@” cannot be read any more. Push it again with the desktop launcher." = "The pushed game data of “%@” cannot be read any more. Push it again with the desktop launcher.";
 "The launcher has not pushed the game data of “%@” yet. Install the build from the desktop launcher, then let it push the game's data into Documents/Games/%@." = "The launcher has not pushed the game data of “%@” yet. Install the build from the desktop launcher, then let it push the game's data into Documents/Games/%@.";
 "“%@” is missing from this game's data folder. Push the game data with the desktop launcher." = "“%@” is missing from this game's data folder. Push the game data with the desktop launcher.";
@@ -473,11 +457,7 @@
 /* --- 0.1.0 runtime badge, AOT diagnostics and Metal HUD state --- */
 "AOT …" = "AOT …";
 "AOT missing" = "AOT missing";
-"AOT pack" = "AOT pack";
 "AOT linked" = "AOT linked";
-"AOT linked code" = "AOT linked code";
-"AOT recompiled" = "AOT recompiled";
-"AOT status" = "AOT status";
 "fps …" = "fps …";
 "GPU …" = "GPU …";
 "Metal GPU" = "Metal GPU";
@@ -490,17 +470,10 @@
 "Runtime status: %@, %@, %@, %@" = "Runtime status: %@, %@, %@, %@";
 "AOT %@" = "AOT %@";
 "Runtime status: %@, %@, %@, %@, %@" = "Runtime status: %@, %@, %@, %@, %@";
-"Metal backend" = "Metal backend";
-"MoltenVK embedded" = "MoltenVK embedded";
-"Software renderer (no MoltenVK)" = "Software renderer (no MoltenVK)";
 "Yes" = "Yes";
 "No" = "No";
 "None" = "None";
 "No AOT build for this game: “%@” was loaded, but the runtime is not executing AOT code (linked title %@, runtime status: %@). The shell refuses to run interpreted code." = "No AOT build for this game: “%@” was loaded, but the runtime is not executing AOT code (linked title %@, runtime status: %@). The shell refuses to run interpreted code.";
-"This build does not enable the Metal HUD (MetalHudEnabled is missing from Info.plist), so the switch cannot show it. Rebuild the shell with scripts/build-ios-app.sh." = "This build does not enable the Metal HUD (MetalHudEnabled is missing from Info.plist), so the switch cannot show it. Rebuild the shell with scripts/build-ios-app.sh.";
-"The game is showing the CPU readback path, so the HUD has no Metal layer to attach to. This happens when the app has no MoltenVK.framework; deploy the launcher's 0.1.0+ shell template." = "The game is showing the CPU readback path, so the HUD has no Metal layer to attach to. This happens when the app has no MoltenVK.framework; deploy the launcher's 0.1.0+ shell template.";
-"On by default since 0.1.0. The HUD appears over a running game on the Metal layer; a Metal device that already existed at launch picks the switch up on the next launch." = "On by default since 0.1.0. The HUD appears over a running game on the Metal layer; a Metal device that already existed at launch picks the switch up on the next launch.";
-"Turn on to show Apple's FPS / GPU HUD over a running game." = "Turn on to show Apple's FPS / GPU HUD over a running game.";
 /* --- Editable control layout and screen layout (0.1.1) ------------------ */
 
 "D-pad up" = "D-pad up";
@@ -570,4 +543,24 @@
 "Portrait and landscape keep separate control layouts. The editor can move, resize and fade every control, including the Circle Pad and the C-stick, and restore the defaults." = "Portrait and landscape keep separate control layouts. The editor can move, resize and fade every control, including the Circle Pad and the C-stick, and restore the defaults.";
 "Presets and Custom (Metal) draw through the CAMetalLayer presenter: full speed, and every phone rotates, scales and filters the picture the same way. Free layout trades that Metal path for exact per-screen placement, because the presenter only knows its own arrangements; the game picture then comes from the readback path the app also uses when Metal is unavailable." = "Presets and Custom (Metal) draw through the CAMetalLayer presenter: full speed, and every phone rotates, scales and filters the picture the same way. Free layout trades that Metal path for exact per-screen placement, because the presenter only knows its own arrangements; the game picture then comes from the readback path the app also uses when Metal is unavailable.";
 "Reset all layouts to defaults" = "Reset all layouts to defaults";
+
+/* --- 0.1.2 settings-ui (task-15): dynamic resolution caption, About page, trimmed HUD reasons --- */
+"%ldx is %ld×%ld." = "%ldx is %ld×%ld.";
+"Links" = "Links";
+"Repository" = "Repository";
+"Releases" = "Releases";
+"Issues" = "Issues";
+"README" = "README";
+"Third-party notices" = "Third-party notices";
+"FPS" = "FPS";
+"Legal" = "Legal";
+"This app ships without any game data: no ROMs, decryption keys, system files or game assets. Use only game dumps you made from your own console." = "This app ships without any game data: no ROMs, decryption keys, system files or game assets. Use only game dumps you made from your own console.";
+"3ds2apple is free and open source under the Apache-2.0 licence; the bundled third-party components keep their own licences." = "3ds2apple is free and open source under the Apache-2.0 licence; the bundled third-party components keep their own licences.";
+"idevice (MIT): usbmuxd / AFC device bridge used by tools/devpush." = "idevice (MIT): usbmuxd / AFC device bridge used by tools/devpush.";
+"LLVM/Clang/LLD 21.1.8 (Apache-2.0 with LLVM exception): local GamePack build on Windows and Linux." = "LLVM/Clang/LLD 21.1.8 (Apache-2.0 with LLVM exception): local GamePack build on Windows and Linux.";
+"Impactor / plumesign (MIT): signing and install on Windows." = "Impactor / plumesign (MIT): signing and install on Windows.";
+"Avalonia 12 / .NET 10 (MIT): Windows launcher UI and runtime." = "Avalonia 12 / .NET 10 (MIT): Windows launcher UI and runtime.";
+"Azahar / Citra (GPL, behaviour reference only): emulation semantics references; no GPL code is linked into this app." = "Azahar / Citra (GPL, behaviour reference only): emulation semantics references; no GPL code is linked into this app.";
+"This build does not enable the Metal HUD; rebuild the shell with scripts/build-ios-app.sh." = "This build does not enable the Metal HUD; rebuild the shell with scripts/build-ios-app.sh.";
+"The game is on the CPU readback path, so the HUD has no Metal layer to attach to." = "The game is on the CPU readback path, so the HUD has no Metal layer to attach to.";
 
