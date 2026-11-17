@@ -163,7 +163,6 @@
 "Library" = "游戏库";
 "Licence" = "许可证";
 "Load" = "载入";
-"Load a game to save or restore a state. Slots already on disk can be deleted here." = "载入游戏后才能保存或恢复存档状态。磁盘上已有的存档位可以在这里删除。";
 "Load state" = "载入即时存档";
 "Loaded %@ · %@" = "已载入 %@ · %@";
 "Loaded: %@" = "已载入：%@";
@@ -374,7 +373,6 @@
 "No game selected" = "未选择游戏";
 "No games in this build" = "此构建中没有游戏";
 "Something went wrong" = "出现问题";
-"Start a game first: battery saves are listed per game." = "请先开始游戏：电池存档按游戏分别列出。";
 "The AOT code linked into this app is for title %@, not %@. Rebuild the app for this game." = "本应用链接的 AOT 代码属于游戏 %@，而不是 %@。请为该游戏重新构建应用。";
 "The desktop build did not allocate AOT code for this game. Build it on your computer and install that build." = "桌面端构建没有为该游戏分配 AOT 代码。请在电脑上构建该游戏并安装该构建。";
 "The game package “%@” is installed and registered for “%@”. Starting games from a package needs the next runtime build; this shell can only start the game whose AOT code is linked into it." = "游戏包“%@”已安装并为“%@”注册。从游戏包启动游戏需要下一版运行时；此版本只能启动 AOT 代码已链接进应用的游戏。";
@@ -567,4 +565,13 @@
 "Azahar / Citra (GPL, behaviour reference only): emulation semantics references; no GPL code is linked into this app." = "Azahar / Citra（GPL，仅行为参考）：模拟语义参考；应用不链接任何 GPL 代码。";
 "This build does not enable the Metal HUD; rebuild the shell with scripts/build-ios-app.sh." = "此构建未启用 Metal HUD；请用 scripts/build-ios-app.sh 重新构建壳。";
 "The game is on the CPU readback path, so the HUD has no Metal layer to attach to." = "游戏正在使用 CPU 回读路径，HUD 没有可附着的 Metal 图层。";
+
+/* --- 0.1.2 存档管理：选择游戏（save-manager 作用域） ---------------------- */
+
+"No game" = "无游戏";
+"Restore default" = "恢复默认";
+"Select a game above to manage its saves." = "在上方选择游戏后即可管理它的存档。";
+"Select a game above to manage its battery saves." = "在上方选择游戏后即可管理它的电池存档。";
+"Start this game to save or load a state." = "启动该游戏后才能保存或加载即时存档。";
+
 

@@ -25,7 +25,7 @@ views do not carry duplicated strings.
 | **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`. Each card has a square art area at the icon's native 1:1 aspect: the game's own SMDH cover art (launcher-pushed `cover.png`, else the build's bundled cover, else the gradient placeholder) is enlarged to fill it with a small inset and a rounded, shadowed edge, and the per-card state badge (**AOT** / **Checking** / **Data missing** / **Error** / **No AOT**) sits in its corner. Under the art the card is deliberately compact: the title for the app language (up to two lines, truncated), the publisher, then the pushed game size · last-played state. There is **no explanatory paragraph under the grid**. iPhone shows two columns, iPad three. Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Refresh button and pull-to-refresh rescan Documents. The empty state explains the desktop launcher. No on-phone import. Settings entry. |
 | **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), on-screen controls, the optional FPS counter and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. The FPS counter sits in the portrait title bar or in a slim landscape strip in the top safe area, outside the 3DS picture and clear of every control. |
 | **Settings** | Display, Audio, Controls, Performance (fast-forward, system Metal HUD, FPS counter), Storage and About sections. |
-| **Save Manager** | The battery save files of the current game (size, date, export as ZIP, import, delete), the three instant save-state slots (save, load, delete) and the container usage. |
+| **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. |
 | **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the FPS appears only while a game is loaded; everything else stays in the log and the diagnostics. |
 | **In-game menu** | Opened from the pause button over the game: pause/resume, quick toggles (on-screen controls, mute, 1×/2×/4× fast-forward), Save State / Load State (slot 1), Reset, Display settings, Save Manager, Diagnostics, Exit. |
 
@@ -58,10 +58,13 @@ on-screen controls, so no input or audio advances behind it.
   buffer size preference.
 - Instant save states: three slots per game, one file per slot under
   `Documents/states/<title id>/`. The in-game menu saves to and loads from slot 1;
-  the Save Manager page manages all three.
-- Save-data management: export the game's battery saves as a ZIP archive through
-  the share sheet, import a ZIP archive or single save files back, and delete
-  individual files. Import and delete are disabled while a game is running.
+  the Save Manager page lists and deletes the selected game's slots even while it
+  is not running, and saves or loads them only while that game runs.
+- Save-data management: the Save Manager's game picker manages every game in the
+  library, not just the one that was last started: export the selected game's
+  battery saves as a ZIP archive through the share sheet, import a ZIP archive or
+  single save files back, and delete individual files. Import and delete are
+  disabled while a game is running.
 - Free-running frame loop capped at 60 Hz (or 30 Hz) and decoupled from the
   display refresh.
 - Fast-forward at 1× / 2× / 4× from Settings and the in-game menu: each
@@ -528,7 +531,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `GameView.swift` | Running game: responsive portrait/landscape layout, screens, status line, on-screen controls, the optional FPS counter, in-game menu. |
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, reset, display settings, save manager, diagnostics, exit) and quick toggles. |
 | `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. |
-| `SaveManagerView.swift` | Battery save list (export as ZIP, import, delete) and the instant save-state slots (save, load, delete), with progress and errors. |
+| `SaveManagerView.swift` | Game picker over the library, the selected game's battery save list (export as ZIP, import, delete) and its instant save-state slots (delete offline; save/load while that game runs), with progress and errors. |
 | `AboutView.swift` | Product page: app icon, name, version/build, project links, acknowledgements and legal notice; a compact runtime status card only while a game is loaded. |
 | `AppSettings.swift` | Persisted settings model (enums for layout, screen rotation, aspect, interface orientation, buffer size, frame cap, playback speed, Metal HUD and FPS-counter switches) and the UserDefaults keys. |
 | `DiagnosticsReport.swift` | Diagnostics report text, the shared diagnostics file type and screen geometry helpers. |
@@ -664,7 +667,12 @@ the launcher deliberately gives them the same namespace.
 
 Battery saves:
 
-- The Save Manager lists every file under the current game's data directory with
+- The page opens with a game picker listing every game in the library (including
+  pushed games that were never started). It remembers the last game picked and,
+  opened from the in-game menu, starts on the running game; "No game" empties the
+  page and Restore default selects the running game or the first one. Battery
+  saves can be managed while the game is not running.
+- The Save Manager lists every file under the selected game's data directory with
   its size and modification date.
 - **Export battery saves as a ZIP…** packs those files into a ZIP archive and
   opens the share sheet, so a backup can go to Files, iCloud Drive or AirDrop.
@@ -689,8 +697,10 @@ Instant save states:
   before the load (the DSP state jumped back too). The last frame stays on screen
   until the restored console draws the next one, then the same session continues;
   the in-game menu closes and resumes after a successful load.
-- The in-game menu's quick buttons use slot 1. The Save Manager page lists all
-  three slots with size and date and offers Save / Load / Delete for each.
+- The in-game menu's quick buttons use slot 1. The Save Manager page lists the
+  selected game's three slots with size and date and offers Save / Load / Delete
+  for each: Delete works without the game running, while Save and Load need that
+  exact game running because the runtime serializes its live console.
 - A save briefly holds the runtime's snapshot and the app's copy of it — about
   twice the compressed state, tens of MiB — and writes the app's copy straight
   from its buffer, so no third copy is made. A load memory-maps the slot file and

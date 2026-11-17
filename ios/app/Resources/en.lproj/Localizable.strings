@@ -159,7 +159,6 @@
 "Library" = "Library";
 "Licence" = "Licence";
 "Load" = "Load";
-"Load a game to save or restore a state. Slots already on disk can be deleted here." = "Load a game to save or restore a state. Slots already on disk can be deleted here.";
 "Load state" = "Load state";
 "Loaded %@ · %@" = "Loaded %@ · %@";
 "Loaded: %@" = "Loaded: %@";
@@ -370,7 +369,6 @@
 "No game selected" = "No game selected";
 "No games in this build" = "No games in this build";
 "Something went wrong" = "Something went wrong";
-"Start a game first: battery saves are listed per game." = "Start a game first: battery saves are listed per game.";
 "The AOT code linked into this app is for title %@, not %@. Rebuild the app for this game." = "The AOT code linked into this app is for title %@, not %@. Rebuild the app for this game.";
 "The desktop build did not allocate AOT code for this game. Build it on your computer and install that build." = "The desktop build did not allocate AOT code for this game. Build it on your computer and install that build.";
 "The game package “%@” is installed and registered for “%@”. Starting games from a package needs the next runtime build; this shell can only start the game whose AOT code is linked into it." = "The game package “%@” is installed and registered for “%@”. Starting games from a package needs the next runtime build; this shell can only start the game whose AOT code is linked into it.";
@@ -563,4 +561,13 @@
 "Azahar / Citra (GPL, behaviour reference only): emulation semantics references; no GPL code is linked into this app." = "Azahar / Citra (GPL, behaviour reference only): emulation semantics references; no GPL code is linked into this app.";
 "This build does not enable the Metal HUD; rebuild the shell with scripts/build-ios-app.sh." = "This build does not enable the Metal HUD; rebuild the shell with scripts/build-ios-app.sh.";
 "The game is on the CPU readback path, so the HUD has no Metal layer to attach to." = "The game is on the CPU readback path, so the HUD has no Metal layer to attach to.";
+
+/* --- 0.1.2 Save Manager: game picker (save-manager scope) ------------------ */
+
+"No game" = "No game";
+"Restore default" = "Restore default";
+"Select a game above to manage its saves." = "Select a game above to manage its saves.";
+"Select a game above to manage its battery saves." = "Select a game above to manage its battery saves.";
+"Start this game to save or load a state." = "Start this game to save or load a state.";
+
 
