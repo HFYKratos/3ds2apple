@@ -249,10 +249,12 @@ check "C-stick is pushed before every console frame" \
   bash -c 'n=$(grep -c "zk_set_cstick(system, input.cStickX, input.cStickY)" ios/app/Sources/ROMSession.swift); [ "$n" -ge 2 ]'
 check "C-stick keeps its value out of the old zk_set_input signature" \
   contains ios/zakuro-ios/src/lib.rs 'static C_STICK: Cell<(f32, f32)>'
-check "en strings cover the layout editors" contains ios/app/Resources/en.lproj/Localizable.strings '"Edit portrait controls"'
-check "zh-Hans strings cover the layout editors" contains ios/app/Resources/zh-Hans.lproj/Localizable.strings '"编辑竖屏按键"'
+check "en strings cover the split layout pages" \
+  bash -c 'grep -q "^\"Screen layout\"" ios/app/Resources/en.lproj/Localizable.strings && grep -q "^\"Control layout\"" ios/app/Resources/en.lproj/Localizable.strings'
+check "zh-Hans strings cover the split layout pages" \
+  bash -c 'grep -q "^\"Screen layout\" = \"屏幕布局\"" ios/app/Resources/zh-Hans.lproj/Localizable.strings && grep -q "^\"Control layout\" = \"控件布局\"" ios/app/Resources/zh-Hans.lproj/Localizable.strings'
 check "no GPL project text copied into the new layout code" \
-  bash -c '! grep -riE "azahar|citra" ios/app/Sources/ControlLayout.swift ios/app/Sources/VirtualControlsView.swift ios/app/Sources/CustomScreenLayout.swift ios/app/Sources/ControlLayoutEditorView.swift ios/app/Sources/ScreenLayoutEditorView.swift ios/app/Sources/LayoutSettingsView.swift'
+  bash -c '! grep -riE "azahar|citra" ios/app/Sources/ControlLayout.swift ios/app/Sources/VirtualControlsView.swift ios/app/Sources/CustomScreenLayout.swift ios/app/Sources/ControlLayoutEditorView.swift ios/app/Sources/ScreenLayoutEditorView.swift ios/app/Sources/ScreenLayoutSettingsView.swift'
 
 section 'Repository hygiene'
 if git status --porcelain | grep -E '^(.. )?(ROM/|IPA/|build/)' >/dev/null 2>&1; then
