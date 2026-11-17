@@ -571,3 +571,17 @@
 "Start this game to save or load a state." = "Start this game to save or load a state.";
 
 
+/* --- 0.1.2 text input (3DS software keyboard overlay) ---------------------
+   Scope: text-input (task-18). Appended block; keep new keys inside it when
+   merging 0.1.2. The applet's own hint/button labels come from the game and are
+   shown as they are; these are the overlay's chrome and validation lines. */
+"Text input" = "Text input";
+"Enter text" = "Enter text";
+"%ld/%ld characters" = "%ld/%ld characters";
+"Too long: at most %ld characters." = "Too long: at most %ld characters.";
+"Text is required." = "Text is required.";
+"Text cannot be empty or only spaces." = "Text cannot be empty or only spaces.";
+"Text cannot be only spaces." = "Text cannot be only spaces.";
+"Enter exactly %ld characters." = "Enter exactly %ld characters.";
+
+

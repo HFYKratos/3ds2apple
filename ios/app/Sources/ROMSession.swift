@@ -278,6 +278,11 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Emulation is paused (in-game menu open, or the user paused): the frame
     /// loop and the audio engine are stopped, the runtime handle stays.
     @Published private(set) var isPaused = false
+    /// The open 3DS software-keyboard request, nil when none: the game view
+    /// shows the keyboard overlay while it is set. The title waits on the
+    /// applet, so the frame loop is stopped until it is answered. Published on
+    /// the main queue; the request is polled on the runtime queue.
+    @Published private(set) var keyboardRequest: KeyboardRequest?
     /// Instant save slots of the current game (SaveStateSupport.swift). Created
     /// on first use; the runtime itself is passed weakly, so the session owns
     /// the support object and not the other way around.
@@ -378,6 +383,14 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private var timingWindow = FrameTimingWindow()
     /// Rolling stutter statistics; runtimeQueue only, published in FrameStats.
     private var stutterTracker = StutterTracker()
+    /// True while a software-keyboard request is open and the frame loop must not
+    /// run: the title is waiting on the applet, so further frames would only burn
+    /// CPU (the desktop frontend stops emulating while it types for the same
+    /// reason). Written on the runtime queue, read by the CADisplayLink fallback.
+    private let keyboardPauseState = LockedFlagState()
+    /// Whether the runtime queue last saw an open applet request, so a request is
+    /// published once instead of on every polled frame. runtimeQueue only.
+    private var keyboardRequestPending = false
     /// Reusable RGBA8 buffers for zk_read_screen + CGImage presentation.
     private let screenBufferPool = ScreenFrameBufferPool()
     /// The warm-up running behind the loading overlay, nil when the game is
@@ -1277,6 +1290,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private func destroySystem() {
         // A warm-up cannot outlive the runtime it runs frames on.
         warmUpRun = nil
+        // A software-keyboard request cannot outlive its console either: the next
+        // load starts with no applet open and no pause.
+        keyboardRequestPending = false
+        keyboardPauseState.set(false)
         if let presenter = framePresenter {
             // The presenter's device and the screens it showed belong to this
             // runtime: stop presenting before the system goes away.
@@ -1659,6 +1676,11 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
               freeRunState.isCurrent(generation),
               system != nil else { return }
 
+        // A software-keyboard request stops the loop until it is answered: the
+        // title is waiting on the applet, so further frames would only burn CPU.
+        // The answer (answerKeyboard) schedules the next frame on this queue.
+        guard !keyboardPauseState.current else { return }
+
         // 60 Hz cap (or the cap chosen in Settings): only the early part of the
         // slot is waited out. A frame that overran its slot continues
         // immediately (delay 0), which is what removes the CADisplayLink
@@ -1716,6 +1738,8 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// drops the tick when the runtime queue is still busy with the previous
     /// frame.
     fileprivate func displayLinkFired(_ link: CADisplayLink) {
+        // The title waits on the software keyboard: no frame to run.
+        guard !keyboardPauseState.current else { return }
         guard frameGate.wait(timeout: .now()) == .success else { return }
         let gate = frameGate
         runtimeQueue.async { [weak self] in
@@ -1800,6 +1824,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             return finishForRunFrameResult(result)
         }
 
+        // A title that started the software keyboard waits for the text, so
+        // publish the request (once) and let the loop stop below.
+        pollSoftwareKeyboard(system: system)
+
         // ZK_FRAME_COMPLETED. Audio first: it does not depend on the display,
         // and in Metal mode a present can wait for a drawable, which must not
         // delay draining the ring buffer. Fast-forward keeps its audio: every
@@ -1879,7 +1907,120 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
             return finishForRunFrameResult(result)
         }
+        // A keyboard request starts in any frame, including a fast-forward one.
+        pollSoftwareKeyboard(system: system)
         return true
+    }
+
+    // MARK: - Software keyboard (3DS library applet)
+
+    /// Polls the software keyboard after a completed frame and publishes a newly
+    /// opened request to the main queue. runtimeQueue only.
+    ///
+    /// The title that starts the applet waits for the text, so once a request is
+    /// open the frame loop stops (`runFreeRunFrame` / `displayLinkFired`) and the
+    /// game view shows the overlay; answering resumes the loop from the frame the
+    /// title was waiting in.
+    private func pollSoftwareKeyboard(system: zk_system_t) {
+        let pending = zk_keyboard_pending(system) != 0
+        guard pending != keyboardRequestPending else { return }
+        keyboardRequestPending = pending
+        guard pending else {
+            keyboardPauseState.set(false)
+            DispatchQueue.main.async { [weak self] in
+                self?.keyboardRequest = nil
+            }
+            return
+        }
+
+        guard let request = KeyboardRequest.decode(json: Self.keyboardJSON(system: system)) else {
+            // A request the app cannot describe would leave the title waiting
+            // forever: close it with the leftmost button (the applet's Cancel)
+            // instead of freezing the game.
+            AppLog.log("[3ds2apple] software keyboard: unreadable request, closing it with button 0")
+            keyboardRequestPending = false
+            _ = zk_answer_keyboard(system, "", 0)
+            return
+        }
+
+        keyboardPauseState.set(true)
+        AppLog.log("[3ds2apple] software keyboard: the title waits for text (%@)", request.logLine)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            // Nothing the player held in 3DS terms may stay down while the
+            // overlay is up; the engine is stopped like the in-game menu does.
+            self.inputState.clearAll()
+            self.stopAudio()
+            self.keyboardRequest = request
+        }
+    }
+
+    /// Copies the pending request's JSON. The library-owned pointer is valid only
+    /// until the next keyboard call on the same thread, so it is copied here
+    /// immediately. runtimeQueue only.
+    private static func keyboardJSON(system: zk_system_t) -> String {
+        guard let pointer = zk_keyboard_request_json(system) else { return "" }
+        return String(cString: pointer)
+    }
+
+    /// Answers the open request: the text typed and the button pressed, zero
+    /// being the leftmost and the last one confirming. Main queue only; called
+    /// by the game view's keyboard overlay.
+    func answerKeyboard(text: String, button: Int) {
+        guard keyboardRequest != nil else { return }
+        let request = keyboardRequest
+        // Clear the overlay immediately; the applet call and the resume happen on
+        // the runtime queue, which also logs a refused answer.
+        keyboardRequest = nil
+        inputState.clearAll()
+        // The answer crosses the C ABI as a NUL-terminated UTF-8 string, so an
+        // embedded NUL (which Swift strings allow) cannot reach the applet.
+        let typed = text.replacingOccurrences(of: "\0", with: "")
+        runtimeQueue.async { [weak self] in
+            guard let self else { return }
+            self.answerKeyboard(text: typed, button: button, request: request)
+        }
+    }
+
+    /// Answers the applet on the runtime queue; runtimeQueue only.
+    private func answerKeyboard(text: String, button: Int, request: KeyboardRequest?) {
+        defer {
+            keyboardRequestPending = false
+            keyboardPauseState.set(false)
+        }
+        guard let system else { return }
+        let buttonCount = max(1, request?.buttons.count ?? 1)
+        let index = UInt32(min(max(button, 0), buttonCount - 1))
+        let result = zk_answer_keyboard(system, text, index)
+        if result == 0 {
+            AppLog.log(
+                "[3ds2apple] software keyboard: answered with button %u (%ld characters); resuming the frame loop",
+                index,
+                KeyboardRequest.utf16Count(text)
+            )
+        } else {
+            AppLog.log("[3ds2apple] software keyboard: the applet refused the answer (result %d)", result)
+        }
+        // The frame loop owns start/stop on the main queue, so the resume hops
+        // there like resumeFromMenu() does.
+        DispatchQueue.main.async { [weak self] in
+            self?.resumeAfterKeyboardAnswer()
+        }
+    }
+
+    /// Restarts what the keyboard request stopped: the free-run loop schedules
+    /// its next frame, the CADisplayLink keeps ticking by itself (its callback
+    /// checks `keyboardPauseState`), and the audio engine comes back. Main queue
+    /// only.
+    private func resumeAfterKeyboardAnswer() {
+        keyboardRequest = nil
+        guard isRuntimeActive, !isPaused else { return }
+        if Self.frameLoopDriver == .freeRun {
+            guard let generation = freeRunState.activeGeneration() else { return }
+            scheduleFreeRunFrame(after: 0, generation: generation)
+        }
+        startAudio()
+        AppLog.log("[3ds2apple] software keyboard: request closed, runtime resumed")
     }
 
     /// Handles a non-zero `zk_run_frame` result (exit, fault, bad handle): stops
@@ -2186,6 +2327,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             self.stopFrameLoopOnMain()
             self.stopAudio()
             self.inputState.clearAll()
+            self.keyboardRequest = nil
             self.isPaused = false
             if let stoppedWarmUp, case .preparing = self.phase {
                 self.warmUp = stoppedWarmUp
@@ -2209,6 +2351,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         frameLoopDisplayLabel = "—"
         frameStats = FrameStats()
         isPaused = false
+        // A software-keyboard overlay cannot outlive the runtime it belongs to.
+        keyboardRequest = nil
+        keyboardPauseState.set(false)
     }
 
     // MARK: - Audio (main queue control, runtimeQueue feeding)
@@ -2383,6 +2528,14 @@ private final class FreeRunLoopState {
         defer { lock.unlock() }
         return active && generation == self.generation
     }
+
+    /// The generation of the running loop, nil when it is stopped. Safe from any
+    /// thread: the software-keyboard answer uses it to schedule the next frame.
+    func activeGeneration() -> UInt64? {
+        lock.lock()
+        defer { lock.unlock() }
+        return active ? generation : nil
+    }
 }
 
 /// Lock-protected integer preference read on the runtime queue: the free-run
@@ -2404,6 +2557,26 @@ private final class LockedIntState {
     }
 
     func set(_ newValue: Int) {
+        lock.lock()
+        value = newValue
+        lock.unlock()
+    }
+}
+
+/// Lock-protected boolean read across the runtime/main queue boundary: the
+/// software-keyboard pause is set on the runtime queue and read by the CADisplayLink
+/// fallback on the main thread.
+private final class LockedFlagState {
+    private let lock = NSLock()
+    private var value = false
+
+    var current: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+
+    func set(_ newValue: Bool) {
         lock.lock()
         value = newValue
         lock.unlock()

@@ -23,7 +23,7 @@ views do not carry duplicated strings.
 | Page | Contents |
 |---|---|
 | **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`. Each card has a square art area at the icon's native 1:1 aspect: the game's own SMDH cover art (launcher-pushed `cover.png`, else the build's bundled cover, else the gradient placeholder) is enlarged to fill it with a small inset and a rounded, shadowed edge, and the per-card state badge (**AOT** / **Checking** / **Data missing** / **Error** / **No AOT**) sits in its corner. Under the art the card is deliberately compact: the title for the app language (up to two lines, truncated), the publisher, then the pushed game size · last-played state. There is **no explanatory paragraph under the grid**. iPhone shows two columns, iPad three. Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Refresh button and pull-to-refresh rescan Documents. The empty state explains the desktop launcher. No on-phone import. Settings entry. |
-| **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), on-screen controls, the optional FPS counter and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. The FPS counter sits in the portrait title bar or in a slim landscape strip in the top safe area, outside the 3DS picture and clear of every control. |
+| **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), on-screen controls, the optional FPS counter and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. The FPS counter sits in the portrait title bar or in a slim landscape strip in the top safe area, outside the 3DS picture and clear of every control. When a title starts the 3DS software keyboard, a full-screen keyboard overlay collects the text and the applet's buttons while the frame loop is stopped; answering resumes the game. |
 | **Settings** | Display, Audio, Controls, Performance (fast-forward, system Metal HUD, FPS counter), Storage and About sections. |
 | **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. |
 | **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the FPS appears only while a game is loaded; everything else stays in the log and the diagnostics. |
@@ -443,6 +443,12 @@ localized.
 - Fast-forward is a property of the frame loop, so pause, save states, reset and
   unload suspend it together with the loop; resuming continues at the setting's
   speed. The in-game menu's speed control applies on resume.
+- A title that starts the 3DS software keyboard stops the game the same way: its
+  request is published, the frame loop is stopped and the audio engine is shut
+  down while the overlay is up. Answering resumes the loop and the engine from
+  the frame the title waited in; the overlay's text, limit, buttons and confirming
+  rule all come from the applet request, so it works for any title that uses the
+  keyboard.
 
 ## Build
 
@@ -528,7 +534,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `ApplicationDelegate.swift` | UIKit delegate used for the orientation preference. |
 | `ContentView.swift` | Root router: home page or game for the current session phase; applies settings to the session. |
 | `HomeView.swift` | Home page: the Documents/Games library grid (two columns on iPhone, three on iPad; square 1:1 SMDH cover art with the per-card state badge in the corner; compact title/publisher/size/last-played text; no explanatory paragraph under the grid), last-played dates, the exact per-game validation error on tap, the launcher empty state, refresh control, settings entry. |
-| `GameView.swift` | Running game: responsive portrait/landscape layout, screens, status line, on-screen controls, the optional FPS counter, in-game menu. |
+| `GameView.swift` | Running game: responsive portrait/landscape layout, screens, status line, on-screen controls, the optional FPS counter, in-game menu and the 3DS software-keyboard overlay. |
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, reset, display settings, save manager, diagnostics, exit) and quick toggles. |
 | `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. |
 | `SaveManagerView.swift` | Game picker over the library, the selected game's battery save list (export as ZIP, import, delete) and its instant save-state slots (delete offline; save/load while that game runs), with progress and errors. |
@@ -540,7 +546,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `SaveDataStore.swift` | Battery save-data folder, file list, ZIP export, ZIP/file import and delete. |
 | `ZipArchive.swift` | Small ZIP writer (stored entries) and reader (stored and deflated entries) used for save-data backups. |
 | `SaveArchivePicker.swift` | Files picker for importing a save-data ZIP or individual save files. |
-| `ROMSession.swift` | Runtime handle, AOT-only game launch gate, frame loop, presenter lifecycle, input/audio plumbing, pause/resume/reset and the settings that change runtime behaviour. |
+| `ROMSession.swift` | Runtime handle, AOT-only game launch gate, frame loop, presenter lifecycle, input/audio plumbing, software-keyboard polling/answer and the pause it causes, pause/resume/reset and the settings that change runtime behaviour. |
 | `MetalScreenView.swift` | `UIView` with a `CAMetalLayer` the presenter draws into (A1); drawable size for the chosen layout/rotation and the render scale (1×–4×), plus the integer-scaling magnification filter. |
 | `ScreenGeometry.swift` | The drawable size of each layout/rotation and the box the screens occupy for the aspect/integer-scale settings. |
 | `GameInfo.swift` | The launcher's `Documents/Games/<TITLEID>/GameInfo.json` manifest (schema 1): authoritative display title, localized `displayNames`/`publisher`/`region` (optional SMDH base info), save namespace and pushed game-data size/SHA-256; the pack fields are informational metadata about the pack embedded in the IPA. |
@@ -552,6 +558,8 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `LegacyGameData.swift` | One-time migration for apps updated from 0.1.x: cartridge lookup for the statically linked title, play times, and renaming ROM-named save folders to the title-id namespace. |
 | `ScreenImage.swift` | Reusable RGBA buffers and `CGImage` conversion. |
 | `InputState.swift` | Thread-safe merge of touch, overlay and controller input. |
+| `KeyboardRequest.swift` | One 3DS software-keyboard request: the schema-1 JSON decode, the applet's confirmation rules (`Request::accepts`), UTF-16 limit handling and the localized rejection lines. |
+| `KeyboardOverlayView.swift` | The full-screen overlay that answers a software-keyboard request: hint, pre-filled text field, character counter, applet buttons and validation; portrait and landscape, above the system keyboard. |
 | `ControlLayout.swift` | Editable control layout model: the full New 3DS control set, normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. |
 | `VirtualControlsView.swift` | Runtime overlay: draws one button / analog stick per control with its own gesture (multi-touch), reports ZK_BUTTON_* bits, Circle Pad and C-stick vectors. |
 | `ControlLayoutEditorView.swift` | "Control layout" page: drag/resize/fade every control, reset one control/orientation/both, save. |
@@ -635,6 +643,51 @@ The app has one presentation path and one fallback:
   surface. A touch on the upper screen is ignored.
 - Input is cleared on pause, unload, background and reset, so a held button
   cannot survive a state change.
+
+## Software keyboard (3DS text input)
+
+A 3DS title that needs a name, a message or a password starts the console's
+software-keyboard library applet and waits for the answer; without an answer the
+game looks frozen on its last frame. The app answers it:
+
+- **Detection.** After every completed `zk_run_frame`, the session asks
+  `zk_keyboard_pending()` — a cheap flag check. When it turns 1, the session reads
+  the request with `zk_keyboard_request_json()` (schema 1: hint, initial text,
+  `maxLength` in UTF-16 units, button labels left to right, and the confirming
+  button's rule), publishes it to the main queue and **stops the frame loop**. The
+  title is waiting on the applet, so further frames would only burn CPU and audio
+  (the desktop frontend stops emulating while it types for the same reason);
+  input is cleared and the audio engine is stopped like the in-game menu does.
+- **Overlay.** `GameView` shows `KeyboardOverlayView` over the paused picture: a
+  full-screen dim layer (the on-screen controls and the pause button cannot be
+  reached while the applet is open) with a glass card that shows the applet's hint,
+  a `TextField` pre-filled with the initial text, an `n/maxLength` UTF-16 counter,
+  the applet's buttons left to right, and — while the confirming rule rejects the
+  text — a localized line saying why the last button is disabled. The card scrolls
+  above the system keyboard, so portrait and landscape both work; the keyboard
+  comes up automatically.
+- **Validation.** The confirming button is enabled only when the text passes the
+  applet's rule, mirrored exactly (`Request::accepts` in Zakuro's keyboard
+  service): `anything`, `notEmpty`, `notEmptyNotBlank`, `notBlank`,
+  `fixedLength` (exactly `maxLength` UTF-16 units). The other buttons — typically
+  Cancel — are always enabled and close the applet with their index. A rule from a
+  newer runtime is treated as `anything` so the player cannot get stuck; a
+  one-button request whose rule rejects the text has nothing to cancel with, like
+  the console.
+- **Length.** The field enforces `maxLength` in UTF-16 units (an emoji counts as
+  two and is kept or dropped whole); the runtime truncates the answer to the same
+  limit and to the shared block the title reads it from, so an overlong answer
+  cannot corrupt the console.
+- **Answer and resume.** A button calls
+  `ROMSession.answerKeyboard(text:button:)`. The applet call
+  (`zk_answer_keyboard`) runs on the runtime serial queue; the session then
+  resumes the loop from the frame the title waited in and restarts the audio
+  engine. The overlay disappears immediately; a refused answer (for example the
+  title closed the applet itself) is logged and the game continues.
+- **Edges.** Backgrounding, unload and reset release the runtime and clear the
+  overlay with it; a request is published once, not on every polled frame; an
+  unreadable JSON document is closed with the leftmost button instead of freezing
+  the title; the typed text is never written to the log, only its length.
 
 ## ROM handling
 
@@ -726,6 +779,11 @@ Instant save states:
   layout and rotation, but it copies both screens to the CPU each frame and is
   slower than the presented path; its stretch mode divides the space between the
   two screens rather than reproducing the presenter's exact sub-screen split.
+- The 3DS software keyboard is answered by the app's own overlay: the hint,
+  initial text, limit, buttons and confirming rule come from the game, but the
+  console's keyboard graphics are not emulated and the title is paused while the
+  overlay is open. A one-button request whose rule rejects the text has no cancel
+  button, like the console.
 - A game runs only when this build has its AOT code — normally
   `Frameworks/GamePack-<TITLEID>.dylib` listed in the bundle `GameCatalog.json`
   — and its pushed game data has passed validation. An app updated from an older

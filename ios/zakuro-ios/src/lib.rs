@@ -125,6 +125,10 @@ thread_local! {
     /// on the current thread. Kept apart from `LAST_ERROR` so those calls never
     /// disturb the error contract.
     static LAST_STATUS: RefCell<CString> = RefCell::new(CString::default());
+    /// Last JSON document [`zk_keyboard_request_json`] returned on the current
+    /// thread. Kept apart from `LAST_STATUS` and `LAST_ERROR` so polling the
+    /// software keyboard never disturbs the status or error contracts.
+    static KEYBOARD_JSON: RefCell<CString> = RefCell::new(CString::default());
 }
 
 /// Why a C string argument could not be converted to a path.
@@ -536,6 +540,142 @@ fn set_status_text(text: impl Into<String>) -> *const c_char {
     }) {
         Ok(pointer) => pointer,
         // TLS is gone during teardown; report an empty string instead of panicking.
+        Err(_) => ptr::null(),
+    }
+}
+
+// -- Software keyboard (3DS library applet) JSON ------------------------------
+
+/// The largest JSON document [`zk_keyboard_request_json`] returns, in bytes and
+/// not counting the terminating NUL. Mirrors `ZK_KEYBOARD_JSON_MAX_BYTES` in
+/// ios/ZakuroBridge.h; keep both in step. The hint and the button labels are
+/// short by construction (the applet's configuration gives them fixed sizes), so
+/// this caps a title's initial text, which the configuration does not bound.
+pub(crate) const KEYBOARD_JSON_MAX_BYTES: usize = 16 * 1024;
+
+/// How many JSON bytes of the initial text [`zk_keyboard_request_json`] may
+/// spend, after escaping. A longer initial text is cut in the document (never
+/// mid-character); `maxLength` still reports the title's own limit and the
+/// answer path truncates what goes back, so nothing the title reads is lost.
+const KEYBOARD_TEXT_JSON_MAX_BYTES: usize = 8 * 1024;
+
+/// Appends `value` as one complete JSON string literal.
+fn push_json_string(out: &mut String, value: &str) {
+    out.push('"');
+    push_json_string_body(out, value, usize::MAX);
+    out.push('"');
+}
+
+/// Appends the body of a JSON string literal, stopping before `max_bytes` of
+/// escaped body have been written. Characters JSON requires to be escaped are
+/// escaped; a character is never split. Returns whether the whole value fit.
+fn push_json_string_body(out: &mut String, value: &str, max_bytes: usize) -> bool {
+    let mut written = 0usize;
+    for character in value.chars() {
+        let cost = match character {
+            '"' | '\\' => 2,
+            '\n' | '\r' | '\t' | '\u{08}' | '\u{0C}' => 2,
+            // The only characters below U+0020 left are written as \u00XX.
+            c if (c as u32) < 0x20 => 6,
+            c => c.len_utf8(),
+        };
+        if written + cost > max_bytes {
+            return false;
+        }
+        match character {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{08}' => out.push_str("\\b"),
+            '\u{0C}' => out.push_str("\\f"),
+            c if (c as u32) < 0x20 => {
+                use std::fmt::Write;
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            c => out.push(c),
+        }
+        written += cost;
+    }
+    true
+}
+
+/// The JSON `valid` value of a request's confirming-button rule. The app maps
+/// these names back to the same checks `Request::accepts` makes.
+fn keyboard_valid_name(valid: zakuro_core::services::keyboard::Valid) -> &'static str {
+    use zakuro_core::services::keyboard::Valid;
+    match valid {
+        Valid::Anything => "anything",
+        Valid::NotEmpty => "notEmpty",
+        Valid::NotEmptyNotBlank => "notEmptyNotBlank",
+        Valid::NotBlank => "notBlank",
+        Valid::FixedLength => "fixedLength",
+    }
+}
+
+/// The JSON document [`zk_keyboard_request_json`] returns for one request:
+/// `{"schema":1,"hint":…,"text":…,"maxLength":…,"buttons":[…],"valid":"…"}`.
+/// The buttons are left to right; the last one confirms, as in the applet.
+fn keyboard_request_json(request: &zakuro_core::services::keyboard::Request) -> String {
+    // Shrinking the initial-text budget is the only way the document can be
+    // shortened without breaking the JSON; the hint and labels cannot normally
+    // reach the cap on their own.
+    let mut text_budget = KEYBOARD_TEXT_JSON_MAX_BYTES;
+    loop {
+        let json = keyboard_request_json_with_text_budget(request, text_budget);
+        if json.len() <= KEYBOARD_JSON_MAX_BYTES {
+            return json;
+        }
+        if text_budget == 0 {
+            // Cannot happen with the applet's fixed-size fields; stay valid and
+            // bounded if a future applet grows them.
+            return "{\"schema\":1,\"hint\":\"\",\"text\":\"\",\"maxLength\":0,\"buttons\":[],\"valid\":\"anything\"}".to_owned();
+        }
+        text_budget /= 2;
+    }
+}
+
+/// One build of the keyboard JSON document with `text_budget` escaped bytes for
+/// the initial text.
+fn keyboard_request_json_with_text_budget(
+    request: &zakuro_core::services::keyboard::Request,
+    text_budget: usize,
+) -> String {
+    let mut json = String::with_capacity(256);
+    json.push_str("{\"schema\":1,\"hint\":");
+    push_json_string(&mut json, &request.hint);
+    json.push_str(",\"text\":");
+    json.push('"');
+    push_json_string_body(&mut json, &request.text, text_budget);
+    json.push('"');
+    json.push_str(",\"maxLength\":");
+    json.push_str(&request.max_length.to_string());
+    json.push_str(",\"buttons\":[");
+    for (index, label) in request.buttons.iter().enumerate() {
+        if index > 0 {
+            json.push(',');
+        }
+        push_json_string(&mut json, label);
+    }
+    json.push_str("],\"valid\":\"");
+    json.push_str(keyboard_valid_name(request.valid));
+    json.push_str("\"}");
+    json
+}
+
+/// Stores `json` as the calling thread's keyboard document and returns a pointer
+/// to it, owned by this library exactly like [`zk_last_error`]'s pointer.
+fn set_keyboard_json(json: String) -> *const c_char {
+    // Escape interior NULs so `CString::new` cannot fail: no panic across FFI.
+    let json = CString::new(json.replace('\0', "\\0")).unwrap_or_default();
+    match KEYBOARD_JSON.try_with(|slot| {
+        let mut slot = slot.borrow_mut();
+        *slot = json;
+        slot.as_ptr()
+    }) {
+        Ok(pointer) => pointer,
+        // TLS is gone during teardown; report "no request" instead of panicking.
         Err(_) => ptr::null(),
     }
 }
@@ -1370,6 +1510,94 @@ pub extern "C" fn zk_set_cstick(system: *mut c_void, c_stick_x: f32, c_stick_y: 
     C_STICK.with(|slot| slot.set((sanitize(c_stick_x), sanitize(c_stick_y))));
 }
 
+// -- Software keyboard (3DS library applet) ----------------------------------
+
+/// 1 while a title waits on the 3DS software keyboard (the library applet a game
+/// starts to have a name or another text typed in), 0 when none is open or
+/// `system` is NULL.
+///
+/// Cheap enough to call after every frame: it only checks whether the applet is
+/// running. When it turns 1, read the request with
+/// [`zk_keyboard_request_json`] and stop running frames until
+/// [`zk_answer_keyboard`] has answered it. The title is waiting, so a running
+/// frame loop would only burn CPU; the desktop frontend stops emulating while it
+/// types for the same reason.
+#[no_mangle]
+pub extern "C" fn zk_keyboard_pending(system: *mut c_void) -> i32 {
+    // SAFETY: `system` is either NULL or a live handle from `zk_create`, read
+    // on the caller's serial queue like every other call that takes a handle.
+    let pending = (unsafe { (system as *mut System).as_ref() })
+        .is_some_and(|system| system.keyboard_request().is_some());
+    i32::from(pending)
+}
+
+/// The pending software-keyboard request as one JSON document, or NULL when no
+/// request is open (or `system` is NULL).
+///
+/// Schema 1:
+///
+/// ```json
+/// {"schema":1,"hint":"Your name","text":"Link","maxLength":8,
+///  "buttons":["Cancel","OK"],"valid":"notEmptyNotBlank"}
+/// ```
+///
+/// `hint` is the applet's prompt line, `text` the initial text (possibly cut to
+/// keep the document within `ZK_KEYBOARD_JSON_MAX_BYTES`), `maxLength` the
+/// title's limit in UTF-16 units, `buttons` the labels left to right (the last
+/// one confirms) and `valid` the confirming button's rule: `anything`,
+/// `notEmpty`, `notEmptyNotBlank`, `notBlank` or `fixedLength` (exactly
+/// `maxLength` units).
+///
+/// The pointer is owned by this library and remains valid until the next
+/// [`zk_keyboard_request_json`] call **on the same thread**; copy the text
+/// (for example `String(cString:)` in Swift), do not free it, and do not keep
+/// it across another call. Call it on the runtime's serial queue, like every
+/// call that takes a handle.
+#[no_mangle]
+pub extern "C" fn zk_keyboard_request_json(system: *mut c_void) -> *const c_char {
+    // SAFETY: `system` is either NULL or a live handle from `zk_create`; only
+    // read here, on the caller's serial queue.
+    let request = (unsafe { (system as *mut System).as_ref() })
+        .and_then(System::keyboard_request);
+    match request {
+        Some(request) => set_keyboard_json(keyboard_request_json(request)),
+        None => {
+            // Clear the thread's old document so a stale pointer cannot report a
+            // request that has already been answered.
+            let _ = KEYBOARD_JSON.try_with(|slot| *slot.borrow_mut() = CString::default());
+            ptr::null()
+        }
+    }
+}
+
+/// Answers the pending software-keyboard request with `text` (UTF-8) and the
+/// `button` pressed, zero being the leftmost and the last one confirming.
+///
+/// 0 = answered (the title wakes up on its next frame), -1 = NULL/invalid
+/// handle, -2 = NULL or non-UTF-8 text, -3 = no request is open (already
+/// answered or the title closed it). The text is truncated to the request's
+/// `maxLength` and to the shared block the title reads it from, like the
+/// console does; a button index past the last button counts as the last one.
+///
+/// Call it on the runtime's serial queue. After a 0, resume the frame loop: the
+/// title continues from the frame it was waiting in.
+#[no_mangle]
+pub extern "C" fn zk_answer_keyboard(system: *mut c_void, text: *const c_char, button: u32) -> i32 {
+    // SAFETY: `system` is either NULL or a live handle from `zk_create`, used
+    // exclusively here on the serial queue that owns it.
+    let Some(system) = (unsafe { (system as *mut System).as_mut() }) else {
+        return -1;
+    };
+    let Some(text) = read_c_string(text) else {
+        return -2;
+    };
+    if system.keyboard_request().is_none() {
+        return -3;
+    }
+    system.answer_keyboard(&text, button as usize);
+    0
+}
+
 /// Releases a handle returned by `zk_create()`. Safe to call with NULL.
 ///
 /// Also releases a saved state the handle had measured and not copied yet (see
@@ -1399,16 +1627,20 @@ mod tests {
     use zakuro_core::{Config, System};
 
     use super::{
-        clear_last_error, render_scale, set_last_error, store_render_scale, zk_create,
-        zk_hardware_status, zk_last_audio_take_micros, zk_last_error,
+        clear_last_error, keyboard_request_json, render_scale, set_last_error, store_render_scale,
+        zk_answer_keyboard, zk_create, zk_hardware_status, zk_keyboard_pending,
+        zk_keyboard_request_json, zk_last_audio_take_micros, zk_last_error,
         zk_last_frame_gpu_busy_micros, zk_last_frame_micros,
         zk_last_screen_read_micros, zk_linked_code, zk_linked_program_id, zk_profiler_hot_spots,
         zk_profiler_start, zk_recompiled, zk_recompiled_status, zk_set_hardware_option,
         zk_set_hardware_renderer, zk_set_render_scale, zk_set_vulkan_library, DEFAULT_RENDER_SCALE,
-        MAX_RENDER_SCALE, MIN_RENDER_SCALE, RENDER_SCALE,
+        KEYBOARD_JSON_MAX_BYTES, MAX_RENDER_SCALE, MIN_RENDER_SCALE, RENDER_SCALE,
     };
     #[cfg(feature = "linked")]
     use super::{clear_linked_refusal, set_linked_refusal};
+    #[cfg(not(feature = "linked"))]
+    use zakuro_core::{Config, System};
+    use zakuro_core::services::keyboard::{Request as KeyboardRequest, Valid as KeyboardValid};
 
     /// Copies the current thread's last error, if any.
     fn last_error_text() -> Option<String> {
@@ -1801,5 +2033,163 @@ mod tests {
         assert_eq!(render_scale(), MIN_RENDER_SCALE);
         RENDER_SCALE.store(MAX_RENDER_SCALE + 1, Ordering::Relaxed);
         assert_eq!(render_scale(), MAX_RENDER_SCALE);
+    }
+
+    // -- Software keyboard JSON and C ABI -------------------------------------
+
+    /// A request with every field set, as the overlay would receive it.
+    fn keyboard_request_fixture() -> KeyboardRequest {
+        KeyboardRequest {
+            hint: "Your name".to_owned(),
+            text: "Link".to_owned(),
+            max_length: 8,
+            buttons: vec!["Cancel".to_owned(), "OK".to_owned()],
+            valid: KeyboardValid::NotEmptyNotBlank,
+        }
+    }
+
+    #[test]
+    fn keyboard_json_carries_every_field() {
+        let json = keyboard_request_json(&keyboard_request_fixture());
+        assert!(json.starts_with("{\"schema\":1,"), "unexpected: {json}");
+        assert!(json.contains("\"hint\":\"Your name\""), "unexpected: {json}");
+        assert!(json.contains("\"text\":\"Link\""), "unexpected: {json}");
+        assert!(json.contains("\"maxLength\":8"), "unexpected: {json}");
+        assert!(
+            json.contains("\"buttons\":[\"Cancel\",\"OK\"]"),
+            "unexpected: {json}"
+        );
+        assert!(
+            json.contains("\"valid\":\"notEmptyNotBlank\""),
+            "unexpected: {json}"
+        );
+        assert!(json.ends_with("\"}"), "unexpected: {json}");
+    }
+
+    #[test]
+    fn keyboard_json_escapes_quotes_and_control_characters() {
+        let mut request = keyboard_request_fixture();
+        request.hint = "a\"b\\c\n\t\u{1} Pokémon".to_owned();
+        let json = keyboard_request_json(&request);
+        // No raw control character may reach the C string, and the escaping is
+        // the JSON one the Swift decoder expects.
+        assert!(!json.chars().any(|character| character < ' '), "unexpected: {json}");
+        assert!(json.contains("\"hint\":\"a\\\"b\\\\c\\n\\t\\u0001 Pokémon\""));
+        assert!(json.contains("Pokémon"), "UTF-8 must survive: {json}");
+    }
+
+    #[test]
+    fn keyboard_json_caps_a_huge_initial_text() {
+        let mut request = keyboard_request_fixture();
+        request.text = "字".repeat(20_000);
+        let json = keyboard_request_json(&request);
+        assert!(
+            json.len() <= KEYBOARD_JSON_MAX_BYTES,
+            "the document must stay bounded: {}",
+            json.len()
+        );
+        assert!(json.contains("\"text\":\""), "unexpected: {json}");
+        assert!(json.contains("\"maxLength\":"), "the fields after the text must be written");
+        assert!(
+            json.matches('字').count() < 20_000,
+            "the initial text must be cut, not dropped or duplicated"
+        );
+    }
+
+    #[test]
+    fn keyboard_json_without_buttons_stays_valid() {
+        let request = KeyboardRequest {
+            hint: String::new(),
+            text: String::new(),
+            max_length: 0,
+            buttons: Vec::new(),
+            valid: KeyboardValid::Anything,
+        };
+        let json = keyboard_request_json(&request);
+        assert!(json.contains("\"buttons\":[]"), "unexpected: {json}");
+        assert!(json.contains("\"valid\":\"anything\""), "unexpected: {json}");
+    }
+
+    #[test]
+    fn keyboard_ffi_names_the_same_rules_as_the_applet() {
+        for (valid, name) in [
+            (KeyboardValid::Anything, "anything"),
+            (KeyboardValid::NotEmpty, "notEmpty"),
+            (KeyboardValid::NotEmptyNotBlank, "notEmptyNotBlank"),
+            (KeyboardValid::NotBlank, "notBlank"),
+            (KeyboardValid::FixedLength, "fixedLength"),
+        ] {
+            let mut request = keyboard_request_fixture();
+            request.valid = valid;
+            assert!(
+                keyboard_request_json(&request).contains(&format!("\"valid\":\"{name}\"")),
+                "the app has to map {name} back to the same rule"
+            );
+        }
+    }
+
+    /// A minimal applet configuration laid out the way the SDK lays it out: two
+    /// buttons with their default labels, "Name" as the hint, a 16-unit limit
+    /// and the not-empty/not-blank rule.
+    fn keyboard_config() -> Vec<u8> {
+        let mut config = vec![0u8; 0x14C];
+        config[0x04] = 1; // two buttons: Cancel, OK
+        config[0x08] = 2; // NotEmptyNotBlank
+        config[0x20..0x22].copy_from_slice(&16u16.to_le_bytes()); // max length
+        for (index, unit) in "Name".encode_utf16().enumerate() {
+            let at = 0x90 + index * 2;
+            config[at..at + 2].copy_from_slice(&unit.to_le_bytes());
+        }
+        config
+    }
+
+    #[test]
+    fn keyboard_ffi_round_trips_a_request() {
+        let mut system = Box::new(System::new(Config::default()));
+        let handle = (&mut *system) as *mut System as *mut c_void;
+
+        // No request yet: pending 0, no document, and answering is "no request".
+        assert_eq!(zk_keyboard_pending(handle), 0);
+        assert!(zk_keyboard_request_json(handle).is_null());
+        assert_eq!(zk_answer_keyboard(handle, c"unused".as_ptr(), 0), -3);
+
+        zakuro_core::services::keyboard::start(&mut system, keyboard_config(), None);
+        assert_eq!(zk_keyboard_pending(handle), 1);
+        let pointer = zk_keyboard_request_json(handle);
+        assert!(!pointer.is_null(), "a pending request must have a document");
+        // SAFETY: the pointer is library-owned and valid until the next keyboard
+        // document call on this thread; it is copied immediately.
+        let json = unsafe { CStr::from_ptr(pointer) }
+            .to_str()
+            .expect("the JSON is UTF-8")
+            .to_owned();
+        assert!(json.contains("\"hint\":\"Name\""), "unexpected: {json}");
+        assert!(json.contains("\"text\":\"\""), "unexpected: {json}");
+        assert!(json.contains("\"maxLength\":16"), "unexpected: {json}");
+        assert!(
+            json.contains("\"buttons\":[\"Cancel\",\"OK\"]"),
+            "unexpected: {json}"
+        );
+        assert!(
+            json.contains("\"valid\":\"notEmptyNotBlank\""),
+            "unexpected: {json}"
+        );
+
+        // Answering closes the request, moves the frame loop back to work, and a
+        // second answer is refused instead of double-closing the applet.
+        assert_eq!(zk_answer_keyboard(handle, c"Link".as_ptr(), 1), 0);
+        assert_eq!(zk_keyboard_pending(handle), 0);
+        assert!(zk_keyboard_request_json(handle).is_null());
+        assert_eq!(zk_answer_keyboard(handle, c"Link".as_ptr(), 1), -3);
+        // Answering needs a real text pointer; NULL is a bad argument, not a
+        // close.
+        assert_eq!(zk_answer_keyboard(handle, ptr::null(), 0), -2);
+    }
+
+    #[test]
+    fn keyboard_ffi_rejects_a_bad_handle() {
+        assert_eq!(zk_keyboard_pending(ptr::null_mut()), 0);
+        assert!(zk_keyboard_request_json(ptr::null_mut()).is_null());
+        assert_eq!(zk_answer_keyboard(ptr::null_mut(), c"x".as_ptr(), 0), -1);
     }
 }

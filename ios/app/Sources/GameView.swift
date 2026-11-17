@@ -22,6 +22,11 @@
 //  on-screen control. Opening the in-game menu pauses emulation; the runtime
 //  and the last frame stay until resume.
 //
+//  When a title starts the 3DS software keyboard, the session stops its frame
+//  loop and publishes the request; this view shows the keyboard overlay on top
+//  of everything. Answering it (a text and one of the applet's buttons) resumes
+//  the game, so a title that waits for text no longer freezes the app.
+//
 
 import CoreGraphics
 import Foundation
@@ -100,6 +105,17 @@ struct GameView: View {
                         onLoadStateCompleted: resumeAfterStateLoad,
                         diagnosticsHint: diagnosticsHint
                     )
+                }
+
+                // The 3DS software keyboard: the title waits on the applet and
+                // the session has stopped the frame loop, so this overlay is the
+                // only interactive surface. It covers the on-screen controls and
+                // the pause button on purpose.
+                if let request = model.keyboardRequest {
+                    KeyboardOverlayView(request: request) { text, button in
+                        model.answerKeyboard(text: text, button: button)
+                    }
+                    .zIndex(10)
                 }
             }
             .onAppear {

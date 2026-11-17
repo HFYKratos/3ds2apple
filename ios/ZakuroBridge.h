@@ -20,6 +20,13 @@
  * loadable MoltenVK zk_presenter_create() returns NULL and the app keeps the
  * zk_create + zk_read_screen + CGImage path.
  *
+ * Software keyboard: a title can start the 3DS keyboard applet and wait for
+ * text (a player name, a message, a password). zk_keyboard_pending() reports
+ * the request after each frame, zk_keyboard_request_json() describes it as JSON
+ * (schema 1) and zk_answer_keyboard() answers it. All three are additive: an
+ * app that never calls them keeps the old behaviour (the title just keeps
+ * waiting), and the app polls them on the runtime serial queue.
+ *
  * No CPU JIT: iOS forbids executable memory. This is the AOT + interpreter
  * build, so nothing here creates executable pages.
  */
@@ -181,6 +188,81 @@ void zk_set_input(zk_system_t system, zk_buttons_t buttons, float circle_x,
  * @param c_stick_y  C-stick Y, -1.0 ... 1.0 (+y is up, like the Circle Pad).
  */
 void zk_set_cstick(zk_system_t system, float c_stick_x, float c_stick_y);
+
+/* ---------------------------------------------- software keyboard (applet) -- */
+
+/**
+ * The largest JSON document zk_keyboard_request_json() returns, in bytes and
+ * not counting the terminating NUL. Mirrors KEYBOARD_JSON_MAX_BYTES in
+ * ios/zakuro-ios/src/lib.rs; keep both in step. The document is deliberately
+ * bounded because a title's initial text is not: the hint and button labels
+ * come from the applet's fixed-size configuration, the text does not.
+ */
+#define ZK_KEYBOARD_JSON_MAX_BYTES (16u * 1024u)
+
+/**
+ * 1 while a title waits on the 3DS software keyboard (the library applet a game
+ * starts to have a name or other text typed in), 0 when none is open or the
+ * handle is NULL.
+ *
+ * Call it after every zk_run_frame() on the runtime serial queue: it is only a
+ * flag check, cheap enough for every frame. When it reports 1, read the request
+ * with zk_keyboard_request_json() and stop running frames until
+ * zk_answer_keyboard() has answered it: the title is waiting on the applet, so
+ * frames would only burn CPU (the desktop frontend stops emulating while it
+ * types for the same reason). Answering resumes the loop from the frame the
+ * title was waiting in.
+ */
+int32_t zk_keyboard_pending(zk_system_t system);
+
+/**
+ * The pending software-keyboard request as one JSON document, or NULL when no
+ * request is open (or the handle is NULL).
+ *
+ * Schema 1:
+ *
+ * {"schema":1,"hint":"Your name","text":"Link","maxLength":8,
+ *  "buttons":["Cancel","OK"],"valid":"notEmptyNotBlank"}
+ *
+ *  hint      the applet's prompt line; may be empty.
+ *  text      the initial text the applet read from the title's shared block;
+ *            possibly cut to keep the document within
+ *            ZK_KEYBOARD_JSON_MAX_BYTES (never mid-character).
+ *  maxLength the title's limit in UTF-16 units.
+ *  buttons   the labels left to right; the last one confirms, like the applet.
+ *  valid     the confirming button's rule: "anything", "notEmpty",
+ *            "notEmptyNotBlank", "notBlank" or "fixedLength" (exactly
+ *            maxLength units). The other buttons never apply it; a request with
+ *            one button can then only be answered with valid text.
+ *
+ * The pointer is owned by the library and stays valid until the next
+ * zk_keyboard_request_json() call on the same thread; copy it
+ * (String(cString:) in Swift) and never free it. Call it on the runtime serial
+ * queue, like every call that takes a handle.
+ */
+const char *zk_keyboard_request_json(zk_system_t system);
+
+/** zk_answer_keyboard() results. */
+enum {
+    ZK_KEYBOARD_ANSWERED = 0,    /**< Answered; resume the frame loop. */
+    ZK_KEYBOARD_BAD_HANDLE = -1, /**< NULL/invalid zk_system_t. */
+    ZK_KEYBOARD_BAD_TEXT = -2,   /**< NULL or non-UTF-8 text. */
+    ZK_KEYBOARD_NO_REQUEST = -3  /**< No request is open (already answered, or
+                                      the title closed it). */
+};
+
+/**
+ * Answers the pending software-keyboard request with @p text (UTF-8) and the
+ * @p button pressed, zero being the leftmost and the last one confirming.
+ *
+ * The text is truncated to the request's maxLength and to the shared block the
+ * title reads it from, like the console does; a button index past the last one
+ * counts as the last one. Returns ::ZK_KEYBOARD_ANSWERED once the title can be
+ * resumed; any other result leaves the request as it was (or closes nothing).
+ *
+ * Call it on the runtime serial queue, like every other handle call.
+ */
+int32_t zk_answer_keyboard(zk_system_t system, const char *text, uint32_t button);
 
 /**
  * Releases a handle returned by zk_create(). Safe to call with NULL.

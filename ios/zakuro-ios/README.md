@@ -137,6 +137,9 @@ The app-side thresholds, log lines and diagnostics fields are documented in
 | `zk_take_audio(system, out, cap)` | Drain interleaved stereo `i16` PCM |
 | `zk_set_input(system, buttons, cx, cy, touch, tx, ty)` | Push buttons, Circle Pad and touch |
 | `zk_set_cstick(system, cx, cy)` | Push the New 3DS C-stick vector that the next `zk_set_input` on the same thread carries (additive; (0, 0) releases it) |
+| `zk_keyboard_pending(system)` | 1 while a title waits on the 3DS software keyboard (library applet), 0 when none is open or NULL; poll after every frame |
+| `zk_keyboard_request_json(system)` | The pending request as JSON (schema 1: `hint`, `text`, `maxLength` in UTF-16 units, `buttons` left to right, `valid` rule); NULL when none. Library-owned thread-local pointer like `zk_recompiled_status`; the document is within `ZK_KEYBOARD_JSON_MAX_BYTES` |
+| `zk_answer_keyboard(system, text, button)` | Answer with UTF-8 text and the button index (0 = leftmost, last confirms): `0` answered, `-1` bad handle, `-2` bad text, `-3` no request. The title continues from the frame it waited in |
 | `zk_destroy(system)` | Release the runtime (and a measured saved state it did not copy) |
 | `zk_save_state_size(system)` | Serialize the console once and return the saved state's byte count; the blob is kept for the copy. `0` on error |
 | `zk_save_state_copy(system, out, cap)` | Copy the measured saved state, or only report its length with `out == NULL`; returns the full byte count (a short buffer is logged), `0` on error |
@@ -187,6 +190,49 @@ the calling thread; `zk_set_hardware_renderer` cannot fail. `zk_hardware_status`
 switches are declared in `src/lib.rs` only and are documented here, so the app
 does not call them today. The build-time `ZAKURO_IOS_HARDWARE` switch needs no
 header change.
+
+## Software keyboard (3DS text input)
+
+A 3DS title that needs text (a player name, a message, a password) starts the
+console's software-keyboard library applet and waits on it. Zakuro already carries
+the applet (`zakuro-core/src/services/keyboard.rs`: `System::keyboard_request()`
+and `System::answer_keyboard()`); this crate exposes it to the app, so a title no
+longer waits forever:
+
+1. Poll `zk_keyboard_pending(system)` after every `zk_run_frame`. It is a flag
+   check, cheap enough per frame.
+2. When it reports 1, copy `zk_keyboard_request_json(system)` (NULL when no
+   request is open). The document is schema 1 and always within
+   `ZK_KEYBOARD_JSON_MAX_BYTES` (16 KiB):
+
+   ```json
+   {"schema":1,"hint":"Your name","text":"Link","maxLength":8,
+    "buttons":["Cancel","OK"],"valid":"notEmptyNotBlank"}
+   ```
+
+   `hint` and `text` are the applet's prompt and initial text,
+   `maxLength` is the title's limit in UTF-16 units, `buttons` are the labels
+   left to right (the last one confirms) and `valid` is the confirming button's
+   rule: `anything`, `notEmpty`, `notEmptyNotBlank`, `notBlank` or
+   `fixedLength` (exactly `maxLength` units). The app mirrors those checks for
+   the overlay; the non-confirming buttons never apply the rule. A very long
+   initial text is cut (never mid-character) to keep the document bounded; the
+   answer path truncates what goes back to `maxLength` and to the shared block
+   regardless.
+3. Stop the frame loop while the request is open: the title is waiting on the
+   applet, so further frames would only burn CPU (the desktop frontend stops
+   emulating while it types for the same reason). The app clears input and stops
+   its audio engine for the same duration.
+4. Call `zk_answer_keyboard(system, text, button)` on the runtime serial queue:
+   0 answered, -1 bad/null handle, -2 NULL or non-UTF-8 text, -3 no request open.
+   Button 0 is the leftmost and the last one confirms; a larger index counts as
+   the last button. The title wakes on its next frame, which the app resumes.
+
+The pointer `zk_keyboard_request_json()` returns is library-owned and valid until
+the next keyboard call on the same thread (like `zk_recompiled_status`), so copy
+it. Polling, reading and answering all belong on the runtime's serial queue. The
+three functions are additive: an app that never calls them keeps the old
+behaviour (the title simply keeps waiting), and no existing signature changed.
 
 ## Saved states
 
@@ -241,6 +287,10 @@ restored memory on the next frame.
 - `zk_last_error` returns a thread-local pointer valid only until the next call
   that records or clears an error on the same thread; copy the text before
   hopping queues.
+- The software-keyboard calls take the handle too: poll
+  `zk_keyboard_pending`/`zk_keyboard_request_json` after a frame and answer with
+  `zk_answer_keyboard` on the same serial queue. The JSON pointer is thread-local
+  and valid only until the next keyboard call on that thread.
 - `zk_destroy` must not run concurrently with any other call on the handle.
 - Save and load follow the same rule and run between frames: a save or load
   copies the whole console (tens of MiB) and can take from tens of milliseconds
@@ -339,10 +389,23 @@ truncated, damaged and foreign states, and a real save → load round trip on a
 console with no ROM loaded. They need no game either, only a few hundred MiB of
 host RAM.
 
+The software-keyboard JSON and ABI have host tests in `src/lib.rs`
+(`keyboard_json_carries_every_field`,
+`keyboard_json_escapes_quotes_and_control_characters`,
+`keyboard_json_caps_a_huge_initial_text`, `keyboard_ffi_round_trips_a_request`, ...).
+They build a `System` with no ROM, open the applet with a synthetic configuration
+and answer it through the C functions:
+
+```bash
+cd third_party/zakuro
+cargo test -p zakuro-ios --lib keyboard
+```
+
 ## Layout
 
 ```text
-src/lib.rs       C ABI, handle/error handling, linked table wiring, hardware FFI
+src/lib.rs       C ABI, handle/error handling, linked table wiring, hardware FFI,
+                 software-keyboard JSON/FFI
 src/presenter.rs A1 CAMetalLayer presentation: presenter/swapchain FFI, touch mapping
 src/savestate.rs  saved states: size/copy/discard/load FFI, container preflight
 src/perf.rs      frame-time logging and profiler helpers

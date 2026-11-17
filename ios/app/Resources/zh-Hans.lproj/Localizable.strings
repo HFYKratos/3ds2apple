@@ -575,3 +575,17 @@
 "Start this game to save or load a state." = "启动该游戏后才能保存或加载即时存档。";
 
 
+/* --- 0.1.2 文字输入（3DS 软件键盘覆盖层） --------------------------------
+   scope: text-input（task-18）。追加块；合并 0.1.2 时新键保持在此块内。
+   键盘的提示语与按钮文字来自游戏本身，原样显示；这里是覆盖层的框架文字与
+   校验提示。 */
+"Text input" = "文字输入";
+"Enter text" = "输入文字";
+"%ld/%ld characters" = "%ld/%ld 个字符";
+"Too long: at most %ld characters." = "文字过长：最多 %ld 个字符。";
+"Text is required." = "必须输入文字。";
+"Text cannot be empty or only spaces." = "不能为空，也不能只有空格。";
+"Text cannot be only spaces." = "不能只有空格。";
+"Enter exactly %ld characters." = "请输入正好 %ld 个字符。";
+
+
