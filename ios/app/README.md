@@ -1032,11 +1032,17 @@ Vulkan timestamp queries and export:
 - `gpu_times_line=` — the window's breakdown: time per kind of GPU work
   (`draw`, `upload`, `clear`, `transfer`, `capture`, `copy`, `download`,
   `barrier`), render passes, barriers, draws, the host's waits for the GPU and
-  the shaded vertices/primitives/fragments per frame. A candidate that lowers
-  `gpu_exec` while the shaded fragment count stays the same changed GPU
-  scheduling or bandwidth, not the emulated shading.
+  the shaded vertices/primitives/fragments per frame. It also lists the render targets by GPU time
+  (`target 0xADDR WxH[+d] X.XXms/f (N passes, M draws)`),
+  so the largest render pass can be named, and `sorted N draws/f` when the
+  opaque front-to-back sort is on. A candidate that lowers `gpu_exec` while
+  the shaded fragment count stays the same changed GPU scheduling or
+  bandwidth, not the emulated shading.
 - `gpu_profile=` / `gpu_profile_definition=` — the diagnostic GPU profile the IPA
-  was built with (`baseline`, `mvk`, `renderer`, `combo`) and what it applies.
+  was built with (`baseline`, `baseline2`, `mvk`, `renderer`, `sort`, `combo`)
+  and what it applies. `baseline2` is the second-round control (pass
+  attribution in the GPU line) and `sort` adds the opaque front-to-back draw
+  sort (`ZAKURO_SORT_OPAQUE=1`), which must leave the picture unchanged.
 
 `scripts/build-gpu-diagnostic-ipa.sh` (on the macOS build VM) packages one IPA
 per profile, differing only in that Info.plist key; the app applies the profile's

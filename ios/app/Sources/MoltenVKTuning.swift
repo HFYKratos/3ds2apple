@@ -96,6 +96,7 @@ enum MoltenVKTuning {
         "ZAKURO_CPU_SHADERS",
         "ZAKURO_FAST_CLEARS",
         "ZAKURO_FAST_BARRIERS",
+        "ZAKURO_SORT_OPAQUE",
         "ZAKURO_FLOAT_DEPTH",
         "ZAKURO_DEPTH_BLITS",
         "ZAKURO_STATIC_BLEND",
@@ -112,9 +113,9 @@ enum MoltenVKTuning {
     /// ones. Only `supportedRendererKeys` are accepted.
     static let rendererEnvironmentVariable = "THREEDS2APPLE_RENDERER_OPTIONS"
 
-    /// The diagnostic profile a build runs: `baseline`, `mvk`, `renderer` or
-    /// `combo`, from this launch variable or the Info.plist key below. A
-    /// normal build has neither.
+    /// The diagnostic profile a build runs: `baseline`/`baseline2`, `mvk`,
+    /// `renderer`, `sort` or `combo`, from this launch variable or the
+    /// Info.plist key below. A normal build has neither.
     static let profileEnvironmentVariable = "THREEDS2APPLE_GPU_PROFILE"
 
     /// The Info.plist key scripts/build-gpu-diagnostic-ipa.sh writes into a
@@ -124,7 +125,7 @@ enum MoltenVKTuning {
 
     /// The profiles a diagnostic IPA can carry, in the order the build script
     /// makes them.
-    static let profileNames = ["baseline", "mvk", "renderer", "combo"]
+    static let profileNames = ["baseline", "baseline2", "mvk", "renderer", "sort", "combo"]
 
     /// The overrides actually applied, as `NAME=value`, for the log and the
     /// diagnostics report.
@@ -148,14 +149,20 @@ enum MoltenVKTuning {
     /// switches, as `NAME=value`. Unknown names set nothing.
     ///
     /// `baseline` is the control: it measures the GPU's own execution time and
-    /// changes nothing else. `mvk` adds the MoltenVK performance parameters an
+    /// changes nothing else. `baseline2` is the same control built from the
+    /// 0.1.3 second-round library, whose GPU line splits the time by render
+    /// target as well. `mvk` adds the MoltenVK performance parameters an
     /// iPhone can use. `renderer` adds the renderer's 0.1.3 A/B switches
     /// (image clears where they can be, a narrower barrier between render
-    /// passes). `combo` is both, for the run after the A/B names a winner.
+    /// passes). `sort` is `baseline2` plus the opaque front-to-back draw sort
+    /// (`ZAKURO_SORT_OPAQUE=1`), the second round's early-Z candidate. `combo`
+    /// is `mvk` + `renderer`, for the run after the A/B names a winner.
     static func profileOptions(_ name: String) -> (moltenvk: [String], renderer: [String]) {
         switch name {
-        case "baseline":
+        case "baseline", "baseline2":
             return ([], ["ZAKURO_GPU_TIMES=1"])
+        case "sort":
+            return ([], ["ZAKURO_GPU_TIMES=1", "ZAKURO_SORT_OPAQUE=1"])
         case "mvk":
             return (
                 [

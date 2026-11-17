@@ -369,11 +369,15 @@ The app reads it through:
 |---|---|
 | `zk_gpu_timing_status()` | 1 when the times are being measured |
 | `zk_gpu_exec_micros_per_frame()` | real GPU execution time per frame, the average of the last 60-frame window (the same number the system Metal HUD shows) |
-| `zk_gpu_times_line(out, capacity)` | the window's breakdown: time per kind (`draw`, `upload`, `clear`, `transfer`, `capture`, `copy`, `download`, `barrier`, `other`), render passes, barriers, draws, the host's waits and the shaded vertices/primitives/fragments per frame |
+| `zk_gpu_times_line(out, capacity)` | the window's breakdown: time per kind (`draw`, `upload`, `clear`, `transfer`, `capture`, `copy`, `download`, `barrier`, `other`), render passes, barriers, draws, the host's waits, the shaded vertices/primitives/fragments per frame, the render targets by GPU time (`target 0xADDR WxH[+d] X.XXms/f (N passes, M draws)`, the one that cost most first) and `sorted N draws/f` when the opaque sort is on |
 
 The periodic log line gains `gpu_exec X.XXms/f passes N/f barriers M/f` (plus
 `shaded V/P/F` when the device keeps pipeline statistics), and a second
-`zk_gpu:` line has the full breakdown. The numbers come from
+`zk_gpu:` line has the full breakdown. Every render target a timestamped batch
+draws into is timed as well, and a `GPU render targets over N batches: ...`
+line (log target `zakuro_gpu::passes`) names the targets that cost most, so the
+largest render pass of a title can be identified without guessing. The numbers
+come from
 `zakuro_gpu::GpuTimes`, the same type the desktop renderer can log with
 `ZAKURO_GPU_TIMES=1` (`GPU over N batches: ...` lines).
 
@@ -384,6 +388,7 @@ the renderer is built, so set them before a load):
 |---|---|
 | `ZAKURO_FAST_CLEARS=1` | a clear of every row goes through `vkCmdClear*Image` instead of a render pass with LOAD+STORE: it writes the rows and nothing else |
 | `ZAKURO_FAST_BARRIERS=1` | the barrier a render pass waits for after a target switch is scoped to the attachment and transfer stages instead of `ALL_COMMANDS` |
+| `ZAKURO_SORT_OPAQUE=1` | opaque draws of a render pass that may be reordered (depth test and write on, no blending, alpha test, logic op or stencil change, vertices placed on the CPU so their depth is known) are held back and recorded front to back, the nearest first, so the early depth test drops the fragments hidden behind them; draws at the same depth keep their order, everything else keeps the title's order, and the picture must not change |
 | `ZAKURO_GPU_TIMES=1` | the GPU's own timestamped execution times above (diagnostic only) |
 
 The other hidden renderer switches (`ZAKURO_GPU_SHADERS` / `ZAKURO_CPU_SHADERS`,
@@ -394,9 +399,10 @@ scheduling, never the rendered picture; `ZAKURO_GPU_SHADERS` is the one that
 moves vertex shading between CPU and GPU and is a measurement switch of its own.
 
 The GPU timing and the switches are in
-`ios/zakuro-ios/patches/0003-gpu-timing-and-render-options.patch`, applied to the
-gitignored Zakuro checkout by `scripts/build-zakuro-ios.sh`, so a static library
-built from this repository carries both. `scripts/README.md` has the A/B build
+`ios/zakuro-ios/patches/0003-gpu-timing-and-render-options.patch` and
+`ios/zakuro-ios/patches/0004-gpu-pass-times-and-opaque-sort.patch`, applied to
+the gitignored Zakuro checkout by `scripts/build-zakuro-ios.sh`, so a static
+library built from this repository carries both. `scripts/README.md` has the A/B build
 and measurement procedure.
 
 ## Tests

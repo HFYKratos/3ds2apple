@@ -16,13 +16,16 @@ use std::time::{Duration, Instant};
 
 use zakuro_core::kernel::thread::CPU_CLOCK_HZ;
 use zakuro_core::System;
-use zakuro_gpu::GpuTimes;
+use zakuro_gpu::{GpuTimes, PassTimes};
 
 /// Frames between `zk_perf` log lines: about two seconds at 30 fps.
 pub const DEFAULT_LOG_INTERVAL: u32 = 60;
 
 /// Guest PC hot spots listed in the log when the profiler runs.
 const LOGGED_HOT_SPOTS: usize = 3;
+
+/// Render targets listed in the GPU line, the one that cost most first.
+const REPORTED_PASSES: usize = 5;
 
 /// Microseconds the last `zk_run_frame` call took.
 static LAST_FRAME_MICROS: AtomicU64 = AtomicU64::new(0);
@@ -117,6 +120,8 @@ struct Window {
     fallbacks: u64,
     /// the GPU's own timings at the window's start, when they are measured.
     gpu_times: Option<GpuTimes>,
+    /// the render targets' cumulative GPU times at the window's start.
+    gpu_passes: Vec<PassTimes>,
 }
 
 impl Window {
@@ -143,6 +148,7 @@ impl Window {
                 .as_ref()
                 .map_or(0, |library| library.fallbacks()),
             gpu_times: system.gpu.gpu_times(),
+            gpu_passes: system.gpu.gpu_passes(),
         }
     }
 }
@@ -167,6 +173,28 @@ struct GpuSummary {
     /// per frame, 0 when the device keeps no pipeline statistics.
     shaded: [f64; 4],
     statistics: bool,
+    /// opaque draws the front-to-back sort held back per frame, 0 when it is
+    /// off, see `ZAKURO_SORT_OPAQUE`.
+    sorted_draws: f64,
+    /// the render targets the GPU's own time went to per frame, the one that
+    /// cost most first.
+    passes: Vec<GpuPass>,
+}
+
+/// One render target the GPU's own time went to over the window, per frame.
+#[derive(Debug, Default)]
+struct GpuPass {
+    /// where the target's color buffer is in guest memory, its size at the
+    /// console's resolution and whether its passes rendered to a depth buffer.
+    addr: u32,
+    width: u32,
+    height: u32,
+    depth: bool,
+    /// milliseconds the GPU spent in the target's passes per frame, and the
+    /// passes and draws they recorded per frame.
+    ms: f64,
+    passes: f64,
+    draws: f64,
 }
 
 /// One `zk_perf` line's numbers, taken while the lock is held.
@@ -402,7 +430,13 @@ fn summarize(window: &mut Window, system: &System) -> Summary {
     };
 
     let per_frame = |count: u64| count as f64 / frames as f64;
-    let gpu = gpu_breakdown(window.gpu_times, system.gpu.gpu_times(), frames);
+    let gpu = gpu_breakdown(
+        window.gpu_times,
+        system.gpu.gpu_times(),
+        &window.gpu_passes,
+        &system.gpu.gpu_passes(),
+        frames,
+    );
 
     Summary {
         frames,
@@ -441,13 +475,41 @@ fn summarize(window: &mut Window, system: &System) -> Summary {
 /// The GPU's own timestamps for a window, averaged per frame, from the
 /// renderer's cumulative readings at the window's start and end. None while the
 /// GPU's times are not measured.
-fn gpu_breakdown(baseline: Option<GpuTimes>, current: Option<GpuTimes>, frames: u64) -> Option<GpuSummary> {
+fn gpu_breakdown(
+    baseline: Option<GpuTimes>,
+    current: Option<GpuTimes>,
+    baseline_passes: &[PassTimes],
+    current_passes: &[PassTimes],
+    frames: u64,
+) -> Option<GpuSummary> {
     let (baseline, current) = (baseline?, current?);
     if frames == 0 {
         return None;
     }
     let work = current.since(&baseline);
     let per_frame = |value: f64| value / frames as f64;
+    // each target's window, from the cumulative readings at its two ends, the
+    // one that cost most per frame first
+    let mut passes: Vec<GpuPass> = current_passes
+        .iter()
+        .filter_map(|pass| {
+            let before = baseline_passes.iter().find(|before| before.addr == pass.addr);
+            let before = before.copied().unwrap_or_default();
+            let ms = per_frame((pass.milliseconds - before.milliseconds).max(0.0));
+            Some(GpuPass {
+                addr: pass.addr,
+                width: pass.width,
+                height: pass.height,
+                depth: pass.depth,
+                ms,
+                passes: per_frame(pass.passes.saturating_sub(before.passes) as f64),
+                draws: per_frame(pass.draws.saturating_sub(before.draws) as f64),
+            })
+        })
+        .filter(|pass| pass.ms > 0.0)
+        .collect();
+    passes.sort_by(|a, b| b.ms.total_cmp(&a.ms));
+    passes.truncate(REPORTED_PASSES);
     let mut shaded = [0u64; 4];
     for (delta, (now, before)) in shaded.iter_mut().zip(current.shaded.iter().zip(baseline.shaded.iter())) {
         *delta = now.saturating_sub(*before);
@@ -468,6 +530,8 @@ fn gpu_breakdown(baseline: Option<GpuTimes>, current: Option<GpuTimes>, frames: 
             .saturating_add(current.waited_done_count.saturating_sub(baseline.waited_done_count)),
         shaded: shaded.map(|count| per_frame(count as f64)),
         statistics: current.pipeline_statistics,
+        sorted_draws: per_frame(current.sorted_draws.saturating_sub(baseline.sorted_draws) as f64),
+        passes,
     })
 }
 
@@ -520,6 +584,9 @@ fn format_summary(summary: &Summary) -> String {
                 gpu.shaded[2] / 1e6
             ));
         }
+        if gpu.sorted_draws > 0.0 {
+            line.push_str(&format!(" sorted {:.0}/f", gpu.sorted_draws));
+        }
     }
     if !summary.hot_spots.is_empty() {
         line.push_str(" | hot");
@@ -553,6 +620,23 @@ fn format_gpu_line(summary: &Summary) -> String {
             gpu.shaded[2] / 1e6,
             gpu.shaded[3] / 1e6
         ));
+    }
+    // the render targets the GPU's time went to, the one that cost most first,
+    // so a profile tells its passes apart and a 2D/composite pass stands out
+    for pass in &gpu.passes {
+        line.push_str(&format!(
+            " | target 0x{:08X} {}x{}{} {:.2}ms/f ({:.0} passes, {:.0} draws)",
+            pass.addr,
+            pass.width,
+            pass.height,
+            if pass.depth { "+d" } else { "" },
+            pass.ms,
+            pass.passes,
+            pass.draws,
+        ));
+    }
+    if gpu.sorted_draws > 0.0 {
+        line.push_str(&format!(" | sorted {:.0} draws/f", gpu.sorted_draws));
     }
     line
 }
@@ -684,6 +768,8 @@ mod tests {
             waited_done_count: 0,
             shaded: [100, 50, fragments, 0],
             pipeline_statistics: true,
+            sorted_draws: 0,
+            sorted_runs: 0,
         }
     }
 
@@ -691,7 +777,7 @@ mod tests {
     fn gpu_breakdown_averages_the_window() {
         let baseline = gpu_times(100.0, 300, 20, 2_000);
         let current = gpu_times(400.0, 900, 80, 10_000);
-        let gpu = gpu_breakdown(Some(baseline), Some(current), 10).expect("the GPU's times");
+        let gpu = gpu_breakdown(Some(baseline), Some(current), &[], &[], 10).expect("the GPU's times");
         assert!((gpu.exec_ms - 30.0).abs() < 1e-9, "exec {} ms", gpu.exec_ms);
         assert!((gpu.work_ms[1] - 30.0).abs() < 1e-9, "draw {} ms", gpu.work_ms[1]);
         assert!((gpu.draws - 60.0).abs() < 1e-9);
@@ -702,9 +788,9 @@ mod tests {
         assert_eq!(gpu.host_waits, 0);
         // no reading at the window's start or no frames means no average, not
         // a zero line
-        assert!(gpu_breakdown(None, Some(current), 10).is_none());
-        assert!(gpu_breakdown(Some(baseline), None, 10).is_none());
-        assert!(gpu_breakdown(Some(baseline), Some(baseline), 0).is_none());
+        assert!(gpu_breakdown(None, Some(current), &[], &[], 10).is_none());
+        assert!(gpu_breakdown(Some(baseline), None, &[], &[], 10).is_none());
+        assert!(gpu_breakdown(Some(baseline), Some(baseline), &[], &[], 0).is_none());
     }
 
     #[test]
@@ -738,6 +824,8 @@ mod tests {
                 host_waits: 6,
                 shaded: [1_200_000.0, 600_000.0, 3_300_000.0, 0.0],
                 statistics: true,
+                sorted_draws: 0.0,
+                passes: Vec::new(),
             }),
             hot_spots: Vec::new(),
         };
@@ -753,5 +841,69 @@ mod tests {
             assert!(gpu_line.contains(field), "missing {field}: {gpu_line}");
         }
         assert!(!gpu_line.contains("other 0.00"), "zero kinds are left out: {gpu_line}");
+    }
+
+    /// the render targets in the GPU line are the window's, the one that cost
+    /// most per frame first, with a target that did no work left out.
+    #[test]
+    fn pass_attribution_averages_the_window_and_names_the_largest_target() {
+        let baseline = gpu_times(100.0, 300, 20, 2_000);
+        let current = gpu_times(400.0, 900, 80, 10_000);
+        let pass = |addr: u32, width: u32, depth: bool, ms: f64, passes: u64, draws: u64| PassTimes {
+            addr,
+            width,
+            height: 240,
+            depth,
+            milliseconds: ms,
+            passes,
+            draws,
+        };
+        let before = [
+            pass(0x1800_0000, 400, true, 100.0, 10, 100),
+            pass(0x1800_1000, 320, false, 900.0, 10, 200),
+            pass(0x1800_2000, 64, true, 5.0, 5, 5),
+        ];
+        let now = [
+            pass(0x1800_0000, 400, true, 400.0, 30, 700),
+            pass(0x1800_1000, 320, false, 1500.0, 30, 300),
+            // this target did nothing this window and is left out
+            pass(0x1800_2000, 64, true, 5.0, 5, 5),
+        ];
+        let gpu = gpu_breakdown(Some(baseline), Some(current), &before, &now, 10).expect("the GPU's times");
+        assert_eq!(gpu.passes.len(), 2, "{:?}", gpu.passes);
+        assert_eq!(gpu.passes[0].addr, 0x1800_1000);
+        assert!((gpu.passes[0].ms - 60.0).abs() < 1e-9, "{:?}", gpu.passes[0]);
+        assert!((gpu.passes[0].passes - 2.0).abs() < 1e-9);
+        assert!((gpu.passes[0].draws - 10.0).abs() < 1e-9);
+        assert!((gpu.passes[1].ms - 30.0).abs() < 1e-9);
+        // the same reading, as the diagnostics line reports it
+        let summary = Summary {
+            frames: 60,
+            seconds: 2.0,
+            frame_avg_ms: 22.0,
+            frame_max_ms: 30.0,
+            screen_avg_ms: [0.0; 2],
+            screen_max_ms: [0.0; 2],
+            screen_reads: 0,
+            audio_avg_ms: 0.0,
+            audio_takes: 60,
+            gpu_ms_per_frame: 5.0,
+            non_gpu_ms_per_frame: 17.0,
+            speed_percent: 80.0,
+            cycles_per_second: 214_000_000.0,
+            draws_per_frame: 180.0,
+            transfers_per_frame: 0.0,
+            fills_per_frame: 2.0,
+            interpreted_percent: 0.1,
+            aot_active: true,
+            gpu: Some(gpu),
+            hot_spots: Vec::new(),
+        };
+        let line = format_gpu_line(&summary);
+        assert!(
+            line.contains("| target 0x18001000 320x240 60.00ms/f (2 passes, 10 draws)"),
+            "{line}"
+        );
+        assert!(line.contains("| target 0x18000000 400x240+d 30.00ms/f (2 passes, 60 draws)"), "{line}");
     }
 }

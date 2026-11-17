@@ -21,9 +21,14 @@
 #
 # Profiles (see ios/app/Sources/MoltenVKTuning.swift and scripts/README.md):
 #   baseline  measures the GPU's own execution time, changes nothing else
+#             (first round; kept so old and new builds can be compared)
+#   baseline2 baseline built from the 0.1.3 second-round library: the GPU line
+#             also splits its time by render target (pass attribution)
 #   mvk       baseline + the MoltenVK performance parameters
 #   renderer  baseline + the renderer A/B switches (image clears, narrower
 #             barriers between render passes)
+#   sort      baseline2 + the opaque front-to-back draw sort
+#             (ZAKURO_SORT_OPAQUE=1), the second round's early-Z candidate
 #   combo     mvk + renderer, for the run after the A/B names a winner
 set -euo pipefail
 
@@ -32,7 +37,7 @@ ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "$ROOT"
 
 OUT_DIR="out/gpu-diag"
-PROFILES="baseline mvk renderer"
+PROFILES="baseline2 sort"
 STATICLIB="build/ios/libzakuro_ios.a"
 APP_DIR="ios/app"
 CONFIGURATION="Release"
@@ -46,8 +51,8 @@ Usage:
   scripts/build-gpu-diagnostic-ipa.sh [options]
 
 Options:
-  --profiles "A B C"   profiles to package (default: baseline mvk renderer)
-                       known: baseline mvk renderer combo
+  --profiles "A B C"   profiles to package (default: baseline2 sort)
+                       known: baseline baseline2 mvk renderer sort combo
   --out-dir DIR        output directory (default: out/gpu-diag, gitignored)
   --staticlib PATH     Zakuro iOS static library, relative to repo root
                        (default: build/ios/libzakuro_ios.a)
@@ -133,8 +138,8 @@ printf '{\n  "schemaVersion": 1,\n  "generatedAt": "%s",\n  "moltenvk": "%s",\n 
 FIRST=1
 for profile in $PROFILES; do
   case "$profile" in
-    baseline|mvk|renderer|combo) ;;
-    *) die "unknown profile: $profile (known: baseline mvk renderer combo)" ;;
+    baseline|baseline2|mvk|renderer|sort|combo) ;;
+    *) die "unknown profile: $profile (known: baseline baseline2 mvk renderer sort combo)" ;;
   esac
   # keep the bundle's own name: the profile is an Info.plist key, not an app
   # rename, so every IPA unzips to Payload/3ds2apple.app
@@ -171,8 +176,18 @@ installing the next replaces the previous), and only on a device with the
 tester's own game data pushed by the launcher.
 
 Profiles
-  baseline  measures the GPU's real execution time (ZAKURO_GPU_TIMES=1) and
-            changes nothing else: this is the control.
+  baseline2 measures the GPU's real execution time (ZAKURO_GPU_TIMES=1) and
+            changes nothing else: this is the control for the second round. Its
+            zk_gpu line also lists the render targets by GPU time, with the
+            passes and draws each took, so the largest render pass is named.
+  sort      baseline2 + the opaque front-to-back draw sort
+            (ZAKURO_SORT_OPAQUE=1): opaque draws whose state allows it (depth
+            test and write on, no blend, alpha test, logic op or stencil
+            change) are recorded nearest first so the early depth test drops
+            the fragments hidden behind them. The line gains `sorted N/f` when
+            the sort engages; the picture must stay the same.
+  baseline  the first round's control, kept so an old IPA and a new one can be
+            compared on the same scene.
   mvk       baseline + MoltenVK performance parameters: Metal argument buffers,
             prefill of Metal command buffers, MTLHeap, more Metal command
             buffers in flight, present via command buffer, async queue submits.
@@ -193,8 +208,15 @@ Procedure (same scene, same duration, one profile per run)
      app between runs so the pipeline cache is warm from the second run on;
      report which run was cold).
   4. Send the diagnostics files: they carry gpu_profile=, gpu_exec_ms_per_frame=,
-     gpu_times_line= (per-kind GPU time, passes, barriers, draws, host waits,
-     fragments) and the frame interval.
+     gpu_times_line= (per-kind GPU time, render-target pass attribution,
+     passes, barriers, draws, host waits, fragments, and `sorted N draws/f`
+     when the opaque sort engaged) and the frame interval.
+
+Compare baseline2 with sort on the same scene: the target scene's GPU time and
+fps are the numbers; the per-target line says which render pass owns the time,
+and gpu_exec_ms_per_frame is the same number the Metal HUD shows. If the
+picture differs at all, the sort is wrong for that title: report it with the
+scene and keep using baseline2.
 
 Reading the files
   gpu_exec_ms_per_frame is the real GPU execution time from the renderer's own

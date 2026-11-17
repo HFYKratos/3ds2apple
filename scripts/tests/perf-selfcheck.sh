@@ -285,7 +285,7 @@ check "the app reads the diagnostic GPU profile" contains ios/app/Sources/Molten
 check "the profile can pick the renderer A/B switches" contains ios/app/Sources/MoltenVKTuning.swift 'ZAKURO_FAST_CLEARS'
 check "the profile keeps the MoltenVK allow-list" contains ios/app/Sources/MoltenVKTuning.swift 'MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=1'
 check "the diagnostic IPA builder exists and is executable" test -x scripts/build-gpu-diagnostic-ipa.sh
-check "the diagnostic IPA builder packages the three profiles" contains scripts/build-gpu-diagnostic-ipa.sh 'PROFILES="baseline mvk renderer"'
+check "the diagnostic IPA builder packages the second round's profiles" contains scripts/build-gpu-diagnostic-ipa.sh 'PROFILES="baseline2 sort"'
 check "the diagnostic IPA builder embeds MoltenVK" contains scripts/build-gpu-diagnostic-ipa.sh '--require-moltenvk'
 check "the diagnostic IPA builder writes a manifest" contains scripts/build-gpu-diagnostic-ipa.sh 'manifest.json'
 check "the GPU patch is tracked" test -f ios/zakuro-ios/patches/0003-gpu-timing-and-render-options.patch
@@ -297,6 +297,18 @@ check "the patch helper lists the new patch" contains scripts/lib/zakuro-patches
 check "scripts/README documents the GPU A/B profiles" contains scripts/README.md 'GPU A/B diagnostic IPAs'
 check "zakuro-ios README documents the GPU execution timing" contains ios/zakuro-ios/README.md 'GPU execution timing and renderer A/B switches'
 check "the app README documents the GPU diagnostics fields" contains ios/app/README.md 'gpu_exec_ms_per_frame='
+check "the second round's patch is tracked" test -f ios/zakuro-ios/patches/0004-gpu-pass-times-and-opaque-sort.patch
+check "the second patch splits the GPU time by render target" contains ios/zakuro-ios/patches/0004-gpu-pass-times-and-opaque-sort.patch 'pub struct PassTimes'
+check "the second patch adds the opaque sort switch" contains ios/zakuro-ios/patches/0004-gpu-pass-times-and-opaque-sort.patch 'ZAKURO_SORT_OPAQUE'
+check "the second patch logs the render targets" contains ios/zakuro-ios/patches/0004-gpu-pass-times-and-opaque-sort.patch 'zakuro_gpu::passes'
+check "perf collects the render targets' GPU times" contains ios/zakuro-ios/src/perf.rs 'system.gpu.gpu_passes()'
+check "perf reports the pass attribution" contains ios/zakuro-ios/src/perf.rs 'target 0x{:08X}'
+check "perf reports the sorted draws" contains ios/zakuro-ios/src/perf.rs 'sorted {:.0} draws/f'
+check "the app's sort profile sets the switch" contains ios/app/Sources/MoltenVKTuning.swift 'ZAKURO_SORT_OPAQUE=1'
+check "the patch helper lists the second patch" contains scripts/lib/zakuro-patches.sh '0004-gpu-pass-times-and-opaque-sort.patch'
+check "scripts/README documents the second-round profiles" contains scripts/README.md 'opaque front-to-back'
+check "zakuro-ios README documents the opaque sort" contains ios/zakuro-ios/README.md 'ZAKURO_SORT_OPAQUE'
+check "the app README documents the pass attribution" contains ios/app/README.md 'render targets by GPU time'
 
 section 'Repository hygiene'
 if git status --porcelain | grep -E '^(.. )?(ROM/|IPA/|build/)' >/dev/null 2>&1; then

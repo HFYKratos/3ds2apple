@@ -13,7 +13,7 @@ developer guide for the scripts.
 | `build-zakuro-ios.sh` | Clone/pin Zakuro, apply `ios/zakuro-ios/patches/*.patch`, add the iOS crate and build `build/ios/libzakuro_ios.a` |
 | `build-ios-app.sh` | `xcodegen` + `xcodebuild` for the unsigned shell `.app` (empty schema-2 catalog) |
 | `package-ipa.sh` | Wrap an unsigned `.app` into `IPA/<name>.ipa` and print its SHA-256; `--manifest FILE` writes the launcher shell `manifest.json` (version/build from the app Info.plist, bundle id, bytes, SHA-256) |
-| `build-gpu-diagnostic-ipa.sh` | Package the ROM-free shell as GPU A/B diagnostic IPAs (one Info.plist GPU profile each: `baseline`/`mvk`/`renderer`/`combo`), with MoltenVK embedded; outputs stay under `out/gpu-diag/` (gitignored) |
+| `build-gpu-diagnostic-ipa.sh` | Package the ROM-free shell as GPU A/B diagnostic IPAs (one Info.plist GPU profile each: `baseline`/`baseline2`/`mvk`/`renderer`/`sort`/`combo`), with MoltenVK embedded; outputs stay under `out/gpu-diag*/` (gitignored) |
 
 ## GamePacks and shell IPA (launcher-first)
 
@@ -102,10 +102,12 @@ sets `ZAKURO_GPU_TIMES=1` so the diagnostics carry the GPU's real execution time
 
 | Profile | What it adds |
 |---|---|
-| `baseline` | nothing but the GPU timing: the control |
+| `baseline` | nothing but the GPU timing: the first round's control |
+| `baseline2` | the second round's control: nothing but the GPU timing, and the GPU line also splits its time by render target (which pass cost what, with its passes and draws) |
 | `mvk` | MoltenVK performance parameters: Metal argument buffers, prefill of Metal command buffers, MTLHeap, more active Metal command buffers, present through a command buffer, async queue submits |
 | `renderer` | renderer A/B switches: image clears where they can be (no attachment load/store for a full clear, `ZAKURO_FAST_CLEARS=1`) and a narrower barrier between render passes (`ZAKURO_FAST_BARRIERS=1`) |
-| `combo` | both, for the confirmation run after the A/B names a winner |
+| `sort` | `baseline2` + the opaque front-to-back draw sort (`ZAKURO_SORT_OPAQUE=1`): order-independent opaque draws are recorded nearest first so the early depth test drops hidden fragments; the line gains `sorted N draws/f` |
+| `combo` | mvk + renderer, for the confirmation run after the A/B names a winner |
 
 Run it on the macOS build VM after `scripts/build-zakuro-ios.sh` and
 `scripts/build-ios-app.sh`; `MOLTENVK_FRAMEWORK` names the downloaded framework

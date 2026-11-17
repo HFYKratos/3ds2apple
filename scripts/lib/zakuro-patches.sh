@@ -15,6 +15,10 @@
 #                                        times for the diagnostics, and the
 #                                        image-clear / narrower-barrier A/B
 #                                        switches (both default off)
+#   0004-gpu-pass-times-and-opaque-sort.patch
+#                                        per-render-target GPU time in the
+#                                        timings, and the opaque front-to-back
+#                                        draw sort A/B switch (default off)
 #
 # Application is idempotent: a patch already in the tree is reported and
 # skipped, so re-running a build script is safe even when the checkout was

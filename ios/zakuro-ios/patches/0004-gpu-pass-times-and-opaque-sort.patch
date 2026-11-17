@@ -1,0 +1,534 @@
+diff --git a/crates/zakuro-gpu/src/lib.rs b/crates/zakuro-gpu/src/lib.rs
+index 89bbd8d..85420d4 100644
+--- a/crates/zakuro-gpu/src/lib.rs
++++ b/crates/zakuro-gpu/src/lib.rs
+@@ -29,7 +29,7 @@ pub use renderer::{DrawCall, Renderer, RendererKind, SoftwareRenderer};
+ #[cfg(feature = "vulkan")]
+ pub use device::SharedDevice;
+ #[cfg(feature = "vulkan")]
+-pub use raster::{GpuTimes, GPU_WORK};
++pub use raster::{GpuTimes, PassTimes, GPU_WORK};
+ 
+ /// how the GPU reaches guest memory.
+ pub trait GpuMemory {
+@@ -805,6 +805,15 @@ impl Gpu {
+         self.resources.hardware.as_ref().and_then(|hardware| hardware.gpu_times())
+     }
+ 
++    /// the render targets the GPU's own timings put its work in, the one that
++    /// cost most first (`ZAKURO_GPU_TIMES=1`): milliseconds, passes and draws
++    /// each, cumulative since the renderer started. Empty while the timings
++    /// are off or the renderer is software.
++    #[cfg(feature = "vulkan")]
++    pub fn gpu_passes(&self) -> Vec<PassTimes> {
++        self.resources.hardware.as_ref().map_or_else(Vec::new, |hardware| hardware.gpu_passes())
++    }
++
+     /// how many times the console's resolution the host's GPU draws at, 1
+     /// when drawing in software.
+     pub fn scale(&self) -> u32 {
+diff --git a/crates/zakuro-gpu/src/raster.rs b/crates/zakuro-gpu/src/raster.rs
+index f7b50c2..8e53009 100644
+--- a/crates/zakuro-gpu/src/raster.rs
++++ b/crates/zakuro-gpu/src/raster.rs
+@@ -39,6 +39,10 @@ pub struct GpuTimes {
+     /// pipeline_statistics says whether they mean anything.
+     pub shaded: [u64; 4],
+     pub pipeline_statistics: bool,
++    /// how many opaque draws the front-to-back sort held back and how many
++    /// runs it recorded in a different order, see `ZAKURO_SORT_OPAQUE`.
++    pub sorted_draws: u64,
++    pub sorted_runs: u64,
+ }
+ 
+ #[cfg(feature = "vulkan")]
+@@ -55,6 +59,27 @@ impl GpuTimes {
+     }
+ }
+ 
++/// one render target's share of the GPU's own time, cumulative since the
++/// renderer started: what the passes that drew into it cost, how many of them
++/// there were and how many draws they recorded. `Gpu::gpu_passes` reports them
++/// most expensive first.
++#[cfg(feature = "vulkan")]
++#[derive(Clone, Copy, Debug, Default)]
++pub struct PassTimes {
++    /// where the color buffer is in guest memory, which is what tells a
++    /// title's render targets apart.
++    pub addr: u32,
++    /// the buffer's width and height at the console's resolution.
++    pub width: u32,
++    pub height: u32,
++    /// whether the passes into it rendered to a depth buffer too.
++    pub depth: bool,
++    /// milliseconds the GPU spent on the passes into it.
++    pub milliseconds: f64,
++    pub passes: u64,
++    pub draws: u64,
++}
++
+ #[cfg(feature = "vulkan")]
+ pub(crate) mod hardware;
+ use crate::texture::TextureFormat;
+@@ -1349,7 +1374,7 @@ fn geometry_stage(
+ /// screen-space vertex, with every varying pre-divided by w so the
+ /// rasterizer only has to interpolate linearly and divide once per pixel.
+ #[derive(Clone, Copy, Debug)]
+-struct Screen {
++pub(super) struct Screen {
+     x: f32,
+     y: f32,
+     /// z/w, which is linear in screen space, the depth map turns it into
+@@ -1363,6 +1388,15 @@ struct Screen {
+     texcoord0_w_over_w: f32,
+ }
+ 
++/// a draw's front-to-back key: the nearest of its vertices' depths in the clip
++/// space the PICA draws in, 0 at the near end and -1 at the far one, none for a
++/// draw without vertices. Draws with a larger key are nearer the viewer, so
++/// recording them first lets the early depth test drop what is behind them.
++#[cfg(feature = "vulkan")]
++pub(super) fn front_to_back_key(vertices: &[Screen]) -> Option<f32> {
++    vertices.iter().map(|vertex| vertex.z).reduce(f32::max)
++}
++
+ fn to_screen(vertex: &Vertex, viewport: (f32, f32, f32, f32)) -> Option<Screen> {
+     let (vx, vy, vw, vh) = viewport;
+     let w = vertex.clip[3];
+diff --git a/crates/zakuro-gpu/src/raster/hardware.rs b/crates/zakuro-gpu/src/raster/hardware.rs
+index eaeef2c..fdfa6c4 100644
+--- a/crates/zakuro-gpu/src/raster/hardware.rs
++++ b/crates/zakuro-gpu/src/raster/hardware.rs
+@@ -874,14 +874,38 @@ const TIMESTAMPS: u32 = 4096;
+ /// batches the times are added up over before they are logged.
+ const TIMED_BATCHES: u32 = 600;
+ 
++/// a timestamp's place: the kind of work the time after it goes to, and the
++/// render target whose pass recorded it, u32::MAX outside a render pass.
++#[derive(Clone, Copy)]
++struct Mark {
++    work: Work,
++    pass: u32,
++}
++
++/// one render target's cumulative share of the GPU's time, its passes and its
++/// draws, and what the last log line reported of them.
++struct PassTotal {
++    width: u32,
++    height: u32,
++    depth: bool,
++    milliseconds: f64,
++    passes: u64,
++    draws: u64,
++    logged: (f64, u64, u64),
++}
++
+ /// the GPU's time per kind of work, from timestamps written whenever the
+ /// work changes kind, ZAKURO_GPU_TIMES=1 turns it on.
+ struct Timing {
+     /// nanoseconds a tick of the GPU's clock lasts.
+     period: f64,
+-    /// each command buffer's timestamps, and the work between them.
+-    pools: HashMap<vk::CommandBuffer, (vk::QueryPool, Vec<Work>)>,
++    /// each command buffer's timestamps, and the work (and the render target
++    /// whose pass recorded it) between them.
++    pools: HashMap<vk::CommandBuffer, (vk::QueryPool, Vec<Mark>)>,
+     current: Work,
++    /// the render target whose pass the work being recorded belongs to,
++    /// u32::MAX outside a render pass.
++    current_pass: u32,
+     /// milliseconds per kind of work, cumulative since the renderer started.
+     totals: [f64; WORK_NAMES.len()],
+     /// the totals as of the last log line, so each line reports its own
+@@ -907,6 +931,8 @@ struct Timing {
+     waited: [(f64, u32); 2],
+     /// the waits as of the last log line.
+     logged_waited: [(f64, u32); 2],
++    /// each render target's cumulative GPU time, passes and draws.
++    passes: HashMap<u32, PassTotal>,
+ }
+ 
+ /// whether clears are done as image clears where they can be, which writes
+@@ -925,6 +951,16 @@ fn fast_barriers() -> bool {
+     *ON.get_or_init(|| std::env::var_os("ZAKURO_FAST_BARRIERS").is_some_and(|value| value != "0"))
+ }
+ 
++/// whether the opaque draws of a render pass are recorded front to back, the
++/// nearest first, so the GPU's early depth test drops the fragments hidden
++/// behind them: ZAKURO_SORT_OPAQUE=1 (A/B, default off) turns it on. Only
++/// draws whose whole state lets their order change are held back; everything
++/// else keeps the title's order and records what was held back in its place.
++fn sort_opaque() -> bool {
++    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    *ON.get_or_init(|| std::env::var_os("ZAKURO_SORT_OPAQUE").is_some_and(|value| value != "0"))
++}
++
+ /// what the host waited for the GPU for.
+ #[derive(Clone, Copy)]
+ enum Wait {
+@@ -1739,6 +1775,13 @@ pub struct Hardware {
+     /// so that each run of draws into the same buffers renders into their
+     /// twins once rather than once a draw.
+     twin_draws: Vec<Recorded>,
++    /// opaque draws held back to record front to back, the nearest first,
++    /// with the depth that orders them, see hold_back.
++    held_back: Vec<(Recorded, f32)>,
++    /// how many draws were held back to sort, and how many runs recorded in a
++    /// different order (ZAKURO_SORT_OPAQUE=1).
++    sorted_draws: u64,
++    sorted_runs: u64,
+     /// textures copied from twins, as copies has those from surfaces.
+     twin_copies: QuickMap<DrawnTexture, Copied>,
+     /// the batch the draw a draw in between follows staged its vertices
+@@ -1986,6 +2029,9 @@ impl Hardware {
+                 pass: Pass::Real,
+                 twins: false,
+                 twin_draws: Vec::new(),
++                held_back: Vec::new(),
++                sorted_draws: 0,
++                sorted_runs: 0,
+                 twin_copies: QuickMap::default(),
+                 twinned_inputs: None,
+                 batch: 0,
+@@ -1999,6 +2045,7 @@ impl Hardware {
+                         period: properties.limits.timestamp_period as f64,
+                         pools: HashMap::new(),
+                         current: Work::Other,
++                        current_pass: u32::MAX,
+                         totals: [0.0; WORK_NAMES.len()],
+                         logged: [0.0; WORK_NAMES.len()],
+                         batches: 0,
+@@ -2012,6 +2059,7 @@ impl Hardware {
+                         logged_shaded: [0; 4],
+                         waited: [(0.0, 0); 2],
+                         logged_waited: [(0.0, 0); 2],
++                        passes: HashMap::new(),
+                     }),
+                 barriers: 0,
+                 unfenced: true,
+@@ -2075,9 +2123,32 @@ impl Hardware {
+             waited_done_count: u64::from(dones),
+             shaded: timing.counts,
+             pipeline_statistics: timing.statistics.is_some(),
++            sorted_draws: self.sorted_draws,
++            sorted_runs: self.sorted_runs,
+         })
+     }
+ 
++    /// each render target's share of the GPU's own timings, the one that cost
++    /// most first, cumulative since the renderer started.
++    pub fn gpu_passes(&self) -> Vec<super::PassTimes> {
++        let Some(timing) = self.timing.as_ref() else { return Vec::new() };
++        let mut passes: Vec<super::PassTimes> = timing
++            .passes
++            .iter()
++            .map(|(&addr, pass)| super::PassTimes {
++                addr,
++                width: pass.width,
++                height: pass.height,
++                depth: pass.depth,
++                milliseconds: pass.milliseconds,
++                passes: pass.passes,
++                draws: pass.draws,
++            })
++            .collect();
++        passes.sort_by(|a, b| b.milliseconds.total_cmp(&a.milliseconds));
++        passes
++    }
++
+     /// whether it runs vertex shaders.
+     pub(crate) fn shades(&self) -> bool {
+         self.shades
+@@ -2295,6 +2366,7 @@ impl Hardware {
+             }
+         };
+         timing.current = Work::Other;
++        timing.current_pass = u32::MAX;
+         // SAFETY: recording, outside rendering
+         unsafe {
+             self.device.cmd_reset_query_pool(commands, pool, 0, TIMESTAMPS);
+@@ -2335,12 +2407,31 @@ impl Hardware {
+             if (marks.len() as u32) + 1 < TIMESTAMPS {
+                 // SAFETY: recording, the query was reset when the batch began
+                 unsafe { self.device.cmd_write_timestamp2(commands, vk::PipelineStageFlags2::ALL_COMMANDS, *pool, marks.len() as u32 + 1) };
+-                marks.push(timing.current);
++                marks.push(Mark { work: timing.current, pass: timing.current_pass });
+             }
+         }
+         timing.current = work;
+     }
+ 
++    /// stamps the end of the work before a render pass begins, or of the pass
++    /// just ended, so each pass's time goes to the target it drew into, and
++    /// sets the pass the work after it goes to, u32::MAX outside one.
++    fn mark_pass(&mut self, pass: u32) {
++        let commands = self.commands;
++        let Some(timing) = &mut self.timing else { return };
++        if !self.recording || timing.current_pass == pass {
++            return;
++        }
++        if let Some((pool, marks)) = timing.pools.get_mut(&commands) {
++            if (marks.len() as u32) + 1 < TIMESTAMPS {
++                // SAFETY: recording, the query was reset when the batch began
++                unsafe { self.device.cmd_write_timestamp2(commands, vk::PipelineStageFlags2::ALL_COMMANDS, *pool, marks.len() as u32 + 1) };
++                marks.push(Mark { work: timing.current, pass: timing.current_pass });
++            }
++        }
++        timing.current_pass = pass;
++    }
++
+     /// adds up a finished batch's times, and logs them every so many.
+     fn add_times(&mut self, commands: vk::CommandBuffer) -> Result<(), String> {
+         let barriers = std::mem::take(&mut self.barriers);
+@@ -2356,8 +2447,12 @@ impl Hardware {
+                     .get_query_pool_results(*pool, 0, &mut stamps, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)
+                     .map_err(vk_error("read timestamps"))?;
+             }
+-            for (i, &work) in marks.iter().enumerate() {
+-                timing.totals[work as usize] += stamps[i + 1].wrapping_sub(stamps[i]) as f64 * timing.period / 1e6;
++            for (i, mark) in marks.iter().enumerate() {
++                let milliseconds = stamps[i + 1].wrapping_sub(stamps[i]) as f64 * timing.period / 1e6;
++                timing.totals[mark.work as usize] += milliseconds;
++                if let Some(pass) = timing.passes.get_mut(&mark.pass) {
++                    pass.milliseconds += milliseconds;
++                }
+             }
+             marks.clear();
+         }
+@@ -2423,12 +2518,47 @@ impl Hardware {
+                 *logged = (milliseconds, times);
+             }
+             let [(room, rooms), (done, dones)] = waits;
++            // the render targets the window's time went to, the one that cost
++            // most first, so a title's passes can be told apart on the device
++            let mut pass_window: Vec<(u32, f64, u64, u64)> = Vec::with_capacity(timing.passes.len());
++            for (&addr, pass) in timing.passes.iter_mut() {
++                let (milliseconds, passes, draws) = (
++                    (pass.milliseconds - pass.logged.0).max(0.0),
++                    pass.passes.saturating_sub(pass.logged.1),
++                    pass.draws.saturating_sub(pass.logged.2),
++                );
++                pass.logged = (pass.milliseconds, pass.passes, pass.draws);
++                if milliseconds > 0.0 {
++                    pass_window.push((addr, milliseconds, passes, draws));
++                }
++            }
++            pass_window.sort_by(|a, b| b.1.total_cmp(&a.1));
++            let reported: Vec<String> = pass_window
++                .iter()
++                .take(6)
++                .map(|&(addr, milliseconds, passes, draws)| {
++                    let pass = &timing.passes[&addr];
++                    format!(
++                        "0x{addr:08X} {}x{}{} {milliseconds:.1} ms ({passes} passes, {draws} draws)",
++                        pass.width,
++                        pass.height,
++                        if pass.depth { " + depth" } else { "" },
++                    )
++                })
++                .collect();
+             log::info!(
+                 target: "zakuro_gpu::times",
+                 "GPU over {TIMED_BATCHES} batches: {total:.1} ms, {}, {barriers} barriers, {renderings} render passes, {draws} draws{shaded}, \
+                  the host waited {room:.1} ms for room {rooms} times and {done:.1} ms for work done {dones} times",
+                 parts.join(", "),
+             );
++            if !reported.is_empty() {
++                log::info!(
++                    target: "zakuro_gpu::passes",
++                    "GPU render targets over {TIMED_BATCHES} batches: {}",
++                    reported.join(", "),
++                );
++            }
+             timing.batches = 0;
+         }
+         Ok(())
+@@ -2495,6 +2625,9 @@ impl Hardware {
+     /// ends the rendering, and draws what waits to go into twins, before
+     /// anything else reads or writes them.
+     fn end_rendering(&mut self) {
++        // what was held back to record front to back goes first, in this pass
++        self.flush_held_back();
++        self.mark_pass(u32::MAX);
+         if self.rendering.take().is_some() {
+             // SAFETY: rendering was begun in this command buffer
+             unsafe { self.device.cmd_end_rendering(self.commands) };
+@@ -4153,6 +4286,12 @@ impl Hardware {
+         let real = pass != Pass::Twin;
+         let twin = twinned && pass != Pass::Twinned;
+ 
++        // a texture taken from a buffer this pass drew into has to see those
++        // draws: record what was held back first, or its copy would read what
++        // the buffer held before them
++        if draw.textures.iter().flatten().any(|bound| bound.drawn.is_some()) {
++            self.flush_held_back();
++        }
+         let mut views = [self.blank.view; 3];
+         let mut twin_views = [self.blank.view; 3];
+         let mut samplers = [vk::Sampler::null(); 3];
+@@ -4415,7 +4554,13 @@ impl Hardware {
+             topology,
+         };
+         if real {
+-            self.record(&recorded);
++            // held back, the pass records it with the other opaque draws front
++            // to back; anything else keeps the title's order and records what
++            // was held back first, in its place
++            if !self.hold_back(&recorded, &draw.geometry, r, color_mask) {
++                self.flush_held_back();
++                self.record(&recorded);
++            }
+         }
+         if twin {
+             self.twin_draws.push(Recorded { views: twin_views, ..recorded });
+@@ -4423,6 +4568,73 @@ impl Hardware {
+         Ok(())
+     }
+ 
++    /// whether to hold an opaque draw back to record it with the pass's other
++    /// opaque draws front to back, the nearest first, so the GPU's early depth
++    /// test drops the fragments hidden behind them; false records it now, and
++    /// records what was held back first, in its place. `ZAKURO_SORT_OPAQUE=1`
++    /// (A/B, default off) turns this on, and only draws whose whole state lets
++    /// their order change are held: depth test and write on, no blending,
++    /// alpha test, logic op or stencil change, and the vertices placed on the
++    /// CPU so their depth is known. Everything else keeps the title's order.
++    fn hold_back(&mut self, recorded: &Recorded, geometry: &Geometry<'_>, registers: &[u32], color_mask: u32) -> bool {
++        if !sort_opaque() || self.twins || self.rendering.is_none() {
++            return false;
++        }
++        // the depth test has to accept exactly what is nearer the viewer: with
++        // depth writes on, LESS and LEQUAL make the picture the same whatever
++        // the order, and anything else (ALWAYS, GREATER, EQUAL, ...) makes the
++        // draw's place in the order matter
++        if !matches!(recorded.depth_compare, vk::CompareOp::LESS | vk::CompareOp::LESS_OR_EQUAL) {
++            return false;
++        }
++        // the stencil has to stay as it is for a later draw to test against
++        if recorded.depth.is_none()
++            || registers[REG_DEPTH_COLOR_MASK] & 1 == 0
++            || !recorded.depth_write
++            || recorded.blend.is_some()
++            || recorded.logic_op.is_some()
++            || recorded.stencil_test
++            || color_mask == 0
++            || registers[REG_ALPHA_TEST] & 1 != 0
++            || (registers[REG_DEPTH_STENCIL_WRITE] != 0 && (registers[REG_STENCIL_TEST] >> 8) & 0xFF != 0)
++        {
++            return false;
++        }
++        // only the draws the CPU placed carry their depth; the GPU shades the
++        // others, so it is not known here
++        let Geometry::Placed { vertices, .. } = geometry else {
++            return false;
++        };
++        let Some(key) = super::front_to_back_key(vertices) else {
++            return false;
++        };
++        self.held_back.push((*recorded, key));
++        true
++    }
++
++    /// records the draws held back, front to back: the nearest first, so the
++    /// early depth test drops the fragments of what is behind it. Runs before
++    /// anything that needs the pass's drawings, and at the pass's end.
++    fn flush_held_back(&mut self) {
++        if self.held_back.is_empty() {
++            return;
++        }
++        let mut held = std::mem::take(&mut self.held_back);
++        if self.rendering.is_none() {
++            log::error!("{} draws were held back outside a rendering", held.len());
++            return;
++        }
++        if held.len() > 1 {
++            // stable, so draws at the same depth keep the title's order
++            held.sort_by(|a, b| b.1.total_cmp(&a.1));
++        }
++        self.sorted_draws += held.len() as u64;
++        self.sorted_runs += 1;
++        for (recorded, _) in &held {
++            self.record(recorded);
++        }
++    }
++
+     /// records a draw, inside the rendering into its buffers or their twins.
+     fn record(&mut self, recorded: &Recorded) {
+         let r = recorded;
+@@ -4556,6 +4768,12 @@ impl Hardware {
+                 self.push.cmd_push_descriptor_set(commands, vk::PipelineBindPoint::GRAPHICS, self.layout, 0, writes);
+             }
+             self.draws += 1;
++            if let Some(timing) = &mut self.timing {
++                let pass = timing.current_pass;
++                if let Some(total) = timing.passes.get_mut(&pass) {
++                    total.draws += 1;
++                }
++            }
+             match vertex_infos {
+                 Some(infos) => match r.shaded.and_then(|staged| staged.index_type) {
+                     Some(index_type) => {
+@@ -4582,6 +4800,25 @@ impl Hardware {
+     /// begins rendering into views the size of a color surface, its own
+     /// image and its depth surface's or their twins.
+     fn begin_rendering_into(&mut self, color: usize, color_view: vk::ImageView, depth_view: Option<vk::ImageView>) {
++        let (addr, width, height) = {
++            let surface = &self.surfaces[color];
++            (surface.addr, surface.width, surface.height)
++        };
++        // the GPU's time goes to the target this pass draws into: the stamp
++        // here ends the work before it, in whatever pass that was
++        self.mark_pass(addr);
++        if let Some(timing) = &mut self.timing {
++            let total = timing.passes.entry(addr).or_insert(PassTotal {
++                width,
++                height,
++                depth: depth_view.is_some(),
++                milliseconds: 0.0,
++                passes: 0,
++                draws: 0,
++                logged: (0.0, 0, 0),
++            });
++            total.passes += 1;
++        }
+         self.renderings += 1;
+         let surface = &self.surfaces[color];
+         let area = vk::Rect2D {
+@@ -4622,6 +4859,7 @@ impl Hardware {
+     pub(crate) fn forget(&mut self) {
+         // the heap starts over before the next draw
+         self.arrays.clear();
++        self.held_back.clear();
+         self.heap_used = HEAP_SIZE;
+         for surface in &mut self.surfaces {
+             surface.untwin();
+@@ -6596,4 +6834,29 @@ mod tests {
+             assert_eq!(shader(depth), d24_from_float(depth), "{depth:e}");
+         }
+     }
++
++    /// the front-to-back key is the nearest of a draw's vertices, and ordering
++    /// the draws by it records the ones nearer the viewer first.
++    #[test]
++    fn opaque_draws_are_ordered_by_their_nearest_vertex() {
++        use crate::raster::{front_to_back_key, Screen};
++        let vertex = |z: f32| Screen {
++            x: 0.0,
++            y: 0.0,
++            z,
++            inv_w: 1.0,
++            color_over_w: [0.0; 4],
++            texcoords_over_w: [[0.0; 2]; 3],
++            quaternion_over_w: [0.0; 4],
++            view_over_w: [0.0; 3],
++            texcoord0_w_over_w: 0.0,
++        };
++        assert_eq!(front_to_back_key(&[]), None);
++        assert_eq!(front_to_back_key(&[vertex(-0.9)]), Some(-0.9));
++        assert_eq!(front_to_back_key(&[vertex(-0.9), vertex(-0.2)]), Some(-0.2));
++        // the nearest first: a draw at -0.1 is recorded before one at -0.5
++        let mut draws = [(-0.8f32, 0u32), (-0.1, 1), (-0.5, 2)];
++        draws.sort_by(|a, b| b.0.total_cmp(&a.0));
++        assert_eq!(draws.map(|(_, at)| at), [1, 2, 0]);
++    }
+ }
