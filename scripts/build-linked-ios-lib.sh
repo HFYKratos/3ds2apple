@@ -22,10 +22,10 @@
 # Split/incremental path (2026-11-12 VM run): cargo does not have to rebuild for
 # every step. Existing artifacts can be adopted instead:
 #
-#   scripts/build-linked-ios-lib.sh pokemon-y --reuse
+#   scripts/build-linked-ios-lib.sh retail-title --reuse
 #       # reuse a validated build/ios/<name>/libzakuro_ios.a and build-info.txt,
 #       # refresh the metadata (no cargo, no Zakuro checkout).
-#   scripts/build-linked-ios-lib.sh pokemon-y --libgame /path/to/librecomp.a
+#   scripts/build-linked-ios-lib.sh retail-title --libgame /path/to/librecomp.a
 #       # use an already-built arm64 archive as libgame.a (build/game/... not
 #       # required); the linked Zakuro library is still built for the title ID.
 #

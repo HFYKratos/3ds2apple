@@ -21,7 +21,7 @@ body:
     attributes:
       label: 游戏名 / Game title
       description: App/启动器里显示的名称，或常见名称。/ The title shown by the app or launcher, or the common name.
-      placeholder: "Pokémon Y"
+      placeholder: "a retail title (no names needed)"
     validations:
       required: true
 

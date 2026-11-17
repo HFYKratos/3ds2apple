@@ -82,7 +82,7 @@ it after `packages add` and copy the fields they need. `GameCatalog.json`
 
 ```json
 {"schemaVersion":2,"games":[
-  {"titleID":"0004000000055E00","displayName":"Pokémon Y",
+  {"titleID":"0004000000055E00","displayName":"Example Game",
    "productCode":"CTR-P-EK2A","aot":true,"aotVersion":1,
    "packFile":"Frameworks/GamePack-0004000000055E00.dylib",
    "packABIVersion":1}]}

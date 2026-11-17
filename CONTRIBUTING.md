@@ -61,6 +61,8 @@ details.
 
 ## Release policy
 
+Never name a commercial game in release notes, the README, issue templates or any other repository text: say "a retail title" / "部分游戏、某款游戏" instead. Compatibility reports may include a title ID, but no game name is needed.
+
 Public releases are GitHub Releases on
 <https://github.com/HFYKratos/3ds2apple/releases>. The policy is intentionally
 minimal: users download one package, and GitHub provides the asset digests.

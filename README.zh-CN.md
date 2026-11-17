@@ -58,7 +58,7 @@ Windows 与 macOS 各有一个启动器。导入你自有的已解密 `.3ds`/`.c
 
 ## 实测数据
 
-在真机 iPhone 上经 Windows 启动器链路运行 Pokémon Y：约 **57–60 fps**，**AOT 100%**，**Metal GPU** 渲染；`zk_perf` 显示 GPU 每帧 4–6 ms、present 10–11 ms、屏幕回读 0。以上是维护者针对该游戏的实测数据；兼容性与性能因游戏而异。
+在真机 iPhone 上经 Windows 启动器链路运行某款商业游戏：约 **57–60 fps**，**AOT 100%**，**Metal GPU** 渲染；`zk_perf` 显示 GPU 每帧 4–6 ms、present 10–11 ms、屏幕回读 0。以上是维护者针对该游戏的实测数据；兼容性与性能因游戏而异。
 
 ## 平台
 

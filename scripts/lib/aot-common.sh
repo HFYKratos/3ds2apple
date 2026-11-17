@@ -333,15 +333,15 @@ aot_selfcheck() {
     "$(aot_title_id_from_rust "$work/main.rs" || echo '<missing>')"
 
   # --- title resolution -------------------------------------------------------
-  mkdir -p "$work/root/build/ios/pokemon-y" "$work/root/build/game/pokemon-y"
-  printf 'title_id=0004000000055E00n\n' > "$work/root/build/ios/pokemon-y/build-info.txt"
-  if aot_resolve_title_id "$work/root" pokemon-y ''; then
+  mkdir -p "$work/root/build/ios/retail-title" "$work/root/build/game/retail-title"
+  printf 'title_id=0004000000055E00n\n' > "$work/root/build/ios/retail-title/build-info.txt"
+  if aot_resolve_title_id "$work/root" retail-title ''; then
     _aot_sc_eq "resolve: repaired build-info title" '0004000000055E00' "$AOT_TITLE_ID"
-    _aot_sc_eq "resolve: source is build-info" 'build/ios/pokemon-y/build-info.txt' "$AOT_TITLE_SOURCE"
+    _aot_sc_eq "resolve: source is build-info" 'build/ios/retail-title/build-info.txt' "$AOT_TITLE_SOURCE"
   else
     _aot_sc_fail "resolve: repaired build-info title"
   fi
-  if aot_resolve_title_id "$work/root" pokemon-y '0004000000055E00'; then
+  if aot_resolve_title_id "$work/root" retail-title '0004000000055E00'; then
     _aot_sc_eq "resolve: explicit --title-id wins" '--title-id' "$AOT_TITLE_SOURCE"
   else
     _aot_sc_fail "resolve: explicit --title-id wins"
@@ -389,7 +389,7 @@ NM
   local digest
   digest="$(aot_sha256 "$work/hash.txt")"
   _aot_sc_eq "sha256: digest length" '64' "${#digest}"
-  if aot_is_valid_name 'pokemon-y'; then _aot_sc_pass "name: valid"; else _aot_sc_fail "name: valid"; fi
+  if aot_is_valid_name 'retail-title'; then _aot_sc_pass "name: valid"; else _aot_sc_fail "name: valid"; fi
   if aot_is_valid_name '../etc'; then _aot_sc_fail "name: path traversal rejected"; else _aot_sc_pass "name: path traversal rejected"; fi
   if aot_is_valid_name '.hidden'; then _aot_sc_fail "name: dotfile rejected"; else _aot_sc_pass "name: dotfile rejected"; fi
 

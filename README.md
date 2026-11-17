@@ -58,7 +58,7 @@ The launchers keep a portable data folder beside the executable/.app, read the R
 
 ## Real numbers
 
-On a physical iPhone, Pokémon Y run through the Windows launcher path measures **about 57-60 fps** with **AOT 100%** and the **Metal GPU** renderer: `zk_perf` reports GPU 4-6 ms per frame, present 10-11 ms and zero screen readback. These numbers are from the maintainers testing that title; compatibility and performance are per game.
+On a physical iPhone, one retail title run through the Windows launcher path measures **about 57-60 fps** with **AOT 100%** and the **Metal GPU** renderer: `zk_perf` reports GPU 4-6 ms per frame, present 10-11 ms and zero screen readback. These numbers are from the maintainers testing that title; compatibility and performance are per game.
 
 ## Platforms
 

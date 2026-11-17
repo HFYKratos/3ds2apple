@@ -69,7 +69,7 @@ Usage:
 
 Arguments:
   <name>             Game build name used by build-recomp-ios.sh
-                     ([A-Za-z0-9._-]; e.g. pokemon-y)
+                     ([A-Za-z0-9._-]; e.g. retail-title)
 
 Options:
   --title-id ID      16 hex digit application title ID (00040000...)

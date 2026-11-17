@@ -31,7 +31,7 @@ clang -target arm64-apple-ios16.0 -O2 -fPIC -fvisibility=hidden \
   already behaves: the shipped 0.2.0-beta1 pack has only `_zk_register_gamepack`
   and `dyld_stub_binder` as undefined imports.
 
-## What the real Pokemon Y generated C needs (verified 2026-11-14)
+## What the real a retail title generated C needs (verified 2026-11-14)
 
 Survey over all 489 generated `.c` files (637 MB):
 
@@ -52,7 +52,7 @@ without a Mac.
 | `string.h` | mem*/str* incl. `strdup`, `strtok_r`, `strerror` |
 | `math.h` | full C99/C11 double/float/long double math set + `M_PI`-style constants + classification macros via `__builtin_*` |
 | `stdlib.h` | malloc/free/abort/exit/strto*/qsort/bsearch/abs/div |
-| `stdio.h` | `FILE` opaque, printf family, file I/O (future codegen; not used by Pokemon Y) |
+| `stdio.h` | `FILE` opaque, printf family, file I/O (future codegen; not used by a retail title) |
 | `assert.h` | `assert` via libSystem's `__assert_rtn` |
 
 ## Rules when extending a stub

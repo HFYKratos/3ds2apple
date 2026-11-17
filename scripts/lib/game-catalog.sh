@@ -13,7 +13,7 @@
 # The schema is fixed and decoded by ios/app/Sources/GameCatalog.swift:
 #
 #   {"schemaVersion":1,"games":[
-#     {"titleID":"0004000000055E00","displayName":"Pokémon Y",
+#     {"titleID":"0004000000055E00","displayName":"a retail title",
 #      "productCode":"CTR-P-EKJA","aot":true,"aotVersion":1,"notes":""}]}
 #
 # Schema 2 (the AOT-first pipeline) additionally carries the per-game pack
@@ -279,7 +279,7 @@ PY
 }
 
 # One-line human readable summary, e.g.
-#   games=1; AOT: Pokémon Y (0004000000055E00)
+#   games=1; AOT: a retail title (0004000000055E00)
 #   games=0; interpreter shell (no AOT games)
 game_catalog_summary_text() {
   local joined=""

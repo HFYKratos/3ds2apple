@@ -15,7 +15,7 @@
 #   scripts/build-ios-app.sh --configuration Debug
 #   scripts/build-ios-app.sh --app-dir ios/app --staticlib build/ios/libzakuro_ios.a
 #   scripts/build-ios-app.sh --clean --verbose --keep-project
-#   scripts/build-ios-app.sh --game-catalog build/catalog/pokemon-y.json
+#   scripts/build-ios-app.sh --game-catalog build/catalog/retail-title.json
 #
 # GameCatalog.json (the build-time AOT manifest): a plain shell build writes an
 # EMPTY schema-2 catalog ({"schemaVersion":2,"games":[]}); the desktop launcher

@@ -18,12 +18,12 @@ headers and `-undefined dynamic_lookup`, and Apple's `ld64` with LLVM's
 
 Host: WSL2 Ubuntu 26.04 x86_64, 16 logical CPUs, LLVM 21.1.8 from Ubuntu debs
 (clang + ld64.lld + llvm-ar + llvm-nm + llvm-objdump), no Apple SDK, no Xcode.
-Input: the real Pokemon Y 3dsrecomp output (`build/game/pokemon-y`, 637 MB,
+Input: the real 3dsrecomp output of a retail title (`build/game/retail-title`, 637 MB,
 489 `.c` + 136 `.h`, gitignored).
 
 | Artifact | Command | Result |
 |---|---|---|
-| device GamePack | `tools/winbuild/build-gamepack.sh pokemon-y --code-dir build/game/pokemon-y --title-id 0004000000055E00 --target device --out build/winbuild --jobs 16` | **230,000,000-ish bytes Mach-O arm64 dylib**, `platform ios`, `minos 16.0`, install name `@rpath/GamePack-0004000000055E00.dylib`, 11 exports (GamePack ABI + recomp tables), **1** undefined import (`_zk_register_gamepack`), sha256 `8c03c33882189f810cbce2089ee20176a21900dab431402020e085d3327fbce2` |
+| device GamePack | `tools/winbuild/build-gamepack.sh retail-title --code-dir build/game/retail-title --title-id 0004000000055E00 --target device --out build/winbuild --jobs 16` | **230,000,000-ish bytes Mach-O arm64 dylib**, `platform ios`, `minos 16.0`, install name `@rpath/GamePack-0004000000055E00.dylib`, 11 exports (GamePack ABI + recomp tables), **1** undefined import (`_zk_register_gamepack`), sha256 `8c03c33882189f810cbce2089ee20176a21900dab431402020e085d3327fbce2` |
 | simulator GamePack | same with `--target sim` | **270,093,816 B** x86_64 Mach-O, `platform iossimulator`; **ran in the real iOS Simulator shell+harness with AOT active and 0.00% interpreted** (10 min 16 s wall / 148 min 49 s CPU with `--jobs 16`); sha256 `61a1d89b…` for the task-26 fresh-C build (`41a470ea…` differs only in the 8-byte `LC_UUID`) |
 | toolchain selfcheck | `tools/winbuild/build-gamepack.sh --selfcheck` | 30 checks, 0 failures (both targets: compile, link, ABI exports, undefined host symbol, Mach-O validation) |
 
@@ -85,12 +85,12 @@ tools/winbuild/build-gamepack.sh --selfcheck
 
 # 3. build one game from 3dsrecomp-generated C (same inputs as
 #    scripts/build-game-pack.sh --code-dir on macOS):
-tools/winbuild/build-gamepack.sh pokemon-y --code-dir build/game/pokemon-y \
+tools/winbuild/build-gamepack.sh retail-title --code-dir build/game/retail-title \
   --title-id 0004000000055E00 --jobs 16
 # -> build/winbuild/packages/0004000000055E00/GamePack-0004000000055E00.dylib
 
 # other targets:
-tools/winbuild/build-gamepack.sh pokemon-y --code-dir build/game/pokemon-y \
+tools/winbuild/build-gamepack.sh retail-title --code-dir build/game/retail-title \
   --title-id 0004000000055E00 --target sim
 ```
 
@@ -112,7 +112,7 @@ for `--out`, `--jobs`, `--target`, `--llvm-dir`, `--pack-bin`, `--dry-run`,
    ```sh
    export WINBUILD_LLVM_DIR="$(cygpath -u 'C:\Program Files\LLVM\bin')"
    tools/winbuild/build-gamepack.sh --selfcheck
-   tools/winbuild/build-gamepack.sh pokemon-y --code-dir build/game/pokemon-y \
+   tools/winbuild/build-gamepack.sh retail-title --code-dir build/game/retail-title \
      --title-id 0004000000055E00 --jobs 8
    ```
 
@@ -136,11 +136,11 @@ git clone https://github.com/fearkov/3dsrecomp third_party/3dsrecomp
 (cd third_party/3dsrecomp && git checkout df82e6e && cargo build --release)
 
 # generate C for the user's own ROM and compile it for arm64 iOS (one step):
-tools/winbuild/recomp-port.sh "ROM/Pokemon Y.cci" build/game/pokemon-y-host
+tools/winbuild/recomp-port.sh "ROM/a retail title.cci" build/game/retail-title-host
 
 # then link the GamePack from that C with LLVM/LLD:
-tools/winbuild/build-gamepack.sh pokemon-y \
-  --code-dir build/game/pokemon-y-host/code \
+tools/winbuild/build-gamepack.sh retail-title \
+  --code-dir build/game/retail-title-host/code \
   --title-id 0004000000055E00 --out build/winbuild
 ```
 
@@ -174,7 +174,7 @@ plus a unit-tested command construction, not a claimed Windows run.
 **Evidence (2026-11-15, task-26):**
 
 * 3dsrecomp `df82e6e` on the Linux host generated **624 files / 635 MiB of C
-  (489 .c + 136 .h)** from the user's Pokémon Y ROM; the combined SHA-256 of all
+  (489 .c + 136 .h)** from the user's own ROM; the combined SHA-256 of all
   generated `.c/.h` files is `4a58182e96c6557a39f018152faed113fe495adeb0d24ac611eb12e130e80363`,
   **identical** to the tree the macOS VM generated from the same ROM.
 * `tools/winbuild/build-gamepack.sh` on that host-generated C produced the device
@@ -243,7 +243,7 @@ back to llvm-nm/llvm-objdump checks). A failing check fails the build.
 * **C only.** The generated code is C; no C++/Objective-C/Swift is involved and
   stubs cover ISO C only. A future C++ component would need libc++ headers and
   `-lc++` from the SDK — do not go there without a shipping review.
-* **Stub coverage is demand-driven.** The real Pokemon Y output needs only
+* **Stub coverage is demand-driven.** The real output of a retail title needs only
   `<stdint.h>` (Clang), `<string.h>` and `<math.h>`. Other games/future codegen
   may add calls; `check-gamepack.py` flags new undefined imports, and each new
   import must be either a libSystem symbol (fine, add the declaration) or a
