@@ -10,6 +10,11 @@
 #
 #   0001-vulkan-on-ios.patch             MoltenVK lookup on iOS (A0/A1 builds)
 #   0002-pipeline-cache-save-every.patch keep the pipeline cache every 5 s
+#   0003-gpu-timing-and-render-options.patch
+#                                        the GPU's own timestamped execution
+#                                        times for the diagnostics, and the
+#                                        image-clear / narrower-barrier A/B
+#                                        switches (both default off)
 #
 # Application is idempotent: a patch already in the tree is reported and
 # skipped, so re-running a build script is safe even when the checkout was

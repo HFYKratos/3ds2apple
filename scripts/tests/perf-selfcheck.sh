@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # perf-selfcheck.sh - static/behaviour checks for the performance work
 # (task-36: the scripts/README.md performance contract, FPS readout/diagnostics,
-# AOT flags, MoltenVK hook; 0.1.2: hitch attribution, run GPU/CPU split).
+# AOT flags, MoltenVK hook; 0.1.2: hitch attribution, run GPU/CPU split;
+# 0.1.3: real GPU execution timing and the renderer A/B switches).
 #
 # Runs on a plain Linux host: no Xcode, no clang, no ROM. It checks the
 # contracts this change introduced and the shell artifact it builds on.
@@ -263,6 +264,39 @@ check "zh-Hans strings cover the split layout pages" \
   bash -c 'grep -q "^\"Screen layout\" = \"屏幕布局\"" ios/app/Resources/zh-Hans.lproj/Localizable.strings && grep -q "^\"Control layout\" = \"控件布局\"" ios/app/Resources/zh-Hans.lproj/Localizable.strings'
 check "no GPL project text copied into the new layout code" \
   bash -c '! grep -riE "azahar|citra" ios/app/Sources/ControlLayout.swift ios/app/Sources/VirtualControlsView.swift ios/app/Sources/CustomScreenLayout.swift ios/app/Sources/ControlLayoutEditorView.swift ios/app/Sources/ScreenLayoutEditorView.swift ios/app/Sources/ScreenLayoutSettingsView.swift ios/app/Sources/ControlLayoutSettingsView.swift'
+
+section 'GPU execution timing and renderer A/B switches (0.1.3)'
+check "perf exposes the GPU execution time" contains ios/zakuro-ios/src/perf.rs 'pub fn last_gpu_exec_micros_per_frame()'
+check "perf reports whether the GPU times are measured" contains ios/zakuro-ios/src/perf.rs 'pub fn gpu_times_enabled()'
+check "perf aggregates the renderer's GPU timestamps per window" contains ios/zakuro-ios/src/perf.rs 'fn gpu_breakdown('
+check "perf formats the GPU breakdown line" contains ios/zakuro-ios/src/perf.rs 'zk_gpu: {} frames'
+check "perf's summary carries the real GPU execution time" contains ios/zakuro-ios/src/perf.rs 'gpu_exec {:.2}ms/f'
+check "header declares the GPU execution timer" contains ios/ZakuroBridge.h 'uint64_t zk_gpu_exec_micros_per_frame(void);'
+check "header declares the GPU timing status" contains ios/ZakuroBridge.h 'int32_t zk_gpu_timing_status(void);'
+check "header declares the GPU breakdown text" contains ios/ZakuroBridge.h 'size_t zk_gpu_times_line(char *out, size_t capacity);'
+check "lib.rs exports the GPU execution timer" contains ios/zakuro-ios/src/lib.rs 'pub extern "C" fn zk_gpu_exec_micros_per_frame() -> u64'
+check "lib.rs exports the GPU timing status" contains ios/zakuro-ios/src/lib.rs 'pub extern "C" fn zk_gpu_timing_status() -> i32'
+check "lib.rs exports the GPU breakdown text" contains ios/zakuro-ios/src/lib.rs 'pub extern "C" fn zk_gpu_times_line('
+check "diagnostics report the GPU profile" contains ios/app/Sources/DiagnosticsReport.swift 'gpu_profile='
+check "diagnostics report the GPU execution time" contains ios/app/Sources/DiagnosticsReport.swift 'gpu_exec_ms_per_frame='
+check "diagnostics report the GPU breakdown line" contains ios/app/Sources/DiagnosticsReport.swift 'gpu_times_line='
+check "diagnostics say when the GPU time is not measured" contains ios/app/Sources/DiagnosticsReport.swift 'not measured (diagnostic GPU profile off)'
+check "the app reads the diagnostic GPU profile" contains ios/app/Sources/MoltenVKTuning.swift 'THREEDS2APPLE_GPU_PROFILE'
+check "the profile can pick the renderer A/B switches" contains ios/app/Sources/MoltenVKTuning.swift 'ZAKURO_FAST_CLEARS'
+check "the profile keeps the MoltenVK allow-list" contains ios/app/Sources/MoltenVKTuning.swift 'MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=1'
+check "the diagnostic IPA builder exists and is executable" test -x scripts/build-gpu-diagnostic-ipa.sh
+check "the diagnostic IPA builder packages the three profiles" contains scripts/build-gpu-diagnostic-ipa.sh 'PROFILES="baseline mvk renderer"'
+check "the diagnostic IPA builder embeds MoltenVK" contains scripts/build-gpu-diagnostic-ipa.sh '--require-moltenvk'
+check "the diagnostic IPA builder writes a manifest" contains scripts/build-gpu-diagnostic-ipa.sh 'manifest.json'
+check "the GPU patch is tracked" test -f ios/zakuro-ios/patches/0003-gpu-timing-and-render-options.patch
+check "the GPU patch adds the image-clear switch" contains ios/zakuro-ios/patches/0003-gpu-timing-and-render-options.patch 'ZAKURO_FAST_CLEARS'
+check "the GPU patch adds the barrier switch" contains ios/zakuro-ios/patches/0003-gpu-timing-and-render-options.patch 'ZAKURO_FAST_BARRIERS'
+check "the GPU patch exposes the renderer timings" contains ios/zakuro-ios/patches/0003-gpu-timing-and-render-options.patch 'pub struct GpuTimes'
+check "the GPU patch keeps the totals cumulative for window readers" contains ios/zakuro-ios/patches/0003-gpu-timing-and-render-options.patch 'logged: [f64; WORK_NAMES.len()]'
+check "the patch helper lists the new patch" contains scripts/lib/zakuro-patches.sh '0003-gpu-timing-and-render-options.patch'
+check "scripts/README documents the GPU A/B profiles" contains scripts/README.md 'GPU A/B diagnostic IPAs'
+check "zakuro-ios README documents the GPU execution timing" contains ios/zakuro-ios/README.md 'GPU execution timing and renderer A/B switches'
+check "the app README documents the GPU diagnostics fields" contains ios/app/README.md 'gpu_exec_ms_per_frame='
 
 section 'Repository hygiene'
 if git status --porcelain | grep -E '^(.. )?(ROM/|IPA/|build/)' >/dev/null 2>&1; then

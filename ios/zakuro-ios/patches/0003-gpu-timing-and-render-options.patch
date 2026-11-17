@@ -1,0 +1,387 @@
+diff --git a/crates/zakuro-gpu/src/lib.rs b/crates/zakuro-gpu/src/lib.rs
+index 4352cd9..89bbd8d 100644
+--- a/crates/zakuro-gpu/src/lib.rs
++++ b/crates/zakuro-gpu/src/lib.rs
+@@ -28,6 +28,8 @@ pub use backend::{layout, place, GpuScreen, Overlay, OverlayMesh, OverlayTexture
+ pub use renderer::{DrawCall, Renderer, RendererKind, SoftwareRenderer};
+ #[cfg(feature = "vulkan")]
+ pub use device::SharedDevice;
++#[cfg(feature = "vulkan")]
++pub use raster::{GpuTimes, GPU_WORK};
+ 
+ /// how the GPU reaches guest memory.
+ pub trait GpuMemory {
+@@ -794,6 +796,15 @@ impl Gpu {
+         None
+     }
+ 
++    /// the GPU's own timings, when they are being measured
++    /// (`ZAKURO_GPU_TIMES=1`), see [`GpuTimes`]; `None` in software, before
++    /// the renderer started and when the timings are off. Cumulative since
++    /// the renderer started.
++    #[cfg(feature = "vulkan")]
++    pub fn gpu_times(&self) -> Option<GpuTimes> {
++        self.resources.hardware.as_ref().and_then(|hardware| hardware.gpu_times())
++    }
++
+     /// how many times the console's resolution the host's GPU draws at, 1
+     /// when drawing in software.
+     pub fn scale(&self) -> u32 {
+diff --git a/crates/zakuro-gpu/src/raster.rs b/crates/zakuro-gpu/src/raster.rs
+index 0f238bf..f7b50c2 100644
+--- a/crates/zakuro-gpu/src/raster.rs
++++ b/crates/zakuro-gpu/src/raster.rs
+@@ -8,6 +8,53 @@ use rayon::prelude::*;
+ use crate::registers::*;
+ use crate::lighting::{Lighting, Tables};
+ 
++/// the kinds of work the GPU's timestamps tell apart, in the order
++/// [`GpuTimes::milliseconds`] has them.
++#[cfg(feature = "vulkan")]
++pub const GPU_WORK: [&str; 9] = ["other", "draw", "upload", "clear", "transfer", "capture", "copy", "download", "barrier"];
++
++/// the GPU's own time, from the timestamps it writes as the work changes
++/// kind, `ZAKURO_GPU_TIMES=1` turns it on. Cumulative since the renderer
++/// started: a host that reports a window subtracts two readings.
++#[cfg(feature = "vulkan")]
++#[derive(Clone, Copy, Debug, Default)]
++pub struct GpuTimes {
++    /// batches the GPU finished and whose timestamps were read.
++    pub batches: u64,
++    /// milliseconds the GPU spent per kind of work, see [`GPU_WORK`].
++    pub milliseconds: [f64; 9],
++    /// draws and render passes the batches recorded, and the barriers between
++    /// them.
++    pub draws: u64,
++    pub renderings: u64,
++    pub barriers: u64,
++    /// milliseconds the host waited for the GPU and how many times: for room
++    /// to record the next batch in, then for work it needed done.
++    pub waited_room_ms: f64,
++    pub waited_room_count: u64,
++    pub waited_done_ms: f64,
++    pub waited_done_count: u64,
++    /// vertices, primitives past clipping, fragments and compute invocations
++    /// the batches shaded, when the device keeps pipeline statistics;
++    /// pipeline_statistics says whether they mean anything.
++    pub shaded: [u64; 4],
++    pub pipeline_statistics: bool,
++}
++
++#[cfg(feature = "vulkan")]
++impl GpuTimes {
++    /// the milliseconds per kind of work between an earlier reading and this
++    /// one.
++    pub fn since(&self, earlier: &GpuTimes) -> [f64; 9] {
++        std::array::from_fn(|i| (self.milliseconds[i] - earlier.milliseconds[i]).max(0.0))
++    }
++
++    /// what this reading adds up to over an earlier one.
++    pub fn added_milliseconds(&self, earlier: &GpuTimes) -> f64 {
++        self.since(earlier).iter().sum()
++    }
++}
++
+ #[cfg(feature = "vulkan")]
+ pub(crate) mod hardware;
+ use crate::texture::TextureFormat;
+diff --git a/crates/zakuro-gpu/src/raster/hardware.rs b/crates/zakuro-gpu/src/raster/hardware.rs
+index 275cca8..eaeef2c 100644
+--- a/crates/zakuro-gpu/src/raster/hardware.rs
++++ b/crates/zakuro-gpu/src/raster/hardware.rs
+@@ -882,20 +882,47 @@ struct Timing {
+     /// each command buffer's timestamps, and the work between them.
+     pools: HashMap<vk::CommandBuffer, (vk::QueryPool, Vec<Work>)>,
+     current: Work,
+-    /// milliseconds per kind of work.
++    /// milliseconds per kind of work, cumulative since the renderer started.
+     totals: [f64; WORK_NAMES.len()],
++    /// the totals as of the last log line, so each line reports its own
++    /// window.
++    logged: [f64; WORK_NAMES.len()],
+     batches: u32,
++    /// batches the GPU finished, cumulative.
++    all_batches: u64,
+     barriers: u64,
+     renderings: u64,
+     draws: u64,
++    /// the counters as of the last log line.
++    logged_counts: [u64; 3],
+     /// each command buffer's pipeline statistics, when the device keeps
+     /// them, and the vertices, primitives past clipping, fragments and
+-    /// compute invocations they added up to.
++    /// compute invocations they added up to, cumulative.
+     statistics: Option<HashMap<vk::CommandBuffer, vk::QueryPool>>,
+     counts: [u64; 4],
++    /// the counts as of the last log line.
++    logged_shaded: [u64; 4],
+     /// milliseconds the host waited for the GPU and how many times, for a
+-    /// batch to record the next in, then for what it needed done.
++    /// batch to record the next in, then for what it needed done, cumulative.
+     waited: [(f64, u32); 2],
++    /// the waits as of the last log line.
++    logged_waited: [(f64, u32); 2],
++}
++
++/// whether clears are done as image clears where they can be, which writes
++/// the rows and nothing else: ZAKURO_FAST_CLEARS=1 (A/B, default off) turns
++/// it on.
++fn fast_clears() -> bool {
++    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    *ON.get_or_init(|| std::env::var_os("ZAKURO_FAST_CLEARS").is_some_and(|value| value != "0"))
++}
++
++/// whether the barrier a render pass about to begin on other buffers waits
++/// for is narrower than a full one: ZAKURO_FAST_BARRIERS=1 (A/B, default off)
++/// turns it on.
++fn fast_barriers() -> bool {
++    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    *ON.get_or_init(|| std::env::var_os("ZAKURO_FAST_BARRIERS").is_some_and(|value| value != "0"))
+ }
+ 
+ /// what the host waited for the GPU for.
+@@ -1973,13 +2000,18 @@ impl Hardware {
+                         pools: HashMap::new(),
+                         current: Work::Other,
+                         totals: [0.0; WORK_NAMES.len()],
++                        logged: [0.0; WORK_NAMES.len()],
+                         batches: 0,
++                        all_batches: 0,
+                         barriers: 0,
+                         renderings: 0,
+                         draws: 0,
++                        logged_counts: [0; 3],
+                         statistics: statistics.then(HashMap::new),
+                         counts: [0; 4],
++                        logged_shaded: [0; 4],
+                         waited: [(0.0, 0); 2],
++                        logged_waited: [(0.0, 0); 2],
+                     }),
+                 barriers: 0,
+                 unfenced: true,
+@@ -2023,6 +2055,29 @@ impl Hardware {
+         &self.name
+     }
+ 
++    /// the GPU's own timings, when they are being measured
++    /// (`ZAKURO_GPU_TIMES=1` on a queue that counts time): time per kind of
++    /// work, draws, render passes, barriers, the host's waits for the GPU and
++    /// what it shaded, cumulative since the renderer started. `None` when
++    /// they are off.
++    pub fn gpu_times(&self) -> Option<super::GpuTimes> {
++        let timing = self.timing.as_ref()?;
++        let [(room, rooms), (done, dones)] = timing.waited;
++        Some(super::GpuTimes {
++            batches: timing.all_batches,
++            milliseconds: timing.totals,
++            draws: timing.draws,
++            renderings: timing.renderings,
++            barriers: timing.barriers,
++            waited_room_ms: room,
++            waited_room_count: u64::from(rooms),
++            waited_done_ms: done,
++            waited_done_count: u64::from(dones),
++            shaded: timing.counts,
++            pipeline_statistics: timing.statistics.is_some(),
++        })
++    }
++
+     /// whether it runs vertex shaders.
+     pub(crate) fn shades(&self) -> bool {
+         self.shades
+@@ -2322,17 +2377,31 @@ impl Hardware {
+         timing.renderings += renderings;
+         timing.draws += draws;
+         timing.batches += 1;
++        timing.all_batches += 1;
+         if timing.batches == TIMED_BATCHES {
+-            let total: f64 = timing.totals.iter().sum();
++            // the window since the last line; the totals keep adding up, so a
++            // host reading them per window (the iOS perf line) can subtract
++            // two readings at any time.
++            let mut window = [0.0f64; WORK_NAMES.len()];
++            for (delta, (total, logged)) in window.iter_mut().zip(timing.totals.iter().zip(timing.logged.iter_mut())) {
++                *delta = (*total - *logged).max(0.0);
++                *logged = *total;
++            }
++            let total: f64 = window.iter().sum();
+             let parts: Vec<String> = WORK_NAMES
+                 .iter()
+-                .zip(timing.totals)
++                .zip(window)
+                 .filter(|&(_, ms)| ms > 0.0)
+                 .map(|(name, ms)| format!("{name} {ms:.1}"))
+                 .collect();
+             let shaded = match timing.statistics {
+                 Some(_) => {
+-                    let millions = timing.counts.map(|count| count as f64 / 1e6);
++                    let mut counts = [0u64; 4];
++                    for (delta, (count, logged)) in counts.iter_mut().zip(timing.counts.iter().zip(timing.logged_shaded.iter_mut())) {
++                        *delta = count.saturating_sub(*logged);
++                        *logged = *count;
++                    }
++                    let millions = counts.map(|count| count as f64 / 1e6);
+                     format!(
+                         ", shaded {:.2}M vertices, {:.2}M primitives, {:.2}M fragments, {:.2}M compute",
+                         millions[0], millions[1], millions[2], millions[3]
+@@ -2340,23 +2409,27 @@ impl Hardware {
+                 }
+                 None => String::new(),
+             };
+-            let [(room, rooms), (done, dones)] = timing.waited;
++            let mut counters = [0u64; 3];
++            let counted = [timing.barriers, timing.renderings, timing.draws];
++            for (delta, (count, logged)) in counters.iter_mut().zip(counted.iter().zip(timing.logged_counts.iter_mut())) {
++                *delta = count.saturating_sub(*logged);
++                *logged = *count;
++            }
++            let [barriers, renderings, draws] = counters;
++            let mut waits = [(0.0f64, 0u32); 2];
++            for (delta, (now, logged)) in waits.iter_mut().zip(timing.waited.iter_mut().zip(timing.logged_waited.iter_mut())) {
++                let (milliseconds, times) = *now;
++                *delta = ((milliseconds - logged.0).max(0.0), times.saturating_sub(logged.1));
++                *logged = (milliseconds, times);
++            }
++            let [(room, rooms), (done, dones)] = waits;
+             log::info!(
+                 target: "zakuro_gpu::times",
+-                "GPU over {TIMED_BATCHES} batches: {total:.1} ms, {}, {} barriers, {} render passes, {} draws{shaded}, \
++                "GPU over {TIMED_BATCHES} batches: {total:.1} ms, {}, {barriers} barriers, {renderings} render passes, {draws} draws{shaded}, \
+                  the host waited {room:.1} ms for room {rooms} times and {done:.1} ms for work done {dones} times",
+                 parts.join(", "),
+-                timing.barriers,
+-                timing.renderings,
+-                timing.draws
+             );
+-            timing.waited = [(0.0, 0); 2];
+-            timing.totals = [0.0; WORK_NAMES.len()];
+             timing.batches = 0;
+-            timing.barriers = 0;
+-            timing.renderings = 0;
+-            timing.draws = 0;
+-            timing.counts = [0; 4];
+         }
+         Ok(())
+     }
+@@ -2383,6 +2456,42 @@ impl Hardware {
+         }
+     }
+ 
++    /// the barrier a render pass about to begin on other buffers waits for,
++    /// narrower than a full one: what the pass before wrote is made visible to
++    /// the attachment reads and writes of this one and to the draws that
++    /// sample it, which is all that can depend on it.
++    /// `ZAKURO_FAST_BARRIERS=1` (A/B, default off) makes draw() call it.
++    fn barrier_rendering(&mut self) {
++        if !std::mem::take(&mut self.unfenced) {
++            return;
++        }
++        let barrier = [vk::MemoryBarrier2::default()
++            .src_stage_mask(
++                vk::PipelineStageFlags2::ALL_TRANSFER
++                    | vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT
++                    | vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
++                    | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS,
++            )
++            .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
++            .dst_stage_mask(
++                vk::PipelineStageFlags2::ALL_TRANSFER
++                    | vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT
++                    | vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
++                    | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS
++                    | vk::PipelineStageFlags2::FRAGMENT_SHADER,
++            )
++            .dst_access_mask(vk::AccessFlags2::MEMORY_READ | vk::AccessFlags2::MEMORY_WRITE)];
++        self.barriers += 1;
++        // what it takes is timed on its own, then the work before goes on
++        let work = self.timing.as_ref().map(|timing| timing.current);
++        self.mark(Work::Barrier, false);
++        // SAFETY: recording is on whenever this is called
++        unsafe { self.device.cmd_pipeline_barrier2(self.commands, &vk::DependencyInfo::default().memory_barriers(&barrier)) };
++        if let Some(work) = work {
++            self.mark(work, false);
++        }
++    }
++
+     /// ends the rendering, and draws what waits to go into twins, before
+     /// anything else reads or writes them.
+     fn end_rendering(&mut self) {
+@@ -2501,6 +2610,11 @@ impl Hardware {
+ 
+     /// records clearing rows of a surface's image or its twin's.
+     fn clear_rows_of(&mut self, index: usize, view: vk::ImageView, rows: (u32, u32), pixel: &[u8]) {
++        // an image clear writes the rows and nothing else: no render pass, no
++        // attachment load or store. ZAKURO_FAST_CLEARS=1 (A/B, default off).
++        if fast_clears() && self.fast_clear_image(index, rows, pixel) {
++            return;
++        }
+         let surface = &self.surfaces[index];
+         let (width, height, kind) = (surface.width, surface.height, surface.kind);
+         let scale = self.scale;
+@@ -2552,6 +2666,53 @@ impl Hardware {
+         }
+     }
+ 
++    /// clears whole rows of a surface with an image clear, which writes them
++    /// and nothing else: no render pass and no attachment load or store, the
++    /// way a render pass clear of the same rows would read and write the whole
++    /// surface. Only a clear of every row can be one, and a twin takes a
++    /// clear of its own, so those go the render pass way. False leaves the
++    /// clear to the render pass. `ZAKURO_FAST_CLEARS=1` (A/B).
++    fn fast_clear_image(&mut self, index: usize, rows: (u32, u32), pixel: &[u8]) -> bool {
++        let surface = &self.surfaces[index];
++        if surface.twinned || rows != (0, surface.height) {
++            return false;
++        }
++        let (kind, image) = (surface.kind, surface.image.image);
++        let range = [vk::ImageSubresourceRange::default()
++            .aspect_mask(match kind {
++                Kind::Color(_) => vk::ImageAspectFlags::COLOR,
++                Kind::Depth(_) => vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL,
++            })
++            .base_mip_level(0)
++            .level_count(1)
++            .base_array_layer(0)
++            .layer_count(1)];
++        // SAFETY: recording outside rendering, the surface's image in the
++        // general layout made to be rendered into and cleared, the whole of
++        // it written
++        unsafe {
++            match kind {
++                Kind::Color(format) => {
++                    let rgba = format.decode(pixel).map(|c| c as f32 / 255.0);
++                    let value = vk::ClearColorValue { float32: rgba };
++                    self.device
++                        .cmd_clear_color_image(self.commands, image, vk::ImageLayout::GENERAL, &value, &range);
++                }
++                Kind::Depth(sample) => {
++                    let (depth, stencil) = match sample {
++                        2 => (((u16::from_le_bytes([pixel[0], pixel[1]]) as u64 * 0xFF_FFFF + 0x7FFF) / 0xFFFF) as u32, 0),
++                        3 => (u32::from_le_bytes([pixel[0], pixel[1], pixel[2], 0]), 0),
++                        _ => (u32::from_le_bytes([pixel[0], pixel[1], pixel[2], 0]), pixel[3] as u32),
++                    };
++                    let value = vk::ClearDepthStencilValue { depth: float_depth(depth), stencil };
++                    self.device
++                        .cmd_clear_depth_stencil_image(self.commands, image, vk::ImageLayout::GENERAL, &value, &range);
++                }
++            }
++        }
++        true
++    }
++
+     /// the height of the tallest surface of a kind at an address and width,
+     /// at least height, the one a draw of that height goes into.
+     fn taller(&self, addr: u32, kind: Kind, width: u32, height: u32) -> u32 {
+@@ -4157,7 +4318,11 @@ impl Hardware {
+         if real {
+             if self.rendering != Some((color, depth)) {
+                 self.end_rendering();
+-                self.barrier();
++                if fast_barriers() {
++                    self.barrier_rendering();
++                } else {
++                    self.barrier();
++                }
+                 self.begin_rendering(color, depth);
+             }
+             if color_mask != 0 {

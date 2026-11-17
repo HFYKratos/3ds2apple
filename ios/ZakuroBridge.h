@@ -589,6 +589,50 @@ const char *zk_hardware_status(zk_system_t system);
  */
 uint64_t zk_last_frame_gpu_busy_micros(void);
 
+/* -------------------------------------------------- GPU execution timings -- */
+
+/**
+ * Microseconds per frame the GPU itself executed over the last `zk_perf`
+ * window, from the renderer's own timestamp queries, 0 while they are not
+ * measured.
+ *
+ * This is the GPU execution time the system Metal Performance HUD shows as
+ * GPU time, not the host time the command walk took
+ * (zk_last_frame_gpu_busy_micros()). It is measured only when the diagnostic
+ * switch was on before the load (`ZAKURO_GPU_TIMES=1`, which the app's
+ * diagnostic GPU profiles set); read zk_gpu_timing_status() first and ignore
+ * the number when it is 0. The value is an average over the last window of
+ * 60 frames and lags by at most one window, so compare scenes for the same
+ * number of frames.
+ */
+uint64_t zk_gpu_exec_micros_per_frame(void);
+
+/**
+ * 1 when the renderer measures the GPU's own execution times (the diagnostic
+ * switch is on and the device counts timestamps), 0 otherwise.
+ */
+int32_t zk_gpu_timing_status(void);
+
+/**
+ * The last window's full GPU breakdown as one line of text, or nothing while
+ * the GPU's times are not measured: execution time per frame, render passes,
+ * barriers, draws, the host's waits for the GPU, the time per kind of work
+ * (`draw`, `upload`, `clear`, `copy`, `barrier`, ...) and, when the device
+ * keeps pipeline statistics, the vertices/primitives/fragments/compute it
+ * shaded per frame. The line starts `zk_gpu:`.
+ *
+ * Writes at most capacity - 1 bytes plus a terminating NUL and returns the
+ * bytes written without the NUL; a shorter buffer truncates the line. Copy it
+ * (String(cString:) in Swift); do not keep the pointer.
+ *
+ * @param out Buffer of `capacity` writable bytes, or NULL (then nothing is
+ *            written and the line's length is returned).
+ * @param capacity Bytes available at `out`.
+ * @return Bytes written without the NUL, or the line's length when `out` is
+ *         NULL or `capacity` is 0.
+ */
+size_t zk_gpu_times_line(char *out, size_t capacity);
+
 /* ------------------------------------------------ linked (AOT) diagnostics -- */
 
 /**

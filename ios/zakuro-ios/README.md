@@ -353,6 +353,52 @@ and hardware builds on the same scene. The system Metal Performance HUD
 (`MetalHudEnabled` in the test IPA's Info.plist) shows FPS/GPU/memory alongside
 the in-app HUD.
 
+## GPU execution timing and renderer A/B switches (0.1.3)
+
+`zk_perf`'s `gpu` column times the host's command-list walk, which is what the
+CPU records; it is not how long the GPU executes the frame. The renderer can
+measure that itself with Vulkan timestamp queries: with `ZAKURO_GPU_TIMES=1`
+set before a load (the app's diagnostic GPU profiles do) every change of work
+kind stamps the GPU's clock, and the per-kind totals, pipeline statistics and
+the host's waits for the GPU are kept. It costs timestamp writes and fence
+reads, so a normal build leaves it off.
+
+The app reads it through:
+
+| C ABI | What it reports |
+|---|---|
+| `zk_gpu_timing_status()` | 1 when the times are being measured |
+| `zk_gpu_exec_micros_per_frame()` | real GPU execution time per frame, the average of the last 60-frame window (the same number the system Metal HUD shows) |
+| `zk_gpu_times_line(out, capacity)` | the window's breakdown: time per kind (`draw`, `upload`, `clear`, `transfer`, `capture`, `copy`, `download`, `barrier`, `other`), render passes, barriers, draws, the host's waits and the shaded vertices/primitives/fragments per frame |
+
+The periodic log line gains `gpu_exec X.XXms/f passes N/f barriers M/f` (plus
+`shaded V/P/F` when the device keeps pipeline statistics), and a second
+`zk_gpu:` line has the full breakdown. The numbers come from
+`zakuro_gpu::GpuTimes`, the same type the desktop renderer can log with
+`ZAKURO_GPU_TIMES=1` (`GPU over N batches: ...` lines).
+
+Renderer switches the diagnostic profiles use (both default off, read once when
+the renderer is built, so set them before a load):
+
+| Variable | Effect |
+|---|---|
+| `ZAKURO_FAST_CLEARS=1` | a clear of every row goes through `vkCmdClear*Image` instead of a render pass with LOAD+STORE: it writes the rows and nothing else |
+| `ZAKURO_FAST_BARRIERS=1` | the barrier a render pass waits for after a target switch is scoped to the attachment and transfer stages instead of `ALL_COMMANDS` |
+| `ZAKURO_GPU_TIMES=1` | the GPU's own timestamped execution times above (diagnostic only) |
+
+The other hidden renderer switches (`ZAKURO_GPU_SHADERS` / `ZAKURO_CPU_SHADERS`,
+`ZAKURO_FLOAT_DEPTH`, `ZAKURO_DEPTH_BLITS`, `ZAKURO_STATIC_BLEND`,
+`ZAKURO_GENERIC_SHADERS`, `ZAKURO_INTERPRET_SHADERS`, `ZAKURO_WAIT_FOR_SHADERS`)
+predate 0.1.3 and keep their defaults. The 0.1.3 switches change GPU state and
+scheduling, never the rendered picture; `ZAKURO_GPU_SHADERS` is the one that
+moves vertex shading between CPU and GPU and is a measurement switch of its own.
+
+The GPU timing and the switches are in
+`ios/zakuro-ios/patches/0003-gpu-timing-and-render-options.patch`, applied to the
+gitignored Zakuro checkout by `scripts/build-zakuro-ios.sh`, so a static library
+built from this repository carries both. `scripts/README.md` has the A/B build
+and measurement procedure.
+
 ## Tests
 
 The unit tests run inside the Zakuro checkout (the build script creates it and

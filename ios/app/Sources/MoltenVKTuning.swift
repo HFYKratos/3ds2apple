@@ -2,7 +2,8 @@
 //  MoltenVKTuning.swift
 //  3ds2apple
 //
-//  Developer A/B hook for MoltenVK's MVK_CONFIG_* performance parameters.
+//  Developer A/B hook for MoltenVK's MVK_CONFIG_* performance parameters and
+//  the renderer's own diagnostic switches.
 //
 //  Why an environment variable and not a Settings switch: MoltenVK reads these
 //  once, while it makes its first Vulkan instance/device, which happens inside
@@ -14,16 +15,25 @@
 //  rebuild. See scripts/README.md §5.3 for the candidate matrix and the
 //  measurement procedure.
 //
-//  Only names the pinned framework actually understands are accepted: the list
-//  below was read from the MoltenVK 1.4.2 binary embedded in the shell IPA
-//  (strings | grep MVK_CONFIG_), so a typo in an A/B run fails loudly instead of
-//  being silently ignored. Nothing here is copied from another project.
+//  0.1.3 adds *diagnostic GPU profiles* on top: a build can carry one profile
+//  name in its Info.plist ("GPUDiagnosticsProfile", injected by
+//  scripts/build-gpu-diagnostic-ipa.sh) and App.init applies that profile's
+//  allow-listed MoltenVK parameters and renderer switches before the first
+//  Vulkan device. A profile is what the GPU A/B IPAs differ in, so the same
+//  binary code can be measured with and without a candidate optimisation; a
+//  normal release build has no such key and the defaults are untouched.
+//
+//  Only names the pinned framework actually understands are accepted: the
+//  supportedKeys list below was read from the MoltenVK 1.4.2 binary embedded in
+//  the shell IPA (strings | grep MVK_CONFIG_), so a typo in an A/B run fails
+//  loudly instead of being silently ignored. Nothing here is copied from
+//  another project.
 //
 
 import Foundation
 
-/// Applies allow-listed `MVK_CONFIG_*` environment variables before the first
-/// Vulkan device exists.
+/// Applies allow-listed `MVK_CONFIG_*` environment variables and the renderer's
+/// diagnostic switches before the first Vulkan device exists.
 enum MoltenVKTuning {
     /// The `MVK_CONFIG_*` names the pinned MoltenVK 1.4.2 framework in the shell
     /// IPA understands (44 names; verified 2026-11-16 with `strings` on
@@ -75,57 +85,181 @@ enum MoltenVKTuning {
         "MVK_CONFIG_VK_SEMAPHORE_SUPPORT_STYLE",
     ]
 
+    /// The renderer's own diagnostic switches a profile may set. They are read
+    /// when the renderer or its device is built, inside the game load, so
+    /// setting them at App.init is early enough. Every one is default-off or
+    /// changes nothing unless the profile asks for it; ios/zakuro-ios/README.md
+    /// describes what each one does.
+    static let supportedRendererKeys: [String] = [
+        "ZAKURO_GPU_TIMES",
+        "ZAKURO_GPU_SHADERS",
+        "ZAKURO_CPU_SHADERS",
+        "ZAKURO_FAST_CLEARS",
+        "ZAKURO_FAST_BARRIERS",
+        "ZAKURO_FLOAT_DEPTH",
+        "ZAKURO_DEPTH_BLITS",
+        "ZAKURO_STATIC_BLEND",
+        "ZAKURO_GENERIC_SHADERS",
+        "ZAKURO_INTERPRET_SHADERS",
+        "ZAKURO_WAIT_FOR_SHADERS",
+    ]
+
     /// `NAME=value` pairs separated by commas, e.g.
     /// `THREEDS2APPLE_MVK_CONFIG=MVK_CONFIG_PREFILL_METAL_COMMAND_BUFFERS=1`.
     static let environmentVariable = "THREEDS2APPLE_MVK_CONFIG"
+
+    /// `NAME=value` pairs of the renderer's switches, applied like the MoltenVK
+    /// ones. Only `supportedRendererKeys` are accepted.
+    static let rendererEnvironmentVariable = "THREEDS2APPLE_RENDERER_OPTIONS"
+
+    /// The diagnostic profile a build runs: `baseline`, `mvk`, `renderer` or
+    /// `combo`, from this launch variable or the Info.plist key below. A
+    /// normal build has neither.
+    static let profileEnvironmentVariable = "THREEDS2APPLE_GPU_PROFILE"
+
+    /// The Info.plist key scripts/build-gpu-diagnostic-ipa.sh writes into a
+    /// diagnostic IPA to pick its profile; an explicit environment variable
+    /// wins over it.
+    static let profileInfoKey = "GPUDiagnosticsProfile"
+
+    /// The profiles a diagnostic IPA can carry, in the order the build script
+    /// makes them.
+    static let profileNames = ["baseline", "mvk", "renderer", "combo"]
 
     /// The overrides actually applied, as `NAME=value`, for the log and the
     /// diagnostics report.
     private(set) static var applied: [String] = []
 
+    /// The renderer switches actually applied, as `NAME=value`.
+    private(set) static var rendererApplied: [String] = []
+
+    /// The diagnostic profile this launch runs, none on a normal launch.
+    private(set) static var profile: String?
+
     /// One line for the device log and the diagnostics report; says "none" on a
     /// normal launch so a captured report explains the framework defaults.
     static var diagnosticsLine: String {
-        applied.isEmpty ? "moltenvk_env=none" : "moltenvk_env=" + applied.joined(separator: ",")
+        let moltenvk = applied.isEmpty ? "moltenvk_env=none" : "moltenvk_env=" + applied.joined(separator: ",")
+        let renderer = rendererApplied.isEmpty ? "renderer_env=none" : "renderer_env=" + rendererApplied.joined(separator: ",")
+        return "\(moltenvk) gpu_profile=\(profile ?? "none") \(renderer)"
     }
 
-    /// Reads the launch environment once and calls `setenv` per allow-listed
-    /// key. Called from `ThreeDS2AppleApp.init` before the first `zk_*` call can
-    /// create a Vulkan device; a normal launch (no variable) changes nothing.
-    static func applyFromEnvironment() {
-        guard applied.isEmpty else { return }   // SwiftUI may rebuild the App.
-        guard let raw = ProcessInfo.processInfo.environment[environmentVariable],
-              !raw.trimmingCharacters(in: .whitespaces).isEmpty else {
-            AppLog.log("[3ds2apple] MoltenVK tuning: %@ unset (framework defaults)", environmentVariable)
-            return
+    /// What a diagnostic profile sets: MoltenVK parameters and renderer
+    /// switches, as `NAME=value`. Unknown names set nothing.
+    ///
+    /// `baseline` is the control: it measures the GPU's own execution time and
+    /// changes nothing else. `mvk` adds the MoltenVK performance parameters an
+    /// iPhone can use. `renderer` adds the renderer's 0.1.3 A/B switches
+    /// (image clears where they can be, a narrower barrier between render
+    /// passes). `combo` is both, for the run after the A/B names a winner.
+    static func profileOptions(_ name: String) -> (moltenvk: [String], renderer: [String]) {
+        switch name {
+        case "baseline":
+            return ([], ["ZAKURO_GPU_TIMES=1"])
+        case "mvk":
+            return (
+                [
+                    "MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=1",
+                    "MVK_CONFIG_PREFILL_METAL_COMMAND_BUFFERS=1",
+                    "MVK_CONFIG_USE_MTLHEAP=1",
+                    "MVK_CONFIG_MAX_ACTIVE_METAL_COMMAND_BUFFERS_PER_QUEUE=8",
+                    "MVK_CONFIG_PRESENT_WITH_COMMAND_BUFFER=1",
+                    "MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS=0",
+                ],
+                ["ZAKURO_GPU_TIMES=1"]
+            )
+        case "renderer":
+            return (
+                [],
+                [
+                    "ZAKURO_GPU_TIMES=1",
+                    "ZAKURO_FAST_CLEARS=1",
+                    "ZAKURO_FAST_BARRIERS=1",
+                ]
+            )
+        case "combo":
+            return (
+                profileOptions("mvk").moltenvk,
+                profileOptions("mvk").renderer
+                    + ["ZAKURO_FAST_CLEARS=1", "ZAKURO_FAST_BARRIERS=1"]
+            )
+        default:
+            return ([], [])
         }
-        var failures = 0
-        for pair in raw.split(separator: ",") {
+    }
+
+    /// Reads the launch environment and the diagnostic profile once and calls
+    /// `setenv` per allow-listed key. Called from `ThreeDS2AppleApp.init` before
+    /// the first `zk_*` call can create a Vulkan device; a normal launch (no
+    /// variable, no profile key) changes nothing.
+    static func applyFromEnvironment() {
+        guard applied.isEmpty && rendererApplied.isEmpty else { return }   // SwiftUI may rebuild the App.
+        // 1) the diagnostic profile, an explicit launch variable winning over
+        // the IPA's Info.plist.
+        let environment = ProcessInfo.processInfo.environment
+        let requested = environment[profileEnvironmentVariable]
+            ?? (Bundle.main.object(forInfoDictionaryKey: profileInfoKey) as? String)
+        if let requested, !requested.trimmingCharacters(in: .whitespaces).isEmpty {
+            let name = requested.trimmingCharacters(in: .whitespaces).lowercased()
+            if profileNames.contains(name) {
+                profile = name
+                let options = profileOptions(name)
+                apply(pairs: options.moltenvk, keys: supportedKeys, into: &applied, source: "profile \(name)")
+                apply(pairs: options.renderer, keys: supportedRendererKeys, into: &rendererApplied, source: "profile \(name)")
+                AppLog.log("[3ds2apple] GPU diagnostic profile: %@ (%ld MoltenVK, %ld renderer switches)",
+                           name, applied.count, rendererApplied.count)
+            } else {
+                AppLog.log("[3ds2apple] GPU diagnostic profile: refusing unknown profile %@ (known: %@)",
+                           name, profileNames.joined(separator: ", "))
+            }
+        }
+        // 2) explicit overrides last, so a tester can top a profile up without
+        // a new build.
+        let moltenvk = environment[environmentVariable] ?? ""
+        apply(pairsCSV: moltenvk, keys: supportedKeys, into: &applied, source: environmentVariable)
+        let renderer = environment[rendererEnvironmentVariable] ?? ""
+        apply(pairsCSV: renderer, keys: supportedRendererKeys, into: &rendererApplied, source: rendererEnvironmentVariable)
+        if applied.isEmpty {
+            AppLog.log("[3ds2apple] MoltenVK tuning: no override applied (framework defaults)")
+        } else {
+            AppLog.log("[3ds2apple] MoltenVK tuning: applied %@ before the first device",
+                       applied.joined(separator: ","))
+        }
+        if !rendererApplied.isEmpty {
+            AppLog.log("[3ds2apple] Renderer tuning: applied %@ before the first device",
+                       rendererApplied.joined(separator: ","))
+        }
+        AppLog.log("[3ds2apple] %@", diagnosticsLine)
+    }
+
+    /// Applies a comma separated `NAME=value` list, rejecting names not in
+    /// `keys` and malformed pairs with a log line.
+    private static func apply(pairsCSV raw: String, keys: [String], into target: inout [String], source: String) {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        apply(pairs: trimmed.split(separator: ",").map(String.init), keys: keys, into: &target, source: source)
+    }
+
+    /// Applies `NAME=value` pairs through setenv, keeping the accepted ones.
+    private static func apply(pairs: [String], keys: [String], into target: inout [String], source: String) {
+        for pair in pairs {
             let trimmed = pair.trimmingCharacters(in: .whitespaces)
             guard let equals = trimmed.firstIndex(of: "="), equals > trimmed.startIndex else {
-                failures += 1
-                AppLog.log("[3ds2apple] MoltenVK tuning: ignoring malformed pair “%@”", String(trimmed))
+                AppLog.log("[3ds2apple] GPU tuning (%@): ignoring malformed pair “%@”", source, trimmed)
                 continue
             }
             let name = String(trimmed[..<equals])
             let value = String(trimmed[trimmed.index(after: equals)...])
-            guard supportedKeys.contains(name) else {
-                failures += 1
-                AppLog.log("[3ds2apple] MoltenVK tuning: refusing unknown key %@", name)
+            guard keys.contains(name) else {
+                AppLog.log("[3ds2apple] GPU tuning (%@): refusing unknown key %@", source, name)
                 continue
             }
+            if target.contains(where: { $0.hasPrefix(name + "=") }) { continue }
             guard setenv(name, value, 1) == 0 else {
-                failures += 1
-                AppLog.log("[3ds2apple] MoltenVK tuning: setenv(%@) failed", name)
+                AppLog.log("[3ds2apple] GPU tuning (%@): setenv(%@) failed", source, name)
                 continue
             }
-            applied.append("\(name)=\(value)")
-        }
-        if applied.isEmpty {
-            AppLog.log("[3ds2apple] MoltenVK tuning: no valid override applied (%@ left at defaults)", environmentVariable)
-        } else {
-            AppLog.log("[3ds2apple] MoltenVK tuning: applied %@ before the first device (%ld rejected)",
-                       applied.joined(separator: ","), failures)
+            target.append("\(name)=\(value)")
         }
     }
 }

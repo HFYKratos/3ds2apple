@@ -1018,6 +1018,37 @@ current session logs follow. These values make renderer, presentation,
 scheduler, settings, fast-forward, language and warm-up changes measurable on
 device.
 
+### GPU execution timing and A/B builds (0.1.3)
+
+`timing_ms_run_gpu=` is the host time the renderer's command walk took, not the
+GPU's execution time. Diagnostic builds additionally measure the GPU itself with
+Vulkan timestamp queries and export:
+
+- `gpu_timing_enabled=` — 1 when the GPU's own times are measured, 0 on a
+  normal build (the diagnostic switch is off).
+- `gpu_exec_ms_per_frame=` — the GPU's real execution time per frame, averaged
+  over the last 60-frame `zk_perf` window: the number the system Metal HUD shows
+  as GPU time. Use this field for before/after comparisons.
+- `gpu_times_line=` — the window's breakdown: time per kind of GPU work
+  (`draw`, `upload`, `clear`, `transfer`, `capture`, `copy`, `download`,
+  `barrier`), render passes, barriers, draws, the host's waits for the GPU and
+  the shaded vertices/primitives/fragments per frame. A candidate that lowers
+  `gpu_exec` while the shaded fragment count stays the same changed GPU
+  scheduling or bandwidth, not the emulated shading.
+- `gpu_profile=` / `gpu_profile_definition=` — the diagnostic GPU profile the IPA
+  was built with (`baseline`, `mvk`, `renderer`, `combo`) and what it applies.
+
+`scripts/build-gpu-diagnostic-ipa.sh` (on the macOS build VM) packages one IPA
+per profile, differing only in that Info.plist key; the app applies the profile's
+allow-listed MoltenVK parameters and renderer switches in `App.init`, before the
+first Vulkan device. Install one profile at a time (they share the bundle id),
+run the same scene at 3x for the same duration per profile, and send the
+diagnostics exports: the fields above plus the frame interval and a Metal HUD
+screenshot are what the optimization decision is made from. The app logs the
+profile and what it applied (`gpu_profile=`, `renderer_env=`, `moltenvk_env=`).
+See `scripts/README.md` for the profile table and the procedure, and
+`ios/zakuro-ios/README.md` for the switches themselves.
+
 ## Performance data capture
 
 The shell records rolling stutter statistics while a game runs, so a hitch on a
@@ -1074,14 +1105,14 @@ from a CPU hitch (`work` large, `gpu` small). The 0.1.1 phase name `run` is gone
 from the export: anything that parsed the old `stutter_phase_share=` string needs
 the new `run-gpu` / `run-cpu` labels.
 
-#### What the 2026-11-17 Zelda/Mario device log showed
+#### What the 2026-11-17 device log of a retail title showed
 
 - The severe hitches (562-930 ms on a cold cache, 100-180 ms on a warm one)
   land on the windows where `draws` jumps and `zk_perf`'s `gpu` column covers
   almost all of the frame time: first-use pipeline creation in the command walk,
   inside `zk_run_frame` - not `present`, and not the pipeline-cache write (that
   runs on the upstream compiler thread and is one 290 KB file per save).
-- Zelda's main-menu low-frame stretch (45-55 fps, `run` average 18-22 ms) had
+- The title's main-menu low-frame stretch (45-55 fps, `run` average 18-22 ms) had
   `gpu` 4.5-5.7 ms and `cpu` 74-91% of real time in the same windows: it is
   CPU-bound emulation, not the 3x render scale, present/vsync or the drawable.
   The layer was already triple-buffered ("Created 3 swapchain images") and

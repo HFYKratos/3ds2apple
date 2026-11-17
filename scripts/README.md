@@ -13,6 +13,7 @@ developer guide for the scripts.
 | `build-zakuro-ios.sh` | Clone/pin Zakuro, apply `ios/zakuro-ios/patches/*.patch`, add the iOS crate and build `build/ios/libzakuro_ios.a` |
 | `build-ios-app.sh` | `xcodegen` + `xcodebuild` for the unsigned shell `.app` (empty schema-2 catalog) |
 | `package-ipa.sh` | Wrap an unsigned `.app` into `IPA/<name>.ipa` and print its SHA-256; `--manifest FILE` writes the launcher shell `manifest.json` (version/build from the app Info.plist, bundle id, bytes, SHA-256) |
+| `build-gpu-diagnostic-ipa.sh` | Package the ROM-free shell as GPU A/B diagnostic IPAs (one Info.plist GPU profile each: `baseline`/`mvk`/`renderer`/`combo`), with MoltenVK embedded; outputs stay under `out/gpu-diag/` (gitignored) |
 
 ## GamePacks and shell IPA (launcher-first)
 
@@ -87,6 +88,34 @@ mixed with host measurements.
 
 The runtime reports the `AOT%` badge and `zk_perf` counters; the plan is to
 measure frame time, present time, GPU time and readbacks before changing codegen.
+
+#### GPU A/B diagnostic IPAs (0.1.3)
+
+`scripts/build-gpu-diagnostic-ipa.sh` builds the unsigned shell once and packages
+one IPA per diagnostic GPU profile, differing only in the `GPUDiagnosticsProfile`
+key written into each copy's `Info.plist`. `MoltenVKTuning.applyFromEnvironment`
+reads that key in `App.init` and applies the profile's allow-listed `MVK_CONFIG_*`
+values and renderer switches before the first Vulkan device, so the same code runs
+with and without a candidate optimisation. The app logs the profile and everything
+it applied (`gpu_profile=`, `renderer_env=`, `moltenvk_env=`), and every profile
+sets `ZAKURO_GPU_TIMES=1` so the diagnostics carry the GPU's real execution time.
+
+| Profile | What it adds |
+|---|---|
+| `baseline` | nothing but the GPU timing: the control |
+| `mvk` | MoltenVK performance parameters: Metal argument buffers, prefill of Metal command buffers, MTLHeap, more active Metal command buffers, present through a command buffer, async queue submits |
+| `renderer` | renderer A/B switches: image clears where they can be (no attachment load/store for a full clear, `ZAKURO_FAST_CLEARS=1`) and a narrower barrier between render passes (`ZAKURO_FAST_BARRIERS=1`) |
+| `combo` | both, for the confirmation run after the A/B names a winner |
+
+Run it on the macOS build VM after `scripts/build-zakuro-ios.sh` and
+`scripts/build-ios-app.sh`; `MOLTENVK_FRAMEWORK` names the downloaded framework
+to embed (never committed). It prints each IPA's path, bytes and SHA-256, writes
+`manifest.json` and an `out/gpu-diag/README.txt` with the device A/B procedure.
+Use the real GPU execution time (`gpu_exec_ms_per_frame=` in the diagnostics,
+`zk_gpu:` line in the log), the frame interval and a system Metal HUD screenshot
+for the same scene and duration per profile: a profile that lowers `gpu_exec`
+while the shaded fragment count stays the same changed GPU scheduling or
+bandwidth, not the emulated shading.
 
 ### Performance contract (licence boundary and measurement)
 

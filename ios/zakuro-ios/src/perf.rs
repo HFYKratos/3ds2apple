@@ -10,12 +10,13 @@
 //! ones in that line. Sampling costs a little per step, so release builds
 //! leave it off.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, Once};
 use std::time::{Duration, Instant};
 
 use zakuro_core::kernel::thread::CPU_CLOCK_HZ;
 use zakuro_core::System;
+use zakuro_gpu::GpuTimes;
 
 /// Frames between `zk_perf` log lines: about two seconds at 30 fps.
 pub const DEFAULT_LOG_INTERVAL: u32 = 60;
@@ -38,6 +39,23 @@ static LAST_FRAME_GPU_BUSY_MICROS: AtomicU64 = AtomicU64::new(0);
 /// Cumulative `system.gpu.busy` at the previous recorded frame, so each frame
 /// reports its own slice instead of the running total.
 static GPU_BUSY_BASELINE_MICROS: AtomicU64 = AtomicU64::new(0);
+
+/// Microseconds per frame the GPU itself executed over the last `zk_perf`
+/// window, from its own timestamp queries (the hardware renderer's
+/// `ZAKURO_GPU_TIMES=1`), 0 while they are not measured.
+static LAST_GPU_EXEC_MICROS_PER_FRAME: AtomicU64 = AtomicU64::new(0);
+/// Whether the loaded renderer measures the GPU's own times, so the app knows
+/// whether [`last_gpu_exec_micros_per_frame`] means anything.
+static GPU_TIMES_MEASURED: AtomicBool = AtomicBool::new(false);
+/// The last window's full GPU breakdown, one line, for the diagnostics
+/// export.
+static GPU_TIMES_LINE: Mutex<String> = Mutex::new(String::new());
+
+/// Locks the GPU line without ever panicking across the FFI boundary (a
+/// poisoned lock still holds usable text).
+fn lock_gpu_line() -> std::sync::MutexGuard<'static, String> {
+    GPU_TIMES_LINE.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 /// Logs Zakuro's own records (`log::info!`/`log::warn!`) to stderr.
 ///
@@ -97,6 +115,8 @@ struct Window {
     recompiled: u64,
     /// instructions the linked code handed back, cumulative in the `System`.
     fallbacks: u64,
+    /// the GPU's own timings at the window's start, when they are measured.
+    gpu_times: Option<GpuTimes>,
 }
 
 impl Window {
@@ -122,8 +142,31 @@ impl Window {
                 .recompiled
                 .as_ref()
                 .map_or(0, |library| library.fallbacks()),
+            gpu_times: system.gpu.gpu_times(),
         }
     }
+}
+
+/// The GPU's own timestamps for a window, averaged per frame: the real
+/// execution time the system Metal HUD shows as GPU time, split by the kind of
+/// work the renderer changed to (see `zakuro_gpu::GPU_WORK`).
+struct GpuSummary {
+    /// milliseconds the GPU executed per frame.
+    exec_ms: f64,
+    /// milliseconds per kind of work per frame, in `zakuro_gpu::GPU_WORK`
+    /// order.
+    work_ms: [f64; 9],
+    /// render passes, barriers and draws recorded per frame.
+    renderings: f64,
+    barriers: f64,
+    draws: f64,
+    /// milliseconds the host waited for the GPU per frame, and how many waits.
+    host_wait_ms: f64,
+    host_waits: u64,
+    /// vertices, primitives past clipping, fragments and compute invocations
+    /// per frame, 0 when the device keeps no pipeline statistics.
+    shaded: [f64; 4],
+    statistics: bool,
 }
 
 /// One `zk_perf` line's numbers, taken while the lock is held.
@@ -146,6 +189,8 @@ struct Summary {
     fills_per_frame: f64,
     interpreted_percent: f64,
     aot_active: bool,
+    /// the GPU's own times over the window, none while they are not measured.
+    gpu: Option<GpuSummary>,
     hot_spots: Vec<(String, u32, u64)>,
 }
 
@@ -203,7 +248,17 @@ pub fn record_frame(system: &System, duration: Duration, result: i32) {
         let summary = summarize(window, system);
         *guard = Some(Window::new(system));
         drop(guard);
+        // keep what the app and the diagnostics report read: the real GPU
+        // execution time and its breakdown, whether it is measured at all.
+        let exec = summary.gpu.as_ref().map_or(0, |gpu| (gpu.exec_ms * 1000.0).round() as u64);
+        LAST_GPU_EXEC_MICROS_PER_FRAME.store(exec, Ordering::Relaxed);
+        GPU_TIMES_MEASURED.store(system.gpu.gpu_times().is_some(), Ordering::Relaxed);
+        let gpu_line = format_gpu_line(&summary);
+        *lock_gpu_line() = gpu_line.clone();
         eprintln!("{}", format_summary(&summary));
+        if !gpu_line.is_empty() {
+            eprintln!("{gpu_line}");
+        }
         if result != 0 {
             eprintln!("zk_perf: frame loop stopped with result {result}");
         }
@@ -248,6 +303,9 @@ pub fn reset() {
     LAST_AUDIO_TAKE_MICROS.store(0, Ordering::Relaxed);
     LAST_FRAME_GPU_BUSY_MICROS.store(0, Ordering::Relaxed);
     GPU_BUSY_BASELINE_MICROS.store(0, Ordering::Relaxed);
+    LAST_GPU_EXEC_MICROS_PER_FRAME.store(0, Ordering::Relaxed);
+    GPU_TIMES_MEASURED.store(false, Ordering::Relaxed);
+    lock_gpu_line().clear();
     *lock_window() = None;
 }
 
@@ -264,6 +322,33 @@ pub fn last_frame_micros() -> u64 {
 /// compile) spike on a device.
 pub fn last_frame_gpu_busy_micros() -> u64 {
     LAST_FRAME_GPU_BUSY_MICROS.load(Ordering::Relaxed)
+}
+
+/// Microseconds per frame the GPU itself executed over the last `zk_perf`
+/// window, from the renderer's own timestamp queries, 0 while the GPU's times
+/// are not measured (the diagnostic switch is off) or before the first window.
+///
+/// This is the execution time the system Metal HUD reports as GPU time, not
+/// the host time the renderer's command walk took (that is
+/// [`last_frame_gpu_busy_micros`]). It lags by at most one window and covers
+/// the window's frames, so a scene comparison holds each reading for the same
+/// number of frames.
+pub fn last_gpu_exec_micros_per_frame() -> u64 {
+    LAST_GPU_EXEC_MICROS_PER_FRAME.load(Ordering::Relaxed)
+}
+
+/// Whether the loaded renderer measures the GPU's own execution times, which
+/// the diagnostic build turns on with `ZAKURO_GPU_TIMES=1`.
+pub fn gpu_times_enabled() -> bool {
+    GPU_TIMES_MEASURED.load(Ordering::Relaxed)
+}
+
+/// The last window's full GPU breakdown as one line: execution time per kind
+/// of work, render passes, barriers, draws, the host's waits for the GPU and
+/// what the GPU shaded. Empty while the GPU's times are not measured or before
+/// the first window.
+pub fn gpu_times_line() -> String {
+    lock_gpu_line().clone()
 }
 
 /// The last `zk_read_screen` duration in microseconds, 0 before the first read.
@@ -317,6 +402,7 @@ fn summarize(window: &mut Window, system: &System) -> Summary {
     };
 
     let per_frame = |count: u64| count as f64 / frames as f64;
+    let gpu = gpu_breakdown(window.gpu_times, system.gpu.gpu_times(), frames);
 
     Summary {
         frames,
@@ -343,12 +429,46 @@ fn summarize(window: &mut Window, system: &System) -> Summary {
         fills_per_frame: per_frame(system.gpu.fills.saturating_sub(window.fills)),
         interpreted_percent,
         aot_active: system.recompiled.is_some(),
+        gpu,
         hot_spots: if system.profile.is_some() {
             system.hot_spots(LOGGED_HOT_SPOTS)
         } else {
             Vec::new()
         },
     }
+}
+
+/// The GPU's own timestamps for a window, averaged per frame, from the
+/// renderer's cumulative readings at the window's start and end. None while the
+/// GPU's times are not measured.
+fn gpu_breakdown(baseline: Option<GpuTimes>, current: Option<GpuTimes>, frames: u64) -> Option<GpuSummary> {
+    let (baseline, current) = (baseline?, current?);
+    if frames == 0 {
+        return None;
+    }
+    let work = current.since(&baseline);
+    let per_frame = |value: f64| value / frames as f64;
+    let mut shaded = [0u64; 4];
+    for (delta, (now, before)) in shaded.iter_mut().zip(current.shaded.iter().zip(baseline.shaded.iter())) {
+        *delta = now.saturating_sub(*before);
+    }
+    Some(GpuSummary {
+        exec_ms: per_frame(work.iter().sum::<f64>()),
+        work_ms: work.map(per_frame),
+        renderings: per_frame(current.renderings.saturating_sub(baseline.renderings) as f64),
+        barriers: per_frame(current.barriers.saturating_sub(baseline.barriers) as f64),
+        draws: per_frame(current.draws.saturating_sub(baseline.draws) as f64),
+        host_wait_ms: per_frame(
+            (current.waited_room_ms - baseline.waited_room_ms).max(0.0)
+                + (current.waited_done_ms - baseline.waited_done_ms).max(0.0),
+        ),
+        host_waits: current
+            .waited_room_count
+            .saturating_sub(baseline.waited_room_count)
+            .saturating_add(current.waited_done_count.saturating_sub(baseline.waited_done_count)),
+        shaded: shaded.map(|count| per_frame(count as f64)),
+        statistics: current.pipeline_statistics,
+    })
 }
 
 /// Formats one `zk_perf` line. Function names are not available for guest
@@ -385,11 +505,54 @@ fn format_summary(summary: &Summary) -> String {
             "interpreting"
         },
     );
+    if let Some(gpu) = &summary.gpu {
+        // the GPU's own timestamps: the execution time the system Metal HUD
+        // shows, not the host command walk `gpu_ms_per_frame` counts.
+        line.push_str(&format!(
+            " | gpu_exec {:.2}ms/f passes {:.0}/f barriers {:.0}/f",
+            gpu.exec_ms, gpu.renderings, gpu.barriers
+        ));
+        if gpu.statistics {
+            line.push_str(&format!(
+                " shaded {:.1}M/{:.1}M/{:.1}M v/p/f/f",
+                gpu.shaded[0] / 1e6,
+                gpu.shaded[1] / 1e6,
+                gpu.shaded[2] / 1e6
+            ));
+        }
+    }
     if !summary.hot_spots.is_empty() {
         line.push_str(" | hot");
         for (thread, pc, hits) in &summary.hot_spots {
             line.push_str(&format!(" {thread}@0x{pc:08X}x{hits}"));
         }
+    }
+    line
+}
+
+/// The last window's full GPU breakdown as one line, for the device log and
+/// the diagnostics export: the execution time per kind of work, the passes,
+/// barriers and draws it took, the host's waits and what the GPU shaded.
+/// Empty while the GPU's own times are not measured.
+fn format_gpu_line(summary: &Summary) -> String {
+    let Some(gpu) = &summary.gpu else { return String::new() };
+    let mut line = format!(
+        "zk_gpu: {} frames | gpu_exec {:.2}ms/frame | passes {:.0}/f barriers {:.0}/f draws {:.0}/f host_wait {:.2}ms/f ({} waits)",
+        summary.frames, gpu.exec_ms, gpu.renderings, gpu.barriers, gpu.draws, gpu.host_wait_ms, gpu.host_waits
+    );
+    for (name, milliseconds) in zakuro_gpu::raster::GPU_WORK.iter().zip(gpu.work_ms) {
+        if milliseconds > 0.0 {
+            line.push_str(&format!(" | {name} {milliseconds:.2}ms/f"));
+        }
+    }
+    if gpu.statistics {
+        line.push_str(&format!(
+            " | shaded {:.2}M vertices {:.2}M primitives {:.2}M fragments {:.3}M compute per frame",
+            gpu.shaded[0] / 1e6,
+            gpu.shaded[1] / 1e6,
+            gpu.shaded[2] / 1e6,
+            gpu.shaded[3] / 1e6
+        ));
     }
     line
 }
@@ -459,6 +622,7 @@ mod tests {
             fills_per_frame: 2.0,
             interpreted_percent: 0.21,
             aot_active: true,
+            gpu: None,
             hot_spots: Vec::new(),
         };
         let line = format_summary(&summary);
@@ -497,8 +661,97 @@ mod tests {
             fills_per_frame: 0.0,
             interpreted_percent: 100.0,
             aot_active: false,
+            gpu: None,
             hot_spots: Vec::new(),
         };
         !format_summary(&summary).contains(" | hot")
+    }
+
+    /// A GPU reading with `draw` time filled in and every other kind 0, as
+    /// the renderer's timestamps report them.
+    fn gpu_times(draw_ms: f64, draws: u64, renderings: u64, fragments: u64) -> GpuTimes {
+        let mut milliseconds = [0.0; 9];
+        milliseconds[1] = draw_ms;
+        GpuTimes {
+            batches: 1,
+            milliseconds,
+            draws,
+            renderings,
+            barriers: renderings + 1,
+            waited_room_ms: 0.0,
+            waited_room_count: 0,
+            waited_done_ms: 0.0,
+            waited_done_count: 0,
+            shaded: [100, 50, fragments, 0],
+            pipeline_statistics: true,
+        }
+    }
+
+    #[test]
+    fn gpu_breakdown_averages_the_window() {
+        let baseline = gpu_times(100.0, 300, 20, 2_000);
+        let current = gpu_times(400.0, 900, 80, 10_000);
+        let gpu = gpu_breakdown(Some(baseline), Some(current), 10).expect("the GPU's times");
+        assert!((gpu.exec_ms - 30.0).abs() < 1e-9, "exec {} ms", gpu.exec_ms);
+        assert!((gpu.work_ms[1] - 30.0).abs() < 1e-9, "draw {} ms", gpu.work_ms[1]);
+        assert!((gpu.draws - 60.0).abs() < 1e-9);
+        assert!((gpu.renderings - 6.0).abs() < 1e-9);
+        assert!((gpu.barriers - 6.0).abs() < 1e-9);
+        assert!((gpu.shaded[2] - 800.0).abs() < 1e-9, "fragments {}", gpu.shaded[2]);
+        assert!(gpu.statistics);
+        assert_eq!(gpu.host_waits, 0);
+        // no reading at the window's start or no frames means no average, not
+        // a zero line
+        assert!(gpu_breakdown(None, Some(current), 10).is_none());
+        assert!(gpu_breakdown(Some(baseline), None, 10).is_none());
+        assert!(gpu_breakdown(Some(baseline), Some(baseline), 0).is_none());
+    }
+
+    #[test]
+    fn summary_and_gpu_line_carry_the_gpu_execution_time() {
+        let summary = Summary {
+            frames: 60,
+            seconds: 2.0,
+            frame_avg_ms: 22.0,
+            frame_max_ms: 30.0,
+            screen_avg_ms: [0.0; 2],
+            screen_max_ms: [0.0; 2],
+            screen_reads: 0,
+            audio_avg_ms: 0.0,
+            audio_takes: 60,
+            gpu_ms_per_frame: 5.0,
+            non_gpu_ms_per_frame: 17.0,
+            speed_percent: 80.0,
+            cycles_per_second: 214_000_000.0,
+            draws_per_frame: 180.0,
+            transfers_per_frame: 0.0,
+            fills_per_frame: 2.0,
+            interpreted_percent: 0.1,
+            aot_active: true,
+            gpu: Some(GpuSummary {
+                exec_ms: 21.5,
+                work_ms: [0.0, 20.0, 0.5, 0.2, 0.0, 0.3, 0.0, 0.0, 0.5],
+                renderings: 12.0,
+                barriers: 13.0,
+                draws: 180.0,
+                host_wait_ms: 0.4,
+                host_waits: 6,
+                shaded: [1_200_000.0, 600_000.0, 3_300_000.0, 0.0],
+                statistics: true,
+            }),
+            hot_spots: Vec::new(),
+        };
+        let line = format_summary(&summary);
+        for field in ["gpu_exec 21.50ms/f", "passes 12/f", "barriers 13/f", "shaded 1.2M/0.6M/3.3M"] {
+            assert!(line.contains(field), "missing {field}: {line}");
+        }
+        // the host command walk keeps its own column, so the two are not
+        // confused when reading a log
+        assert!(line.contains("gpu 5.00ms/frame"), "missing the walk column: {line}");
+        let gpu_line = format_gpu_line(&summary);
+        for field in ["zk_gpu:", "gpu_exec 21.50ms/frame", "| draw 20.00ms/f", "passes 12/f", "3.30M fragments"] {
+            assert!(gpu_line.contains(field), "missing {field}: {gpu_line}");
+        }
+        assert!(!gpu_line.contains("other 0.00"), "zero kinds are left out: {gpu_line}");
     }
 }

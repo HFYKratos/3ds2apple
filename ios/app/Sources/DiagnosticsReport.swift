@@ -149,6 +149,32 @@ enum DiagnosticsExporter {
         return "\(Int(size.width))x\(Int(size.height))"
     }
 
+    /// 1 when the loaded renderer measures its own GPU execution time (the
+    /// diagnostic GPU profile set `ZAKURO_GPU_TIMES=1`), 0 otherwise.
+    private static var gpuTimingEnabled: Bool {
+        zk_gpu_timing_status() == 1
+    }
+
+    /// The GPU's real execution time per frame over the last 60-frame
+    /// `zk_perf` window, in milliseconds, or why it is not measured.
+    private static var gpuExecutionText: String {
+        guard gpuTimingEnabled else { return "not measured (diagnostic GPU profile off)" }
+        let micros = zk_gpu_exec_micros_per_frame()
+        return String(format: "%.2f", Double(micros) / 1000.0)
+    }
+
+    /// The last window's full GPU breakdown (passes, barriers, draws, host
+    /// waits, time per kind of work, shaded counts), or why it is not measured.
+    private static var gpuTimesLine: String {
+        guard gpuTimingEnabled else { return "not measured (diagnostic GPU profile off)" }
+        var buffer = [CChar](repeating: 0, count: 1024)
+        let written = buffer.withUnsafeMutableBufferPointer { pointer -> Int in
+            guard let base = pointer.baseAddress else { return 0 }
+            return zk_gpu_times_line(base, pointer.count)
+        }
+        guard written > 0 else { return "empty" }
+        return String(cString: buffer)
+    }
     /// The report text: a header with the current state and both session logs.
     static func report(model: ROMSession, settings: AppSettings) -> String {
         let info = Bundle.main.infoDictionary ?? [:]
@@ -278,6 +304,12 @@ enum DiagnosticsExporter {
         \(stutterLines(stutter))
         perf_log=zk_perf window every 60 frames on stderr (ios/zakuro-ios/README.md)
         metal_moltenvk_env=\(MoltenVKTuning.diagnosticsLine)
+        gpu_profile=\(MoltenVKTuning.profile ?? "none")
+        gpu_profile_definition=diagnostic builds only (scripts/build-gpu-diagnostic-ipa.sh): baseline measures the GPU's own execution time and changes nothing else; mvk adds the MoltenVK performance parameters; renderer adds the 0.1.3 renderer A/B switches (image clears where they can be, a narrower barrier between render passes); combo both. none on a normal build
+        gpu_timing_enabled=\(gpuTimingEnabled ? 1 : 0)
+        gpu_exec_ms_per_frame=\(gpuExecutionText)
+        gpu_exec_definition=real GPU execution time from the renderer's own Vulkan timestamp queries (ZAKURO_GPU_TIMES=1), averaged over the last 60-frame zk_perf window: the number the system Metal HUD shows as GPU time. timing_ms_run_gpu is the host command-walk time instead. A/B: compare this field, timing_ms_interval and a Metal HUD screenshot between profile IPAs in the same scene for the same duration
+        gpu_times_line=\(gpuTimesLine)
         """
         header += "\n\n"
         return AppLog.shared.exportReport(header: header)

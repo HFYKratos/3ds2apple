@@ -22,7 +22,7 @@ if [[ ! -d "$ZAKURO_DIR/.git" ]]; then
 fi
 
 # Apply the local patches (MoltenVK lookup on iOS, pipeline-cache save
-# interval). Idempotent: an already patched checkout is left as it is, and a
+# interval, GPU execution timings and the renderer A/B switches). Idempotent: an already patched checkout is left as it is, and a
 # patch that no longer applies is a warning, so upstream main can drift.
 # shellcheck source=lib/zakuro-patches.sh
 source "$ROOT/scripts/lib/zakuro-patches.sh"

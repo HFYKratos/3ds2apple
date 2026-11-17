@@ -61,6 +61,14 @@
 //! renderer's tuning switches (GPU versus CPU vertex shading) before a load.
 //! `METAL.md` has the architecture, the MoltenVK findings and the spike plan.
 //!
+//! The GPU's own execution time is a diagnostic of its own: with
+//! `ZAKURO_GPU_TIMES=1` set before a load, the renderer writes timestamps and
+//! keeps per-kind totals, and `zk_gpu_exec_micros_per_frame` /
+//! `zk_gpu_times_line` report them for the diagnostics export. The periodic
+//! `zk_perf` line carries the average and a second `zk_gpu:` line has the
+//! breakdown. It costs timestamp writes and fences, so a normal build leaves it
+//! off; the app's diagnostic profiles turn it on.
+//!
 //! The internal resolution the host-GPU renderer draws the 3D at is a separate,
 //! process-wide switch: [`zk_set_render_scale`] picks 1x (the console's own
 //! 400×240, the default) to 4x, and the value is read when a system loads, like
@@ -1095,6 +1103,63 @@ pub extern "C" fn zk_last_frame_micros() -> u64 {
 #[no_mangle]
 pub extern "C" fn zk_last_frame_gpu_busy_micros() -> u64 {
     perf::last_frame_gpu_busy_micros()
+}
+
+/// Microseconds per frame the GPU itself executed over the last `zk_perf`
+/// window, from the renderer's own timestamp queries, 0 while they are not
+/// measured.
+///
+/// This is the GPU execution time (what the system Metal HUD shows), not the
+/// host time the command walk took (`zk_last_frame_gpu_busy_micros`). The
+/// timings are off unless `ZAKURO_GPU_TIMES=1` was set before the load, so
+/// read `zk_gpu_timing_status` first a diagnostic report says anything about
+/// the number. It is an average over the last window of
+/// [`perf::DEFAULT_LOG_INTERVAL`] frames and lags by at most one window.
+#[no_mangle]
+pub extern "C" fn zk_gpu_exec_micros_per_frame() -> u64 {
+    perf::last_gpu_exec_micros_per_frame()
+}
+
+/// 1 when the renderer measures the GPU's own execution times (the diagnostic
+/// switch is on and the device counts timestamps), 0 otherwise.
+#[no_mangle]
+pub extern "C" fn zk_gpu_timing_status() -> i32 {
+    i32::from(perf::gpu_times_enabled())
+}
+
+/// The last window's full GPU breakdown as one line of text, or nothing while
+/// the GPU's times are not measured.
+///
+/// The line starts `zk_gpu:` and has the execution time per frame, the render
+/// passes, barriers and draws it took, the host's waits for the GPU, the time
+/// per kind of work the renderer changed to (`draw`, `upload`, `clear`,
+/// `copy`, `barrier`, ...) and, when the device keeps pipeline statistics, the
+/// vertices, primitives, fragments and compute invocations it shaded per
+/// frame. Copy it into the diagnostics report for a device A/B.
+///
+/// Writes at most `capacity - 1` bytes plus a terminating NUL and returns the
+/// bytes written without the NUL; a shorter buffer truncates the line. Copy it
+/// (for example `String(cString:)` in Swift) rather than keeping the pointer.
+///
+/// # Safety
+///
+/// `out` must point at `capacity` writable bytes, or be `NULL` (then nothing
+/// is written and the line's length is returned).
+#[no_mangle]
+pub extern "C" fn zk_gpu_times_line(out: *mut c_char, capacity: usize) -> usize {
+    let text = perf::gpu_times_line();
+    if out.is_null() || capacity == 0 {
+        return text.len();
+    }
+    let bytes = text.as_bytes();
+    let keep = bytes.len().min(capacity - 1);
+    // SAFETY: the caller promises `capacity` writable bytes at `out`, and
+    // `keep` is at most `capacity - 1`, so the NUL fits too.
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), out as *mut u8, keep);
+        *out.add(keep) = 0;
+    }
+    keep
 }
 
 /// 1 when this `System` is running 3dsrecomp code, 0 when the interpreter runs
