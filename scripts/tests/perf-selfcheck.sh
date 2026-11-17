@@ -138,6 +138,63 @@ check "CAMetalLayer keeps the three-drawable swapchain" contains ios/app/Sources
 check "README documents the 0.1.2 attribution" contains ios/app/README.md 'stutter_pipeline_compile_suspects='
 check "README documents the device A/B method" contains ios/app/README.md '### A/B a change on device'
 
+section 'Pause/resume timing (0.1.2 diagnostics fix)'
+check "frame pause clock exists" contains ios/app/Sources/FrameTiming.swift 'final class FramePauseClock'
+check "pause clock opens a pause" contains ios/app/Sources/FrameTiming.swift 'func pause(at ticks: UInt64)'
+check "pause clock closes a pause" contains ios/app/Sources/FrameTiming.swift 'func resume(at ticks: UInt64)'
+check "the frame path consumes the pending pause" contains ios/app/Sources/FrameTiming.swift 'func takePendingResume()'
+check "a restarted loop drops the pending pause" contains ios/app/Sources/FrameTiming.swift 'func forgetPendingResume()'
+check "pause totals are exposed for diagnostics" contains ios/app/Sources/FrameTiming.swift 'struct FramePauseStats'
+check "StutterTracker can pause" contains ios/app/Sources/FrameTiming.swift 'mutating func pause(at ticks: UInt64)'
+check "StutterTracker can resume" contains ios/app/Sources/FrameTiming.swift 'mutating func resume(at ticks: UInt64)'
+check "a frame recorded inside a pause is ignored" contains ios/app/Sources/FrameTiming.swift 'guard pauseStartTicks == nil else { return }'
+check "the per-minute rate excludes paused time" contains ios/app/Sources/FrameTiming.swift 'startedTicks &+= pausedTicks'
+check "the render path applies the pending pause" contains ios/app/Sources/ROMSession.swift 'applyPendingPauseResume(at: frameStart)'
+check "the FPS window is rebased after a pause" contains ios/app/Sources/ROMSession.swift 'statsWindowStartTicks = frameStartTicks'
+check "the stutter tracker is rebased after a pause" contains ios/app/Sources/ROMSession.swift 'stutterTracker.resume(at: frameStartTicks)'
+check "every pause site records the pause clock" \
+  bash -c 'n=$(grep -c "framePauseClock\.pause(at: FrameClock.now())" ios/app/Sources/ROMSession.swift); [ "$n" -ge 5 ]'
+check "every resume site closes the pause clock" \
+  bash -c 'n=$(grep -c "framePauseClock\.resume(at: FrameClock.now())" ios/app/Sources/ROMSession.swift); [ "$n" -ge 4 ]'
+check "a new frame loop drops the old pause" contains ios/app/Sources/ROMSession.swift 'framePauseClock.forgetPendingResume()'
+check "a new session clears the pause totals" contains ios/app/Sources/ROMSession.swift 'framePauseClock.resetSession()'
+check "the in-game menu pauses the frame clock" contains ios/app/Sources/ROMSession.swift 'framePauseClock.pause(at: FrameClock.now())'
+check "an inactive scene pauses the loop" contains ios/app/Sources/ROMSession.swift 'func pauseForInactiveScene()'
+check "an active scene resumes the loop without resetting stats" contains ios/app/Sources/ROMSession.swift 'func resumeAfterInactiveScene()'
+check "ContentView pauses for the inactive scene phase" contains ios/app/Sources/ContentView.swift 'model.pauseForInactiveScene()'
+check "ContentView resumes for the active scene phase" contains ios/app/Sources/ContentView.swift 'model.resumeAfterInactiveScene()'
+check "diagnostics export has the pause count" contains ios/app/Sources/DiagnosticsReport.swift 'frame_pause_count='
+check "diagnostics export has the paused time" contains ios/app/Sources/DiagnosticsReport.swift 'frame_pause_ms_total='
+check "diagnostics export explains the pause exclusion" contains ios/app/Sources/DiagnosticsReport.swift 'frame_pause_definition='
+check "diagnostics reads the pipeline cache at export time" contains ios/app/Sources/DiagnosticsReport.swift 'let cache = PipelineCacheStats.read()'
+check "diagnostics names the cache directory state" contains ios/app/Sources/DiagnosticsReport.swift 'pipeline_cache_dir_state='
+check "diagnostics does not invent a cold at-load state" contains ios/app/Sources/DiagnosticsReport.swift 'unknown (no load in this session)'
+check "cache stats keep the read error" contains ios/app/Sources/GraphicsWarmUp.swift 'var readError: String?'
+check "cache stats distinguish missing from unreadable" contains ios/app/Sources/GraphicsWarmUp.swift 'var directoryState: String'
+check "an unreadable cache is reported with its reason" contains ios/app/Sources/GraphicsWarmUp.swift 'unreadable ('
+check "a missing cache directory is a normal cold run" contains ios/app/Sources/GraphicsWarmUp.swift 'NSFileReadNoSuchFileError'
+check "README documents the pause counters" contains ios/app/README.md 'frame_pause_count='
+check "README documents the cache directory state" contains ios/app/README.md 'pipeline_cache_dir_state='
+
+section 'Frame timing pause/resume logic (Swift, macOS only)'
+if command -v swiftc >/dev/null 2>&1; then
+  SELFTEST_BIN="${TMPDIR:-/tmp}/3ds2apple-frame-timing-selftest.$$"
+  if swiftc -parse-as-library -O -o "${SELFTEST_BIN}" \
+      ios/app/Sources/FrameTiming.swift scripts/tests/frame-timing-selftest.swift >/dev/null 2>&1; then
+    pass "frame-timing self-test compiles"
+    if "${SELFTEST_BIN}" >/dev/null 2>&1; then
+      pass "pause/resume logic: pauses are not stutters or FPS dips"
+    else
+      fail "pause/resume logic: pauses are not stutters or FPS dips"
+    fi
+  else
+    fail "frame-timing self-test compiles"
+  fi
+  rm -f -- "${SELFTEST_BIN}"
+else
+  printf '  skip frame-timing self-test (swiftc missing; runs on the macOS VM)\n'
+fi
+
 section 'Licence boundary'
 if grep -rlE 'any3ds' ios scripts tools --include='*.swift' --include='*.sh' --include='*.c' --include='*.rs' \
      | grep -v -- 'scripts/tests/perf-selfcheck.sh' >/dev/null 2>&1; then

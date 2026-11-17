@@ -451,12 +451,26 @@ localized.
   (generation-guarded, so a frame already queued becomes a no-op) and stops the
   audio engine; the runtime handle is kept. Resuming starts a new loop and
   restarts the audio engine.
+- Paused wall time is excluded from the frame statistics. The in-game menu, a
+  save-state operation, the software keyboard and scene transitions record when
+  the pause starts and ends; the first frame after a resume rebases the
+  start-to-start interval and restarts the 0.5 s FPS window instead of measuring
+  the pause. A three-second keyboard pause therefore resumes at a normal frame
+  rate instead of logging `fps=0.5` with one multi-second `stutter=` spike, and
+  the diagnostics header reports the pause separately as `frame_pause_count=` /
+  `frame_pause_ms_total=` / `frame_pause_ms_last=`. The system Metal HUD's own
+  first sample after a pause still includes the pause (MoltenVK measures
+  present-to-present); that is outside the app's statistics.
 - Reset releases the runtime and loads the same ROM again with the same per-ROM
   save data directory; battery saves are kept.
 - Exit releases the runtime and returns to the home page. The ROM file and save
   data stay in the app container.
 - Moving the app to the background releases the runtime (iOS may jettison a
   backgrounded process); the home page then offers to load the ROM again.
+  Losing scene activity without backgrounding (Control Center, the app switcher,
+  an incoming call, a system alert) only pauses: the loop and the audio engine
+  stop, and returning resumes the same session with its statistics preserved
+  and the inactive minutes excluded.
 - Fast-forward is a property of the frame loop, so pause, save states, reset and
   unload suspend it together with the loop; resuming continues at the setting's
   speed. The in-game menu's speed control applies on resume.
@@ -676,6 +690,8 @@ game looks frozen on its last frame. The app answers it:
   title is waiting on the applet, so further frames would only burn CPU and audio
   (the desktop frontend stops emulating while it types for the same reason);
   input is cleared and the audio engine is stopped like the in-game menu does.
+  The wait is recorded as a pause, so the resumed `perf:`/diagnostics numbers
+  exclude it instead of counting it as one huge stutter.
 - **Overlay.** `GameView` shows `KeyboardOverlayView` over the paused picture: a
   full-screen dim layer (the on-screen controls and the pause button cannot be
   reached while the applet is open) with a glass card that shows the applet's hint,
@@ -866,7 +882,8 @@ the pipeline-cache state at
 launch/load/after `zk_destroy`, one line recording that the warm-up option is
 gone, a `frame cap:` / `render scale:` line when those settings change (the
 render-scale line notes that the internal 3D scale applies on the next load),
-one line per pause/resume/reset, one `save state:` line per save/load/delete,
+one line per pause/resume/reset, one `frame timing: excluded a <n> s pause ...`
+line per resume that followed a pause, one `save state:` line per save/load/delete,
 one `library:` line per scan (entry counts per source) with a `library entry:`
 line and the per-game validation messages for every game, the
 `-gamesRoot`/`-openAOTTitleID` arguments when the debug hooks are used,
@@ -886,8 +903,18 @@ The exported diagnostics header adds the build, device, session phase
 `metal_moltenvk_embedded=`, `metal_hud_enabled=`, `renderer_software=`,
 `app_language=`, `system_language=`), `warmup_enabled=0` with the
 `warmup_note=removed-in-0.1.1` marker (the first-load warm-up is gone; pipeline
-cache persistence is unchanged) and the `pipeline_cache*` fields (directory,
-file count, size, newest file). 0.1.2 adds the hitch-attribution fields:
+cache persistence is unchanged) and the `pipeline_cache*` fields: the export now
+reads the cache directory at export time with the same
+`PipelineCacheStats.read()` the app log uses, so `pipeline_cache_dir=` is the
+real `Library/Caches/zakuro/pipelines` path and `pipeline_cache=` its real file
+count/size even when the report is exported from the home screen before any game
+loaded. `pipeline_cache_dir_state=` is `ok`, `missing (not created yet)` (a cold
+first run) or `unreadable: <reason>` (permissions/I/O) instead of a bare
+`unknown`; `pipeline_cache_at_load=` keeps the state the session's load began
+with and reads `unknown (no load in this session)` when nothing was loaded. The
+pause block `frame_pause_count=` / `frame_pause_ms_total=` /
+`frame_pause_ms_last=` / `frame_pause_definition=` records the paused wall time
+the frame statistics excluded. 0.1.2 adds the hitch-attribution fields:
 `timing_ms_run_gpu=`, `timing_ms_run_cpu=`, `timing_ms_interval=`,
 `timing_share_run_gpu_pct=`, `timing_share_run_cpu_pct=`,
 `pipeline_cache_at_load=` / `_files=` / `_bytes=`, plus the `stutter_*`
@@ -905,6 +932,12 @@ than 33.3 ms (two 60 Hz slots); a frame over 100 ms is severe. The counters are
 session-wide; the report keeps the 20 most recent spikes with their relative
 time, start-to-start interval, held-up duration, work item, command-walk share,
 phase and presented frame number.
+
+Paused wall time is not a stutter: the counters, the per-minute rate and the
+worst frame exclude the in-game menu, save-state, software-keyboard and scene
+transitions (reported separately as `frame_pause_*`). The start-to-start
+interval of the first frame after a resume is rebased, so a multi-second
+keyboard pause no longer shows up as one `stutter=` spike or a `fps=` dip.
 
 ### Hitch attribution (0.1.2)
 
@@ -982,8 +1015,10 @@ the new `run-gpu` / `run-cpu` labels.
 The diagnostics header carries the block `stutter_definition=`,
 `stutter_count=`, `stutter_per_min=`, `stutter_severe_count=`,
 `stutter_worst_ms=`, `stutter_top_phase=`, `stutter_gpu_walk_bound_frames=`,
-`stutter_pipeline_compile_suspects=`, `stutter_phase_share=` and
-`stutter_events=`, followed by one `stutter_event=` line per spike. The frame
+`stutter_pipeline_compile_suspects=`, `stutter_phase_share=`,
+`stutter_events=` and the pause block `frame_pause_count=` /
+`frame_pause_ms_total=` / `frame_pause_ms_last=` / `frame_pause_definition=`,
+followed by one `stutter_event=` line per spike. The frame
 path only does a few tick comparisons; nothing is written to disk while the
 game runs and the tracker takes no lock (it is read on the runtime queue at the
 existing 0.5 s stats boundary). The same numbers are appended to the periodic
@@ -996,7 +1031,8 @@ existing 0.5 s stats boundary). The same numbers are appended to the periodic
    first use), so drive past them and, if possible, capture a second run as well.
 2. Open the in-game menu (pause button) and tap **Export logs** (Simplified
    Chinese UI: **导出日志**). Opening the menu pauses the frame loop, so the
-   numbers stop changing at the moment you tap it.
+   numbers stop changing at the moment you tap it; the menu pause itself is
+   excluded from them and reported as `frame_pause_*`.
 3. The share sheet opens with the report, and the same file is also kept on the
    device as `Documents/Diagnostics/3ds2apple-diagnostics-yyyyMMdd-HHmmss.txt`
    (the newest 5 are kept). The export entry exists twice: the in-game menu

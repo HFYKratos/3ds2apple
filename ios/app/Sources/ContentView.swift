@@ -96,10 +96,17 @@ struct ContentView: View {
             // iOS may jettison a backgrounded process; release the runtime.
             if newPhase == .background {
                 model.stopForBackground()
-            }
-            // The launcher (or the Files app) can add or replace games while
-            // the app is not in front: rescan Documents/Games on return.
-            if newPhase == .active {
+            } else if newPhase == .inactive {
+                // Control Center, the app switcher, an incoming call or a system
+                // alert: pause the loop so the inactive time is excluded from
+                // fps/stutter (ROMSession.applyPendingPauseResume).
+                model.pauseForInactiveScene()
+            } else if newPhase == .active {
+                // Returned from a scene transition: continue the same session
+                // with its running statistics preserved.
+                model.resumeAfterInactiveScene()
+                // The launcher (or the Files app) can add or replace games while
+                // the app is not in front: rescan Documents/Games on return.
                 library.refresh()
             }
         }

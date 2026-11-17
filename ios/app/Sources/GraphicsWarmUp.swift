@@ -336,6 +336,13 @@ struct PipelineCacheStats: Equatable {
     var newestFileName: String? = nil
     var newestModification: Date? = nil
     var directoryPath = ""
+    /// False when `directoryPath` does not exist yet (no cache was written so
+    /// far); the cold summary is then a fact, not a failed read.
+    var directoryExists = true
+    /// Why the directory could not be read (permissions / I/O); nil when the
+    /// listing succeeded or the directory simply does not exist yet. The
+    /// diagnostics export prints this reason instead of `unknown`.
+    var readError: String? = nil
 
     static let empty = PipelineCacheStats()
 
@@ -353,8 +360,22 @@ struct PipelineCacheStats: Equatable {
     /// Whether any pipelines were kept from an earlier run.
     var isWarm: Bool { fileCount > 0 }
 
+    /// Whether the directory could be read at all; when false the file counts
+    /// and `summary` do not describe the cache.
+    var isReadable: Bool { readError == nil }
+
+    /// One value for the diagnostics header: `ok`, `missing` (a cold first run
+    /// that has not written a cache yet) or the reason the read failed.
+    var directoryState: String {
+        if let readError { return "unreadable: \(readError)" }
+        return directoryExists ? "ok" : "missing (not created yet)"
+    }
+
     /// Human-readable one-liner for logs and diagnostics.
     var summary: String {
+        if let readError {
+            return "unreadable (\(readError))"
+        }
         guard fileCount > 0 else {
             return "cold (no cached pipelines)"
         }
@@ -375,20 +396,38 @@ struct PipelineCacheStats: Equatable {
     }()
 
     /// Reads file count / total size / newest modification. Small directory:
-    /// a handful of files, one per title. Never throws; a missing or
-    /// unreadable directory reads as cold.
+    /// a handful of files, one per title. Never throws: a directory that does
+    /// not exist yet (a cold first run) reads as cold, and one that cannot be
+    /// read keeps the reason in `readError` so the diagnostics export can say
+    /// why instead of reporting `unknown`.
     static func read() -> PipelineCacheStats {
-        guard let directory = directoryURL else { return .empty }
         var stats = PipelineCacheStats()
-        stats.directoryPath = directory.path
-        let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: keys,
-            options: [.skipsHiddenFiles]
-        ) else {
+        guard let directory = directoryURL else {
+            stats.directoryExists = false
+            stats.readError = "the app Caches directory is unavailable"
             return stats
         }
+        // Record the intended path before listing anything so the report names
+        // the directory even when the listing fails.
+        stats.directoryPath = directory.path
+        let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]
+        let entries: [URL]
+        do {
+            entries = try FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: keys,
+                options: [.skipsHiddenFiles]
+            )
+        } catch let error as NSError
+            where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError {
+            // Cold first run: Zakuro has not written its cache directory yet.
+            stats.directoryExists = false
+            return stats
+        } catch {
+            stats.readError = error.localizedDescription
+            return stats
+        }
+        stats.directoryExists = true
         var newest: (name: String, date: Date)? = nil
         for entry in entries where entry.pathExtension.lowercased() == "bin" {
             let values = try? entry.resourceValues(forKeys: Set(keys))

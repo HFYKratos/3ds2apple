@@ -264,6 +264,10 @@ struct StutterTracker {
     private var phaseCounts: [Int] = []
     private var events: [StutterEvent] = []
     private var recordedEvents = 0
+    /// FrameClock tick the current pause began at, nil while the loop runs.
+    /// A pause is not frame-loop time: it must not become a stutter, a
+    /// start-to-start interval or part of the per-minute rate.
+    private var pauseStartTicks: UInt64?
 
     init() {
         phaseCounts = [Int](repeating: 0, count: StutterPhase.allCases.count)
@@ -291,6 +295,36 @@ struct StutterTracker {
         }
     }
 
+    /// Marks the start of a pause. runtimeQueue only (the frame that applies it
+    /// is the first one after the resume). A pause that is already open keeps
+    /// its first start time, so a nested pause (menu + keyboard) stays one
+    /// record. No frame is recorded while the pause is open.
+    mutating func pause(at ticks: UInt64) {
+        guard pauseStartTicks == nil else { return }
+        pauseStartTicks = ticks
+    }
+
+    /// Ends a pause at `ticks`: the paused wall time is excluded from the
+    /// per-minute denominator and from the start-to-start baselines, so the next
+    /// recorded frame measures only the frame-loop time that actually ran.
+    /// runtimeQueue only.
+    mutating func resume(at ticks: UInt64) {
+        guard let started = pauseStartTicks else { return }
+        pauseStartTicks = nil
+        let pausedTicks = ticks > started ? ticks - started : 0
+        // Shift the measurement origin forward instead of subtracting at
+        // snapshot time: `atMilliseconds` (t since loop start) and the
+        // per-minute rate are then frame-loop time only. Rebase both
+        // start-to-start baselines to the resume so the first frame after a
+        // pause cannot report the paused gap as an interval or a stutter.
+        startedTicks &+= pausedTicks
+        lastFrameStartTicks = ticks
+        lastWorkTicks = 0
+    }
+
+    /// True while a recorded pause is open.
+    var isPaused: Bool { pauseStartTicks != nil }
+
     /// Records one presented frame. runtimeQueue only.
     ///
     /// A hitch is detected on the measured work item and on the gap between
@@ -309,6 +343,9 @@ struct StutterTracker {
                          cgImageTicks: UInt64,
                          audioTicks: UInt64,
                          frame: UInt64) {
+        // A frame must never be measured while the loop is recorded as paused;
+        // the resumed frame rebases every baseline before it is recorded.
+        guard pauseStartTicks == nil else { return }
         let intervalTicks = frameStartTicks > lastFrameStartTicks
             ? frameStartTicks - lastFrameStartTicks
             : workTicks
@@ -369,7 +406,12 @@ struct StutterTracker {
         snapshot.gpuWalkBoundFrames = gpuWalkBoundFrames
         snapshot.pipelineCompileSuspects = pipelineCompileSuspects
         snapshot.phaseCounts = phaseCounts
-        let measuredSeconds = FrameClock.seconds(lastFrameStartTicks - startedTicks)
+        // A pause that is still open ends the measured window at its start, so
+        // the paused wall time is never part of the per-minute rate.
+        let measuredEndTicks = pauseStartTicks ?? lastFrameStartTicks
+        let measuredSeconds = measuredEndTicks > startedTicks
+            ? FrameClock.seconds(measuredEndTicks - startedTicks)
+            : 0
         snapshot.perMinute = measuredSeconds > 0 ? Double(count) / (measuredSeconds / 60.0) : 0
         let available = min(recordedEvents, StutterTracker.maximumEvents)
         let first = recordedEvents > StutterTracker.maximumEvents
@@ -382,6 +424,122 @@ struct StutterTracker {
         }
         snapshot.events = recent
         return snapshot
+    }
+}
+
+/// One pause of the presented frame loop that the runtime queue has not
+/// applied to its timing baselines yet.
+struct FramePause: Equatable {
+    /// FrameClock tick the pause began at.
+    var startedTicks: UInt64 = 0
+    /// Wall time spent paused, in mach ticks.
+    var pausedTicks: UInt64 = 0
+}
+
+/// Completed pauses of the presented frame loop, for the diagnostics report.
+struct FramePauseStats: Equatable {
+    /// Pauses that ended with a resume.
+    var count: Int = 0
+    /// Total paused wall time, in milliseconds.
+    var totalMilliseconds: Double = 0
+    /// Duration of the most recent pause, in milliseconds.
+    var lastMilliseconds: Double = 0
+}
+
+/// Records the wall-clock pauses of the presented frame loop.
+///
+/// A pause stops the loop for an arbitrary time (in-game menu, save-state
+/// operation, software keyboard, scene transition). That wall time is not a
+/// frame: it must never be counted as a start-to-start interval, a stutter, or
+/// part of an FPS window. `pause`/`resume` are called from the main queue at the
+/// session's pause control points; the first runtime-queue frame after a resume
+/// consumes the recorded pause with `takePendingResume()` and rebases its timing
+/// baselines (`ROMSession.applyPendingPauseResume`).
+///
+/// `forgetPendingResume()` is used when the loop is restarted from scratch: its
+/// baselines are reset anyway, and a stale pending pause must not shift them.
+/// Thread-safe (the lock is taken on pause/resume and once per frame).
+final class FramePauseClock {
+    private let lock = NSLock()
+    /// Tick the open pause began at; nil while the loop runs.
+    private var pausedAtTicks: UInt64?
+    /// A pause the runtime queue has not consumed yet.
+    private var pendingResume: FramePause?
+    private var recordedCount = 0
+    private var recordedTicks: UInt64 = 0
+    private var lastRecordedTicks: UInt64 = 0
+
+    /// True while a pause is open.
+    var isPaused: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return pausedAtTicks != nil
+    }
+
+    /// Starts a pause. A pause that is already open keeps its first start time,
+    /// so a request that arrives under an already paused loop stays one pause.
+    func pause(at ticks: UInt64) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard pausedAtTicks == nil else { return }
+        pausedAtTicks = ticks
+    }
+
+    /// Ends the pause at `ticks` and hands the paused interval to the next
+    /// frame. Returns false (and records nothing) when no pause was open.
+    @discardableResult
+    func resume(at ticks: UInt64) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let started = pausedAtTicks else { return false }
+        pausedAtTicks = nil
+        let pausedTicks = ticks > started ? ticks - started : 0
+        pendingResume = FramePause(startedTicks: started, pausedTicks: pausedTicks)
+        recordedCount += 1
+        recordedTicks &+= pausedTicks
+        lastRecordedTicks = pausedTicks
+        return true
+    }
+
+    /// The pause the runtime queue still has to apply, nil when the loop was not
+    /// resumed since the last frame.
+    func takePendingResume() -> FramePause? {
+        lock.lock()
+        defer { lock.unlock() }
+        let pause = pendingResume
+        pendingResume = nil
+        return pause
+    }
+
+    /// Drops an open pause and its pending record without counting them: the
+    /// frame loop was restarted and every timing baseline was reset.
+    func forgetPendingResume() {
+        lock.lock()
+        defer { lock.unlock() }
+        pausedAtTicks = nil
+        pendingResume = nil
+    }
+
+    /// Pauses the session recorded, for the diagnostics header.
+    func snapshot() -> FramePauseStats {
+        lock.lock()
+        defer { lock.unlock() }
+        return FramePauseStats(
+            count: recordedCount,
+            totalMilliseconds: FrameClock.milliseconds(recordedTicks),
+            lastMilliseconds: FrameClock.milliseconds(lastRecordedTicks)
+        )
+    }
+
+    /// Forgets the session totals (a new load / unload / returned background).
+    func resetSession() {
+        lock.lock()
+        defer { lock.unlock() }
+        pausedAtTicks = nil
+        pendingResume = nil
+        recordedCount = 0
+        recordedTicks = 0
+        lastRecordedTicks = 0
     }
 }
 

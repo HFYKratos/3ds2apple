@@ -383,6 +383,19 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private var timingWindow = FrameTimingWindow()
     /// Rolling stutter statistics; runtimeQueue only, published in FrameStats.
     private var stutterTracker = StutterTracker()
+    /// Wall-clock pauses of the frame loop (in-game menu, save-state operation,
+    /// software keyboard, scene transition). The pause control points record
+    /// them on the main queue; the first frame after a resume excludes the
+    /// paused interval from the FPS window, the start-to-start baseline and the
+    /// stutter statistics (`applyPendingPauseResume`). Thread-safe.
+    private let framePauseClock = FramePauseClock()
+    /// True while the scene-phase pause (`pauseForInactiveScene`) holds the
+    /// loop; main queue only. Kept apart from `isPaused` (the in-game menu) so
+    /// returning to the app only resumes what the scene pause stopped.
+    private var scenePauseActive = false
+
+    /// Paused wall time excluded from the frame statistics (diagnostics header).
+    var framePauseStats: FramePauseStats { framePauseClock.snapshot() }
     /// True while a software-keyboard request is open and the frame loop must not
     /// run: the title is waiting on the applet, so further frames would only burn
     /// CPU (the desktop frontend stops emulating while it types for the same
@@ -685,10 +698,14 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// background: iOS may jettison a backgrounded process at any time, so the
     /// handle must not outlive the active scene.
     func stopForBackground() {
+        // The background transition is a pause too: record it so a report made
+        // after returning cannot count the inactive time as a frame.
+        framePauseClock.pause(at: FrameClock.now())
         stopFrameLoop()
         stopAudio()
         inputState.clearAll()
         isPaused = false
+        scenePauseActive = false
         runtimeQueue.async { [weak self] in
             guard let self else { return }
             let hadRuntime = self.system != nil
@@ -985,6 +1002,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         guard !isPaused, case .loaded = phase else { return }
         isPaused = true
         inputState.clearAll()
+        // The menu can stay open for minutes; record the pause so the frame
+        // statistics exclude it (the restart on resume resets every baseline).
+        framePauseClock.pause(at: FrameClock.now())
         stopFrameLoop()
         stopAudio()
         AppLog.log("[3ds2apple] runtime paused")
@@ -994,6 +1014,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     func resumeFromMenu() {
         guard isPaused else { return }
         isPaused = false
+        // Close the recorded pause before the loop is restarted: the restart
+        // resets every timing baseline, so the pause only counts in the
+        // diagnostics totals and can never leak into a frame.
+        framePauseClock.resume(at: FrameClock.now())
         guard case .loaded = phase, let game = currentGame else { return }
         startFrameLoop(warmUp: nil, romKey: game.titleID)
         startAudio()
@@ -1040,6 +1064,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         guard case .loaded = phase else { return false }
         isPaused = true
         inputState.clearAll()
+        framePauseClock.pause(at: FrameClock.now())
         stopFrameLoop()
         stopAudio()
         AppLog.log("[3ds2apple] runtime paused for a save-state operation")
@@ -1052,9 +1077,44 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         guard suspended else { return }
         guard case .loaded = phase, let game = currentGame else { return }
         isPaused = false
+        framePauseClock.resume(at: FrameClock.now())
         startFrameLoop(warmUp: nil, romKey: game.titleID)
         startAudio()
         AppLog.log("[3ds2apple] runtime resumed after the save-state operation")
+    }
+
+    // MARK: - Scene transitions (main queue)
+
+    /// Pauses the loop when the scene stops being active (Control Center, the
+    /// app switcher, an incoming call, a system alert). The paused wall time is
+    /// excluded from the frame rate and the stutter statistics by the pause
+    /// clock; returning resumes the same session with its statistics preserved.
+    ///
+    /// A game already paused by the in-game menu, a save-state operation or the
+    /// software keyboard is left alone: its own resume path owns it.
+    func pauseForInactiveScene() {
+        guard case .loaded = phase, !isPaused, keyboardRequest == nil,
+              !scenePauseActive else { return }
+        scenePauseActive = true
+        inputState.clearAll()
+        framePauseClock.pause(at: FrameClock.now())
+        stopFrameLoop()
+        stopAudio()
+        AppLog.log("[3ds2apple] scene inactive: frame loop paused")
+    }
+
+    /// Continues a session paused by `pauseForInactiveScene()`. Unlike the
+    /// in-game menu, the loop is only restarted: the session keeps its running
+    /// frame statistics, and the pause is excluded from them instead of
+    /// resetting them.
+    func resumeAfterInactiveScene() {
+        guard scenePauseActive else { return }
+        scenePauseActive = false
+        guard case .loaded = phase, !isPaused, keyboardRequest == nil else { return }
+        framePauseClock.resume(at: FrameClock.now())
+        rearmFrameLoop()
+        startAudio()
+        AppLog.log("[3ds2apple] scene active: frame loop resumed")
     }
 
     /// Drops audio buffered before a state load: the DSP state went back to the
@@ -1611,6 +1671,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         // frame loop is running yet, so no frame can race this.
         timingWindow.reset()
         stutterTracker.start(at: statsWindowStartTicks)
+        // A new loop starts from a new baseline: a pause from the old loop (the
+        // menu pause that led here) is only counted in the session totals.
+        framePauseClock.forgetPendingResume()
         frameStats = FrameStats()
         if let plan {
             warmUpRun = GraphicsWarmUpRun(
@@ -1637,6 +1700,20 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             setFrameLoopLabels(isFreeRun: false, cap: frameRateCap.current)
             AppLog.log("[3ds2apple] frame loop started (CADisplayLink at %d fps)",
                   Self.displayLinkFramesPerSecond)
+        }
+    }
+
+    /// Restarts the configured frame-loop driver without resetting the session's
+    /// frame statistics: used by a resume that keeps the running totals (a scene
+    /// transition). Main queue only.
+    private func rearmFrameLoop() {
+        setFrameLoopLabels(isFreeRun: Self.frameLoopDriver == .freeRun, cap: frameRateCap.current)
+        switch Self.frameLoopDriver {
+        case .freeRun:
+            let generation = freeRunState.start()
+            scheduleFreeRunFrame(after: 0, generation: generation)
+        case .displayLink:
+            startDisplayLinkOnMain()
         }
     }
 
@@ -1748,6 +1825,29 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         }
     }
 
+    /// Excludes a pause that ended since the previous frame from every timing
+    /// baseline. runtimeQueue only: called with the loop idle at the start of the
+    /// first frame after a resume.
+    ///
+    /// A pause is not a frame. Without this rebase the first frame after (for
+    /// example) an answered software-keyboard request measured the whole pause
+    /// as a start-to-start interval: it was counted as one multi-second stutter
+    /// and the FPS window divided a few frames by the paused wall time
+    /// (`stutter=… worst 8518.8ms` / `fps=0.5` after a keyboard answer).
+    private func applyPendingPauseResume(at frameStartTicks: UInt64) {
+        guard let pause = framePauseClock.takePendingResume() else { return }
+        lastFrameStartTicks = frameStartTicks
+        statsWindowStartTicks = frameStartTicks
+        framesSinceStats = 0
+        lastPerfLogTicks = frameStartTicks
+        stutterTracker.pause(at: pause.startedTicks)
+        stutterTracker.resume(at: frameStartTicks)
+        AppLog.log(
+            "[3ds2apple] frame timing: excluded a %.2f s pause from the fps, stutter and start-to-start baselines",
+            FrameClock.seconds(pause.pausedTicks)
+        )
+    }
+
     /// Executes one presented frame, times every phase and publishes screens +
     /// stats. runtimeQueue only.
     ///
@@ -1765,6 +1865,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private func renderFrame() -> Bool {
         guard let system else { return false }
         let frameStart = FrameClock.now()
+        // A pause is not a frame: rebase the FPS window and the start-to-start
+        // baselines and tell the stutter tracker before this frame is measured.
+        applyPendingPauseResume(at: frameStart)
         // Start-to-start interval: what the player sees and the pacing baseline
         // the stutter tracker needs. A gap it cannot explain from the previous
         // frame's work is a scheduling stall, not this frame's cost.
@@ -1950,6 +2053,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             // Nothing the player held in 3DS terms may stay down while the
             // overlay is up; the engine is stopped like the in-game menu does.
             self.inputState.clearAll()
+            // Record the pause before the audio stops: the loop is gated right
+            // after the frame that published this request, and that wall time
+            // must not become a stutter or an FPS drop in the resumed window.
+            self.framePauseClock.pause(at: FrameClock.now())
             self.stopAudio()
             self.keyboardRequest = request
         }
@@ -1987,6 +2094,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         defer {
             keyboardRequestPending = false
             keyboardPauseState.set(false)
+            // End the recorded pause on the runtime queue, right where the
+            // applet was answered: the next scheduled frame excludes it from
+            // the fps/stutter/start-to-start baselines.
+            framePauseClock.resume(at: FrameClock.now())
         }
         guard let system else { return }
         let buttonCount = max(1, request?.buttons.count ?? 1)
@@ -2329,6 +2440,8 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             self.inputState.clearAll()
             self.keyboardRequest = nil
             self.isPaused = false
+            self.scenePauseActive = false
+            self.framePauseClock.forgetPendingResume()
             if let stoppedWarmUp, case .preparing = self.phase {
                 self.warmUp = stoppedWarmUp
                 AppLog.log("[3ds2apple] graphics warm-up: %@", stoppedWarmUp.logLine)
@@ -2351,6 +2464,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         frameLoopDisplayLabel = "—"
         frameStats = FrameStats()
         isPaused = false
+        scenePauseActive = false
+        // The pause totals belong to one loaded session: a load releases the old
+        // runtime and a fresh one starts here, an unload/background ends it.
+        framePauseClock.resetSession()
         // A software-keyboard overlay cannot outlive the runtime it belongs to.
         keyboardRequest = nil
         keyboardPauseState.set(false)

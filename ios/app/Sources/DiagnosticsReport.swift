@@ -158,8 +158,13 @@ enum DiagnosticsExporter {
         let screen = UIScreen.main
         let timing = model.frameStats.timing
         let stutter = model.frameStats.stutter
-        let cache = model.pipelineCacheStats
+        // Read the cache directory at export time with the same function the
+        // AppLog lines use: the session snapshot only changes on a load or a
+        // zk_destroy, so a report exported from a fresh app session used to say
+        // `unknown`/`cold` while the app log named the directory and its files.
+        let cache = PipelineCacheStats.read()
         let cacheAtLoad = model.pipelineCacheAtLoad
+        let pauses = model.framePauseStats
         let aot = model.aotDiagnostics
         let aotPercentText = aot.aotPercent.map { String(format: "%.2f", $0) } ?? "-"
         let interpretedPercentText = aot.interpretedPercent.map { String(format: "%.2f", $0) } ?? "-"
@@ -242,12 +247,17 @@ enum DiagnosticsExporter {
         \(L10n.diagnosticsLine)
         controller=\(model.controllerName ?? "none")
         pipeline_cache_dir=\(cache.directoryPath.isEmpty ? "unknown" : cache.directoryPath)
+        pipeline_cache_dir_state=\(cache.directoryState)
         pipeline_cache=\(cache.summary)
         pipeline_cache_files=\(cache.fileCount)
         pipeline_cache_bytes=\(cache.byteCount)
-        pipeline_cache_at_load=\(cacheAtLoad.summary)
+        pipeline_cache_at_load=\(cacheAtLoad.directoryPath.isEmpty ? "unknown (no load in this session)" : cacheAtLoad.summary)
         pipeline_cache_at_load_files=\(cacheAtLoad.fileCount)
         pipeline_cache_at_load_bytes=\(cacheAtLoad.byteCount)
+        frame_pause_count=\(pauses.count)
+        frame_pause_ms_total=\(String(format: "%.1f", pauses.totalMilliseconds))
+        frame_pause_ms_last=\(String(format: "%.1f", pauses.lastMilliseconds))
+        frame_pause_definition=paused wall time (software keyboard, in-game menu, save states, scene transitions) is excluded from fps, stutter and start-to-start timing; a pause stops or restarts the loop instead of counting as a frame
         timing_ms_total=\(String(format: "%.2f/%.2f/%.2f", timing.renderTotal.average, timing.renderTotal.maximum, timing.renderTotal.last))
         timing_ms_run=\(String(format: "%.2f/%.2f/%.2f", timing.runFrame.average, timing.runFrame.maximum, timing.runFrame.last))
         timing_ms_run_gpu=\(String(format: "%.2f/%.2f/%.2f", timing.runGPU.average, timing.runGPU.maximum, timing.runGPU.last))
@@ -281,7 +291,7 @@ enum DiagnosticsExporter {
             String(format: "%.1f", stutter.share(for: phase))
         }
         var lines = [
-            "stutter_definition=a presented frame the work item or a scheduling gap held over 33.3 ms (>100 ms severe); the gap is start-to-start minus the previous frame's work, so one hitch counts once (run-gpu: software GPU command walk / pipeline-compile suspect; run-cpu: emulated CPU/HLE; other: scheduling gap)",
+            "stutter_definition=a presented frame the work item or a scheduling gap held over 33.3 ms (>100 ms severe); the gap is start-to-start minus the previous frame's work, so one hitch counts once (run-gpu: software GPU command walk / pipeline-compile suspect; run-cpu: emulated CPU/HLE; other: scheduling gap). Paused wall time (frame_pause_count/ms_total) is excluded: a pause stops or restarts the loop instead of counting as a frame.",
             "stutter_count=\(stutter.count)",
             "stutter_per_min=\(String(format: "%.2f", stutter.perMinute))",
             "stutter_severe_count=\(stutter.severeCount)",
