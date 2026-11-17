@@ -533,7 +533,7 @@ enum SelfCheckCore {
     private static func writeShellInfoPlist(to path: String, metalHUD: Bool, fileSharing: Bool) {
         let plist: [String: Any] = [
             "CFBundleIdentifier": "com.kratos.3ds2apple",
-            "CFBundleShortVersionString": "0.1.1",
+            "CFBundleShortVersionString": "0.1.2",
             "CFBundleVersion": "1",
             "MetalHudEnabled": metalHUD,
             "UIFileSharingEnabled": fileSharing,

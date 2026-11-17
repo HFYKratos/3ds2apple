@@ -69,7 +69,7 @@ dependencies = [
 
 [[package]]
 name = "builder-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "hex",
  "sha2",
@@ -78,7 +78,7 @@ dependencies = [
 
 [[package]]
 name = "builder-pack"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "builder-core",
  "clap",

@@ -604,7 +604,7 @@ final class MockDeviceBridge: DeviceBridge {
         return AppAttr(
             installed: installed,
             dataContainer: installed ? "/mock/containers/" + bundleID : nil,
-            appBundleVersion: installed ? "0.1.1" : nil,
+            appBundleVersion: installed ? "0.1.2" : nil,
             fileSharingEnabled: installed
         )
     }

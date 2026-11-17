@@ -1,6 +1,6 @@
 # 3ds2apple launcher for Windows (MVP)
 
-Status: **launcher 0.1.1 (build 1, 2026-11-16 release build)** — portable data
+Status: **launcher 0.1.2 (build 1, 2026-11-17 release build)** — portable data
 folder beside the exe (LocalAppData only when read-only, with one-time migration),
 hardware-aware compile line (cores/RAM + 3dsrecomp auto-parallelism), ROM metadata UI
 from the pack CLI (SMDH `cover.png` icon, localized `displayNames`, `publisher`; no
@@ -17,13 +17,13 @@ unit/integration tests pass**. The packaged single-file exe runs its clean-folde
 `--self-test` on Linux/WSL with the embedded payload (32 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a minimal Settings gear; it is
 localized (English / 简体中文) and uses the iOS app icon. The user-facing package is a ZIP
-with exactly one self-contained exe (the rebuilt 0.1.1 package: 148,958,820 B,
-SHA-256 `a9484c7a…936d6e86`; the withdrawn first 0.1.1 package was 148,965,268 B).
-Synthetic (non-game) UI captures of the 0.1.1 UI are in `docs/ui/v4-*.png`; the 0.1.2
+with exactly one self-contained exe (the 0.1.2 package: 149,148,613 B, SHA-256
+`b01a232c…6405ab`; the 0.1.1 package was 148,958,820 B).
+Synthetic (non-game) UI captures (pre-0.1.2) are in `docs/ui/v4-*.png`; the 0.1.2
 Deploy-prerequisite and Settings renders are generated into `out/ui-smoke/` (gitignored)
 by the developer-only `--ui-smoke` mode. The Windows 11 device path (import, local
 compile, Impactor signing, devpush and launch) was verified by the maintainers on the
-0.1.0 build; the 0.1.1 metadata additions still need a device pass (device acceptance
+0.1.0 build; the 0.1.1/0.1.2 additions still need a device pass (device acceptance
 steps: see the root [README.md](../../README.md) usage section).
 
 Architecture correction (Lead, 2026-11-14): iOS cannot dlopen a loose unsigned
@@ -47,8 +47,8 @@ re-checked by the shell), `launcherVersion` and `pushedAt`. `schemaVersion` stay
 
 Shell-template identity is validated before signing: version >= 0.1.0, build >= 1
 (manifest and Info.plist), bundle catalogue schema 2 + empty for the template, no
-Roms/. The shipped template is **0.1.1 / build 1** (5,628,924 B, SHA-256
-`a7b26136…3ad97a70`; rebuilt from current main for the 0.1.1 rebuild;
+Roms/. The shipped template is **0.1.2 / build 1** (5,800,569 B, SHA-256
+`83a8c86e…2aa999fd`; rebuilt from current main for the 0.1.2 release;
 the pre-reset template was 0.2.2 build 10) and additionally contains
 `Frameworks/MoltenVK.framework` (GPU renderer + Metal HUD); `IpaComposer` copies
 every non-GamePack template entry, so the framework survives composition and is signed

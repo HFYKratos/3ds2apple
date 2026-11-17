@@ -79,7 +79,7 @@ check "zh-Hans Localizable.strings has the FPS accessibility label" grep -Fq -- 
 if grep -Fq -- 'Metal backend' ios/app/Sources/SettingsView.swift; then
   fail "SettingsView still shows the Metal backend row"
 else
-  pass "SettingsView has no Metal backend row (About keeps it)"
+  pass "SettingsView has no Metal backend row"
 fi
 if grep -Fq -- 'First-load graphics warm-up' ios/app/Sources/SettingsView.swift ios/app/Sources/GameView.swift; then
   fail "a first-load warm-up option/overlay string is still in the UI sources"

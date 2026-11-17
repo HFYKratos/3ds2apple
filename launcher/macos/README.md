@@ -1,7 +1,7 @@
 # 3ds2apple macOS launcher
 
 A SwiftUI macOS app for the AOT-first product flow (v2: Library -> Deploy),
-aligned with the Windows launcher (current product version **0.1.1 build 1**;
+aligned with the Windows launcher (current product version **0.1.2 build 1**;
 0.2.x numbers below are the pre-reset history):
 
     Library: import your own decrypted .3ds/.cci; cards show the ROM's own SMDH
@@ -160,6 +160,33 @@ it from a source tree).
     screenshots/               generated non-game UI evidence (committed)
 
 ## Evidence / QA
+
+### launcher 0.1.2 build 1 (final 0.1.2 release, 2026-11-17)
+
+The 0.1.2 package on the macOS VM (macOS 26.7.3, Xcode 26.6, headless):
+
+- xcodebuild: BUILD SUCCEEDED (Release), 0 errors; universal binary
+  (x86_64 + arm64, 7,155,472-byte executable), bundle
+  com.kratos.3ds2apple.launcher, version 0.1.2 build 1.
+- self-check: **212/212 checks passed** (exit 0), including the shell-runtime
+  identity check: the pinned ROM-free shell template is exactly 5,800,569 bytes,
+  sha256 83a8c86e…, carries the pinned 4,822,128-byte MoltenVK 1.4.2 framework
+  (sha256 6cd58884…), keeps the Metal HUD + Documents file-sharing Info.plist keys
+  and reports CFBundleShortVersionString 0.1.2 / CFBundleVersion 1. The packaged
+  app, freshly extracted from the ZIP, also passed 212/212.
+- screenshots: 18 non-game PNGs, English + Simplified Chinese, dark + light
+  (Library SMDH icons/names/publisher; Deploy hardware line and GameInfo push
+  steps; Settings "Version 0.1.2 (1)" + data folder + compile hardware); the 4
+  Settings shots were regenerated for 0.1.2, the other 14 stayed byte-identical.
+- artifact: out/launchers/3ds2apple-launcher-0.1.2-macos-app.zip
+  (5,509,098 bytes, sha256
+  3b027d8c506c7286f387c06b49eb6e679855e32528fee535efd288d27e780cd9), one .app
+  plus LICENSE/NOTICE/THIRD_PARTY.md at the ZIP root (19 entries, 13,996,526 bytes
+  uncompressed) including Contents/Resources/MoltenVK.framework. The launcher
+  embeds the MoltenVK framework, but the macOS package is not self-contained yet
+  (a checkout + Xcode + the built tools are required). Real iPhone acceptance is
+  still NOT done: the shared VM has no attached iPhone and no Apple ID signing
+  assets; the manual checklist is section **Real-device acceptance** below.
 
 ### launcher 0.1.1 build 1 (rebuilt 0.1.1, 2026-11-17)
 
