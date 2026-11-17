@@ -1,4 +1,5 @@
 using ThreeDsTwoApple.Launcher.Core;
+using ThreeDsTwoApple.Launcher.Core.Deploy;
 using ThreeDsTwoApple.Launcher.Core.Localization;
 
 namespace ThreeDsTwoApple.Launcher.App.ViewModels;
@@ -62,6 +63,36 @@ public sealed class LocalizedText
     public string DeployLog => Loc.T("deploy.log");
     public string DeployLogShow => Loc.T("deploy.logShow");
     public string DeployLogHide => Loc.T("deploy.logHide");
+
+    // Deploy prerequisites (task-20): one green/red status light per row.
+    public string DeployPrereqTitle => Loc.T("deploy.prereq.title");
+    public string DeployPrereqRefresh => Loc.T("deploy.prereq.refresh");
+    public string DeployPrereqSigningNote => Loc.T("deploy.prereq.signing.note");
+
+    public string DeployPrereqSummary(int ready, int total) => Loc.T("deploy.prereq.summary", ready, total);
+
+    public string DeployPrereqLabel(DeployPrerequisiteKind kind) => kind switch
+    {
+        DeployPrerequisiteKind.DeviceConnected => Loc.T("deploy.prereq.device.label"),
+        DeployPrerequisiteKind.SigningTools => Loc.T("deploy.prereq.signing.label"),
+        DeployPrerequisiteKind.LocalToolchain => Loc.T("deploy.prereq.toolchain.label"),
+        DeployPrerequisiteKind.DeviceBridge => Loc.T("deploy.prereq.bridge.label"),
+        DeployPrerequisiteKind.ShellTemplate => Loc.T("deploy.prereq.shell.label"),
+        _ => kind.ToString(),
+    };
+
+    /// <summary>One short action for a red row; <paramref name="detail"/> is the missing tool list for the toolchain.</summary>
+    public string DeployPrereqHint(DeployPrerequisiteKind kind, string detail) => kind switch
+    {
+        DeployPrerequisiteKind.DeviceConnected => Loc.T("deploy.prereq.device.hint"),
+        DeployPrerequisiteKind.SigningTools => Loc.T("deploy.prereq.signing.hint"),
+        DeployPrerequisiteKind.LocalToolchain => string.IsNullOrWhiteSpace(detail)
+            ? Loc.T("deploy.prereq.toolchain.hint")
+            : Loc.T("deploy.prereq.toolchain.hint.missing", detail),
+        DeployPrerequisiteKind.DeviceBridge => Loc.T("deploy.prereq.bridge.hint"),
+        DeployPrerequisiteKind.ShellTemplate => Loc.T("deploy.prereq.shell.hint"),
+        _ => string.Empty,
+    };
 
     // Settings
     public string SettingsTitle => Loc.T("settings.title");

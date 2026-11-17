@@ -6,6 +6,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using ThreeDsTwoApple.Launcher.App.ViewModels;
 using ThreeDsTwoApple.Launcher.App.Views;
+using ThreeDsTwoApple.Launcher.Core.Localization;
 
 namespace ThreeDsTwoApple.Launcher.App;
 
@@ -44,6 +45,21 @@ public partial class App : Application
                         catch (Exception)
                         {
                             // a failed probe must not block the smoke render
+                        }
+                        // Dev-only: switch the language through the same view-model setter a
+                        // ComboBox pick uses AFTER the window is live, then render: the
+                        // screenshot proves the language box keeps showing the selected
+                        // language after a switch (task-20 L3).
+                        var smokeLanguage = Environment.GetEnvironmentVariable("THREEDS2APPLE_UI_SMOKE_LANGUAGE");
+                        if (!string.IsNullOrWhiteSpace(smokeLanguage))
+                        {
+                            var preference = LanguageCatalog.ParsePreference(smokeLanguage);
+                            var choice = viewModel.LanguageOptions.FirstOrDefault(option => option.Preference == preference);
+                            if (choice is not null)
+                            {
+                                viewModel.SelectedLanguage = choice;
+                                await Task.Delay(300);
+                            }
                         }
                         var shot = Environment.GetEnvironmentVariable("THREEDS2APPLE_UI_SMOKE_SHOT");
                         if (!string.IsNullOrWhiteSpace(shot) && desktop.MainWindow is { } window && window.Bounds.Width > 0)

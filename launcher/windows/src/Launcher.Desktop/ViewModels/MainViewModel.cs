@@ -86,7 +86,7 @@ public sealed class GameRow : ObservableObject
         ? Loc.T("library.card.notBuilt")
         : Entry.Pack.IsPlaceholder
             ? Loc.T("library.card.pack.placeholder", FormatBytes(Entry.Pack.Bytes))
-            : Loc.T("library.card.pack.built", FormatBytes(Entry.Pack.Bytes), Entry.Pack.Sha256[..12]);
+            : Loc.T("library.card.pack.built", FormatBytes(Entry.Pack.Bytes));
 
     public string RemoveLabel => Loc.T("library.card.remove");
 
@@ -177,7 +177,7 @@ public sealed class DeployRow : ObservableObject
         : HasRealPack ? Loc.T("library.card.state.built") : Loc.T("library.card.state.imported");
 
     public string DetailLine => HasRealPack
-        ? Loc.T("library.card.pack.built", FormatBytes(Entry.Pack?.Bytes ?? 0), (Entry.Pack?.Sha256 ?? string.Empty).PadRight(12)[..12])
+        ? Loc.T("library.card.pack.built", FormatBytes(Entry.Pack?.Bytes ?? 0))
         : Loc.T("library.card.notBuilt");
 
     public bool IsSelected
@@ -262,8 +262,59 @@ public sealed class DeployStepRow : ObservableObject
     public void RefreshLabels() => OnPropertyChanged(nameof(StatusLabel));
 }
 
-/// <summary>A selectable UI language with its localized label.</summary>
-public sealed record LanguageChoice(UiLanguagePreference Preference, string Label);
+/// <summary>
+/// One row of the Deploy prerequisites panel: a status light (green = ready, red = not
+/// yet), a short label, the probe detail and — when red — one actionable hint.
+/// </summary>
+public sealed class DeployPrerequisiteRow : ObservableObject
+{
+    private DeployPrerequisite _prerequisite;
+    private string _line = string.Empty;
+    private string _hint = string.Empty;
+    private string _note = string.Empty;
+
+    public DeployPrerequisiteRow(DeployPrerequisite prerequisite, LocalizedText text)
+    {
+        _prerequisite = prerequisite;
+        Kind = prerequisite.Kind;
+        Apply(text);
+    }
+
+    public DeployPrerequisiteKind Kind { get; }
+
+    public bool IsReady => _prerequisite.Ready;
+
+    /// <summary>Label + probe detail on one line (detail is omitted while the row is red).</summary>
+    public string Line => _line;
+
+    /// <summary>One short action shown below a red row.</summary>
+    public string Hint => _hint;
+
+    public bool ShowRedHint => !IsReady;
+
+    /// <summary>Apple-ID note under the green signing row (the login cannot be probed).</summary>
+    public string Note => _note;
+
+    public bool ShowNote => IsReady && Kind == DeployPrerequisiteKind.SigningTools;
+
+    public void RefreshLabels(LocalizedText text) => Apply(text);
+
+    private void Apply(LocalizedText text)
+    {
+        var label = text.DeployPrereqLabel(Kind);
+        _line = IsReady && !string.IsNullOrWhiteSpace(_prerequisite.Detail)
+            ? label + " · " + _prerequisite.Detail
+            : label;
+        _hint = text.DeployPrereqHint(Kind, IsReady ? string.Empty : _prerequisite.Detail);
+        _note = Kind == DeployPrerequisiteKind.SigningTools ? text.DeployPrereqSigningNote : string.Empty;
+        OnPropertyChanged(nameof(IsReady));
+        OnPropertyChanged(nameof(Line));
+        OnPropertyChanged(nameof(Hint));
+        OnPropertyChanged(nameof(ShowRedHint));
+        OnPropertyChanged(nameof(Note));
+        OnPropertyChanged(nameof(ShowNote));
+    }
+}
 
 /// <summary>One row of the readiness panel (auto self-check result).</summary>
 public sealed class ToolRow : ObservableObject
@@ -315,8 +366,7 @@ public sealed class MainViewModel : ObservableObject
     private string _deviceStatus = string.Empty;
     private string _shellStatus = string.Empty;
     private string _installedStatus = string.Empty;
-    private string _toolchainStatus = string.Empty;
-    private bool _toolchainReady;
+    private Task? _prerequisiteRefresh;
     private string _readinessState = "checking";
     private string _readinessDetail = string.Empty;
     private string _deployState = "idle";
@@ -342,7 +392,6 @@ public sealed class MainViewModel : ObservableObject
         Loc.ApplyPreference(_languagePreference, CultureInfo.CurrentUICulture.Name);
         StatusText = Loc.T("status.ready");
         DeviceStatus = Loc.T("deploy.deviceNone");
-        ToolchainStatus = Loc.T("readiness.unchecked");
         ShowLibraryCommand = new RelayCommand(ShowLibrary);
         ShowDeployCommand = new RelayCommand(ShowDeploy);
         OpenSettingsCommand = new RelayCommand(OpenSettings);
@@ -351,6 +400,7 @@ public sealed class MainViewModel : ObservableObject
         SelectAllCommand = new RelayCommand(() => SetAllSelected(true));
         SelectNoneCommand = new RelayCommand(() => SetAllSelected(false));
         RefreshDevicesCommand = new AsyncRelayCommand(() => RefreshDevicesAsync(), () => !IsBusy);
+        RefreshPrerequisitesCommand = new AsyncRelayCommand(() => RefreshDeployPrerequisitesAsync(), () => !IsBusy);
         RefreshStatusCommand = new AsyncRelayCommand(() => RefreshStatusAsync(), () => !IsBusy);
         RefreshReadinessCommand = new AsyncRelayCommand(() => RefreshStatusAsync(), () => !IsBusy);
         OpenImpactorCommand = new RelayCommand(OpenImpactor, () => !IsBusy);
@@ -378,6 +428,9 @@ public sealed class MainViewModel : ObservableObject
 
     public ObservableCollection<DeployStepRow> DeploySteps { get; } = new();
 
+    /// <summary>Five green/red prerequisites shown at the top of the Deploy page.</summary>
+    public ObservableCollection<DeployPrerequisiteRow> DeployPrerequisites { get; } = new();
+
     public ObservableCollection<LanguageChoice> LanguageOptions { get; } = new();
 
     public ObservableCollection<ToolRow> Tools { get; } = new();
@@ -395,6 +448,7 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand SelectAllCommand { get; }
     public RelayCommand SelectNoneCommand { get; }
     public AsyncRelayCommand RefreshDevicesCommand { get; }
+    public AsyncRelayCommand RefreshPrerequisitesCommand { get; }
     public AsyncRelayCommand RefreshStatusCommand { get; }
     public AsyncRelayCommand RefreshReadinessCommand { get; }
     public RelayCommand OpenImpactorCommand { get; }
@@ -699,6 +753,11 @@ public sealed class MainViewModel : ObservableObject
 
     public bool IsDeployFailed => _deployState == "failed";
 
+    /// <summary>"n of 5 prerequisites ready" (or a checking label before the first probe).</summary>
+    public string DeployPrereqSummary => DeployPrerequisites.Count == 0
+        ? L.ReadinessStatusChecking
+        : L.DeployPrereqSummary(DeployPrerequisites.Count(row => row.IsReady), DeployPrerequisites.Count);
+
     public string DeployMessage { get => _deployMessage; private set => SetProperty(ref _deployMessage, value); }
 
     public string DeployStepName { get => _deployStepName; private set => SetProperty(ref _deployStepName, value); }
@@ -714,12 +773,6 @@ public sealed class MainViewModel : ObservableObject
     public string ShellStatus { get => _shellStatus; private set => SetProperty(ref _shellStatus, value); }
 
     public string InstalledStatus { get => _installedStatus; private set => SetProperty(ref _installedStatus, value); }
-
-    public string ToolchainStatus { get => _toolchainStatus; private set => SetProperty(ref _toolchainStatus, value); }
-
-    public bool IsToolchainReady { get => _toolchainReady; private set => SetProperty(ref _toolchainReady, value); }
-
-    public string ToolchainFix => L.DeployToolchainFix;
 
     public void OnDeploySelectionChanged()
     {
@@ -829,7 +882,7 @@ public sealed class MainViewModel : ObservableObject
             SetBusy(false, Loc.T("status.ready"));
             await RefreshLibraryAsync().ConfigureAwait(true);
             await RefreshStatusAsync().ConfigureAwait(true);
-            await RefreshDeployReadinessAsync().ConfigureAwait(true);
+            await RefreshDeployPrerequisitesAsync().ConfigureAwait(true);
         }
     }
 
@@ -974,28 +1027,48 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ReadinessLabel));
     }
 
-    private async Task RefreshDeployReadinessAsync()
+    /// <summary>
+    /// Refresh the five Deploy prerequisites. Runs at startup, every time the Deploy page
+    /// opens and from the panel's Refresh status button; concurrent calls share one run.
+    /// </summary>
+    public Task RefreshDeployPrerequisitesAsync()
+    {
+        if (_prerequisiteRefresh is { IsCompleted: false })
+        {
+            return _prerequisiteRefresh;
+        }
+        _prerequisiteRefresh = RefreshDeployPrerequisitesCoreAsync();
+        return _prerequisiteRefresh;
+    }
+
+    private async Task RefreshDeployPrerequisitesCoreAsync()
     {
         try
         {
-            var readiness = await _services.CheckDeployReadinessAsync().ConfigureAwait(true);
-            IsToolchainReady = readiness.CanDeploy;
-            ToolchainStatus = readiness.CanDeploy
-                ? L.DeployToolchainReady
-                : Loc.T("deploy.toolchain.missing", string.Join(", ", readiness.Missing));
-            OnPropertyChanged(nameof(ToolchainStatus));
-            OnPropertyChanged(nameof(ToolchainFix));
-            if (!readiness.CanDeploy)
+            var report = await _services.CheckDeployPrerequisitesAsync().ConfigureAwait(true);
+            DeployPrerequisites.Clear();
+            foreach (var prerequisite in report.Prerequisites)
             {
-                Log("deploy readiness: " + readiness.Summary);
+                DeployPrerequisites.Add(new DeployPrerequisiteRow(prerequisite, L));
             }
+            OnPropertyChanged(nameof(DeployPrereqSummary));
+            Log(report.AllReady
+                ? "deploy prerequisites: all 5 ready"
+                : "deploy prerequisites red: " + string.Join(", ", report.Blocked.Select(item => item.Kind + (string.IsNullOrWhiteSpace(item.Detail) ? string.Empty : " (" + item.Detail + ")"))));
         }
         catch (Exception exception)
         {
-            IsToolchainReady = false;
-            ToolchainStatus = Loc.T("deploy.toolchain.missing", exception.Message);
-            OnPropertyChanged(nameof(ToolchainStatus));
+            Log("deploy prerequisite check failed: " + exception.Message);
         }
+    }
+
+    private void RefreshDeployPrerequisiteLabels()
+    {
+        foreach (var row in DeployPrerequisites)
+        {
+            row.RefreshLabels(L);
+        }
+        OnPropertyChanged(nameof(DeployPrereqSummary));
     }
 
     private async Task RefreshDevicesAsync()
@@ -1080,6 +1153,8 @@ public sealed class MainViewModel : ObservableObject
         _section = "deploy";
         _showSettings = false;
         RaiseViewState();
+        // Re-probe every time the user opens Deploy: the phone may have been plugged in since.
+        _ = RefreshDeployPrerequisitesAsync();
     }
 
     public void OpenSettings()
@@ -1128,12 +1203,13 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>Build the language items once; a later switch refreshes their labels in place.</summary>
     private void RebuildLanguageOptions()
     {
         LanguageOptions.Clear();
-        foreach (var preference in LanguageCatalog.AllPreferences)
+        foreach (var choice in LanguageChoices.Create(Loc.CurrentTag))
         {
-            LanguageOptions.Add(new LanguageChoice(preference, LanguageCatalog.DisplayName(preference, Loc.CurrentTag)));
+            LanguageOptions.Add(choice);
         }
         _selectedLanguage = LanguageOptions.FirstOrDefault(option => option.Preference == _languagePreference) ?? LanguageOptions.FirstOrDefault();
         OnPropertyChanged(nameof(SelectedLanguage));
@@ -1149,7 +1225,14 @@ public sealed class MainViewModel : ObservableObject
             _services.Workspace.SaveState();
         }
         L = new LocalizedText();
-        RebuildLanguageOptions();
+        // Refresh the labels IN PLACE: replacing the ComboBox items would drop the selected
+        // item object and leave the language box blank after a switch (task-20 L3).
+        LanguageChoices.RefreshLabels(LanguageOptions, Loc.CurrentTag);
+        if (_selectedLanguage is null || _selectedLanguage.Preference != preference)
+        {
+            _selectedLanguage = LanguageOptions.FirstOrDefault(option => option.Preference == preference) ?? LanguageOptions.FirstOrDefault();
+            OnPropertyChanged(nameof(SelectedLanguage));
+        }
         foreach (var row in Games)
         {
             row.Refresh();
@@ -1194,7 +1277,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(DistributionReasonText));
         OnPropertyChanged(nameof(HardwareLine));
         OnPropertyChanged(nameof(HardwareDiagnostics));
-        OnPropertyChanged(nameof(ToolchainStatus));
+        RefreshDeployPrerequisiteLabels();
         OnPropertyChanged(nameof(DiagnosticsToggleLabel));
         OnPropertyChanged(nameof(DeployLogToggleLabel));
         UpdateShellStatus();
@@ -1284,7 +1367,7 @@ public sealed class MainViewModel : ObservableObject
             UpdateShellStatus();
             OnPropertyChanged(nameof(InstalledBundleIdLine));
             await RefreshDevicesAsync().ConfigureAwait(true);
-            await RefreshDeployReadinessAsync().ConfigureAwait(true);
+            await RefreshDeployPrerequisitesAsync().ConfigureAwait(true);
             Log(_shell is null
                 ? "Shell template manifest not found in Shell/. Reinstall the launcher package; Deploy needs the ROM-free base shell IPA."
                 : $"Shell template: v{_shell.Version} {_shell.BundleId} ({_shell.FileName}); the app IPA is composed at deploy time.");
@@ -1314,8 +1397,8 @@ public sealed class MainViewModel : ObservableObject
         }
         foreach (var command in new System.Windows.Input.ICommand[]
                  {
-                     DeployCommand, RefreshDevicesCommand, RefreshStatusCommand, RefreshReadinessCommand,
-                     OpenImpactorCommand,
+                     DeployCommand, RefreshDevicesCommand, RefreshPrerequisitesCommand, RefreshStatusCommand,
+                     RefreshReadinessCommand, OpenImpactorCommand,
                  })
         {
             switch (command)

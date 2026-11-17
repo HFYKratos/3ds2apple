@@ -12,18 +12,19 @@ cover and keeps an existing built GamePack (a user-supplied cover is never overw
 The legacy Build Agent path (`builder/{agent,cli,linux,windows}`, `MacAgent*` providers)
 is deleted; the local 3dsrecomp + LLVM/LLD build is the only path and the single-file
 exe no longer embeds `builder-windows.exe` (~1.24 MB smaller).
-This checkout compiles cleanly (0 errors, warnings as errors) and its **150
+This checkout compiles cleanly (0 errors, warnings as errors) and its **163
 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
 `--self-test` on Linux/WSL with the embedded payload (32 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a minimal Settings gear; it is
 localized (English / 简体中文) and uses the iOS app icon. The user-facing package is a ZIP
 with exactly one self-contained exe (the rebuilt 0.1.1 package: 148,958,820 B,
 SHA-256 `a9484c7a…936d6e86`; the withdrawn first 0.1.1 package was 148,965,268 B).
-Synthetic (non-game) UI captures are in `docs/ui/v4-*.png` (the Windows UI is unchanged in
-0.1.1). The Windows 11 device path (import, local compile, Impactor signing, devpush and
-launch) was verified by the maintainers on the 0.1.0 build; the 0.1.1 metadata additions
-still need a device pass (device acceptance steps: see the root [README.md](../../README.md)
-usage section).
+Synthetic (non-game) UI captures of the 0.1.1 UI are in `docs/ui/v4-*.png`; the 0.1.2
+Deploy-prerequisite and Settings renders are generated into `out/ui-smoke/` (gitignored)
+by the developer-only `--ui-smoke` mode. The Windows 11 device path (import, local
+compile, Impactor signing, devpush and launch) was verified by the maintainers on the
+0.1.0 build; the 0.1.1 metadata additions still need a device pass (device acceptance
+steps: see the root [README.md](../../README.md) usage section).
 
 Architecture correction (Lead, 2026-11-14): iOS cannot dlopen a loose unsigned
 dylib from Documents. The **GamePack.dylib lives inside the signed app IPA**
@@ -58,7 +59,14 @@ with the app. Device UDIDs are redacted in all UI/log output.
 1. **Library**: import a decrypted .3ds/.cci you own. Only headers are read (title ID,
    product code, name) by the existing 3ds2apple-pack CLI; the ROM is not copied. List,
    rename or remove games — there are deliberately no build/install/push buttons here.
-2. **Deploy**: tick one or many library games and press **一键部署 / Deploy selected**. One
+   Cards show the title, publisher, ROM size and GamePack size/state; the SHA-256 stays
+   in the verification/log output and is not shown in the UI.
+2. **Deploy**: the page opens with a prerequisite panel — five green/red status lights
+   (iPhone/iPad connected over USB, signing tools pinned to the Impactor v2.7.2 SHA-256,
+   local build toolchain, devpush device bridge, shell template) with one short fix hint
+   on every red row; **Refresh status** re-probes everything (opening Deploy does too) and
+   **Open Impactor** covers the Apple-ID login the launcher cannot detect. Then tick one
+   or many library games and press **一键部署 / Deploy selected**. One
    action then runs, in order, with a live per-step state and one Retry button on failure:
    - compile each selected game locally (3dsrecomp + open-source LLVM/LLD on this PC; real
      packs already built are reused). The old macOS Build Agent / preview choices are gone
@@ -72,8 +80,10 @@ with the app. Device UDIDs are redacted in all UI/log output.
      **actual installed bundle id**, with size/SHA verification and read-back.
    - mark done ("可以在手机上玩了") only after every selected game verified.
 3. **Settings** (gear): language, Apple ID / Open Impactor, device status/refresh, logs
-   (show/export/open/self-test), about. Build mode, tool paths, UDID and bundle-id
-   overrides are no longer user settings — bundled tools are auto-detected.
+   (show/export/open/self-test), about. The language picker keeps showing the current
+   language after a switch (labels refresh in place; the persisted key format is
+   unchanged). Build mode, tool paths, UDID and bundle-id overrides are no longer user
+   settings — bundled tools are auto-detected.
 
 No ROM, key, IPA, generated C or Apple credential is stored in this repository.
 
@@ -85,7 +95,7 @@ No ROM, key, IPA, generated C or Apple credential is stored in this repository.
   Deploy pipeline + composed-IPA verifier, IPA composition, signing, push, localization
   catalog, embedded single-file payload) /
   ThreeDsTwoApple.Launcher.Desktop (Avalonia shell) /
-  ThreeDsTwoApple.Launcher.Core.Tests (146 xUnit tests).
+  ThreeDsTwoApple.Launcher.Core.Tests (163 xUnit tests).
 - All external work goes through CLI tools passed as argument arrays (never a
   shell string): 3ds2apple-pack, devpush, the official plumesign.
   The launcher never re-implements ROM parsing, the AOT compile/link,

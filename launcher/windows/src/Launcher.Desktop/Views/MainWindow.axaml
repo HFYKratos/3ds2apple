@@ -111,19 +111,40 @@
             </StackPanel>
           </Grid>
 
-          <!-- Toolchain / device readiness: one actionable line when something is missing. -->
-          <Border Classes="card" IsVisible="{Binding !IsToolchainReady}">
-            <StackPanel Spacing="6">
-              <TextBlock Text="{Binding L.DeployToolchainTitle}" Classes="h2" />
-              <TextBlock Text="{Binding ToolchainStatus}" Classes="muted" />
-              <TextBlock Text="{Binding ToolchainFix}" Classes="caption" />
+          <!-- Prerequisites: one row = one status light (green = ready, red = not yet) plus a
+               one-line fix hint for red rows. Refresh status re-probes everything including the
+               phone; Open Impactor covers the Apple-ID login the launcher cannot detect. -->
+          <Border Classes="card">
+            <StackPanel Spacing="10">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{Binding L.DeployPrereqTitle}" Classes="h2" />
+                  <TextBlock Text="{Binding DeployPrereqSummary}" Classes="caption" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                  <Button Content="{Binding L.DeployPrereqRefresh}" Command="{Binding RefreshPrerequisitesCommand}" Classes="ghost" />
+                  <Button Content="{Binding L.SettingsAppleOpen}" Command="{Binding OpenImpactorCommand}" Classes="ghost" />
+                </StackPanel>
+              </Grid>
+              <ItemsControl ItemsSource="{Binding DeployPrerequisites}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Grid ColumnDefinitions="Auto,*" Margin="0,5">
+                      <Panel Width="10" Height="10" VerticalAlignment="Top" Margin="0,4,0,0">
+                        <Border Width="10" Height="10" CornerRadius="5" Background="{DynamicResource AppReadyBrush}" IsVisible="{Binding IsReady}" />
+                        <Border Width="10" Height="10" CornerRadius="5" Background="{DynamicResource AppErrorBrush}" IsVisible="{Binding !IsReady}" />
+                      </Panel>
+                      <StackPanel Grid.Column="1" Margin="10,0,0,0" Spacing="2">
+                        <TextBlock Text="{Binding Line}" FontSize="13" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Hint}" Classes="caption" IsVisible="{Binding ShowRedHint}" Foreground="{DynamicResource AppWarningBrush}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Note}" Classes="caption" IsVisible="{Binding ShowNote}" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
             </StackPanel>
           </Border>
-          <TextBlock Text="{Binding ToolchainStatus}" Classes="caption" IsVisible="{Binding IsToolchainReady}" />
-          <TextBlock Text="{Binding DeviceStatus}" Classes="caption" />
-          <!-- Hardware-aware compile line: cores + RAM + 3dsrecomp's automatic parallelism. -->
-          <TextBlock Text="{Binding HardwareLine}" Classes="caption" TextWrapping="Wrap" />
-          <TextBlock Text="{Binding InstalledBundleIdLine}" Classes="caption" />
 
           <Border Classes="card">
             <StackPanel Spacing="10">

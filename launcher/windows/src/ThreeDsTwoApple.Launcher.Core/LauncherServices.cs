@@ -5,6 +5,7 @@ using ThreeDsTwoApple.Launcher.Core.Deploy;
 using ThreeDsTwoApple.Launcher.Core.Models;
 using ThreeDsTwoApple.Launcher.Core.Signing;
 using ThreeDsTwoApple.Launcher.Core.Tools;
+using ThreeDsTwoApple.Launcher.Core.Util;
 using ThreeDsTwoApple.Launcher.Core.LauncherState;
 
 namespace ThreeDsTwoApple.Launcher.Core;
@@ -30,13 +31,6 @@ public sealed record HostReadiness(
         }
     }
 }
-
-/// <summary>What the Deploy page needs: local build tools + signing + device bridge + shell template.</summary>
-public sealed record DeployReadiness(
-    bool CanDeploy,
-    IReadOnlyList<string> Missing,
-    bool LocalBuildToolsReady,
-    string Summary);
 
 /// <summary>
 /// Composition root for the launcher: owns the process runner, the workspace,
@@ -157,44 +151,114 @@ public sealed class LauncherServices
         CreateShellInstallService(),
         CreatePushService() is { } push ? new LauncherGameDataPusher(push) : null);
 
-    /// <summary>Pre-check for the Deploy page: exactly which components are missing (one actionable line).</summary>
-    public async Task<DeployReadiness> CheckDeployReadinessAsync(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Deploy pre-check: the five green/red prerequisites the Deploy page shows before the
+    /// user presses Deploy. Every probe is best-effort, so a missing tool, an unreachable
+    /// device service or a corrupt shell template becomes a red row, never an exception.
+    /// </summary>
+    public async Task<DeployPrerequisiteReport> CheckDeployPrerequisitesAsync(CancellationToken cancellationToken = default)
     {
-        var missing = new List<string>();
-        if (Pack is null)
+        var deviceSummaries = new List<string>();
+        var bridgeFound = DevPush is not null;
+        var bridgeEnumerates = false;
+        string? bridgeVersion = null;
+        if (DevPush is { } devPush)
         {
-            missing.Add("3ds2apple-pack.exe");
+            try
+            {
+                using var probeTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                probeTimeout.CancelAfter(TimeSpan.FromSeconds(8));
+                var probe = await devPush.ProbeAsync(probeTimeout.Token).ConfigureAwait(false);
+                bridgeVersion = probe.Version;
+                if (probe.Ready)
+                {
+                    using var devicesTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    devicesTimeout.CancelAfter(TimeSpan.FromSeconds(8));
+                    var devices = await devPush.DevicesAsync(devicesTimeout.Token).ConfigureAwait(false);
+                    bridgeEnumerates = true;
+                    // Deploy installs/pushes over USB; a network-paired phone is not enough.
+                    deviceSummaries.AddRange(devices.Where(device => device.IsUsb).Select(device => device.Display));
+                }
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested
+                                               && exception is LauncherToolException or OperationCanceledException or IOException or UnauthorizedAccessException)
+            {
+                // A missing or unresponsive bridge is a red prerequisite, not a crash.
+            }
         }
-        if (LocalTools is null)
+        if (deviceSummaries.Count == 0)
         {
-            missing.Add("local build toolchain (3dsrecomp + LLVM 21.1.8)");
+            // Fall back to the read-only usbmuxd list so the device light can still be green
+            // when only the device bridge is missing.
+            try
+            {
+                using var muxTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                muxTimeout.CancelAfter(TimeSpan.FromSeconds(4));
+                var muxDevices = await Mux.ListDevicesAsync(TimeSpan.FromSeconds(3), muxTimeout.Token).ConfigureAwait(false);
+                deviceSummaries.AddRange(muxDevices.Where(device => device.IsUsb)
+                    .Select(device => device.ConnectionType + " · " + Privacy.RedactUdid(device.Udid)));
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested
+                                               && exception is LauncherToolException or OperationCanceledException or IOException or UnauthorizedAccessException)
+            {
+                // No Apple device service on this PC: the device row stays red with its hint.
+            }
         }
-        else
+
+        var signingPinned = false;
+        try
         {
-            missing.AddRange(LocalTools.MissingTools());
+            signingPinned = Impactor.Verify().BinariesOk;
         }
-        if (PlumeSign is null)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            missing.Add("official Impactor/plumesign");
+            signingPinned = false;
         }
-        if (DevPush is null)
-        {
-            missing.Add("devpush.exe (device bridge)");
-        }
+
+        var localTools = LocalTools;
+        IReadOnlyList<string> missingLocalTools = localTools is null
+            ? new[] { "3dsrecomp.exe + LLVM 21.1.8" }
+            : localTools.MissingTools().Select(ShortToolName).ToArray();
+
         var shell = Shell ?? await LoadShellAsync(cancellationToken).ConfigureAwait(false);
-        if (shell is null)
+        var shellManifestPresent = shell is not null;
+        var shellVerified = false;
+        string? shellDetail = null;
+        if (shell is not null)
         {
-            missing.Add("Shell/manifest.json (ROM-free base shell)");
+            shellDetail = "v" + shell.Version + " build " + shell.Build;
+            try
+            {
+                var verification = shell.Verify(ShellDirectory);
+                var compatibility = ShellTemplateRules.ValidateManifest(shell);
+                shellVerified = verification.Ok && compatibility.Ok;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                shellVerified = false;
+            }
         }
-        var localReady = LocalTools is { } local && local.MissingTools().Count == 0;
-        var canDeploy = missing.Count == 0;
-        return new DeployReadiness(
-            canDeploy,
-            missing,
-            localReady,
-            canDeploy
-                ? "Ready: local build, signing and device push are available."
-                : "Deploy needs: " + string.Join("; ", missing));
+
+        return DeployPrerequisiteEvaluator.Evaluate(new DeployPrerequisiteInputs(
+            SigningToolsPinned: signingPinned,
+            SigningDetail: "Impactor v" + ImpactorPins.TestedVersion + " + plumesign",
+            LocalToolchainResolved: localTools is not null,
+            MissingLocalTools: missingLocalTools,
+            LocalToolchainDetail: "3dsrecomp · LLVM clang/llvm-ar/ld64.lld",
+            DeviceBridgeFound: bridgeFound,
+            DeviceBridgeEnumerates: bridgeEnumerates,
+            DeviceBridgeVersion: bridgeVersion,
+            DeviceSummaries: deviceSummaries,
+            ShellManifestPresent: shellManifestPresent,
+            ShellVerified: shellVerified,
+            ShellDetail: shellDetail));
+    }
+
+    /// <summary>Short tool name from a <see cref="LocalToolchain.MissingTools"/> sentence (the explanation starts at " (").</summary>
+    private static string ShortToolName(string message)
+    {
+        var index = message.IndexOf(" (", StringComparison.Ordinal);
+        return index > 0 ? message[..index] : message;
     }
 
     public PushService? CreatePushService() => DevPush is null ? null : new PushService(DevPush);
