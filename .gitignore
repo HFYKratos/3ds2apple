@@ -63,6 +63,9 @@ desktop.ini
 *.log
 logs/
 tmp/
+# User-uploaded device/launcher logs (may contain device identifiers): never commit
+temp_log/
+temp_logs/
 # --- Local test IPAs (never commit) ----------------------------------------
 IPA/
 
