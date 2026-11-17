@@ -22,13 +22,18 @@
  *       export it (a pack that cannot hand its AOT code to the runtime would
  *       only make zk_create fall back to the interpreter). Called on the main
  *       thread after dlopen, and again whenever the runtime's single
- *       registration slot names another title. Results:
+ *       registration slot names another title. A pack may carry a single code
+ *       unit: when 3dsrecomp wrote recomp_module_count == 0 (the program has no
+ *       CRO modules) the module table is empty and the entries table holds all
+ *       of the code; the runtime accepts that shape. Results:
  *         0 = accepted, the pack's tables are now the runtime's AOT code;
  *         1 = host ABI mismatch (the pack does not speak this host's ABI);
- *         2 = the runtime refused the tables (recomp interface version);
+ *         2 = the runtime refused the tables (empty/invalid tables, or a recomp
+ *             interface version this runtime does not accept);
  *       any non-zero result makes the shell unregister/unload the pack and
  *       report the game as unavailable. The shim shipped in
- *       ios/zakuro-ios/gamepack/ returns 1 and 2 respectively.
+ *       ios/zakuro-ios/gamepack/ returns 1 and 2 respectively; its 2 covers
+ *       both host refusals (-1 invalid tables, -2 interface version).
  *
  * Host side (exported by libzakuro_ios.a / libzakuro_ios_sim.a, implemented in
  * ios/zakuro-ios/src/gamepack.rs)
@@ -39,10 +44,15 @@
  *                                const void *modules, uint32_t module_count,
  *                                const void *origins);
  *       Registers the pack's generated tables so the next zk_create() runs them
- *       as AOT code. Returns 0 on success, -1 for invalid arguments, -2 when
- *       the tables' recomp interface version is not one this runtime accepts.
- *       The pointers must stay valid for the whole process: they are constants
- *       inside the loaded pack, which the shell never unloads.
+ *       as AOT code. module_count may be 0, the normal shape of a port whose
+ *       program is a single code unit (3dsrecomp writes
+ *       recomp_module_count = units.len() - 1): the empty module table is never
+ *       read and modules may be NULL then. The entries and origins pointers and
+ *       a non-zero entry_count are always required. Returns 0 on success, -1 for
+ *       invalid arguments or unusable tables, -2 when the tables' recomp
+ *       interface version is not one this runtime accepts. The pointers must
+ *       stay valid for the whole process: they are constants inside the loaded
+ *       pack, which the shell never unloads.
  *
  *   int32_t zk_unregister_gamepack(void);       forget the registered pack (0)
  *   int32_t zk_gamepack_registered(void);      1 when a pack is registered
@@ -51,8 +61,11 @@
  * The table layout and interface version are declared by the 3dsrecomp
  * generated recomp.h ("Exported symbols"): recomp_abi, recomp_generation,
  * recomp_entry_count, recomp_entries, recomp_module_count, recomp_modules and
- * recomp_origins. A pack links one game's generated archive and no copy of the
- * runtime; the host symbols are resolved from the app at dlopen time.
+ * recomp_origins. A program with no CRO modules (a single code unit) has
+ * recomp_module_count == 0 and an empty recomp_modules table; that is a
+ * complete program, not a broken pack. A pack links one game's generated
+ * archive and no copy of the runtime; the host symbols are resolved from the
+ * app at dlopen time.
  */
 #ifndef ZAKURO_GAMEPACK_H
 #define ZAKURO_GAMEPACK_H

@@ -255,6 +255,17 @@ and link it into the app. `zk_create` builds Zakuro's `Linked` value from those
 tables; the loader checks the title ID and interface version and falls back to
 the interpreter when they do not match.
 
+A port can have a **single code unit**: 3dsrecomp writes the module count as
+`units.len() - 1`, so a program with no CRO modules has
+`recomp_module_count == 0` and an empty `recomp_modules` table. That is a
+complete program - all of its code is in `recomp_entries` - and the loader,
+`recomp-abi`'s `Library::linked` and the run path all accept it; nothing reads
+the empty module table. A GamePack may therefore pass `modules == NULL` when
+`module_count == 0` (registration replaces it with a non-NULL placeholder so
+the empty slice is well-formed); the entries and origins tables and a non-zero
+entry count are still required. `src/gamepack.rs` has regression tests for this
+shape.
+
 ## Hardware rendering (Metal via MoltenVK)
 
 There are two levels, and the app picks the better one it can run:
@@ -297,6 +308,16 @@ ZAKURO_LINKED_PROGRAM_ID=<16-hex-title-id> cargo test -p zakuro-ios --lib --feat
 # Host Vulkan/MoltenVK probe: builds and drops a device. Ignored by default;
 # a machine without Vulkan (or MoltenVK) fails it by design.
 cargo test -p zakuro-ios --lib -- --ignored hardware_probe_makes_a_device
+```
+
+The GamePack registration rules have host tests in `src/gamepack.rs`
+(`register_accepts_a_single_code_unit`, `register_rejects_invalid_tables`,
+`register_refuses_an_unaccepted_interface_version`). They use synthetic tables,
+so they need no ROM and no generated archive:
+
+```bash
+cd third_party/zakuro
+cargo test -p zakuro-ios --lib gamepack
 ```
 
 The presenter FFI has its own host tests (argument validation and the
