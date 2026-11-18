@@ -105,6 +105,14 @@ enum MoltenVKTuning {
         "ZAKURO_GENERIC_SHADERS",
         "ZAKURO_INTERPRET_SHADERS",
         "ZAKURO_WAIT_FOR_SHADERS",
+        // the fourth round's measurement profiles and the safe skips, see
+        // ios/zakuro-ios/README.md and scripts/README.md §GPU A/B
+        "ZAKURO_MEASURE_NOBLEND",
+        "ZAKURO_MEASURE_FLAT",
+        "ZAKURO_SAFE_SKIPS",
+        // app-side, not a renderer switch: the internal 3D render scale the
+        // 2x3x profile asks for while the drawable stays at the setting's
+        "THREEDS2APPLE_DIAG_RENDER_SCALE",
     ]
 
     /// `NAME=value` pairs separated by commas, e.g.
@@ -128,7 +136,8 @@ enum MoltenVKTuning {
     /// The profiles a diagnostic IPA can carry, in the order the build script
     /// makes them.
     static let profileNames = [
-        "baseline", "baseline2", "baseline3", "mvk", "renderer", "sort", "sort2", "merge", "capture", "combo",
+        "baseline", "baseline2", "baseline3", "baseline4", "mvk", "renderer", "sort", "sort2", "merge", "capture",
+        "noblend", "flat", "2x3x", "safe", "combo",
     ]
 
     /// The overrides actually applied, as `NAME=value`, for the log and the
@@ -140,6 +149,13 @@ enum MoltenVKTuning {
 
     /// The diagnostic profile this launch runs, none on a normal launch.
     private(set) static var profile: String?
+
+    /// The internal 3D render scale a diagnostic profile asks for (the 2x3x
+    /// profile asks for 2 while the drawable keeps the setting's 3x), none on a
+    /// normal launch. Kept here rather than read back from `ProcessInfo`:
+    /// that environment snapshot is taken before this type's `setenv` calls,
+    /// so a later read would miss the value the profile set.
+    private(set) static var diagnosticRenderScale: Int?
 
     /// One line for the device log and the diagnostics report; says "none" on a
     /// normal launch so a captured report explains the framework defaults.
@@ -176,6 +192,19 @@ enum MoltenVKTuning {
         switch name {
         case "baseline", "baseline2", "baseline3":
             return ([], ["ZAKURO_GPU_TIMES=1"])
+        case "baseline4":
+            return ([], ["ZAKURO_GPU_TIMES=1"])
+        case "noblend":
+            return ([], ["ZAKURO_GPU_TIMES=1", "ZAKURO_MEASURE_NOBLEND=1"])
+        case "flat":
+            return ([], ["ZAKURO_GPU_TIMES=1", "ZAKURO_MEASURE_FLAT=1"])
+        // the internal 3D renderer at 2x while the drawable keeps the setting's
+        // 3x: the fill cost of the 3x target against the 2x one, measurement
+        // only (the presented picture is the 2x one upscaled)
+        case "2x3x":
+            return ([], ["ZAKURO_GPU_TIMES=1", "THREEDS2APPLE_DIAG_RENDER_SCALE=2"])
+        case "safe":
+            return ([], ["ZAKURO_GPU_TIMES=1", "ZAKURO_SAFE_SKIPS=1"])
         case "sort", "sort2":
             return ([], ["ZAKURO_GPU_TIMES=1", "ZAKURO_SORT_OPAQUE=1"])
         case "merge":
@@ -255,6 +284,13 @@ enum MoltenVKTuning {
             AppLog.log("[3ds2apple] Renderer tuning: applied %@ before the first device",
                        rendererApplied.joined(separator: ","))
         }
+        // the 2x3x profile's internal scale, kept for the shell: the environment
+        // snapshot ProcessInfo returns was taken before the setenv calls above,
+        // so the shell must not read it back from there
+        let prefix = "THREEDS2APPLE_DIAG_RENDER_SCALE="
+        diagnosticRenderScale = rendererApplied
+            .compactMap { $0.hasPrefix(prefix) ? Int($0.dropFirst(prefix.count)) : nil }
+            .last
         AppLog.log("[3ds2apple] %@", diagnosticsLine)
     }
 

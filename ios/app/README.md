@@ -1043,17 +1043,30 @@ Vulkan timestamp queries and export:
   the opaque sort is on the line carries `sorted N/f of M/f draws in R/f runs`
   and the reason each draw was held or not (`no-depth`, `blend`,
   `gpu-vertices`, ...), and `merge`'s `merged N draws/f` or `capture`'s
-  `captures_skipped N/f`. A candidate that lowers `gpu_exec` while the shaded
-  fragment count stays the same changed GPU scheduling or bandwidth, not the
-  emulated shading.
+  `captures_skipped N/f`. The fourth round also splits the draw time by draw
+  state (`draw_classes blend/alpha/tex/write/coverage X.XXms/f N/f Y.YYMpx/f`,
+  the most expensive class first) and counts the math-equivalent skips
+  (`safe_skips N/f D.DDMpx/f`). A candidate that lowers `gpu_exec` while the
+  shaded fragment count stays the same changed GPU scheduling or bandwidth, not
+  the emulated shading.
 - `gpu_profile=` / `gpu_profile_definition=` — the diagnostic GPU profile the IPA
-  was built with (`baseline`, `baseline2`, `baseline3`, `mvk`, `renderer`,
-  `sort`, `sort2`, `merge`, `capture`, `combo`) and what it applies.
+  was built with (`baseline`, `baseline2`, `baseline3`, `baseline4`, `mvk`,
+  `renderer`, `sort`, `sort2`, `merge`, `capture`, `noblend`, `flat`, `2x3x`,
+  `safe`, `combo`) and what it applies.
   `baseline3` is the third-round control (per-pass report, pass breaks, work
   counts), `sort2` adds the relaxed opaque front-to-back draw sort
   (`ZAKURO_SORT_OPAQUE=1`), `merge` adds render-pass merging
   (`ZAKURO_MERGE_PASSES=1`) and `capture` adds duplicate-capture skipping
   (`ZAKURO_DEDUPE_CAPTURE=1`); all must leave the picture unchanged.
+  `baseline4` is the fourth-round control (draw-state GPU time buckets with
+  estimated pixels and the safe-skip count). `noblend`
+  (`ZAKURO_MEASURE_NOBLEND=1`) and `flat` (`ZAKURO_MEASURE_FLAT=1`) are
+  measurement profiles whose picture is deliberately wrong: what the blend and
+  the fragment work cost. `2x3x` (`THREEDS2APPLE_DIAG_RENDER_SCALE=2`) draws
+  the internal 3D at 2x while the drawable stays at the setting's 3x, which
+  measures the 3x target's fill cost (the presented picture is the upscaled 2x
+  one). `safe` (`ZAKURO_SAFE_SKIPS=1`) skips draws that cannot change either
+  buffer and must leave the picture exactly as it is.
 
 `scripts/build-gpu-diagnostic-ipa.sh` (on the macOS build VM) packages one IPA
 per profile, differing only in that Info.plist key; the app applies the profile's

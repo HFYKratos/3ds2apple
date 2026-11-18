@@ -369,7 +369,7 @@ The app reads it through:
 |---|---|
 | `zk_gpu_timing_status()` | 1 when the times are being measured |
 | `zk_gpu_exec_micros_per_frame()` | real GPU execution time per frame, the average of the last 60-frame window (the same number the system Metal HUD shows) |
-| `zk_gpu_times_line(out, capacity)` | the window's breakdown: time per kind (`draw`, `upload`, `clear`, `transfer`, `capture`, `copy`, `download`, `barrier`, `upright`, `readback`, `other`), render passes, barriers, draws, the host's waits, the shaded vertices/primitives/fragments per frame, the render targets by GPU time (`target 0xADDR WxH[+d] X.XXms/f (N passes, M draws)`, the one that cost most first), the per-pass report (`zk_passes:`: the dominant target's passes in recording order, each one's GPU milliseconds, draws, depth and twin, and what ended the pass before it, with the window's pass breaks), the kinds of work the batches started (`ops ...`) and, when the opaque sort is on, `sorted N/f of M/f draws in R/f runs` with the reason each draw was held or not |
+| `zk_gpu_times_line(out, capacity)` | the window's breakdown: time per kind (`draw`, `upload`, `clear`, `transfer`, `capture`, `copy`, `download`, `barrier`, `upright`, `readback`, `other`), render passes, barriers, draws, the host's waits, the shaded vertices/primitives/fragments per frame, the render targets by GPU time (`target 0xADDR WxH[+d] X.XXms/f (N passes, M draws)`, the one that cost most first), the per-pass report (`zk_passes:`: the dominant target's passes in recording order, each one's GPU milliseconds, draws, depth and twin, and what ended the pass before it, with the window's pass breaks), the kinds of work the batches started (`ops ...`), the draw-state classes by GPU time (`draw_classes`: `blend/alpha/tex/write/coverage X.XXms/f N/f Y.YYMpx/f`, the class that cost most first, see below), the `safe_skips N/f D.DDMpx/f` counter, and, when the opaque sort is on, `sorted N/f of M/f draws in R/f runs` with the reason each draw was held or not |
 
 The periodic log line gains `gpu_exec X.XXms/f passes N/f barriers M/f` (plus
 `shaded V/P/F` when the device keeps pipeline statistics), and a second
@@ -387,6 +387,25 @@ come from
 `zakuro_gpu::GpuTimes`, the same type the desktop renderer can log with
 `ZAKURO_GPU_TIMES=1` (`GPU over N batches: ...` lines).
 
+A frame that is fill bound needs its draw time split by draw state, not only by
+render target. `ZAKURO_GPU_TIMES=1` also buckets the draw time five ways: the
+blend kind (off, the usual source-alpha over, anything else), whether the alpha
+test is on, how many texture units are enabled, what the draw may write (color
+and depth, color only, a partial color mask, nothing) and how much of the target
+its triangles estimate to cover (under a sixteenth, under a quarter, more; a
+draw the GPU shades has no placed vertices so its coverage is unknown). That is
+`3 x 2 x 4 x 4 x 4` classes. The timestamp is written when the class changes,
+not on every draw, so the buckets cost a handful of extra query writes per
+batch instead of one per draw; the time between two stamps goes to the class of
+the draw before it, and the draws and the pixels their triangle areas add up to
+are counted per class the same way. A `GPU draw classes over N batches: ...`
+line (log target `zakuro_gpu::draws`) lists the ten most expensive classes with
+their milliseconds, draws and estimated megapixels, and `gpu_times_line` carries
+the same as `draw_classes ...` plus `safe_skips ...`. Time and pixels per class
+together say what a class's milliseconds buy: a class whose ms/f is high and
+whose Mpx/f is higher than the frame's pixels is overdraw, and the fragment
+cost per megapixel is what a texture/ALU change would have to lower.
+
 Renderer switches the diagnostic profiles use (both default off, read once when
 the renderer is built, so set them before a load):
 
@@ -398,6 +417,9 @@ the renderer is built, so set them before a load):
 | `ZAKURO_MERGE_PASSES=1` | a draw the guest gives no depth buffer, into the color buffer a pass with depth is already drawing into, keeps that pass and draws with the depth attachment it has and no depth test or write: the picture is the same and the pass does not end and begin again. The line gains `merged N draws/f` |
 | `ZAKURO_DEDUPE_CAPTURE=1` | a capture of a surface asked for again in the same batch, with nothing drawn since the last capture, is skipped; the line gains `captures_skipped N/f` when it happens |
 | `ZAKURO_GPU_TIMES=1` | the GPU's own timestamped execution times above (diagnostic only) |
+| `ZAKURO_MEASURE_NOBLEND=1` | measurement only, the picture is wrong: every blending draw is written as if the blend were off, so the time blending and its read of the destination cost can be measured apart from the rest of the draw |
+| `ZAKURO_MEASURE_FLAT=1` | measurement only, the picture is wrong: every fragment is drawn as one color, with the combiners, the texture fetches, lighting, the procedural texture and the fog neutralized in a copy of the draw's registers. What the draw time loses against the normal build is what the fragment work adds beyond fill and blending |
+| `ZAKURO_SAFE_SKIPS=1` | math-equivalent: a draw that can change neither buffer is left out as a whole (no color writes, no depth write and no stencil write, or a blend that leaves the destination as it is), and the time and pixels it would have cost are counted in `safe_skips N/f` instead. The picture must not change |
 
 The other hidden renderer switches (`ZAKURO_GPU_SHADERS` / `ZAKURO_CPU_SHADERS`,
 `ZAKURO_FLOAT_DEPTH`, `ZAKURO_DEPTH_BLITS`, `ZAKURO_STATIC_BLEND`,

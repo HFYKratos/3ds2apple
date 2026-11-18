@@ -13,7 +13,7 @@ developer guide for the scripts.
 | `build-zakuro-ios.sh` | Clone/pin Zakuro, apply `ios/zakuro-ios/patches/*.patch`, add the iOS crate and build `build/ios/libzakuro_ios.a` |
 | `build-ios-app.sh` | `xcodegen` + `xcodebuild` for the unsigned shell `.app` (empty schema-2 catalog) |
 | `package-ipa.sh` | Wrap an unsigned `.app` into `IPA/<name>.ipa` and print its SHA-256; `--manifest FILE` writes the launcher shell `manifest.json` (version/build from the app Info.plist, bundle id, bytes, SHA-256) |
-| `build-gpu-diagnostic-ipa.sh` | Package the ROM-free shell as GPU A/B diagnostic IPAs (one Info.plist GPU profile each: `baseline`/`baseline2`/`baseline3`/`mvk`/`renderer`/`sort`/`sort2`/`merge`/`capture`/`combo`), with MoltenVK embedded; outputs stay under `out/gpu-diag*/` (gitignored) |
+| `build-gpu-diagnostic-ipa.sh` | Package the ROM-free shell as GPU A/B diagnostic IPAs (one Info.plist GPU profile each: `baseline`/`baseline2`/`baseline3`/`baseline4`/`mvk`/`renderer`/`sort`/`sort2`/`merge`/`capture`/`noblend`/`flat`/`2x3x`/`safe`/`combo`), with MoltenVK embedded; outputs stay under `out/gpu-diag*/` (gitignored) |
 
 ## GamePacks and shell IPA (launcher-first)
 
@@ -111,6 +111,11 @@ sets `ZAKURO_GPU_TIMES=1` so the diagnostics carry the GPU's real execution time
 | `sort2` | `baseline3` + the relaxed opaque front-to-back draw sort (`ZAKURO_SORT_OPAQUE=1`): alpha test and partial colour masks no longer keep a draw out, only a state that can change the picture does (depth writes, blending, logic ops, stencil writes, GPU-shaded vertices); the line gains `sorted N/f of M/f draws` and a per-reason count so a run that does not engage says why |
 | `merge` | `baseline3` + render-pass merging (`ZAKURO_MERGE_PASSES=1`): a draw with no depth buffer into a depth-buffered pass keeps that pass with its depth test and write off, so a title that switches depth on and off does not end and begin a pass each time; the line gains `merged N/f` |
 | `capture` | `baseline3` + duplicate-capture skipping (`ZAKURO_DEDUPE_CAPTURE=1`): a capture asked for again in the same batch with nothing drawn since is not recorded again; the line gains `captures_skipped N/f` when it happens |
+| `baseline4` | the fourth round's control: the GPU draw time split by draw state (blend kind, alpha test, texture units, writes, estimated coverage) with the timestamps at class boundaries rather than one per draw; the line carries each class's ms/f, draws/f and estimated Mpx/f (`draw_classes`) and the `safe_skips` count |
+| `noblend` | `baseline4` + every blending draw written as if the blend were off (`ZAKURO_MEASURE_NOBLEND=1`), measurement only: the drop in `gpu_exec` is what blending and its destination read cost |
+| `flat` | `baseline4` + every fragment drawn as one color instead of the combiners, fetches and lighting (`ZAKURO_MEASURE_FLAT=1`), measurement only: the drop in `gpu_exec` is what the fragment work adds beyond fill and blending |
+| `2x3x` | `baseline4` with the internal 3D renderer at 2x while the drawable keeps 3x (`THREEDS2APPLE_DIAG_RENDER_SCALE=2`), measurement only: the drop in `gpu_exec` is what the 3x target's fill costs |
+| `safe` | `baseline4` + math-equivalent skips of draws whose state cannot change either buffer (`ZAKURO_SAFE_SKIPS=1`); the picture must be unchanged and `safe_skips N/f` says whether it engaged |
 | `combo` | mvk + renderer, for the confirmation run after the A/B names a winner |
 
 Run it on the macOS build VM after `scripts/build-zakuro-ios.sh` and
@@ -125,7 +130,12 @@ bandwidth, not the emulated shading. The per-pass report (`zk_passes:`, carried
 inside `gpu_times_line=`) and the `pass_breaks` counters are what a pass-merge
 candidate is judged from, and the sort's `sorted`/reason counters say whether
 the draw sort engaged at all; a candidate with under 5% real GPU-time gain, or
-any picture change, stays off in the release build.
+any picture change, stays off in the release build. The fourth round's
+`draw_classes` line (draw-state GPU time buckets, estimated pixels per class)
+and the `noblend`/`flat`/`2x3x` measurement profiles are how a 3x scene that is
+fill bound is shown to be fill bound: no math-equivalent change can then
+recover the fragments without changing the picture, and `safe` measures the one
+candidate class that can.
 
 ### Performance contract (licence boundary and measurement)
 

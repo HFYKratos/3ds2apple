@@ -1,0 +1,659 @@
+diff --git a/crates/zakuro-gpu/src/lib.rs b/crates/zakuro-gpu/src/lib.rs
+index c1807ab..7402cf3 100644
+--- a/crates/zakuro-gpu/src/lib.rs
++++ b/crates/zakuro-gpu/src/lib.rs
+@@ -29,7 +29,10 @@ pub use renderer::{DrawCall, Renderer, RendererKind, SoftwareRenderer};
+ #[cfg(feature = "vulkan")]
+ pub use device::SharedDevice;
+ #[cfg(feature = "vulkan")]
+-pub use raster::{GpuTimes, PassTimes, SortCounts, BREAK_KINDS, GPU_WORK, SORT_REASONS};
++pub use raster::{
++    draw_class_name, draw_class_parts, GpuTimes, PassTimes, SortCounts, BREAK_KINDS, DRAW_ALPHA_TESTS, DRAW_BLENDS,
++    DRAW_CLASSES, DRAW_COVERAGES, DRAW_TEXTURES, DRAW_WRITES, GPU_WORK, SORT_REASONS,
++};
+ 
+ /// how the GPU reaches guest memory.
+ pub trait GpuMemory {
+diff --git a/crates/zakuro-gpu/src/raster.rs b/crates/zakuro-gpu/src/raster.rs
+index 7c77011..cbdb4f5 100644
+--- a/crates/zakuro-gpu/src/raster.rs
++++ b/crates/zakuro-gpu/src/raster.rs
+@@ -28,6 +28,70 @@ pub const SORT_REASONS: [&str; 12] = [
+ #[cfg(feature = "vulkan")]
+ pub const BREAK_KINDS: [&str; 9] = ["other", "uploads", "target", "twin", "clear", "transfer", "capture", "copy", "sync"];
+ 
++/// the render pass a draw's time belongs to more than one class of, see
++/// [`GpuTimes::draw_class_ms`]: a draw's state and the pixels its triangles
++/// estimate to cover, broken into small buckets. The GPU's timestamps are
++/// written at the boundaries between classes rather than once per draw, so a
++/// frame's fragment cost can be told apart by state without paying a query per
++/// draw.
++#[cfg(feature = "vulkan")]
++pub const DRAW_CLASSES: usize = 3 * 2 * 4 * 4 * 4;
++
++/// the blend kinds a draw class tells apart, in class index order: the output
++/// merger off, the usual source-alpha over, and any other blend equation.
++#[cfg(feature = "vulkan")]
++pub const DRAW_BLENDS: [&str; 3] = ["noblend", "alphablend", "blend"];
++/// whether the alpha test is on, in class index order.
++#[cfg(feature = "vulkan")]
++pub const DRAW_ALPHA_TESTS: [&str; 2] = ["noalpha", "alpha"];
++/// the enabled texture units, in class index order.
++#[cfg(feature = "vulkan")]
++pub const DRAW_TEXTURES: [&str; 4] = ["tex0", "tex1", "tex2", "tex3"];
++/// what a draw may write, in class index order: color and depth, color only, a
++/// partial color mask, or nothing at all.
++#[cfg(feature = "vulkan")]
++pub const DRAW_WRITES: [&str; 4] = ["c+d", "c", "mask", "none"];
++/// how much of the target a draw covers, estimated on the CPU from its
++/// triangles, in class index order; the first is a draw the GPU shades, whose
++/// vertices the CPU has not placed so its coverage is not known.
++#[cfg(feature = "vulkan")]
++pub const DRAW_COVERAGES: [&str; 4] = ["cov?", "cov-s", "cov-m", "cov-l"];
++
++/// the class index a draw's state and coverage give it, see
++/// [`DRAW_CLASSES`]; `blend`, `alpha`, `textures`, `write` and `coverage`
++/// index their own tables.
++#[cfg(feature = "vulkan")]
++pub fn draw_class_index(blend: usize, alpha: usize, textures: usize, write: usize, coverage: usize) -> usize {
++    (((blend * DRAW_ALPHA_TESTS.len() + alpha) * DRAW_TEXTURES.len() + textures) * DRAW_WRITES.len() + write)
++        * DRAW_COVERAGES.len()
++        + coverage
++}
++
++/// the five parts of a class index, in the order [`draw_class_index`] takes
++/// them: blend kind, alpha test, texture units, writes and coverage.
++#[cfg(feature = "vulkan")]
++pub fn draw_class_parts(class: usize) -> [usize; 5] {
++    let coverage = class % DRAW_COVERAGES.len();
++    let rest = class / DRAW_COVERAGES.len();
++    let write = rest % DRAW_WRITES.len();
++    let rest = rest / DRAW_WRITES.len();
++    let textures = rest % DRAW_TEXTURES.len();
++    let rest = rest / DRAW_TEXTURES.len();
++    let alpha = rest % DRAW_ALPHA_TESTS.len();
++    let blend = rest / DRAW_ALPHA_TESTS.len();
++    [blend, alpha, textures, write, coverage]
++}
++
++/// a class's name, the parts joined with slashes: `alphablend/alpha/tex2/c/cov-l`.
++#[cfg(feature = "vulkan")]
++pub fn draw_class_name(class: usize) -> String {
++    let [blend, alpha, textures, write, coverage] = draw_class_parts(class);
++    format!(
++        "{}/{}/{}/{}/{}",
++        DRAW_BLENDS[blend], DRAW_ALPHA_TESTS[alpha], DRAW_TEXTURES[textures], DRAW_WRITES[write], DRAW_COVERAGES[coverage]
++    )
++}
++
+ /// what the opaque front-to-back sort (`ZAKURO_SORT_OPAQUE=1`) did with the
+ /// draws it saw, cumulative since the renderer started: the draws it
+ /// considered, the ones held back and recorded in a different order (`runs`
+@@ -59,7 +123,7 @@ impl SortCounts {
+ /// kind, `ZAKURO_GPU_TIMES=1` turns it on. Cumulative since the renderer
+ /// started: a host that reports a window subtracts two readings.
+ #[cfg(feature = "vulkan")]
+-#[derive(Clone, Copy, Debug, Default)]
++#[derive(Clone, Copy, Debug)]
+ pub struct GpuTimes {
+     /// batches the GPU finished and whose timestamps were read.
+     pub batches: u64,
+@@ -94,6 +158,49 @@ pub struct GpuTimes {
+     /// captures skipped because the surface still held the batch's picture,
+     /// see `ZAKURO_DEDUPE_CAPTURE`.
+     pub captures_skipped: u64,
++    /// milliseconds the GPU spent in each draw-state class, see
++    /// [`DRAW_CLASSES`]: what a frame's draws cost apart by blend, alpha test,
++    /// texture units, writes and estimated coverage, with the timestamps at
++    /// the group boundaries rather than one per draw.
++    pub draw_class_ms: [f64; DRAW_CLASSES],
++    /// the draws recorded per class, cumulative.
++    pub draw_class_draws: [u64; DRAW_CLASSES],
++    /// the pixels those draws' triangles estimate to cover per class,
++    /// cumulative: console pixels times the draw's render scale squared.
++    pub draw_class_pixels: [u64; DRAW_CLASSES],
++    /// draws skipped because they could not change either buffer, and the
++    /// pixels they would have covered, see `ZAKURO_SAFE_SKIPS`.
++    pub safe_skips: u64,
++    pub safe_skipped_pixels: u64,
++}
++
++#[cfg(feature = "vulkan")]
++impl Default for GpuTimes {
++    fn default() -> GpuTimes {
++        GpuTimes {
++            batches: 0,
++            milliseconds: [0.0; GPU_WORK.len()],
++            draws: 0,
++            renderings: 0,
++            barriers: 0,
++            waited_room_ms: 0.0,
++            waited_room_count: 0,
++            waited_done_ms: 0.0,
++            waited_done_count: 0,
++            shaded: [0; 4],
++            pipeline_statistics: false,
++            sort: SortCounts::default(),
++            merged_draws: 0,
++            breaks: [0; BREAK_KINDS.len()],
++            work_ops: [0; GPU_WORK.len()],
++            captures_skipped: 0,
++            draw_class_ms: [0.0; DRAW_CLASSES],
++            draw_class_draws: [0; DRAW_CLASSES],
++            draw_class_pixels: [0; DRAW_CLASSES],
++            safe_skips: 0,
++            safe_skipped_pixels: 0,
++        }
++    }
+ }
+ 
+ #[cfg(feature = "vulkan")]
+@@ -108,6 +215,16 @@ impl GpuTimes {
+     pub fn added_milliseconds(&self, earlier: &GpuTimes) -> f64 {
+         self.since(earlier).iter().sum()
+     }
++
++    /// each draw-state class's time, draws and estimated pixels between an
++    /// earlier reading and this one, see [`DRAW_CLASSES`].
++    pub fn draw_classes_since(&self, earlier: &GpuTimes) -> ([f64; DRAW_CLASSES], [u64; DRAW_CLASSES], [u64; DRAW_CLASSES]) {
++        (
++            std::array::from_fn(|i| (self.draw_class_ms[i] - earlier.draw_class_ms[i]).max(0.0)),
++            std::array::from_fn(|i| self.draw_class_draws[i].saturating_sub(earlier.draw_class_draws[i])),
++            std::array::from_fn(|i| self.draw_class_pixels[i].saturating_sub(earlier.draw_class_pixels[i])),
++        )
++    }
+ }
+ 
+ /// one render target's share of the GPU's own time, cumulative since the
+@@ -1448,6 +1565,22 @@ pub(super) fn front_to_back_key(vertices: &[Screen]) -> Option<f32> {
+     vertices.iter().map(|vertex| vertex.z).reduce(f32::max)
+ }
+ 
++/// the pixels a draw the CPU placed estimates to cover: the area of its
++/// triangles in window pixels, added up whether they overlap or not, which is
++/// what the GPU shades. The estimate is for attribution, not for a picture:
++/// it ignores the scissor and what the depth or stencil test would drop.
++#[cfg(feature = "vulkan")]
++pub(super) fn estimated_pixels(vertices: &[Screen], indices: &[u32]) -> u64 {
++    let mut area = 0.0f64;
++    for triangle in indices.chunks_exact(3) {
++        let at = |i: usize| &vertices[i as usize];
++        let [a, b, c] = [at(triangle[0] as usize), at(triangle[1] as usize), at(triangle[2] as usize)];
++        let cross = (b.x - a.x) as f64 * (c.y - a.y) as f64 - (c.x - a.x) as f64 * (b.y - a.y) as f64;
++        area += cross.abs() * 0.5;
++    }
++    area as u64
++}
++
+ fn to_screen(vertex: &Vertex, viewport: (f32, f32, f32, f32)) -> Option<Screen> {
+     let (vx, vy, vw, vh) = viewport;
+     let w = vertex.clip[3];
+diff --git a/crates/zakuro-gpu/src/raster/hardware.rs b/crates/zakuro-gpu/src/raster/hardware.rs
+index 21feae8..4c2a737 100644
+--- a/crates/zakuro-gpu/src/raster/hardware.rs
++++ b/crates/zakuro-gpu/src/raster/hardware.rs
+@@ -883,13 +883,19 @@ const TIMESTAMPS: u32 = 4096;
+ /// batches the times are added up over before they are logged.
+ const TIMED_BATCHES: u32 = 600;
+ 
+-/// a timestamp's place: the kind of work the time after it goes to, and the
++/// the class a draw's time goes to before one changes it, see
++/// [`super::DRAW_CLASSES`].
++const NO_CLASS: u16 = u16::MAX;
++
++/// a timestamp's place: the kind of work the time after it goes to, the
+ /// render pass whose work it is, an index into [`Timing::pass_detail`],
+-/// u32::MAX outside a render pass.
++/// u32::MAX outside a render pass, and the draw-state class it belongs to,
++/// [`NO_CLASS`] outside a draw.
+ #[derive(Clone, Copy)]
+ struct Mark {
+     work: Work,
+     pass: u32,
++    class: u16,
+ }
+ 
+ /// one render pass as it was recorded, for the per-pass report: the target it
+@@ -972,6 +978,20 @@ struct Timing {
+     logged_waited: [(f64, u32); 2],
+     /// each render target's cumulative GPU time, passes and draws.
+     passes: HashMap<u32, PassTotal>,
++    /// the draw-state class the draw being recorded belongs to, [`NO_CLASS`]
++    /// outside a draw, see [`super::DRAW_CLASSES`].
++    current_class: u16,
++    /// milliseconds the GPU spent in each draw-state class, cumulative.
++    draw_classes: [f64; super::DRAW_CLASSES],
++    /// draws and the pixels their triangles estimate to cover per class,
++    /// cumulative.
++    draw_class_draws: [u64; super::DRAW_CLASSES],
++    draw_class_pixels: [u64; super::DRAW_CLASSES],
++    /// the class totals as of the last log line, so each line reports its own
++    /// window.
++    logged_draw_classes: [f64; super::DRAW_CLASSES],
++    logged_draw_class_draws: [u64; super::DRAW_CLASSES],
++    logged_draw_class_pixels: [u64; super::DRAW_CLASSES],
+ }
+ 
+ /// whether clears are done as image clears where they can be, which writes
+@@ -1018,6 +1038,33 @@ fn dedupe_captures() -> bool {
+     *ON.get_or_init(|| std::env::var_os("ZAKURO_DEDUPE_CAPTURE").is_some_and(|value| value != "0"))
+ }
+ 
++/// whether every draw shades a flat color instead of running the title's
++/// combiners, texture fetches and lighting: ZAKURO_MEASURE_FLAT=1 (a
++/// measurement profile; the picture is wrong) turns it on, so the GPU time a
++/// scene costs with the fragment work removed can be told from what it adds.
++fn measure_flat() -> bool {
++    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    *ON.get_or_init(|| std::env::var_os("ZAKURO_MEASURE_FLAT").is_some_and(|value| value != "0"))
++}
++
++/// whether every blending draw writes like the blend were off:
++/// ZAKURO_MEASURE_NOBLEND=1 (a measurement profile; the picture is wrong) turns
++/// it on, so the time blending and its read of the destination adds can be
++/// measured apart.
++fn measure_noblend() -> bool {
++    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    *ON.get_or_init(|| std::env::var_os("ZAKURO_MEASURE_NOBLEND").is_some_and(|value| value != "0"))
++}
++
++/// whether draws whose state cannot change either buffer are skipped as a
++/// whole: ZAKURO_SAFE_SKIPS=1 (A/B, default off) turns it on. Such a draw
++/// writes nothing, blends to the destination it would read, or writes depth,
++/// stencil and color nothing; leaving it out draws the same picture.
++fn safe_skips() -> bool {
++    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    *ON.get_or_init(|| std::env::var_os("ZAKURO_SAFE_SKIPS").is_some_and(|value| value != "0"))
++}
++
+ /// why a render pass ended, in the order [`super::BREAK_KINDS`] has them.
+ #[derive(Clone, Copy, PartialEq, Eq)]
+ enum Break {
+@@ -1891,6 +1938,13 @@ pub struct Hardware {
+     /// captures skipped as the surface still held the batch's picture
+     /// (ZAKURO_DEDUPE_CAPTURE=1).
+     captures_skipped: u64,
++    /// draws skipped as they could not change either buffer
++    /// (ZAKURO_SAFE_SKIPS=1), and the pixels they would have covered.
++    safe_skips: u64,
++    safe_skipped_pixels: u64,
++    /// the skip counters as of the last log line.
++    logged_safe_skips: u64,
++    logged_safe_skipped_pixels: u64,
+     /// what needs the rendering's drawings, so the next end_rendering says
+     /// why the pass ended, see [`Break`].
+     pending_break: Break,
+@@ -2149,6 +2203,10 @@ impl Hardware {
+                 sort: super::SortCounts::default(),
+                 merged_draws: 0,
+                 captures_skipped: 0,
++                safe_skips: 0,
++                safe_skipped_pixels: 0,
++                logged_safe_skips: 0,
++                logged_safe_skipped_pixels: 0,
+                 pending_break: Break::Other,
+                 last_break: Break::Other,
+                 last_passes_line: String::new(),
+@@ -2186,6 +2244,13 @@ impl Hardware {
+                         waited: [(0.0, 0); 2],
+                         logged_waited: [(0.0, 0); 2],
+                         passes: HashMap::new(),
++                        current_class: NO_CLASS,
++                        draw_classes: [0.0; super::DRAW_CLASSES],
++                        draw_class_draws: [0; super::DRAW_CLASSES],
++                        draw_class_pixels: [0; super::DRAW_CLASSES],
++                        logged_draw_classes: [0.0; super::DRAW_CLASSES],
++                        logged_draw_class_draws: [0; super::DRAW_CLASSES],
++                        logged_draw_class_pixels: [0; super::DRAW_CLASSES],
+                     }),
+                 barriers: 0,
+                 unfenced: true,
+@@ -2254,6 +2319,11 @@ impl Hardware {
+             breaks: timing.pass_breaks,
+             work_ops: timing.work_ops,
+             captures_skipped: self.captures_skipped,
++            draw_class_ms: timing.draw_classes,
++            draw_class_draws: timing.draw_class_draws,
++            draw_class_pixels: timing.draw_class_pixels,
++            safe_skips: self.safe_skips,
++            safe_skipped_pixels: self.safe_skipped_pixels,
+         })
+     }
+ 
+@@ -2504,6 +2574,7 @@ impl Hardware {
+         };
+         timing.current = Work::Other;
+         timing.current_pass = u32::MAX;
++        timing.current_class = NO_CLASS;
+         // SAFETY: recording, outside rendering
+         unsafe {
+             self.device.cmd_reset_query_pool(commands, pool, 0, TIMESTAMPS);
+@@ -2549,10 +2620,13 @@ impl Hardware {
+             if (marks.len() as u32) + 1 < TIMESTAMPS {
+                 // SAFETY: recording, the query was reset when the batch began
+                 unsafe { self.device.cmd_write_timestamp2(commands, vk::PipelineStageFlags2::ALL_COMMANDS, *pool, marks.len() as u32 + 1) };
+-                marks.push(Mark { work: timing.current, pass: timing.current_pass });
++                marks.push(Mark { work: timing.current, pass: timing.current_pass, class: timing.current_class });
+             }
+         }
+         timing.current = work;
++        if work != Work::Draw {
++            timing.current_class = NO_CLASS;
++        }
+     }
+ 
+     /// stamps the end of the work before a render pass begins, or of the pass
+@@ -2568,10 +2642,30 @@ impl Hardware {
+             if (marks.len() as u32) + 1 < TIMESTAMPS {
+                 // SAFETY: recording, the query was reset when the batch began
+                 unsafe { self.device.cmd_write_timestamp2(commands, vk::PipelineStageFlags2::ALL_COMMANDS, *pool, marks.len() as u32 + 1) };
+-                marks.push(Mark { work: timing.current, pass: timing.current_pass });
++                marks.push(Mark { work: timing.current, pass: timing.current_pass, class: timing.current_class });
+             }
+         }
+         timing.current_pass = pass;
++        timing.current_class = NO_CLASS;
++    }
++
++    /// stamps the end of the draw-state class before, when a draw's state
++    /// gives it another, so each class's time is measured from the draw that
++    /// changes the state rather than with a timestamp on every draw.
++    fn mark_class(&mut self, class: u16) {
++        let commands = self.commands;
++        let Some(timing) = &mut self.timing else { return };
++        if !self.recording || timing.current_class == class || timing.current != Work::Draw {
++            return;
++        }
++        if let Some((pool, marks)) = timing.pools.get_mut(&commands) {
++            if (marks.len() as u32) + 1 < TIMESTAMPS {
++                // SAFETY: recording, the query was reset when the batch began
++                unsafe { self.device.cmd_write_timestamp2(commands, vk::PipelineStageFlags2::ALL_COMMANDS, *pool, marks.len() as u32 + 1) };
++                marks.push(Mark { work: timing.current, pass: timing.current_pass, class: timing.current_class });
++            }
++        }
++        timing.current_class = class;
+     }
+ 
+     /// adds up a finished batch's times, and logs them every so many.
+@@ -2600,6 +2694,11 @@ impl Hardware {
+                         total.milliseconds += milliseconds;
+                     }
+                 }
++                // the draw-state class the work was recorded in, when it was
++                // a draw; the classes are what a frame's draws cost apart
++                if mark.work == Work::Draw && mark.class != NO_CLASS {
++                    timing.draw_classes[mark.class as usize] += milliseconds;
++                }
+             }
+             marks.clear();
+         }
+@@ -2779,6 +2878,51 @@ impl Hardware {
+                     reasons.join(", "),
+                 );
+             }
++            // the draw-state classes this window's GPU time went to, the one
++            // that cost most first, so a title's blended and opaque draws can
++            // be told apart on the device: the time the timestamps at class
++            // boundaries put there, the draws and the pixels they estimate to
++            // cover, and what the safe skips left out
++            let mut classes: Vec<(usize, f64, u64, u64)> = Vec::new();
++            for class in 0..super::DRAW_CLASSES {
++                let milliseconds = (timing.draw_classes[class] - timing.logged_draw_classes[class]).max(0.0);
++                let draws = timing.draw_class_draws[class].saturating_sub(timing.logged_draw_class_draws[class]);
++                let pixels = timing.draw_class_pixels[class].saturating_sub(timing.logged_draw_class_pixels[class]);
++                if draws > 0 || pixels > 0 {
++                    classes.push((class, milliseconds, draws, pixels));
++                }
++                timing.logged_draw_classes[class] = timing.draw_classes[class];
++                timing.logged_draw_class_draws[class] = timing.draw_class_draws[class];
++                timing.logged_draw_class_pixels[class] = timing.draw_class_pixels[class];
++            }
++            let skipped = self.safe_skips.saturating_sub(self.logged_safe_skips);
++            let skipped_pixels = self.safe_skipped_pixels.saturating_sub(self.logged_safe_skipped_pixels);
++            self.logged_safe_skips = self.safe_skips;
++            self.logged_safe_skipped_pixels = self.safe_skipped_pixels;
++            if !classes.is_empty() {
++                classes.sort_by(|a, b| b.1.total_cmp(&a.1));
++                let reported: Vec<String> = classes
++                    .iter()
++                    .take(10)
++                    .map(|&(class, milliseconds, draws, pixels)| {
++                        format!(
++                            "{} {milliseconds:.1}ms/{draws}d/{:.2}Mpx",
++                            super::draw_class_name(class),
++                            pixels as f64 / 1e6
++                        )
++                    })
++                    .collect();
++                let skips = if skipped > 0 {
++                    format!(", safe skips {skipped} ({:.2}Mpx)", skipped_pixels as f64 / 1e6)
++                } else {
++                    String::new()
++                };
++                log::info!(
++                    target: "zakuro_gpu::draws",
++                    "GPU draw classes over {TIMED_BATCHES} batches: {}{skips}",
++                    reported.join(", "),
++                );
++            }
+             timing.batches = 0;
+         }
+         Ok(())
+@@ -4592,14 +4736,44 @@ impl Hardware {
+         };
+ 
+ 
+-        let r = draw.registers;
++        // the flat measurement profile draws every fragment as one color: a
++        // copy of the registers neutralizes the combiners, the texture units,
++        // the alpha test, the procedural texture, the fog and lighting, so the
++        // same shader does almost none of the fragment work the title asked
++        // for. measurement only, the picture is wrong
++        let flat = measure_flat();
++        let forced_registers;
++        let r: &[u32] = if flat {
++            let mut forced = draw.registers.to_vec();
++            for base in STAGE_REGISTERS {
++                forced[base..base + 5].fill(0);
++            }
++            forced[REG_UPDATE_BUFFER] = 0;
++            forced[REG_BUFFER_COLOR] = 0;
++            forced[REG_ALPHA_TEST] = 0;
++            forced[REG_TEXTURE_CONFIG] = 0;
++            for base in TEXTURE_UNIT_BASES {
++                forced[base] = 0;
++                forced[base + 2] = 0;
++            }
++            for register in proctex::REG_CONFIG..proctex::REG_CONFIG + 6 {
++                forced[register] = 0;
++            }
++            forced[fog::REG_COLOR] = 0;
++            forced_registers = forced;
++            &forced_registers[..]
++        } else {
++            draw.registers
++        };
++        // lighting off is what flat removes; the uniforms below say so
++        let lighting_on = draw.lighting.is_some() && !flat;
+         let mut block = std::mem::take(&mut self.uniforms);
+         let words = &mut block.words;
+         words.clear();
+         for base in STAGE_REGISTERS {
+             words.extend([r[base], r[base + 1], r[base + 2], r[base + 3], r[base + 4], 0, 0, 0]);
+         }
+-        let texture_config = (r[REG_TEXTURE_CONFIG] & !7) | enabled;
++        let texture_config = if flat { 0 } else { (r[REG_TEXTURE_CONFIG] & !7) | enabled };
+         words.extend([r[REG_UPDATE_BUFFER], r[REG_BUFFER_COLOR], r[REG_ALPHA_TEST], texture_config]);
+         for base in TEXTURE_UNIT_BASES {
+             words.extend([r[base + 2], r[base], 0, 0]);
+@@ -4617,10 +4791,10 @@ impl Hardware {
+             Geometry::Shaded(_) if [mapped.0, mapped.1].iter().all(|d| (0.0..=1.0).contains(d)) => (false, mapped),
+             Geometry::Shaded(_) => (true, (0.0, 1.0)),
+         };
+-        words.extend([depth_flags, draw.lighting.is_some() as u32, depth_map.scale.to_bits(), depth_map.offset.to_bits()]);
++        words.extend([depth_flags, lighting_on as u32, depth_map.scale.to_bits(), depth_map.offset.to_bits()]);
+         match draw.lighting {
+-            Some(lighting) => lighting.pack(words),
+-            None => words.resize(UNIFORM_WORDS - PROCTEX_WORDS - FOG_WORDS, 0),
++            Some(lighting) if lighting_on => lighting.pack(words),
++            _ => words.resize(UNIFORM_WORDS - PROCTEX_WORDS - FOG_WORDS, 0),
+         }
+         let procedural = [
+             proctex::REG_CONFIG,
+@@ -4660,7 +4834,11 @@ impl Hardware {
+         };
+         // only the bits compile_pipeline reads, so draws that differ
+         // elsewhere share a pipeline
+-        let blend = (r[REG_COLOR_OPERATION] & 0x100 != 0).then_some(r[REG_BLEND_FUNC] & 0xFFFF_0707);
++        let blend = if measure_noblend() {
++            None
++        } else {
++            (r[REG_COLOR_OPERATION] & 0x100 != 0).then_some(r[REG_BLEND_FUNC] & 0xFFFF_0707)
++        };
+         let mut logic_op = LogicOp::read(r);
+         let mut color_mask = color_mask;
+         if !self.logic_ops {
+@@ -4671,6 +4849,22 @@ impl Hardware {
+             }
+             logic_op = None;
+         }
++        // a draw that can change neither buffer is left out as a whole
++        // (ZAKURO_SAFE_SKIPS=1): no color writes, no depth writes and no
++        // stencil writes leave nothing to do, and a blend whose factors leave
++        // the destination as it is writes the same bytes back. Both draw the
++        // same picture without the draw; the count and the pixels it would
++        // have covered go to the diagnostics line.
++        if safe_skips() && logic_op.is_none() && !depth_write && !Self::stencil_writes(r, depth.is_some()) {
++            let writes_nothing = color_mask == 0;
++            let blends_away = color_mask != 0 && blend.is_some_and(Self::blend_leaves_destination);
++            if writes_nothing || blends_away {
++                let (_, pixels) = Self::draw_class_of(r, &draw.geometry, draw.width, draw.height, self.scale, color_mask, depth_write);
++                self.safe_skips += 1;
++                self.safe_skipped_pixels += pixels;
++                return Ok(());
++            }
++        }
+         // only the bits the shader reads, so draws that differ elsewhere
+         // share a pipeline
+         let mut fragment = [0u32; FRAGMENT_CONSTANTS];
+@@ -4682,7 +4876,7 @@ impl Hardware {
+         }
+         fragment[24] = r[REG_UPDATE_BUFFER] & 0xFF00;
+         fragment[25] = texture_config & 0x2707;
+-        fragment[26] = draw.lighting.is_some() as u32;
++        fragment[26] = lighting_on as u32;
+         fragment[27] = r[REG_ALPHA_TEST] & 0x71;
+         fragment[28] = depth_flags | ((writes_depth as u32) * WRITES_DEPTH);
+         // what stands in for a translated program's pipeline, the
+@@ -4697,9 +4891,21 @@ impl Hardware {
+             vertex,
+             fragment,
+         };
++        // the draw's state class, its time measured from the draw that changes
++        // it rather than with a stamp on every draw, and its estimated pixels
++        let class = self.timing.as_ref().map(|_| {
++            Self::draw_class_of(r, &draw.geometry, draw.width, draw.height, self.scale, color_mask, depth_write)
++        });
+         let pipeline = self.pipeline_for(key, translating)?;
+ 
+         self.mark(Work::Draw, false);
++        if let Some((class, pixels)) = class {
++            if let Some(timing) = &mut self.timing {
++                timing.draw_class_draws[class as usize] += 1;
++                timing.draw_class_pixels[class as usize] += pixels;
++            }
++            self.mark_class(class);
++        }
+         if self.uploads {
+             self.pending_break = Break::Uploads;
+             self.end_rendering();
+@@ -4941,6 +5147,81 @@ impl Hardware {
+             && registers[REG_STENCIL_OP] & 0x777 != 0
+     }
+ 
++    /// whether a blend configuration leaves the destination as it is for every
++    /// fragment: both equations add, and the source factor is zero and the
++    /// destination one, so the result is the destination either way. A draw
++    /// whose blend does that writes the same bytes back.
++    fn blend_leaves_destination(config: u32) -> bool {
++        let factor = |raw: u32| raw & 0xF;
++        let equation = |raw: u32| if raw & 7 > 4 { 0 } else { raw & 7 };
++        equation(config) == 0
++            && equation(config >> 8) == 0
++            && factor(config >> 16) == 0
++            && factor(config >> 20) == 1
++            && factor(config >> 24) == 0
++            && factor(config >> 28) == 1
++    }
++
++    /// the draw-state class a draw's state and geometry give it, see
++    /// [`super::DRAW_CLASSES`], and the pixels its triangles estimate to
++    /// cover at the render scale. The blend kind, the alpha test, the enabled
++    /// texture units, what the draw may write and its coverage are each a
++    /// small bucket, so timestamps are written only where a class changes.
++    fn draw_class_of(
++        registers: &[u32],
++        geometry: &Geometry<'_>,
++        width: u32,
++        height: u32,
++        scale: u32,
++        color_mask: u32,
++        depth_write: bool,
++    ) -> (u16, u64) {
++        let blend = registers[REG_COLOR_OPERATION] & 0x100 != 0;
++        let config = registers[REG_BLEND_FUNC];
++        let factor = |raw: u32| raw & 0xF;
++        // the usual over reads the fragment's alpha, which is what makes a
++        // blended layer cost more than an opaque one
++        let alpha_blend = blend
++            && [factor(config >> 16), factor(config >> 20), factor(config >> 24), factor(config >> 28)]
++                .into_iter()
++                .any(|factor| matches!(factor, 6 | 7 | 14));
++        let blend_kind = if !blend {
++            0
++        } else if alpha_blend {
++            1
++        } else {
++            2
++        };
++        let alpha = usize::from(registers[REG_ALPHA_TEST] & 1 != 0);
++        let textures = (registers[REG_TEXTURE_CONFIG] & 7).count_ones() as usize;
++        let write = if color_mask == 0 {
++            3
++        } else if color_mask == 0xF {
++            if depth_write { 0 } else { 1 }
++        } else {
++            2
++        };
++        let (pixels, known) = match geometry {
++            Geometry::Placed { vertices, indices } => (super::estimated_pixels(vertices, indices) * u64::from(scale * scale), true),
++            Geometry::Shaded(_) => (0, false),
++        };
++        let coverage = if !known || width == 0 || height == 0 {
++            0
++        } else {
++            let full = f64::from(width) * f64::from(height) * f64::from(scale * scale);
++            let fraction = pixels as f64 / full;
++            if fraction < 0.0625 {
++                1
++            } else if fraction < 0.25 {
++                2
++            } else {
++                3
++            }
++        };
++        let class = super::draw_class_index(blend_kind, alpha, textures.min(3), write, coverage);
++        (class as u16, pixels)
++    }
++
+     /// records a draw, inside the rendering into its buffers or their twins.
+     fn record(&mut self, recorded: &Recorded) {
+         let r = recorded;
+@@ -5131,6 +5412,7 @@ impl Hardware {
+             });
+             timing.current_pass = id;
+             timing.current_pass_addr = addr;
++            timing.current_class = NO_CLASS;
+             self.last_break = Break::Other;
+             let total = timing.passes.entry(addr).or_insert(PassTotal {
+                 width,

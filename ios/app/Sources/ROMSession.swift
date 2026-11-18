@@ -944,19 +944,27 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     func applyRenderScale(_ scale: CGFloat) {
         let factor = min(max(Int(scale.rounded()), 1), 4)
         requestedRenderScale = CGFloat(factor)
+        // A diagnostic profile can ask the internal 3D renderer for another
+        // factor than the drawable's (the 2x3x profile draws the 3D at 2x and
+        // presents at 3x) to measure how much of the GPU time is fill. A
+        // release build has no such variable and uses the setting for both.
+        var internalScale = factor
+        if let override = MoltenVKTuning.diagnosticRenderScale {
+            internalScale = min(max(override, 1), 4)
+        }
         // The value is read while a system loads, and loads run on the runtime
         // queue: queue the write there so it can never race a load.
         runtimeQueue.async {
-            let result = zk_set_render_scale(UInt32(factor))
+            let result = zk_set_render_scale(UInt32(internalScale))
             if result != 0 {
                 AppLog.log("[3ds2apple] zk_set_render_scale(%d) failed: %@",
-                      factor, Self.currentRuntimeError())
+                      internalScale, Self.currentRuntimeError())
             }
         }
         applyPresentedGeometry()
         AppLog.log(
-            "[3ds2apple] render scale: %dx · drawable resized now · internal 3D renderer applies on the next load",
-            factor
+            "[3ds2apple] render scale: %dx drawable · internal 3D renderer %dx applies on the next load",
+            factor, internalScale
         )
     }
 

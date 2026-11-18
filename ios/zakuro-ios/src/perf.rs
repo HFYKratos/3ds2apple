@@ -16,7 +16,9 @@ use std::time::{Duration, Instant};
 
 use zakuro_core::kernel::thread::CPU_CLOCK_HZ;
 use zakuro_core::System;
-use zakuro_gpu::{GpuTimes, PassTimes, BREAK_KINDS, GPU_WORK, SORT_REASONS};
+use zakuro_gpu::{
+    draw_class_name, GpuTimes, PassTimes, BREAK_KINDS, DRAW_CLASSES, GPU_WORK, SORT_REASONS,
+};
 
 /// Frames between `zk_perf` log lines: about two seconds at 30 fps.
 pub const DEFAULT_LOG_INTERVAL: u32 = 60;
@@ -26,6 +28,9 @@ const LOGGED_HOT_SPOTS: usize = 3;
 
 /// Render targets listed in the GPU line, the one that cost most first.
 const REPORTED_PASSES: usize = 5;
+
+/// Draw-state classes listed in the GPU line, the one that cost most first.
+const REPORTED_DRAW_CLASSES: usize = 8;
 
 /// Microseconds the last `zk_run_frame` call took.
 static LAST_FRAME_MICROS: AtomicU64 = AtomicU64::new(0);
@@ -195,12 +200,34 @@ struct GpuSummary {
     /// captures skipped because the surface still held the batch's picture per
     /// frame (`ZAKURO_DEDUPE_CAPTURE=1`).
     captures_skipped: f64,
+    /// the draw-state classes the GPU's time went to per frame, the one that
+    /// cost most first: what a frame's draws cost apart by blend, alpha test,
+    /// texture units, writes and estimated coverage, see
+    /// `zakuro_gpu::DRAW_CLASSES`.
+    draw_classes: Vec<DrawClass>,
+    /// draws skipped because they could not change either buffer per frame,
+    /// and the pixels they would have covered (`ZAKURO_SAFE_SKIPS=1`).
+    safe_skips: f64,
+    safe_skipped_pixels: f64,
     /// the last per-pass report when it changed in this window: the dominant
     /// render target's passes in recording order.
     passes_line: String,
     /// the render targets the GPU's own time went to per frame, the one that
     /// cost most first.
     passes: Vec<GpuPass>,
+}
+
+/// One draw-state class the GPU's own time went to over the window, per frame.
+#[derive(Debug, Default)]
+struct DrawClass {
+    /// the class's parts, `blend/alpha/tex/write/coverage`, see
+    /// `zakuro_gpu::draw_class_name`.
+    name: String,
+    /// milliseconds the GPU spent in draws of the class per frame, the draws
+    /// recorded and the pixels their triangles estimate to cover.
+    ms: f64,
+    draws: f64,
+    pixels: f64,
 }
 
 /// One render target the GPU's own time went to over the window, per frame.
@@ -540,6 +567,25 @@ fn gpu_breakdown(
     for (delta, (now, before)) in shaded.iter_mut().zip(current.shaded.iter().zip(baseline.shaded.iter())) {
         *delta = now.saturating_sub(*before);
     }
+    // each draw-state class's share of the window's GPU time, the one that
+    // cost most first: the classes are the buckets the timestamps at class
+    // boundaries put the time in, so a frame's blended and opaque draws are
+    // told apart, with the pixels their triangles estimate to cover
+    let (class_ms, class_draws, class_pixels) = current.draw_classes_since(&baseline);
+    let mut draw_classes: Vec<DrawClass> = (0..DRAW_CLASSES)
+        .filter_map(|class| {
+            let draws = class_draws[class];
+            let pixels = class_pixels[class];
+            (draws > 0 || pixels > 0).then(|| DrawClass {
+                name: draw_class_name(class),
+                ms: per_frame(class_ms[class]),
+                draws: per_frame(draws as f64),
+                pixels: per_frame(pixels as f64),
+            })
+        })
+        .collect();
+    draw_classes.sort_by(|a, b| b.ms.total_cmp(&a.ms));
+    draw_classes.truncate(REPORTED_DRAW_CLASSES);
     // the sort's draws, the pass breaks, the kinds of work started and the
     // pass merge's draws are cumulative too, so take this window's share
     let sort = current.sort.since(&baseline.sort);
@@ -569,6 +615,11 @@ fn gpu_breakdown(
         breaks,
         work_ops,
         captures_skipped: per_frame(current.captures_skipped.saturating_sub(baseline.captures_skipped) as f64),
+        draw_classes,
+        safe_skips: per_frame(current.safe_skips.saturating_sub(baseline.safe_skips) as f64),
+        safe_skipped_pixels: per_frame(
+            current.safe_skipped_pixels.saturating_sub(baseline.safe_skipped_pixels) as f64,
+        ),
         passes_line: if current_line == baseline_line { String::new() } else { current_line.to_owned() },
         passes,
     })
@@ -697,6 +748,32 @@ fn format_gpu_line(summary: &Summary) -> String {
     }
     if gpu.captures_skipped > 0.0 {
         line.push_str(&format!(" | captures_skipped {:.0}/f", gpu.captures_skipped));
+    }
+    // the draw-state classes the GPU's time went to, the one that cost most
+    // first: each class's milliseconds, draws and estimated pixels per frame,
+    // so an A/B run says which kind of draw the time is in
+    if !gpu.draw_classes.is_empty() {
+        let classes: Vec<String> = gpu
+            .draw_classes
+            .iter()
+            .map(|class| {
+                format!(
+                    "{} {:.2}ms/f {:.0}/f {:.2}Mpx/f",
+                    class.name,
+                    class.ms,
+                    class.draws,
+                    class.pixels / 1e6
+                )
+            })
+            .collect();
+        line.push_str(&format!(" | draw_classes {}", classes.join(", ")));
+    }
+    if gpu.safe_skips > 0.0 {
+        line.push_str(&format!(
+            " | safe_skips {:.0}/f {:.2}Mpx/f",
+            gpu.safe_skips,
+            gpu.safe_skipped_pixels / 1e6
+        ));
     }
     // the kinds of work the batches started, so an unexpected pass, copy or
     // readback is seen in the counts as well as in the time
@@ -861,7 +938,37 @@ mod tests {
             breaks: [0; BREAK_KINDS.len()],
             work_ops: [0; GPU_WORK.len()],
             captures_skipped: 0,
+            draw_class_ms: [0.0; DRAW_CLASSES],
+            draw_class_draws: [0; DRAW_CLASSES],
+            draw_class_pixels: [0; DRAW_CLASSES],
+            safe_skips: 0,
+            safe_skipped_pixels: 0,
         }
+    }
+
+    /// the draw-state classes in the GPU line are the window's, the one that
+    /// cost most per frame first, and the safe skips are counted per frame too.
+    #[test]
+    fn draw_classes_and_safe_skips_average_the_window() {
+        let mut baseline = gpu_times(100.0, 300, 20, 2_000);
+        let mut current = gpu_times(400.0, 900, 80, 10_000);
+        baseline.draw_class_ms[7] = 10.0;
+        current.draw_class_ms[7] = 60.0;
+        baseline.draw_class_draws[7] = 10;
+        current.draw_class_draws[7] = 70;
+        baseline.draw_class_pixels[7] = 1_000_000;
+        current.draw_class_pixels[7] = 7_000_000;
+        baseline.safe_skips = 1;
+        current.safe_skips = 21;
+        current.safe_skipped_pixels = 2_000_000;
+        let gpu = gpu_breakdown(Some(baseline), Some(current), &[], &[], "", "", 10).expect("the GPU's times");
+        assert_eq!(gpu.draw_classes.len(), 1);
+        assert_eq!(gpu.draw_classes[0].name, draw_class_name(7));
+        assert!((gpu.draw_classes[0].ms - 5.0).abs() < 1e-9, "ms {}", gpu.draw_classes[0].ms);
+        assert!((gpu.draw_classes[0].draws - 6.0).abs() < 1e-9);
+        assert!((gpu.draw_classes[0].pixels - 600_000.0).abs() < 1e-9);
+        assert!((gpu.safe_skips - 2.0).abs() < 1e-9);
+        assert!((gpu.safe_skipped_pixels - 200_000.0).abs() < 1e-9);
     }
 
     #[test]
@@ -923,6 +1030,14 @@ mod tests {
                 breaks: [0.0; BREAK_KINDS.len()],
                 work_ops: [0.0; GPU_WORK.len()],
                 captures_skipped: 0.0,
+                draw_classes: vec![DrawClass {
+                    name: "alphablend/alpha/tex2/c/cov-l".to_owned(),
+                    ms: 12.0,
+                    draws: 90.0,
+                    pixels: 4_000_000.0,
+                }],
+                safe_skips: 3.0,
+                safe_skipped_pixels: 500_000.0,
                 passes_line: String::new(),
                 passes: Vec::new(),
             }),
@@ -936,7 +1051,15 @@ mod tests {
         // confused when reading a log
         assert!(line.contains("gpu 5.00ms/frame"), "missing the walk column: {line}");
         let gpu_line = format_gpu_line(&summary);
-        for field in ["zk_gpu:", "gpu_exec 21.50ms/frame", "| draw 20.00ms/f", "passes 12/f", "3.30M fragments"] {
+        for field in [
+            "zk_gpu:",
+            "gpu_exec 21.50ms/frame",
+            "| draw 20.00ms/f",
+            "passes 12/f",
+            "3.30M fragments",
+            "draw_classes alphablend/alpha/tex2/c/cov-l 12.00ms/f 90/f 4.00Mpx/f",
+            "safe_skips 3/f 0.50Mpx/f",
+        ] {
             assert!(gpu_line.contains(field), "missing {field}: {gpu_line}");
         }
         assert!(!gpu_line.contains("other 0.00"), "zero kinds are left out: {gpu_line}");
@@ -1061,7 +1184,7 @@ mod tests {
             "| sort 40/f of 60/f draws in 2/f runs",
             "sorted 40/f",
             "no-depth 20/f",
-            "| merged 30/f",
+            "| merged 30 draws/f",
             "| captures_skipped 2/f",
             "| pass_breaks target 4/f",
             "| ops transfer 6/f",

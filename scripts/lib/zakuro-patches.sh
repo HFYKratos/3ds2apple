@@ -25,6 +25,13 @@
 #                                        sort with its reason counters, the
 #                                        render-pass merge and duplicate-capture
 #                                        switches (all default off)
+#   0006-gpu-draw-classes-and-safe-skips.patch
+#                                        the GPU's draw time split by draw
+#                                        state (blend, alpha test, texture
+#                                        units, writes, estimated coverage) at
+#                                        class-boundary timestamps, and the
+#                                        math-equivalent safe skips with their
+#                                        counter (default off)
 #
 # Application is idempotent: a patch already in the tree is reported and
 # skipped, so re-running a build script is safe even when the checkout was
