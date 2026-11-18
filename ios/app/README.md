@@ -1051,8 +1051,9 @@ Vulkan timestamp queries and export:
   the emulated shading.
 - `gpu_profile=` / `gpu_profile_definition=` — the diagnostic GPU profile the IPA
   was built with (`baseline`, `baseline2`, `baseline3`, `baseline4`, `baseline5`,
-  `mvk`, `renderer`, `sort`, `sort2`, `merge`, `capture`, `noblend`, `flat`,
-  `2x3x`, `safe`, `texonly`, `fragspec`, `fastmath`, `combo`) and what it applies.
+  `baseline6`, `mvk`, `renderer`, `sort`, `sort2`, `merge`, `capture`, `noblend`,
+  `flat`, `2x3x`, `safe`, `texonly`, `fragspec`, `fastmath`, `mvkrenderer`,
+  `combo`) and what it applies.
   `baseline3` is the third-round control (per-pass report, pass breaks, work
   counts), `sort2` adds the relaxed opaque front-to-back draw sort
   (`ZAKURO_SORT_OPAQUE=1`), `merge` adds render-pass merging
@@ -1076,7 +1077,15 @@ Vulkan timestamp queries and export:
   fragment ALU's cost). `fragspec` (`ZAKURO_FRAG_SPECIALIZE=1`) has
   the lighting, fog and unit wrapping compiled in as constants, and `fastmath`
   (`ZAKURO_FRAG_FAST_MATH=1`) drops `precise`; both must leave the
-  picture unchanged and say `frag_build ... N/f` when they engage.
+  picture unchanged and say `frag_build ... N/f` when they engage, and the GPU
+  line reports four build counters (fast-math, texonly, specialized, specfast).
+  `baseline6` is the sixth round's control (the same timing as `baseline5` with
+  the fragment builds off). `combo` sets both switches at once; the renderer
+  then runs a combined build of `raster.frag` (the specialization constants
+  without `precise`, counted as `frag_build specfast N/f`), which is the
+  candidate for the release default. `mvkrenderer` is the old `mvk` +
+  `renderer` combination, kept so the first round's confirmation run can still
+  be reproduced.
 
 `scripts/build-gpu-diagnostic-ipa.sh` (on the macOS build VM) packages one IPA
 per profile, differing only in that Info.plist key; the app applies the profile's

@@ -60,7 +60,32 @@
 #   safe      baseline4 + math-equivalent skips of draws that cannot change
 #             either buffer (ZAKURO_SAFE_SKIPS=1): the picture must stay the
 #             same, and safe_skips N/f says whether it engaged
-#   combo     mvk + renderer, for the run after the A/B names a winner
+#   baseline5 baseline from the fifth-round library: the GPU line also carries
+#             the fragment state per draw (frag_lights, fog) and the names of
+#             the builds past the default one (frag_build <name> N/f)
+#   texonly   baseline5 + the fragment shader samples the textures and little
+#             else (ZAKURO_MEASURE_TEXONLY=1): measurement only, the picture
+#             is wrong; baseline5 - texonly is the fragment ALU's cost
+#   fragspec  baseline5 + the lighting, fog and unit wrapping compiled in as
+#             specialization constants (ZAKURO_FRAG_SPECIALIZE=1):
+#             math-equivalent, frag_build specialized N/f says it engaged
+#   fastmath  baseline5 + precise dropped from the fragment shader
+#             (ZAKURO_FRAG_FAST_MATH=1): the driver may contract and
+#             approximate; the picture must stay visually the same and
+#             frag_build fastmath N/f says it engaged
+#   baseline6 the sixth round's control: the same timing as baseline5 with the
+#             fast-math and specialized fragment builds off, so combo is
+#             measured against the default build
+#   combo     the sixth round's combination: ZAKURO_FRAG_FAST_MATH=1 and
+#             ZAKURO_FRAG_SPECIALIZE=1 together. The renderer runs its
+#             combined build (the specialized constants and no precise), so
+#             both savings apply to the same draw; math-equivalent apart from
+#             rounding, frag_build specfast N/f says it engaged. The sixth
+#             round's candidate for the release default; the picture must be
+#             confirmed scene by scene (see README.txt)
+#   mvkrenderer
+#             the first round's confirmation run after its A/B: mvk +
+#             renderer, kept so that run can still be reproduced
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -68,7 +93,7 @@ ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "$ROOT"
 
 OUT_DIR="out/gpu-diag"
-PROFILES="baseline5 texonly fragspec fastmath"
+PROFILES="baseline6 combo"
 STATICLIB="build/ios/libzakuro_ios.a"
 APP_DIR="ios/app"
 CONFIGURATION="Release"
@@ -83,10 +108,11 @@ Usage:
 
 Options:
   --profiles "A B C"   profiles to package
-                       (default: baseline4 noblend flat 2x3x safe)
-                       known: baseline baseline2 baseline3 baseline4 mvk
-                       renderer sort sort2 merge capture noblend flat 2x3x
-                       safe combo
+                       (default: baseline6 combo)
+                       known: baseline baseline2 baseline3 baseline4
+                       baseline5 baseline6 mvk renderer sort sort2 merge
+                       capture noblend flat 2x3x safe texonly fragspec
+                       fastmath mvkrenderer combo
   --out-dir DIR        output directory (default: out/gpu-diag, gitignored)
   --staticlib PATH     Zakuro iOS static library, relative to repo root
                        (default: build/ios/libzakuro_ios.a)
@@ -172,8 +198,8 @@ printf '{\n  "schemaVersion": 1,\n  "generatedAt": "%s",\n  "moltenvk": "%s",\n 
 FIRST=1
 for profile in $PROFILES; do
   case "$profile" in
-    baseline|baseline2|baseline3|baseline4|baseline5|mvk|renderer|sort|sort2|merge|capture|noblend|flat|2x3x|safe|texonly|fragspec|fastmath|combo) ;;
-    *) die "unknown profile: $profile (known: baseline baseline2 baseline3 baseline4 baseline5 mvk renderer sort sort2 merge capture noblend flat 2x3x safe texonly fragspec fastmath combo)" ;;
+    baseline|baseline2|baseline3|baseline4|baseline5|baseline6|mvk|renderer|sort|sort2|merge|capture|noblend|flat|2x3x|safe|texonly|fragspec|fastmath|mvkrenderer|combo) ;;
+    *) die "unknown profile: $profile (known: baseline baseline2 baseline3 baseline4 baseline5 baseline6 mvk renderer sort sort2 merge capture noblend flat 2x3x safe texonly fragspec fastmath mvkrenderer combo)" ;;
   esac
   # keep the bundle's own name: the profile is an Info.plist key, not an app
   # rename, so every IPA unzips to Payload/3ds2apple.app
@@ -293,6 +319,10 @@ Profiles
             approximate. The picture must stay visually the same (rounding may
             differ by a least significant bit); frag_build fastmath N/f says
             the build engaged.
+  baseline6 the sixth round's control: the same timing as baseline5 with the
+            fast-math and specialized fragment builds off, so a combo run is
+            measured against the default build. The GPU line carries
+            frag_lights, fog and frag_build <name> N/f the same way.
   baseline  the first round's control, kept so an old IPA and a new one can be
             compared on the same scene.
   baseline2 the second round's control (render-target pass attribution).
@@ -303,8 +333,16 @@ Profiles
   renderer  baseline + the renderer's 0.1.3 A/B switches: image clears where
             they can be (no attachment load/store for a full clear) and a
             narrower barrier between render passes.
-  combo     mvk + renderer, for the confirmation run after the A/B names a
-            winner.
+  combo     the sixth round's combination: ZAKURO_FRAG_FAST_MATH=1 and
+            ZAKURO_FRAG_SPECIALIZE=1 together. The renderer runs its combined
+            build, the specialized constants (lighting, fog, unit wrapping)
+            without precise, so both savings apply to the same draw. The
+            picture must stay visually the same (fastmath may round by a
+            least significant bit) and frag_build specfast N/f says it
+            engaged. This is the candidate for the release default.
+  mvkrenderer
+            the first round's confirmation run after its A/B: mvk + renderer,
+            kept so that run can still be reproduced.
 
 Procedure (same scene, same duration, one profile per run)
   1. Install one IPA (Sideloadly/AltStore, user's own signing). Start the app,
@@ -321,6 +359,16 @@ Procedure (same scene, same duration, one profile per run)
      per-pass time/draws/break reasons, work-operation counts, passes,
      barriers, draws, host waits, fragments, and when the opaque sort is on
      `sorted N/f of M/f draws` with the reasons) and the frame interval.
+
+From the sixth round, compare baseline6 with combo on the same scene, and
+where the fifth-round IPAs are still at hand also with fastmath and fragspec:
+combo is the two math-equivalent candidates together, so it must lower
+gpu_exec against baseline6 and frag_build specfast N/f must be non-zero. The
+combination has to add to fastmath (the larger of the two on the two test
+titles), not merely match the specialized build; if fastmath alone is within
+the measurement noise of combo, the release default would keep only fastmath
+(one pipeline shape instead of a specialized and a combined build), so send
+both numbers plus the exports.
 
 Compare baseline4 with noblend, flat and 2x3x on the same scene: those three
 are measurements, so their picture is expected to differ. baseline4 - flat is
@@ -347,6 +395,28 @@ and no picture change goes into the release build; otherwise the 3x behaviour
 stays exactly as it is. A profile that lowers gpu_exec while the shaded
 fragments stay the same changed GPU scheduling or bandwidth, not the emulated
 shading.
+
+Visual confirmation before a fragment build becomes a release default
+  The fast-math build changes rounding and lets the driver contract multiply
+  and add; the specialized build compiles the lighting, fog and unit wrapping
+  in as constants. Both are meant to be invisible, but only the tester's own
+  eyes can confirm it on real hardware. Do this on two titles, and for each
+  title on several scenes, one run still and one moving:
+    - title/menu and HUD: text edges, gradients, icons, alpha-tested sprites
+    - a lit field or room: light falloff on walls and characters, highlights,
+      specular speckle, shadows
+    - a foggy or distant view: fog colour and distance bands, no banding
+    - a water or semi-transparent surface: transparency, reflections, colour
+      blending over what is behind it
+    - alpha-test edges: foliage, fences, hair, particles (no crawling or
+      shimmering edges)
+    - dark-to-bright gradients and sky: banding, dithering, one-LSB steps
+    - effects that combine lighting and fog: glow, torches, particles
+  Compare still screenshots frame by frame where possible and move the
+  camera/cutscene for ~30 s per scene: fastmath differences show up as
+  vibration in gradients, dither patterns or alpha edges, not as a missing
+  object. Any visible difference in any item means no default; write down the
+  scene, the checkpoint and what changed, and send it with the exports.
 
 Reading the files
   gpu_exec_ms_per_frame is the real GPU execution time from the renderer's own

@@ -211,10 +211,11 @@ struct GpuSummary {
     safe_skipped_pixels: f64,
     /// draws per frame by the lights their fragment lighting had, 0 meaning
     /// off, whether the fog was on, and which builds of the fragment shader
-    /// past the default one they ran, in `zakuro_gpu::FRAG_BUILDS` order.
+    /// past the default one they ran, in `zakuro_gpu::FRAG_BUILDS` order
+    /// (the fast-math, texonly, specialized and combined builds).
     frag_lights: [f64; 9],
     frag_fog: f64,
-    frag_builds: [f64; 3],
+    frag_builds: [f64; 4],
     /// the last per-pass report when it changed in this window: the dominant
     /// render target's passes in recording order.
     passes_line: String,
@@ -984,7 +985,7 @@ mod tests {
             safe_skipped_pixels: 0,
             frag_lights: [0; 9],
             frag_fog: 0,
-            frag_builds: [0; 3],
+            frag_builds: [0; 4],
         }
     }
 
@@ -1082,7 +1083,7 @@ mod tests {
                 safe_skipped_pixels: 500_000.0,
                 frag_lights: [120.0, 60.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
                 frag_fog: 40.0,
-                frag_builds: [0.0, 0.0, 180.0],
+                frag_builds: [0.0, 0.0, 180.0, 60.0],
                 passes_line: String::new(),
                 passes: Vec::new(),
             }),
@@ -1106,7 +1107,7 @@ mod tests {
             "safe_skips 3/f 0.50Mpx/f",
             "frag_lights 0 120/f, 1 60/f",
             "fog 40/f",
-            "frag_build specialized 180/f",
+            "frag_build specialized 180/f, specfast 60/f",
         ] {
             assert!(gpu_line.contains(field), "missing {field}: {gpu_line}");
         }

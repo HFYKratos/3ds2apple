@@ -120,7 +120,9 @@ sets `ZAKURO_GPU_TIMES=1` so the diagnostics carry the GPU's real execution time
 | `texonly` | `baseline5` + the fragment shader samples the texture units and outputs their sum and the vertex color, with no combiners, lighting, fog or alpha test (`ZAKURO_MEASURE_TEXONLY=1`), measurement only: `baseline5 - texonly` is the fragment ALU's cost and `texonly - flat` the texture fetch cost |
 | `fragspec` | `baseline5` + the lighting state, the fog switch and each unit's wrapping compiled in as specialization constants (`ZAKURO_FRAG_SPECIALIZE=1`); math-equivalent, the picture must be unchanged and `frag_build specialized N/f` says the build engaged |
 | `fastmath` | `baseline5` + `precise` dropped from the fragment shader (`ZAKURO_FRAG_FAST_MATH=1`), so the driver may contract and approximate; the picture must stay visually the same and `frag_build fastmath N/f` says it engaged |
-| `combo` | mvk + renderer, for the confirmation run after the A/B names a winner |
+| `baseline6` | the sixth round's control: the same timing and fragment-state report as `baseline5` with the fast-math and specialized fragment builds off, so a `combo` run is measured against the default build |
+| `combo` | the sixth round's combination: `ZAKURO_FRAG_FAST_MATH=1` and `ZAKURO_FRAG_SPECIALIZE=1` together, which the renderer runs as its combined build (the specialized constants and no `precise`); math-equivalent apart from rounding, the picture must be confirmed scene by scene and `frag_build specfast N/f` says it engaged; the sixth round's candidate for the release default |
+| `mvkrenderer` | the first round's confirmation run after its A/B: `mvk` + `renderer`, kept so that run can still be reproduced |
 
 Run it on the macOS build VM after `scripts/build-zakuro-ios.sh` and
 `scripts/build-ios-app.sh`; `MOLTENVK_FRAMEWORK` names the downloaded framework
@@ -151,6 +153,33 @@ as specialization constants, and `fastmath`, the same shader built without
 scene at all. Both must lower `gpu_exec` with the picture unchanged (fastmath
 may round a least significant bit) and say `frag_build ... N/f`; under 5%
 gain, no access path.
+
+The sixth round combines the fifth round's two math-equivalent candidates. The
+`combo` profile sets both `ZAKURO_FRAG_FAST_MATH=1` and
+`ZAKURO_FRAG_SPECIALIZE=1`; the renderer then runs a combined build of
+`raster.frag` with the specialization constants of the `fragspec` build and
+without the `precise` of the `fastmath` build, counted in
+`frag_build specfast N/f`. `baseline6` is the same build's control with the
+fragment builds off, so `baseline6 - combo` is the saving a release default
+would carry. Build the pair with
+`scripts/build-gpu-diagnostic-ipa.sh --out-dir out/gpu-diag6` and run the same
+scene on the device for both profiles per the procedure above; if `combo` is
+within the measurement noise of `fastmath` alone (round five), the default
+keeps only `fastmath`, because the specialized build costs one more pipeline
+shape per lighting/fog/wrapping state and its first-load compile time.
+
+Visual checkpoints (each item must be confirmed to look identical between
+`baseline6` and `combo`; any visible difference means no default): two titles
+and several scenes per title, one run still and one moving per scene —
+title/menu and HUD (text edges, gradients, icons, alpha-tested sprites); a lit
+field or room (light falloff, highlights, specular speckle, shadows); a foggy
+or distant view (fog colour and bands); water or a transparent surface
+(blending, reflections, what shows through); alpha-tested edges (foliage,
+fences, hair, particles); dark-to-bright gradients and the sky (banding,
+dithering, one-LSB steps); effects that mix lighting and fog (glow, torches,
+particles). In the moving runs look for shimmering or crawling in gradients
+and alpha edges, not for missing objects. A zero `specfast` count on a scene
+means the specialized half did not engage there; say so in the report.
 
 ### Performance contract (licence boundary and measurement)
 

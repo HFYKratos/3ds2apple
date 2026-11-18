@@ -406,7 +406,7 @@ together say what a class's milliseconds buy: a class whose ms/f is high and
 whose Mpx/f is higher than the frame's pixels is overdraw, and the fragment
 cost per megapixel is what a texture/ALU change would have to lower.
 
-Renderer switches the diagnostic profiles use (both default off, read once when
+Renderer switches the diagnostic profiles use (all default off, read once when
 the renderer is built, so set them before a load):
 
 | Variable | Effect |
@@ -423,6 +423,7 @@ the renderer is built, so set them before a load):
 | `ZAKURO_MEASURE_TEXONLY=1` | measurement only, the picture is wrong: the fragment shader samples the texture units the draw has and outputs their sum and the vertex color, with the combiners, fragment lighting, procedural texture, fog and alpha test left out. `baseline5 - texonly` is what that fragment ALU costs and `texonly - flat` what the texture fetches cost |
 | `ZAKURO_FRAG_SPECIALIZE=1` | math-equivalent: a second build of `raster.frag` takes the draw's fragment lighting (the lights on, its switches, the bump and shadow words), the fog's switch and each unit's wrapping as specialization constants, so the driver compiles away the light loop's shape, the fog's test and the border comparisons of units that do not border. The picture must not change; the GPU line counts the draws in `frag_build specialized N/f` |
 | `ZAKURO_FRAG_FAST_MATH=1` | math-equivalent apart from rounding: a second build of `raster.frag` without `precise`, so the driver may contract multiply and add into fused operations and approximate. The picture must stay visually the same; the GPU line counts the draws in `frag_build fastmath N/f` |
+| `ZAKURO_FRAG_FAST_MATH=1` + `ZAKURO_FRAG_SPECIALIZE=1` | both fragment switches at once: a third build of `raster.frag` with the specialization constants *and* without `precise` runs, so the two savings apply to the same draw. Math-equivalent apart from rounding; the GPU line counts the draws in `frag_build specfast N/f`. Setting only one switch keeps that switch's own build |
 
 The other hidden renderer switches (`ZAKURO_GPU_SHADERS` / `ZAKURO_CPU_SHADERS`,
 `ZAKURO_FLOAT_DEPTH`, `ZAKURO_DEPTH_BLITS`, `ZAKURO_STATIC_BLEND`,
@@ -437,7 +438,8 @@ The GPU timing and the switches are in
 `0005-gpu-sort-reasons-and-pass-merge.patch`,
 `0006-gpu-draw-classes-and-safe-skips.patch` and
 `0007-gpu-fragment-builds.patch` (the fifth round's fast-math, texonly and
-specialized builds of the fragment shader), applied to
+specialized builds of the fragment shader, and the sixth round's combined
+fast-math + specialized build), applied to
 the gitignored Zakuro checkout by `scripts/build-zakuro-ios.sh`, so a static
 library built from this repository carries all of them. `scripts/README.md` has
 the A/B build and measurement procedure.

@@ -129,9 +129,8 @@ enum MoltenVKTuning {
     /// ones. Only `supportedRendererKeys` are accepted.
     static let rendererEnvironmentVariable = "THREEDS2APPLE_RENDERER_OPTIONS"
 
-    /// The diagnostic profile a build runs: `baseline`/`baseline2`, `mvk`,
-    /// `renderer`, `sort` or `combo`, from this launch variable or the
-    /// Info.plist key below. A normal build has neither.
+    /// The diagnostic profile a build runs (one of `profileNames`), from this
+    /// launch variable or the Info.plist key below. A normal build has neither.
     static let profileEnvironmentVariable = "THREEDS2APPLE_GPU_PROFILE"
 
     /// The Info.plist key scripts/build-gpu-diagnostic-ipa.sh writes into a
@@ -142,8 +141,9 @@ enum MoltenVKTuning {
     /// The profiles a diagnostic IPA can carry, in the order the build script
     /// makes them.
     static let profileNames = [
-        "baseline", "baseline2", "baseline3", "baseline4", "baseline5", "mvk", "renderer", "sort", "sort2",
-        "merge", "capture", "noblend", "flat", "2x3x", "safe", "texonly", "fragspec", "fastmath", "combo",
+        "baseline", "baseline2", "baseline3", "baseline4", "baseline5", "baseline6", "mvk", "renderer",
+        "sort", "sort2", "merge", "capture", "noblend", "flat", "2x3x", "safe", "texonly", "fragspec",
+        "fastmath", "mvkrenderer", "combo",
     ]
 
     /// The overrides actually applied, as `NAME=value`, for the log and the
@@ -192,8 +192,15 @@ enum MoltenVKTuning {
     /// parameters an iPhone can use. `renderer` adds the renderer's 0.1.3
     /// A/B switches (image clears where they can be, a narrower barrier
     /// between render passes). `sort` is the second round's sort profile,
-    /// kept so an old IPA can be compared on the same scene. `combo` is
-    /// `mvk` + `renderer`, for the run after the A/B names a winner.
+    /// kept so an old IPA can be compared on the same scene. `baseline6` is
+    /// the sixth round's control: the same timing as `baseline5` with the
+    /// fast-math and specialized fragment builds off, so a run measures the
+    /// default build. `combo` is the sixth round's combination: the fast-math
+    /// and the specialization switch on together, which the renderer runs as
+    /// its combined build (the specialized constants without `precise`), so
+    /// the two savings are measured at once when both defaults could ship.
+    /// `mvkrenderer` is the old `mvk` + `renderer` combination, kept for the
+    /// run after the first round's A/B names a winner.
     static func profileOptions(_ name: String) -> (moltenvk: [String], renderer: [String]) {
         switch name {
         case "baseline", "baseline2", "baseline3":
@@ -204,6 +211,11 @@ enum MoltenVKTuning {
         // the draws ask for (which lights, whether the fog is on) in the GPU
         // line, so a run says whether the fragment-work A/Bs can help
         case "baseline5":
+            return ([], ["ZAKURO_GPU_TIMES=1"])
+        // the sixth round's control: the same timing as baseline5, and the
+        // fast-math and specialized fragment builds off, so combo is measured
+        // against the default build
+        case "baseline6":
             return ([], ["ZAKURO_GPU_TIMES=1"])
         // samples the textures and little else: a measurement, the picture is
         // wrong; the drop against baseline5 is the fragment ALU's cost
@@ -255,7 +267,22 @@ enum MoltenVKTuning {
                     "ZAKURO_FAST_BARRIERS=1",
                 ]
             )
+        // the sixth round's combination: both fragment A/B switches on at
+        // once, which the renderer runs as the combined build (the
+        // specialized constants and no precise), so a run measures the two
+        // savings together; the picture must stay visually the same
         case "combo":
+            return (
+                [],
+                [
+                    "ZAKURO_GPU_TIMES=1",
+                    "ZAKURO_FRAG_FAST_MATH=1",
+                    "ZAKURO_FRAG_SPECIALIZE=1",
+                ]
+            )
+        // the first round's confirmation run after its A/B: mvk + renderer,
+        // kept so that run can still be reproduced
+        case "mvkrenderer":
             return (
                 profileOptions("mvk").moltenvk,
                 profileOptions("mvk").renderer
