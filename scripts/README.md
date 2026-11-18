@@ -116,6 +116,10 @@ sets `ZAKURO_GPU_TIMES=1` so the diagnostics carry the GPU's real execution time
 | `flat` | `baseline4` + every fragment drawn as one color instead of the combiners, fetches and lighting (`ZAKURO_MEASURE_FLAT=1`), measurement only: the drop in `gpu_exec` is what the fragment work adds beyond fill and blending |
 | `2x3x` | `baseline4` with the internal 3D renderer at 2x while the drawable keeps 3x (`THREEDS2APPLE_DIAG_RENDER_SCALE=2`), measurement only: the drop in `gpu_exec` is what the 3x target's fill costs |
 | `safe` | `baseline4` + math-equivalent skips of draws whose state cannot change either buffer (`ZAKURO_SAFE_SKIPS=1`); the picture must be unchanged and `safe_skips N/f` says whether it engaged |
+| `baseline5` | the fifth round's control: the same timing plus the fragment state per draw (`frag_lights`: draws/frame with the fragment lighting off, then with 1 to 8 lights; `fog`: draws/frame with the fog on; `frag_build <name> N/f` when a build past the default one runs), so a run says whether the fragment-work A/Bs can help the scene |
+| `texonly` | `baseline5` + the fragment shader samples the texture units and outputs their sum and the vertex color, with no combiners, lighting, fog or alpha test (`ZAKURO_MEASURE_TEXONLY=1`), measurement only: `baseline5 - texonly` is the fragment ALU's cost and `texonly - flat` the texture fetch cost |
+| `fragspec` | `baseline5` + the lighting state, the fog switch and each unit's wrapping compiled in as specialization constants (`ZAKURO_FRAG_SPECIALIZE=1`); math-equivalent, the picture must be unchanged and `frag_build specialized N/f` says the build engaged |
+| `fastmath` | `baseline5` + `precise` dropped from the fragment shader (`ZAKURO_FRAG_FAST_MATH=1`), so the driver may contract and approximate; the picture must stay visually the same and `frag_build fastmath N/f` says it engaged |
 | `combo` | mvk + renderer, for the confirmation run after the A/B names a winner |
 
 Run it on the macOS build VM after `scripts/build-zakuro-ios.sh` and
@@ -136,6 +140,17 @@ and the `noblend`/`flat`/`2x3x` measurement profiles are how a 3x scene that is
 fill bound is shown to be fill bound: no math-equivalent change can then
 recover the fragments without changing the picture, and `safe` measures the one
 candidate class that can.
+
+The fifth round works on the fragment shader itself. `texonly` splits the
+fragment cost the `flat` profile left in two (texture fetch against ALU:
+combiners, fragment lighting, fog, procedural texture), and `frag_lights`/`fog`
+say whether the lighting and fog the two math-equivalent candidates
+(`fragspec`, a fragment shader with the lighting, fog and unit wrapping taken
+as specialization constants, and `fastmath`, the same shader built without
+`precise` so the driver may contract and approximate) act on are there in the
+scene at all. Both must lower `gpu_exec` with the picture unchanged (fastmath
+may round a least significant bit) and say `frag_build ... N/f`; under 5%
+gain, no access path.
 
 ### Performance contract (licence boundary and measurement)
 

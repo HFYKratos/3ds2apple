@@ -5,8 +5,9 @@
 #   scripts/build-zakuro-ios.sh
 #   scripts/build-linked-ios-lib.sh
 #
-# The patches in ios/zakuro-ios/patches/ are small, text-only changes to the
-# upstream Zakuro checkout (which is gitignored and never committed):
+# The patches in ios/zakuro-ios/patches/ are changes to the upstream Zakuro
+# checkout (which is gitignored and never committed), text except for the
+# precompiled SPIR-V of the fifth round's fragment shader builds:
 #
 #   0001-vulkan-on-ios.patch             MoltenVK lookup on iOS (A0/A1 builds)
 #   0002-pipeline-cache-save-every.patch keep the pipeline cache every 5 s
@@ -32,6 +33,11 @@
 #                                        class-boundary timestamps, and the
 #                                        math-equivalent safe skips with their
 #                                        counter (default off)
+#   0007-gpu-fragment-builds.patch       the fragment shader's fast-math and
+#                                        specialized builds, and its texonly
+#                                        measurement build, each an
+#                                        independent environment switch
+#                                        (default off)
 #
 # Application is idempotent: a patch already in the tree is reported and
 # skipped, so re-running a build script is safe even when the checkout was

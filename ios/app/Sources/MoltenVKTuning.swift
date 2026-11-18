@@ -110,6 +110,12 @@ enum MoltenVKTuning {
         "ZAKURO_MEASURE_NOBLEND",
         "ZAKURO_MEASURE_FLAT",
         "ZAKURO_SAFE_SKIPS",
+        // the fifth round's fragment shader builds: the fast-math A/B, the
+        // specialized A/B and the texonly measurement, see
+        // ios/zakuro-ios/README.md and scripts/README.md §GPU A/B
+        "ZAKURO_FRAG_FAST_MATH",
+        "ZAKURO_FRAG_SPECIALIZE",
+        "ZAKURO_MEASURE_TEXONLY",
         // app-side, not a renderer switch: the internal 3D render scale the
         // 2x3x profile asks for while the drawable stays at the setting's
         "THREEDS2APPLE_DIAG_RENDER_SCALE",
@@ -136,8 +142,8 @@ enum MoltenVKTuning {
     /// The profiles a diagnostic IPA can carry, in the order the build script
     /// makes them.
     static let profileNames = [
-        "baseline", "baseline2", "baseline3", "baseline4", "mvk", "renderer", "sort", "sort2", "merge", "capture",
-        "noblend", "flat", "2x3x", "safe", "combo",
+        "baseline", "baseline2", "baseline3", "baseline4", "baseline5", "mvk", "renderer", "sort", "sort2",
+        "merge", "capture", "noblend", "flat", "2x3x", "safe", "texonly", "fragspec", "fastmath", "combo",
     ]
 
     /// The overrides actually applied, as `NAME=value`, for the log and the
@@ -194,6 +200,23 @@ enum MoltenVKTuning {
             return ([], ["ZAKURO_GPU_TIMES=1"])
         case "baseline4":
             return ([], ["ZAKURO_GPU_TIMES=1"])
+        // the fifth round's control: the same timing, plus the fragment state
+        // the draws ask for (which lights, whether the fog is on) in the GPU
+        // line, so a run says whether the fragment-work A/Bs can help
+        case "baseline5":
+            return ([], ["ZAKURO_GPU_TIMES=1"])
+        // samples the textures and little else: a measurement, the picture is
+        // wrong; the drop against baseline5 is the fragment ALU's cost
+        case "texonly":
+            return ([], ["ZAKURO_GPU_TIMES=1", "ZAKURO_MEASURE_TEXONLY=1"])
+        // the lighting, fog and unit wrapping as constants: math-equivalent,
+        // the picture must stay the same
+        case "fragspec":
+            return ([], ["ZAKURO_GPU_TIMES=1", "ZAKURO_FRAG_SPECIALIZE=1"])
+        // the driver may contract and approximate the fragment math: the
+        // picture must stay the same
+        case "fastmath":
+            return ([], ["ZAKURO_GPU_TIMES=1", "ZAKURO_FRAG_FAST_MATH=1"])
         case "noblend":
             return ([], ["ZAKURO_GPU_TIMES=1", "ZAKURO_MEASURE_NOBLEND=1"])
         case "flat":

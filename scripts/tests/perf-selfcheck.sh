@@ -366,6 +366,26 @@ check "zakuro-ios README documents the draw classes" contains ios/zakuro-ios/REA
 check "the app README documents the fourth-round profiles" contains ios/app/README.md 'noblend'
 check "the selfcheck only grows this list when the contract changes" test -s scripts/tests/perf-selfcheck.sh
 
+section 'Fifth-round fragment shader builds (0.1.3, task-33)'
+check "the fifth-round patch is tracked" test -f ios/zakuro-ios/patches/0007-gpu-fragment-builds.patch
+check "the fifth patch builds a fast-math fragment shader" contains ios/zakuro-ios/patches/0007-gpu-fragment-builds.patch 'ZAKURO_FAST_MATH'
+check "the fifth patch builds a specialized fragment shader" contains ios/zakuro-ios/patches/0007-gpu-fragment-builds.patch 'ZAKURO_FRAG_SPECIALIZE'
+check "the fifth patch builds a texonly measurement shader" contains ios/zakuro-ios/patches/0007-gpu-fragment-builds.patch 'ZAKURO_MEASURE_TEXONLY'
+check "the fifth patch adds the fragment builds' modules" contains ios/zakuro-ios/patches/0007-gpu-fragment-builds.patch 'FragmentMode'
+check "perf reports the fragment builds" contains ios/zakuro-ios/src/perf.rs 'frag_build'
+check "perf reports the fragment lighting's lights" contains ios/zakuro-ios/src/perf.rs 'frag_lights'
+check "the app lists the fifth-round profiles" contains ios/app/Sources/MoltenVKTuning.swift '"baseline5"'
+check "the app lists the texonly profile" contains ios/app/Sources/MoltenVKTuning.swift '"texonly"'
+check "the app lists the fragspec profile" contains ios/app/Sources/MoltenVKTuning.swift '"fragspec"'
+check "the app lists the fastmath profile" contains ios/app/Sources/MoltenVKTuning.swift '"fastmath"'
+check "the app allows the fast-math switch" contains ios/app/Sources/MoltenVKTuning.swift 'ZAKURO_FRAG_FAST_MATH'
+check "the app allows the specialized switch" contains ios/app/Sources/MoltenVKTuning.swift 'ZAKURO_FRAG_SPECIALIZE'
+check "the app allows the texonly switch" contains ios/app/Sources/MoltenVKTuning.swift 'ZAKURO_MEASURE_TEXONLY'
+check "scripts/README documents the fifth-round profiles" contains scripts/README.md 'fragspec'
+check "scripts/README documents the texonly split" contains scripts/README.md 'texonly - flat'
+check "zakuro-ios README documents the fragment builds" contains ios/zakuro-ios/README.md 'ZAKURO_FRAG_SPECIALIZE=1'
+check "the app README documents the fifth-round profiles" contains ios/app/README.md 'fragspec'
+check "the patch helper lists the fifth patch" contains scripts/lib/zakuro-patches.sh '0007-gpu-fragment-builds.patch'
 section 'Repository hygiene'
 if git status --porcelain | grep -E '^(.. )?(ROM/|IPA/|build/)' >/dev/null 2>&1; then
   fail "ROM/, IPA/ or build/ has changes staged/untracked"

@@ -420,6 +420,9 @@ the renderer is built, so set them before a load):
 | `ZAKURO_MEASURE_NOBLEND=1` | measurement only, the picture is wrong: every blending draw is written as if the blend were off, so the time blending and its read of the destination cost can be measured apart from the rest of the draw |
 | `ZAKURO_MEASURE_FLAT=1` | measurement only, the picture is wrong: every fragment is drawn as one color, with the combiners, the texture fetches, lighting, the procedural texture and the fog neutralized in a copy of the draw's registers. What the draw time loses against the normal build is what the fragment work adds beyond fill and blending |
 | `ZAKURO_SAFE_SKIPS=1` | math-equivalent: a draw that can change neither buffer is left out as a whole (no color writes, no depth write and no stencil write, or a blend that leaves the destination as it is), and the time and pixels it would have cost are counted in `safe_skips N/f` instead. The picture must not change |
+| `ZAKURO_MEASURE_TEXONLY=1` | measurement only, the picture is wrong: the fragment shader samples the texture units the draw has and outputs their sum and the vertex color, with the combiners, fragment lighting, procedural texture, fog and alpha test left out. `baseline5 - texonly` is what that fragment ALU costs and `texonly - flat` what the texture fetches cost |
+| `ZAKURO_FRAG_SPECIALIZE=1` | math-equivalent: a second build of `raster.frag` takes the draw's fragment lighting (the lights on, its switches, the bump and shadow words), the fog's switch and each unit's wrapping as specialization constants, so the driver compiles away the light loop's shape, the fog's test and the border comparisons of units that do not border. The picture must not change; the GPU line counts the draws in `frag_build specialized N/f` |
+| `ZAKURO_FRAG_FAST_MATH=1` | math-equivalent apart from rounding: a second build of `raster.frag` without `precise`, so the driver may contract multiply and add into fused operations and approximate. The picture must stay visually the same; the GPU line counts the draws in `frag_build fastmath N/f` |
 
 The other hidden renderer switches (`ZAKURO_GPU_SHADERS` / `ZAKURO_CPU_SHADERS`,
 `ZAKURO_FLOAT_DEPTH`, `ZAKURO_DEPTH_BLITS`, `ZAKURO_STATIC_BLEND`,
@@ -430,8 +433,11 @@ moves vertex shading between CPU and GPU and is a measurement switch of its own.
 
 The GPU timing and the switches are in
 `ios/zakuro-ios/patches/0003-gpu-timing-and-render-options.patch`,
-`ios/zakuro-ios/patches/0004-gpu-pass-times-and-opaque-sort.patch` and
-`ios/zakuro-ios/patches/0005-gpu-sort-reasons-and-pass-merge.patch`, applied to
+`0004-gpu-pass-times-and-opaque-sort.patch`,
+`0005-gpu-sort-reasons-and-pass-merge.patch`,
+`0006-gpu-draw-classes-and-safe-skips.patch` and
+`0007-gpu-fragment-builds.patch` (the fifth round's fast-math, texonly and
+specialized builds of the fragment shader), applied to
 the gitignored Zakuro checkout by `scripts/build-zakuro-ios.sh`, so a static
 library built from this repository carries all of them. `scripts/README.md` has
 the A/B build and measurement procedure.

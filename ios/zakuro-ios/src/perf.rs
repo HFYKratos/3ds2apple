@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use zakuro_core::kernel::thread::CPU_CLOCK_HZ;
 use zakuro_core::System;
 use zakuro_gpu::{
-    draw_class_name, GpuTimes, PassTimes, BREAK_KINDS, DRAW_CLASSES, GPU_WORK, SORT_REASONS,
+    draw_class_name, GpuTimes, PassTimes, BREAK_KINDS, DRAW_CLASSES, FRAG_BUILDS, GPU_WORK, SORT_REASONS,
 };
 
 /// Frames between `zk_perf` log lines: about two seconds at 30 fps.
@@ -209,6 +209,12 @@ struct GpuSummary {
     /// and the pixels they would have covered (`ZAKURO_SAFE_SKIPS=1`).
     safe_skips: f64,
     safe_skipped_pixels: f64,
+    /// draws per frame by the lights their fragment lighting had, 0 meaning
+    /// off, whether the fog was on, and which builds of the fragment shader
+    /// past the default one they ran, in `zakuro_gpu::FRAG_BUILDS` order.
+    frag_lights: [f64; 9],
+    frag_fog: f64,
+    frag_builds: [f64; 3],
     /// the last per-pass report when it changed in this window: the dominant
     /// render target's passes in recording order.
     passes_line: String,
@@ -620,6 +626,13 @@ fn gpu_breakdown(
         safe_skipped_pixels: per_frame(
             current.safe_skipped_pixels.saturating_sub(baseline.safe_skipped_pixels) as f64,
         ),
+        frag_lights: std::array::from_fn(|i| {
+            per_frame(current.frag_lights[i].saturating_sub(baseline.frag_lights[i]) as f64)
+        }),
+        frag_fog: per_frame(current.frag_fog.saturating_sub(baseline.frag_fog) as f64),
+        frag_builds: std::array::from_fn(|i| {
+            per_frame(current.frag_builds[i].saturating_sub(baseline.frag_builds[i]) as f64)
+        }),
         passes_line: if current_line == baseline_line { String::new() } else { current_line.to_owned() },
         passes,
     })
@@ -774,6 +787,32 @@ fn format_gpu_line(summary: &Summary) -> String {
             gpu.safe_skips,
             gpu.safe_skipped_pixels / 1e6
         ));
+    }
+    // what the draws ask the fragment stages for: the lights their fragment
+    // lighting had, whether the fog was on, and which build of the fragment
+    // shader they ran, so a run says whether the fragment-work A/B can help
+    // the scene and whether it engaged
+    let lights: Vec<String> = gpu
+        .frag_lights
+        .iter()
+        .enumerate()
+        .filter(|&(_, draws)| *draws > 0.0)
+        .map(|(count, draws)| format!("{count} {draws:.0}/f"))
+        .collect();
+    if !lights.is_empty() {
+        line.push_str(&format!(" | frag_lights {}", lights.join(", ")));
+    }
+    if gpu.frag_fog > 0.0 {
+        line.push_str(&format!(" | fog {:.0}/f", gpu.frag_fog));
+    }
+    let builds: Vec<String> = FRAG_BUILDS
+        .iter()
+        .zip(gpu.frag_builds)
+        .filter(|&(_, draws)| draws > 0.0)
+        .map(|(name, draws)| format!("{name} {draws:.0}/f"))
+        .collect();
+    if !builds.is_empty() {
+        line.push_str(&format!(" | frag_build {}", builds.join(", ")));
     }
     // the kinds of work the batches started, so an unexpected pass, copy or
     // readback is seen in the counts as well as in the time
@@ -943,6 +982,9 @@ mod tests {
             draw_class_pixels: [0; DRAW_CLASSES],
             safe_skips: 0,
             safe_skipped_pixels: 0,
+            frag_lights: [0; 9],
+            frag_fog: 0,
+            frag_builds: [0; 3],
         }
     }
 
@@ -1038,6 +1080,9 @@ mod tests {
                 }],
                 safe_skips: 3.0,
                 safe_skipped_pixels: 500_000.0,
+                frag_lights: [120.0, 60.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                frag_fog: 40.0,
+                frag_builds: [0.0, 0.0, 180.0],
                 passes_line: String::new(),
                 passes: Vec::new(),
             }),
@@ -1059,6 +1104,9 @@ mod tests {
             "3.30M fragments",
             "draw_classes alphablend/alpha/tex2/c/cov-l 12.00ms/f 90/f 4.00Mpx/f",
             "safe_skips 3/f 0.50Mpx/f",
+            "frag_lights 0 120/f, 1 60/f",
+            "fog 40/f",
+            "frag_build specialized 180/f",
         ] {
             assert!(gpu_line.contains(field), "missing {field}: {gpu_line}");
         }

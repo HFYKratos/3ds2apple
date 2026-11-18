@@ -68,7 +68,7 @@ ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "$ROOT"
 
 OUT_DIR="out/gpu-diag"
-PROFILES="baseline4 noblend flat 2x3x safe"
+PROFILES="baseline5 texonly fragspec fastmath"
 STATICLIB="build/ios/libzakuro_ios.a"
 APP_DIR="ios/app"
 CONFIGURATION="Release"
@@ -172,8 +172,8 @@ printf '{\n  "schemaVersion": 1,\n  "generatedAt": "%s",\n  "moltenvk": "%s",\n 
 FIRST=1
 for profile in $PROFILES; do
   case "$profile" in
-    baseline|baseline2|baseline3|baseline4|mvk|renderer|sort|sort2|merge|capture|noblend|flat|2x3x|safe|combo) ;;
-    *) die "unknown profile: $profile (known: baseline baseline2 baseline3 baseline4 mvk renderer sort sort2 merge capture noblend flat 2x3x safe combo)" ;;
+    baseline|baseline2|baseline3|baseline4|baseline5|mvk|renderer|sort|sort2|merge|capture|noblend|flat|2x3x|safe|texonly|fragspec|fastmath|combo) ;;
+    *) die "unknown profile: $profile (known: baseline baseline2 baseline3 baseline4 baseline5 mvk renderer sort sort2 merge capture noblend flat 2x3x safe texonly fragspec fastmath combo)" ;;
   esac
   # keep the bundle's own name: the profile is an Info.plist key, not an app
   # rename, so every IPA unzips to Payload/3ds2apple.app
@@ -267,6 +267,32 @@ Profiles
             is). The picture must stay exactly the same; the line gains
             safe_skips N/f and the Mpx/f they would have covered, so a run
             where the count is 0 says the candidate cannot help that title.
+  baseline5 the fifth round's control: the same timing as baseline4 plus what
+            the draws ask the fragment shader for, so a run says whether the
+            fragment A/Bs can help the scene at all. The line gains
+            frag_lights (the draws per frame with the fragment lighting off,
+            then with 1, 2, ... 8 lights), fog (the draws per frame with the
+            fog on) and, when a build past the default one runs,
+            frag_build <name> N/f.
+  texonly   baseline5 + ZAKURO_MEASURE_TEXONLY=1: the fragment shader samples
+            the texture units the draw has and outputs their sum and the
+            vertex color, with none of the combiners, lighting, procedural
+            texture, fog or alpha test. The picture is wrong (measurement
+            only); baseline5 - texonly is what that fragment ALU costs, and
+            texonly - flat is what the texture fetches cost.
+  fragspec  baseline5 + ZAKURO_FRAG_SPECIALIZE=1: the shader's fragment
+            lighting state (the lights on, its switches, the bump and shadow
+            words), the fog's switch and each texture unit's wrapping are
+            compiled in as specialization constants, so the driver folds the
+            light loop's shape, the fog's test and the border comparisons of
+            units that do not border away. Math-equivalent: the picture must
+            stay exactly the same; frag_build specialized N/f says the builds
+            engaged.
+  fastmath  baseline5 + ZAKURO_FRAG_FAST_MATH=1: the shader drops precise, so
+            the driver may contract multiply and add into fused operations and
+            approximate. The picture must stay visually the same (rounding may
+            differ by a least significant bit); frag_build fastmath N/f says
+            the build engaged.
   baseline  the first round's control, kept so an old IPA and a new one can be
             compared on the same scene.
   baseline2 the second round's control (render-target pass attribution).
@@ -301,7 +327,18 @@ are measurements, so their picture is expected to differ. baseline4 - flat is
 what the fragment work (combiners, fetches, lighting) costs; baseline4 -
 noblend is what blending and its destination read cost; 2x3x is what the 3x
 target's fill costs, and it is the number that says the scene is fill-rate
-bound. Compare baseline4 against the same scene's third-round control only with care:
+bound.
+From the fifth round on, also compare baseline5 with texonly, fragspec and
+fastmath on the same scene: baseline5 - texonly is the fragment ALU's cost
+(lighting, combiners, fog, procedural texture) and texonly - flat the texture
+fetches'; read frag_lights and fog first, because the fragment lighting and
+the fog are where the specialized build can save anything, and a scene whose
+lighting is mostly off or whose fog is off has little for it to do. fragspec
+and fastmath must lower gpu_exec with the same picture (fastmath may round a
+least significant bit differently) and say frag_build ... N/f; a build that
+does not engage changes nothing. Compare them within the fifth round:
+baseline5 also counts the fragment state, so a sub-millisecond difference
+against baseline4 is the measurement, not a regression. Compare baseline4 against the same scene's third-round control only with care:
 the class timestamps add a small, bounded number of query writes, so a
 sub-millisecond difference is the measurement, not a regression. Then compare
 safe with baseline4, where the picture must be the same:

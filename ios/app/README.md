@@ -1050,9 +1050,9 @@ Vulkan timestamp queries and export:
   shaded fragment count stays the same changed GPU scheduling or bandwidth, not
   the emulated shading.
 - `gpu_profile=` / `gpu_profile_definition=` — the diagnostic GPU profile the IPA
-  was built with (`baseline`, `baseline2`, `baseline3`, `baseline4`, `mvk`,
-  `renderer`, `sort`, `sort2`, `merge`, `capture`, `noblend`, `flat`, `2x3x`,
-  `safe`, `combo`) and what it applies.
+  was built with (`baseline`, `baseline2`, `baseline3`, `baseline4`, `baseline5`,
+  `mvk`, `renderer`, `sort`, `sort2`, `merge`, `capture`, `noblend`, `flat`,
+  `2x3x`, `safe`, `texonly`, `fragspec`, `fastmath`, `combo`) and what it applies.
   `baseline3` is the third-round control (per-pass report, pass breaks, work
   counts), `sort2` adds the relaxed opaque front-to-back draw sort
   (`ZAKURO_SORT_OPAQUE=1`), `merge` adds render-pass merging
@@ -1067,6 +1067,16 @@ Vulkan timestamp queries and export:
   measures the 3x target's fill cost (the presented picture is the upscaled 2x
   one). `safe` (`ZAKURO_SAFE_SKIPS=1`) skips draws that cannot change either
   buffer and must leave the picture exactly as it is.
+  `baseline5` is the fifth-round control: the same timing plus the fragment
+  state per draw in the GPU line (`frag_lights`: the draws per frame with the
+  fragment lighting off, then with 1 to 8 lights; `fog`: the draws with the
+  fog on), so a run says whether the fragment-work A/Bs can help the scene.
+  `texonly` (`ZAKURO_MEASURE_TEXONLY=1`) samples the textures and little
+  else (measurement only, the picture is wrong; `baseline5 - texonly` is the
+  fragment ALU's cost). `fragspec` (`ZAKURO_FRAG_SPECIALIZE=1`) has
+  the lighting, fog and unit wrapping compiled in as constants, and `fastmath`
+  (`ZAKURO_FRAG_FAST_MATH=1`) drops `precise`; both must leave the
+  picture unchanged and say `frag_build ... N/f` when they engage.
 
 `scripts/build-gpu-diagnostic-ipa.sh` (on the macOS build VM) packages one IPA
 per profile, differing only in that Info.plist key; the app applies the profile's
