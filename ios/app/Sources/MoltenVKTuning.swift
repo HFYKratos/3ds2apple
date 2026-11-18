@@ -97,6 +97,8 @@ enum MoltenVKTuning {
         "ZAKURO_FAST_CLEARS",
         "ZAKURO_FAST_BARRIERS",
         "ZAKURO_SORT_OPAQUE",
+        "ZAKURO_MERGE_PASSES",
+        "ZAKURO_DEDUPE_CAPTURE",
         "ZAKURO_FLOAT_DEPTH",
         "ZAKURO_DEPTH_BLITS",
         "ZAKURO_STATIC_BLEND",
@@ -125,7 +127,9 @@ enum MoltenVKTuning {
 
     /// The profiles a diagnostic IPA can carry, in the order the build script
     /// makes them.
-    static let profileNames = ["baseline", "baseline2", "mvk", "renderer", "sort", "combo"]
+    static let profileNames = [
+        "baseline", "baseline2", "baseline3", "mvk", "renderer", "sort", "sort2", "merge", "capture", "combo",
+    ]
 
     /// The overrides actually applied, as `NAME=value`, for the log and the
     /// diagnostics report.
@@ -148,21 +152,36 @@ enum MoltenVKTuning {
     /// What a diagnostic profile sets: MoltenVK parameters and renderer
     /// switches, as `NAME=value`. Unknown names set nothing.
     ///
-    /// `baseline` is the control: it measures the GPU's own execution time and
-    /// changes nothing else. `baseline2` is the same control built from the
-    /// 0.1.3 second-round library, whose GPU line splits the time by render
-    /// target as well. `mvk` adds the MoltenVK performance parameters an
-    /// iPhone can use. `renderer` adds the renderer's 0.1.3 A/B switches
-    /// (image clears where they can be, a narrower barrier between render
-    /// passes). `sort` is `baseline2` plus the opaque front-to-back draw sort
-    /// (`ZAKURO_SORT_OPAQUE=1`), the second round's early-Z candidate. `combo`
-    /// is `mvk` + `renderer`, for the run after the A/B names a winner.
+    /// `baseline` is the first round's control: it measures the GPU's own
+    /// execution time and changes nothing else. `baseline2` is the second
+    /// round's control (pass attribution in the GPU line). `baseline3` is the
+    /// third round's control: the same timing, plus the per-pass report (each
+    /// pass's GPU milliseconds and draws, and what ended the pass before it),
+    /// the pass-break reasons, the kinds of work started and the work
+    /// operations per frame. `sort2` is `baseline3` plus the relaxed opaque
+    /// front-to-back sort (`ZAKURO_SORT_OPAQUE=1`): its `sorted N/f of M/f`
+    /// and reason counters say whether it engaged and why not. `merge` is
+    /// `baseline3` plus render-pass merging (`ZAKURO_MERGE_PASSES=1`): a draw
+    /// the guest gives no depth buffer, into the color buffer a depth-buffered
+    /// pass is already drawing into, keeps that pass with its depth test and
+    /// write off, so the pass does not end and begin again. `capture` is
+    /// `baseline3` plus duplicate-capture skipping
+    /// (`ZAKURO_DEDUPE_CAPTURE=1`). `mvk` adds the MoltenVK performance
+    /// parameters an iPhone can use. `renderer` adds the renderer's 0.1.3
+    /// A/B switches (image clears where they can be, a narrower barrier
+    /// between render passes). `sort` is the second round's sort profile,
+    /// kept so an old IPA can be compared on the same scene. `combo` is
+    /// `mvk` + `renderer`, for the run after the A/B names a winner.
     static func profileOptions(_ name: String) -> (moltenvk: [String], renderer: [String]) {
         switch name {
-        case "baseline", "baseline2":
+        case "baseline", "baseline2", "baseline3":
             return ([], ["ZAKURO_GPU_TIMES=1"])
-        case "sort":
+        case "sort", "sort2":
             return ([], ["ZAKURO_GPU_TIMES=1", "ZAKURO_SORT_OPAQUE=1"])
+        case "merge":
+            return ([], ["ZAKURO_GPU_TIMES=1", "ZAKURO_MERGE_PASSES=1"])
+        case "capture":
+            return ([], ["ZAKURO_GPU_TIMES=1", "ZAKURO_DEDUPE_CAPTURE=1"])
         case "mvk":
             return (
                 [

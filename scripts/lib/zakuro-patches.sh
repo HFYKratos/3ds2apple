@@ -19,6 +19,12 @@
 #                                        per-render-target GPU time in the
 #                                        timings, and the opaque front-to-back
 #                                        draw sort A/B switch (default off)
+#   0005-gpu-sort-reasons-and-pass-merge.patch
+#                                        per-pass GPU time, draws and break
+#                                        reasons, the relaxed front-to-back
+#                                        sort with its reason counters, the
+#                                        render-pass merge and duplicate-capture
+#                                        switches (all default off)
 #
 # Application is idempotent: a patch already in the tree is reported and
 # skipped, so re-running a build script is safe even when the checkout was

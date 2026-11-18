@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use zakuro_core::kernel::thread::CPU_CLOCK_HZ;
 use zakuro_core::System;
-use zakuro_gpu::{GpuTimes, PassTimes};
+use zakuro_gpu::{GpuTimes, PassTimes, BREAK_KINDS, GPU_WORK, SORT_REASONS};
 
 /// Frames between `zk_perf` log lines: about two seconds at 30 fps.
 pub const DEFAULT_LOG_INTERVAL: u32 = 60;
@@ -122,6 +122,8 @@ struct Window {
     gpu_times: Option<GpuTimes>,
     /// the render targets' cumulative GPU times at the window's start.
     gpu_passes: Vec<PassTimes>,
+    /// the last per-pass report the renderer logged, at the window's start.
+    gpu_passes_line: String,
 }
 
 impl Window {
@@ -149,6 +151,7 @@ impl Window {
                 .map_or(0, |library| library.fallbacks()),
             gpu_times: system.gpu.gpu_times(),
             gpu_passes: system.gpu.gpu_passes(),
+            gpu_passes_line: system.gpu.gpu_passes_line(),
         }
     }
 }
@@ -161,7 +164,7 @@ struct GpuSummary {
     exec_ms: f64,
     /// milliseconds per kind of work per frame, in `zakuro_gpu::GPU_WORK`
     /// order.
-    work_ms: [f64; 9],
+    work_ms: [f64; GPU_WORK.len()],
     /// render passes, barriers and draws recorded per frame.
     renderings: f64,
     barriers: f64,
@@ -173,9 +176,28 @@ struct GpuSummary {
     /// per frame, 0 when the device keeps no pipeline statistics.
     shaded: [f64; 4],
     statistics: bool,
-    /// opaque draws the front-to-back sort held back per frame, 0 when it is
-    /// off, see `ZAKURO_SORT_OPAQUE`.
-    sorted_draws: f64,
+    /// the front-to-back sort per frame, 0 when it is off: the draws it
+    /// considered, the ones it held back, the runs it recorded, and the
+    /// reason each draw was held or not in `zakuro_gpu::SORT_REASONS` order.
+    sort_draws: f64,
+    sort_candidates: f64,
+    sort_runs: f64,
+    sort_reasons: [f64; SORT_REASONS.len()],
+    /// draws a render pass kept instead of ending it and beginning its own per
+    /// frame (`ZAKURO_MERGE_PASSES=1`).
+    merged_draws: f64,
+    /// render passes that ended per frame, by what needed the drawings first,
+    /// in `zakuro_gpu::BREAK_KINDS` order.
+    breaks: [f64; BREAK_KINDS.len()],
+    /// how many times each kind of work started per frame, in
+    /// `zakuro_gpu::GPU_WORK` order.
+    work_ops: [f64; GPU_WORK.len()],
+    /// captures skipped because the surface still held the batch's picture per
+    /// frame (`ZAKURO_DEDUPE_CAPTURE=1`).
+    captures_skipped: f64,
+    /// the last per-pass report when it changed in this window: the dominant
+    /// render target's passes in recording order.
+    passes_line: String,
     /// the render targets the GPU's own time went to per frame, the one that
     /// cost most first.
     passes: Vec<GpuPass>,
@@ -435,6 +457,8 @@ fn summarize(window: &mut Window, system: &System) -> Summary {
         system.gpu.gpu_times(),
         &window.gpu_passes,
         &system.gpu.gpu_passes(),
+        &window.gpu_passes_line,
+        &system.gpu.gpu_passes_line(),
         frames,
     );
 
@@ -480,6 +504,8 @@ fn gpu_breakdown(
     current: Option<GpuTimes>,
     baseline_passes: &[PassTimes],
     current_passes: &[PassTimes],
+    baseline_line: &str,
+    current_line: &str,
     frames: u64,
 ) -> Option<GpuSummary> {
     let (baseline, current) = (baseline?, current?);
@@ -514,6 +540,11 @@ fn gpu_breakdown(
     for (delta, (now, before)) in shaded.iter_mut().zip(current.shaded.iter().zip(baseline.shaded.iter())) {
         *delta = now.saturating_sub(*before);
     }
+    // the sort's draws, the pass breaks, the kinds of work started and the
+    // pass merge's draws are cumulative too, so take this window's share
+    let sort = current.sort.since(&baseline.sort);
+    let breaks = std::array::from_fn(|i| per_frame(current.breaks[i].saturating_sub(baseline.breaks[i]) as f64));
+    let work_ops = std::array::from_fn(|i| per_frame(current.work_ops[i].saturating_sub(baseline.work_ops[i]) as f64));
     Some(GpuSummary {
         exec_ms: per_frame(work.iter().sum::<f64>()),
         work_ms: work.map(per_frame),
@@ -530,7 +561,15 @@ fn gpu_breakdown(
             .saturating_add(current.waited_done_count.saturating_sub(baseline.waited_done_count)),
         shaded: shaded.map(|count| per_frame(count as f64)),
         statistics: current.pipeline_statistics,
-        sorted_draws: per_frame(current.sorted_draws.saturating_sub(baseline.sorted_draws) as f64),
+        sort_draws: per_frame(sort.draws as f64),
+        sort_candidates: per_frame(sort.candidates as f64),
+        sort_runs: per_frame(sort.runs as f64),
+        sort_reasons: std::array::from_fn(|i| per_frame(sort.reasons[i] as f64)),
+        merged_draws: per_frame(current.merged_draws.saturating_sub(baseline.merged_draws) as f64),
+        breaks,
+        work_ops,
+        captures_skipped: per_frame(current.captures_skipped.saturating_sub(baseline.captures_skipped) as f64),
+        passes_line: if current_line == baseline_line { String::new() } else { current_line.to_owned() },
         passes,
     })
 }
@@ -584,8 +623,8 @@ fn format_summary(summary: &Summary) -> String {
                 gpu.shaded[2] / 1e6
             ));
         }
-        if gpu.sorted_draws > 0.0 {
-            line.push_str(&format!(" sorted {:.0}/f", gpu.sorted_draws));
+        if gpu.sort_candidates > 0.0 {
+            line.push_str(&format!(" sorted {:.0}/f of {:.0}/f", gpu.sort_candidates, gpu.sort_draws));
         }
     }
     if !summary.hot_spots.is_empty() {
@@ -635,8 +674,57 @@ fn format_gpu_line(summary: &Summary) -> String {
             pass.draws,
         ));
     }
-    if gpu.sorted_draws > 0.0 {
-        line.push_str(&format!(" | sorted {:.0} draws/f", gpu.sorted_draws));
+    // the draws the front-to-back sort held and its reasons, so an A/B run
+    // says whether it engaged and why not when it did not, see
+    // `ZAKURO_SORT_OPAQUE`
+    if gpu.sort_draws > 0.0 {
+        let reasons: Vec<String> = SORT_REASONS
+            .iter()
+            .zip(gpu.sort_reasons)
+            .filter(|&(_, count)| count > 0.0)
+            .map(|(name, count)| format!("{name} {count:.0}/f"))
+            .collect();
+        line.push_str(&format!(
+            " | sort {:.0}/f of {:.0}/f draws in {:.0}/f runs ({})",
+            gpu.sort_candidates,
+            gpu.sort_draws,
+            gpu.sort_runs,
+            reasons.join(", "),
+        ));
+    }
+    if gpu.merged_draws > 0.0 {
+        line.push_str(&format!(" | merged {:.0} draws/f", gpu.merged_draws));
+    }
+    if gpu.captures_skipped > 0.0 {
+        line.push_str(&format!(" | captures_skipped {:.0}/f", gpu.captures_skipped));
+    }
+    // the kinds of work the batches started, so an unexpected pass, copy or
+    // readback is seen in the counts as well as in the time
+    let ops: Vec<String> = GPU_WORK
+        .iter()
+        .zip(gpu.work_ops)
+        .filter(|&(_, count)| count > 0.0)
+        .map(|(name, count)| format!("{name} {count:.0}/f"))
+        .collect();
+    if !ops.is_empty() {
+        line.push_str(&format!(" | ops {}", ops.join(", ")));
+    }
+    // what ended the window's passes
+    let breaks: Vec<String> = BREAK_KINDS
+        .iter()
+        .zip(gpu.breaks)
+        .filter(|&(_, count)| count > 0.0)
+        .map(|(name, count)| format!("{name} {count:.0}/f"))
+        .collect();
+    if !breaks.is_empty() {
+        line.push_str(&format!(" | pass_breaks {}", breaks.join(", ")));
+    }
+    // the per-pass report the renderer logs: the dominant target's passes in
+    // recording order with each one's time, draws and what ended the pass
+    // before it, so a run of passes into one buffer can be told apart
+    if !gpu.passes_line.is_empty() {
+        line.push_str(" | ");
+        line.push_str(&gpu.passes_line);
     }
     line
 }
@@ -754,7 +842,7 @@ mod tests {
     /// A GPU reading with `draw` time filled in and every other kind 0, as
     /// the renderer's timestamps report them.
     fn gpu_times(draw_ms: f64, draws: u64, renderings: u64, fragments: u64) -> GpuTimes {
-        let mut milliseconds = [0.0; 9];
+        let mut milliseconds = [0.0; GPU_WORK.len()];
         milliseconds[1] = draw_ms;
         GpuTimes {
             batches: 1,
@@ -768,8 +856,11 @@ mod tests {
             waited_done_count: 0,
             shaded: [100, 50, fragments, 0],
             pipeline_statistics: true,
-            sorted_draws: 0,
-            sorted_runs: 0,
+            sort: Default::default(),
+            merged_draws: 0,
+            breaks: [0; BREAK_KINDS.len()],
+            work_ops: [0; GPU_WORK.len()],
+            captures_skipped: 0,
         }
     }
 
@@ -777,7 +868,7 @@ mod tests {
     fn gpu_breakdown_averages_the_window() {
         let baseline = gpu_times(100.0, 300, 20, 2_000);
         let current = gpu_times(400.0, 900, 80, 10_000);
-        let gpu = gpu_breakdown(Some(baseline), Some(current), &[], &[], 10).expect("the GPU's times");
+        let gpu = gpu_breakdown(Some(baseline), Some(current), &[], &[], "", "", 10).expect("the GPU's times");
         assert!((gpu.exec_ms - 30.0).abs() < 1e-9, "exec {} ms", gpu.exec_ms);
         assert!((gpu.work_ms[1] - 30.0).abs() < 1e-9, "draw {} ms", gpu.work_ms[1]);
         assert!((gpu.draws - 60.0).abs() < 1e-9);
@@ -788,9 +879,9 @@ mod tests {
         assert_eq!(gpu.host_waits, 0);
         // no reading at the window's start or no frames means no average, not
         // a zero line
-        assert!(gpu_breakdown(None, Some(current), &[], &[], 10).is_none());
-        assert!(gpu_breakdown(Some(baseline), None, &[], &[], 10).is_none());
-        assert!(gpu_breakdown(Some(baseline), Some(baseline), &[], &[], 0).is_none());
+        assert!(gpu_breakdown(None, Some(current), &[], &[], "", "", 10).is_none());
+        assert!(gpu_breakdown(Some(baseline), None, &[], &[], "", "", 10).is_none());
+        assert!(gpu_breakdown(Some(baseline), Some(baseline), &[], &[], "", "", 0).is_none());
     }
 
     #[test]
@@ -816,7 +907,7 @@ mod tests {
             aot_active: true,
             gpu: Some(GpuSummary {
                 exec_ms: 21.5,
-                work_ms: [0.0, 20.0, 0.5, 0.2, 0.0, 0.3, 0.0, 0.0, 0.5],
+                work_ms: [0.0, 20.0, 0.5, 0.2, 0.0, 0.3, 0.0, 0.0, 0.5, 0.2, 0.1],
                 renderings: 12.0,
                 barriers: 13.0,
                 draws: 180.0,
@@ -824,7 +915,15 @@ mod tests {
                 host_waits: 6,
                 shaded: [1_200_000.0, 600_000.0, 3_300_000.0, 0.0],
                 statistics: true,
-                sorted_draws: 0.0,
+                sort_draws: 0.0,
+                sort_candidates: 0.0,
+                sort_runs: 0.0,
+                sort_reasons: [0.0; SORT_REASONS.len()],
+                merged_draws: 0.0,
+                breaks: [0.0; BREAK_KINDS.len()],
+                work_ops: [0.0; GPU_WORK.len()],
+                captures_skipped: 0.0,
+                passes_line: String::new(),
                 passes: Vec::new(),
             }),
             hot_spots: Vec::new(),
@@ -869,7 +968,7 @@ mod tests {
             // this target did nothing this window and is left out
             pass(0x1800_2000, 64, true, 5.0, 5, 5),
         ];
-        let gpu = gpu_breakdown(Some(baseline), Some(current), &before, &now, 10).expect("the GPU's times");
+        let gpu = gpu_breakdown(Some(baseline), Some(current), &before, &now, "", "", 10).expect("the GPU's times");
         assert_eq!(gpu.passes.len(), 2, "{:?}", gpu.passes);
         assert_eq!(gpu.passes[0].addr, 0x1800_1000);
         assert!((gpu.passes[0].ms - 60.0).abs() < 1e-9, "{:?}", gpu.passes[0]);
@@ -905,5 +1004,72 @@ mod tests {
             "{line}"
         );
         assert!(line.contains("| target 0x18000000 400x240+d 30.00ms/f (2 passes, 60 draws)"), "{line}");
+    }
+
+    /// the round-3 lines: the sort's draws and reasons, the pass breaks, the
+    /// pass merge's draws and the renderer's per-pass report travel in the
+    /// `zk_gpu:` line the diagnostics export carries.
+    #[test]
+    fn sort_reasons_and_the_pass_report_travel_in_the_gpu_line() {
+        let pass = |addr: u32, ms: f64, passes: u64, draws: u64| PassTimes {
+            addr,
+            width: 400,
+            height: 240,
+            depth: true,
+            milliseconds: ms,
+            passes,
+            draws,
+        };
+        let mut baseline = gpu_times(100.0, 300, 20, 2_000);
+        let mut current = gpu_times(400.0, 900, 80, 10_000);
+        current.sort.draws = 120;
+        current.sort.candidates = 80;
+        current.sort.runs = 4;
+        current.sort.reasons[11] = 80;
+        current.sort.reasons[3] = 40;
+        current.merged_draws = 60;
+        current.breaks[2] = 8;
+        current.captures_skipped = 3;
+        current.work_ops[4] = 12;
+        let line = "zk_passes: 0x18000000 400x240 20.0ms/f (1 passes, 1 draws), last 1: p0 20.00ms/1d +d after target";
+        let gpu = gpu_breakdown(Some(baseline), Some(current), &[pass(0x1800_0000, 100.0, 10, 100)], &[pass(0x1800_0000, 300.0, 30, 700)], "", line, 2)
+            .expect("the GPU's times");
+        let summary = Summary {
+            frames: 60,
+            seconds: 2.0,
+            frame_avg_ms: 22.0,
+            frame_max_ms: 30.0,
+            screen_avg_ms: [0.0; 2],
+            screen_max_ms: [0.0; 2],
+            screen_reads: 0,
+            audio_avg_ms: 0.0,
+            audio_takes: 60,
+            gpu_ms_per_frame: 5.0,
+            non_gpu_ms_per_frame: 17.0,
+            speed_percent: 80.0,
+            cycles_per_second: 214_000_000.0,
+            draws_per_frame: 180.0,
+            transfers_per_frame: 0.0,
+            fills_per_frame: 2.0,
+            interpreted_percent: 0.1,
+            aot_active: true,
+            gpu: Some(gpu),
+            hot_spots: Vec::new(),
+        };
+        let gpu_line = format_gpu_line(&summary);
+        for field in [
+            "| sort 40/f of 60/f draws in 2/f runs",
+            "sorted 40/f",
+            "no-depth 20/f",
+            "| merged 30/f",
+            "| captures_skipped 2/f",
+            "| pass_breaks target 4/f",
+            "| ops transfer 6/f",
+            line,
+        ] {
+            assert!(gpu_line.contains(field), "missing {field}: {gpu_line}");
+        }
+        let summary_line = format_summary(&summary);
+        assert!(summary_line.contains("sorted 40/f of 60/f"), "{summary_line}");
     }
 }

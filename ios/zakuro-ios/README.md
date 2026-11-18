@@ -369,14 +369,20 @@ The app reads it through:
 |---|---|
 | `zk_gpu_timing_status()` | 1 when the times are being measured |
 | `zk_gpu_exec_micros_per_frame()` | real GPU execution time per frame, the average of the last 60-frame window (the same number the system Metal HUD shows) |
-| `zk_gpu_times_line(out, capacity)` | the window's breakdown: time per kind (`draw`, `upload`, `clear`, `transfer`, `capture`, `copy`, `download`, `barrier`, `other`), render passes, barriers, draws, the host's waits, the shaded vertices/primitives/fragments per frame, the render targets by GPU time (`target 0xADDR WxH[+d] X.XXms/f (N passes, M draws)`, the one that cost most first) and `sorted N draws/f` when the opaque sort is on |
+| `zk_gpu_times_line(out, capacity)` | the window's breakdown: time per kind (`draw`, `upload`, `clear`, `transfer`, `capture`, `copy`, `download`, `barrier`, `upright`, `readback`, `other`), render passes, barriers, draws, the host's waits, the shaded vertices/primitives/fragments per frame, the render targets by GPU time (`target 0xADDR WxH[+d] X.XXms/f (N passes, M draws)`, the one that cost most first), the per-pass report (`zk_passes:`: the dominant target's passes in recording order, each one's GPU milliseconds, draws, depth and twin, and what ended the pass before it, with the window's pass breaks), the kinds of work the batches started (`ops ...`) and, when the opaque sort is on, `sorted N/f of M/f draws in R/f runs` with the reason each draw was held or not |
 
 The periodic log line gains `gpu_exec X.XXms/f passes N/f barriers M/f` (plus
 `shaded V/P/F` when the device keeps pipeline statistics), and a second
 `zk_gpu:` line has the full breakdown. Every render target a timestamped batch
 draws into is timed as well, and a `GPU render targets over N batches: ...`
 line (log target `zakuro_gpu::passes`) names the targets that cost most, so the
-largest render pass of a title can be identified without guessing. The numbers
+largest render pass of a title can be identified without guessing. Each
+timestamped pass is also kept as an instance with its own milliseconds, draws,
+depth, twin and the reason the pass before it ended, and a `zk_passes:` line
+(log target `zakuro_gpu::passes`, carried in `gpu_times_line`) reports the
+dominant target's passes in recording order: that is what says whether a title's
+run of passes into one buffer is a depth switch, a texture upload, a transfer or
+a capture, and what a pass merge would join. The numbers
 come from
 `zakuro_gpu::GpuTimes`, the same type the desktop renderer can log with
 `ZAKURO_GPU_TIMES=1` (`GPU over N batches: ...` lines).
@@ -388,7 +394,9 @@ the renderer is built, so set them before a load):
 |---|---|
 | `ZAKURO_FAST_CLEARS=1` | a clear of every row goes through `vkCmdClear*Image` instead of a render pass with LOAD+STORE: it writes the rows and nothing else |
 | `ZAKURO_FAST_BARRIERS=1` | the barrier a render pass waits for after a target switch is scoped to the attachment and transfer stages instead of `ALL_COMMANDS` |
-| `ZAKURO_SORT_OPAQUE=1` | opaque draws of a render pass that may be reordered (depth test and write on, no blending, alpha test, logic op or stencil change, vertices placed on the CPU so their depth is known) are held back and recorded front to back, the nearest first, so the early depth test drops the fragments hidden behind them; draws at the same depth keep their order, everything else keeps the title's order, and the picture must not change |
+| `ZAKURO_SORT_OPAQUE=1` | opaque draws of a render pass whose state may be reordered (depth test and write on, no blending or logic op, no stencil writes, vertices placed on the CPU so their depth is known) are held back and recorded front to back, the nearest first, so the early depth test drops the fragments hidden behind them. Alpha test and partial colour masks no longer keep a draw out: they cannot change what any order draws. Draws at the same depth keep their order (stable sort), everything else keeps the title's order, and the picture must not change. Every draw's reason is counted (`off`, `twins`, `no-pass`, `no-depth`, `compare`, `write-off`, `blend`, `logic`, `stencil`, `gpu-vertices`, `no-vertices`, `sorted`) and a `zk_sort:` line says whether it engaged at all |
+| `ZAKURO_MERGE_PASSES=1` | a draw the guest gives no depth buffer, into the color buffer a pass with depth is already drawing into, keeps that pass and draws with the depth attachment it has and no depth test or write: the picture is the same and the pass does not end and begin again. The line gains `merged N draws/f` |
+| `ZAKURO_DEDUPE_CAPTURE=1` | a capture of a surface asked for again in the same batch, with nothing drawn since the last capture, is skipped; the line gains `captures_skipped N/f` when it happens |
 | `ZAKURO_GPU_TIMES=1` | the GPU's own timestamped execution times above (diagnostic only) |
 
 The other hidden renderer switches (`ZAKURO_GPU_SHADERS` / `ZAKURO_CPU_SHADERS`,
@@ -399,11 +407,12 @@ scheduling, never the rendered picture; `ZAKURO_GPU_SHADERS` is the one that
 moves vertex shading between CPU and GPU and is a measurement switch of its own.
 
 The GPU timing and the switches are in
-`ios/zakuro-ios/patches/0003-gpu-timing-and-render-options.patch` and
-`ios/zakuro-ios/patches/0004-gpu-pass-times-and-opaque-sort.patch`, applied to
+`ios/zakuro-ios/patches/0003-gpu-timing-and-render-options.patch`,
+`ios/zakuro-ios/patches/0004-gpu-pass-times-and-opaque-sort.patch` and
+`ios/zakuro-ios/patches/0005-gpu-sort-reasons-and-pass-merge.patch`, applied to
 the gitignored Zakuro checkout by `scripts/build-zakuro-ios.sh`, so a static
-library built from this repository carries both. `scripts/README.md` has the A/B build
-and measurement procedure.
+library built from this repository carries all of them. `scripts/README.md` has
+the A/B build and measurement procedure.
 
 ## Tests
 

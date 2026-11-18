@@ -1176,6 +1176,9 @@ Upstream `main` @ `f54cbdb` (2026-11-12):
 | `crates/zakuro-gpu/shaders/*.spv` | precompiled SPIR-V (`include_bytes!` at build time) |
 | `ios/zakuro-ios/patches/0001-vulkan-on-ios.patch` | iOS MoltenVK lookup in `instance.rs` |
 | `ios/zakuro-ios/patches/0002-pipeline-cache-save-every.patch` | `SAVE_EVERY` 60 s → 5 s in `hardware.rs` (10.2) |
+| `ios/zakuro-ios/patches/0003-gpu-timing-and-render-options.patch` | the GPU's own timestamped execution times (`ZAKURO_GPU_TIMES=1`, default off) and the image-clear / narrower-barrier A/B switches |
+| `ios/zakuro-ios/patches/0004-gpu-pass-times-and-opaque-sort.patch` | per-render-target GPU time in the timings, and the opaque front-to-back draw sort A/B switch (default off) |
+| `ios/zakuro-ios/patches/0005-gpu-sort-reasons-and-pass-merge.patch` | per-pass GPU time, draws and break reasons, the relaxed front-to-back sort with its reason counters, the render-pass merge and duplicate-capture A/B switches (all default off) |
 
 ## Appendix B: verification log
 

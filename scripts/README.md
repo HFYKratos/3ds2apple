@@ -13,7 +13,7 @@ developer guide for the scripts.
 | `build-zakuro-ios.sh` | Clone/pin Zakuro, apply `ios/zakuro-ios/patches/*.patch`, add the iOS crate and build `build/ios/libzakuro_ios.a` |
 | `build-ios-app.sh` | `xcodegen` + `xcodebuild` for the unsigned shell `.app` (empty schema-2 catalog) |
 | `package-ipa.sh` | Wrap an unsigned `.app` into `IPA/<name>.ipa` and print its SHA-256; `--manifest FILE` writes the launcher shell `manifest.json` (version/build from the app Info.plist, bundle id, bytes, SHA-256) |
-| `build-gpu-diagnostic-ipa.sh` | Package the ROM-free shell as GPU A/B diagnostic IPAs (one Info.plist GPU profile each: `baseline`/`baseline2`/`mvk`/`renderer`/`sort`/`combo`), with MoltenVK embedded; outputs stay under `out/gpu-diag*/` (gitignored) |
+| `build-gpu-diagnostic-ipa.sh` | Package the ROM-free shell as GPU A/B diagnostic IPAs (one Info.plist GPU profile each: `baseline`/`baseline2`/`baseline3`/`mvk`/`renderer`/`sort`/`sort2`/`merge`/`capture`/`combo`), with MoltenVK embedded; outputs stay under `out/gpu-diag*/` (gitignored) |
 
 ## GamePacks and shell IPA (launcher-first)
 
@@ -104,9 +104,13 @@ sets `ZAKURO_GPU_TIMES=1` so the diagnostics carry the GPU's real execution time
 |---|---|
 | `baseline` | nothing but the GPU timing: the first round's control |
 | `baseline2` | the second round's control: nothing but the GPU timing, and the GPU line also splits its time by render target (which pass cost what, with its passes and draws) |
+| `baseline3` | the third round's control: the per-pass report (each pass's GPU milliseconds and draws, whether it had depth or drew into a twin, what ended the pass before it), the window's pass-break reasons and the work-operation counts |
 | `mvk` | MoltenVK performance parameters: Metal argument buffers, prefill of Metal command buffers, MTLHeap, more active Metal command buffers, present through a command buffer, async queue submits |
 | `renderer` | renderer A/B switches: image clears where they can be (no attachment load/store for a full clear, `ZAKURO_FAST_CLEARS=1`) and a narrower barrier between render passes (`ZAKURO_FAST_BARRIERS=1`) |
-| `sort` | `baseline2` + the opaque front-to-back draw sort (`ZAKURO_SORT_OPAQUE=1`): order-independent opaque draws are recorded nearest first so the early depth test drops hidden fragments; the line gains `sorted N draws/f` |
+| `sort` | the second round's `baseline2` + opaque sort build, kept for an old IPA comparison |
+| `sort2` | `baseline3` + the relaxed opaque front-to-back draw sort (`ZAKURO_SORT_OPAQUE=1`): alpha test and partial colour masks no longer keep a draw out, only a state that can change the picture does (depth writes, blending, logic ops, stencil writes, GPU-shaded vertices); the line gains `sorted N/f of M/f draws` and a per-reason count so a run that does not engage says why |
+| `merge` | `baseline3` + render-pass merging (`ZAKURO_MERGE_PASSES=1`): a draw with no depth buffer into a depth-buffered pass keeps that pass with its depth test and write off, so a title that switches depth on and off does not end and begin a pass each time; the line gains `merged N/f` |
+| `capture` | `baseline3` + duplicate-capture skipping (`ZAKURO_DEDUPE_CAPTURE=1`): a capture asked for again in the same batch with nothing drawn since is not recorded again; the line gains `captures_skipped N/f` when it happens |
 | `combo` | mvk + renderer, for the confirmation run after the A/B names a winner |
 
 Run it on the macOS build VM after `scripts/build-zakuro-ios.sh` and
@@ -117,7 +121,11 @@ Use the real GPU execution time (`gpu_exec_ms_per_frame=` in the diagnostics,
 `zk_gpu:` line in the log), the frame interval and a system Metal HUD screenshot
 for the same scene and duration per profile: a profile that lowers `gpu_exec`
 while the shaded fragment count stays the same changed GPU scheduling or
-bandwidth, not the emulated shading.
+bandwidth, not the emulated shading. The per-pass report (`zk_passes:`, carried
+inside `gpu_times_line=`) and the `pass_breaks` counters are what a pass-merge
+candidate is judged from, and the sort's `sorted`/reason counters say whether
+the draw sort engaged at all; a candidate with under 5% real GPU-time gain, or
+any picture change, stays off in the release build.
 
 ### Performance contract (licence boundary and measurement)
 
