@@ -21,7 +21,8 @@
 //  allow-listed MoltenVK parameters and renderer switches before the first
 //  Vulkan device. A profile is what the GPU A/B IPAs differ in, so the same
 //  binary code can be measured with and without a candidate optimisation; a
-//  normal release build has no such key and the defaults are untouched.
+//  normal release build has no such key and instead applies the release
+//  renderer defaults (0.1.3: the fast-math fragment build only).
 //
 //  Only names the pinned framework actually understands are accepted: the
 //  supportedKeys list below was read from the MoltenVK 1.4.2 binary embedded in
@@ -144,6 +145,16 @@ enum MoltenVKTuning {
         "baseline", "baseline2", "baseline3", "baseline4", "baseline5", "baseline6", "mvk", "renderer",
         "sort", "sort2", "merge", "capture", "noblend", "flat", "2x3x", "safe", "texonly", "fragspec",
         "fastmath", "mvkrenderer", "combo",
+    ]
+
+    /// The renderer switches a normal release build applies when no diagnostic
+    /// GPU profile is selected (0.1.3: the fast-math fragment build only).
+    /// Diagnostic IPAs carry a profile, so A/B runs never inherit these
+    /// defaults; an explicit `THREEDS2APPLE_RENDERER_OPTIONS` value wins because
+    /// `apply` skips a key that is already set. Kill switch:
+    /// `THREEDS2APPLE_RENDERER_OPTIONS=ZAKURO_FRAG_FAST_MATH=0`.
+    static let releaseRendererDefaults: [String] = [
+        "ZAKURO_FRAG_FAST_MATH=1",
     ]
 
     /// The overrides actually applied, as `NAME=value`, for the log and the
@@ -324,6 +335,15 @@ enum MoltenVKTuning {
         apply(pairsCSV: moltenvk, keys: supportedKeys, into: &applied, source: environmentVariable)
         let renderer = environment[rendererEnvironmentVariable] ?? ""
         apply(pairsCSV: renderer, keys: supportedRendererKeys, into: &rendererApplied, source: rendererEnvironmentVariable)
+        // 3) the release defaults last: a normal build applies the renderer
+        // switches 0.1.3 ships with (the fast-math fragment build). A
+        // diagnostic profile and an explicit environment variable both win,
+        // because `apply` skips a key that is already set; this block runs only
+        // when no profile was selected.
+        if profile == nil {
+            apply(pairs: releaseRendererDefaults, keys: supportedRendererKeys,
+                  into: &rendererApplied, source: "release defaults")
+        }
         if applied.isEmpty {
             AppLog.log("[3ds2apple] MoltenVK tuning: no override applied (framework defaults)")
         } else {

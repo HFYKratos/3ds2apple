@@ -297,6 +297,12 @@ check "the patch helper lists the new patch" contains scripts/lib/zakuro-patches
 check "scripts/README documents the GPU A/B profiles" contains scripts/README.md 'GPU A/B diagnostic IPAs'
 check "zakuro-ios README documents the GPU execution timing" contains ios/zakuro-ios/README.md 'GPU execution timing and renderer A/B switches'
 check "the app README documents the GPU diagnostics fields" contains ios/app/README.md 'gpu_exec_ms_per_frame='
+check "the release build applies the fast-math fragment default" contains ios/app/Sources/MoltenVKTuning.swift 'releaseRendererDefaults'
+check "the release default is the fast-math fragment build" contains ios/app/Sources/MoltenVKTuning.swift 'ZAKURO_FRAG_FAST_MATH=1'
+check "the release default is applied only without a diagnostic profile" \
+  bash -c 'grep -A2 "if profile == nil" ios/app/Sources/MoltenVKTuning.swift | grep -q "releaseRendererDefaults"'
+check "the specialized fragment build is not a release default" \
+  bash -c '! awk "/releaseRendererDefaults = \\[/,/\\]/" ios/app/Sources/MoltenVKTuning.swift | grep -q "ZAKURO_FRAG_SPECIALIZE"'
 check "the second round's patch is tracked" test -f ios/zakuro-ios/patches/0004-gpu-pass-times-and-opaque-sort.patch
 check "the second patch splits the GPU time by render target" contains ios/zakuro-ios/patches/0004-gpu-pass-times-and-opaque-sort.patch 'pub struct PassTimes'
 check "the second patch adds the opaque sort switch" contains ios/zakuro-ios/patches/0004-gpu-pass-times-and-opaque-sort.patch 'ZAKURO_SORT_OPAQUE'

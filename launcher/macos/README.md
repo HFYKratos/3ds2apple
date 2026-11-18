@@ -1,7 +1,7 @@
 # 3ds2apple macOS launcher
 
 A SwiftUI macOS app for the AOT-first product flow (v2: Library -> Deploy),
-aligned with the Windows launcher (current product version **0.1.2 build 1**;
+aligned with the Windows launcher (current product version **0.1.3 build 1**;
 0.2.x numbers below are the pre-reset history):
 
     Library: import your own decrypted .3ds/.cci; cards show the ROM's own SMDH

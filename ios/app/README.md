@@ -1082,10 +1082,14 @@ Vulkan timestamp queries and export:
   `baseline6` is the sixth round's control (the same timing as `baseline5` with
   the fragment builds off). `combo` sets both switches at once; the renderer
   then runs a combined build of `raster.frag` (the specialization constants
-  without `precise`, counted as `frag_build specfast N/f`), which is the
-  candidate for the release default. `mvkrenderer` is the old `mvk` +
-  `renderer` combination, kept so the first round's confirmation run can still
-  be reproduced.
+  without `precise`, counted as `frag_build specfast N/f`). The release default
+  from 0.1.3 is `fastmath` only (`ZAKURO_FRAG_FAST_MATH=1`, applied by
+  `MoltenVKTuning.releaseRendererDefaults` when no diagnostic profile is set;
+  `THREEDS2APPLE_RENDERER_OPTIONS=ZAKURO_FRAG_FAST_MATH=0` disables it): the
+  combined build measured within noise of fast-math alone, and the specialized
+  build needs one more pipeline shape per lighting/fog/wrapping state.
+  `mvkrenderer` is the old `mvk` + `renderer` combination, kept so the first
+  round's confirmation run can still be reproduced.
 
 `scripts/build-gpu-diagnostic-ipa.sh` (on the macOS build VM) packages one IPA
 per profile, differing only in that Info.plist key; the app applies the profile's

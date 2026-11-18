@@ -35,7 +35,7 @@ OUTPUT_ROOT="$REPO_ROOT/out/launchers"
 if [ "$#" -ge 1 ]; then OUTPUT_ROOT="$1"; fi
 mkdir -p "$OUTPUT_ROOT"
 VERSION="$(awk -F'[<>]' '/<Version>/{print $3; exit}' "$WINDOWS_ROOT/Directory.Build.props")"
-if [ -z "$VERSION" ]; then VERSION="0.1.2"; fi
+if [ -z "$VERSION" ]; then VERSION="0.1.3"; fi
 EXE_NAME="3ds2apple-launcher.exe"
 PUBLISH_DIR="$OUTPUT_ROOT/publish-win-x64"
 ZIP_PATH="$OUTPUT_ROOT/3ds2apple-windows-single-$VERSION.zip"

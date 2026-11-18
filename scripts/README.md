@@ -168,6 +168,11 @@ within the measurement noise of `fastmath` alone (round five), the default
 keeps only `fastmath`, because the specialized build costs one more pipeline
 shape per lighting/fog/wrapping state and its first-load compile time.
 
+**Release default in 0.1.3:** `fastmath` only. `MoltenVKTuning.releaseRendererDefaults`
+applies `ZAKURO_FRAG_FAST_MATH=1` when no diagnostic GPU profile is set (kill
+switch: `THREEDS2APPLE_RENDERER_OPTIONS=ZAKURO_FRAG_FAST_MATH=0`);
+`fragspec`, `combo` and `specfast` remain diagnostic-only.
+
 Visual checkpoints (each item must be confirmed to look identical between
 `baseline6` and `combo`; any visible difference means no default): two titles
 and several scenes per title, one run still and one moving per scene —

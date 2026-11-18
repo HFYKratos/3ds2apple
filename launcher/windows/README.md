@@ -1,6 +1,6 @@
 # 3ds2apple launcher for Windows (MVP)
 
-Status: **launcher 0.1.2 (build 1, 2026-11-17 release build)** — portable data
+Status: **launcher 0.1.3 (build 1, 2026-11-18 release build)** — portable data
 folder beside the exe (LocalAppData only when read-only, with one-time migration),
 hardware-aware compile line (cores/RAM + 3dsrecomp auto-parallelism), ROM metadata UI
 from the pack CLI (SMDH `cover.png` icon, localized `displayNames`, `publisher`; no

@@ -425,6 +425,13 @@ the renderer is built, so set them before a load):
 | `ZAKURO_FRAG_FAST_MATH=1` | math-equivalent apart from rounding: a second build of `raster.frag` without `precise`, so the driver may contract multiply and add into fused operations and approximate. The picture must stay visually the same; the GPU line counts the draws in `frag_build fastmath N/f` |
 | `ZAKURO_FRAG_FAST_MATH=1` + `ZAKURO_FRAG_SPECIALIZE=1` | both fragment switches at once: a third build of `raster.frag` with the specialization constants *and* without `precise` runs, so the two savings apply to the same draw. Math-equivalent apart from rounding; the GPU line counts the draws in `frag_build specfast N/f`. Setting only one switch keeps that switch's own build |
 
+**Release default from 0.1.3:** a normal build enables only
+`ZAKURO_FRAG_FAST_MATH=1` (`MoltenVKTuning.releaseRendererDefaults`, applied
+when no diagnostic GPU profile is selected; an explicit
+`THREEDS2APPLE_RENDERER_OPTIONS=ZAKURO_FRAG_FAST_MATH=0` disables it). The
+combined build stays diagnostic: it measured within noise of fast-math alone
+and the specialized build costs one more pipeline shape per state.
+
 The other hidden renderer switches (`ZAKURO_GPU_SHADERS` / `ZAKURO_CPU_SHADERS`,
 `ZAKURO_FLOAT_DEPTH`, `ZAKURO_DEPTH_BLITS`, `ZAKURO_STATIC_BLEND`,
 `ZAKURO_GENERIC_SHADERS`, `ZAKURO_INTERPRET_SHADERS`, `ZAKURO_WAIT_FOR_SHADERS`)
