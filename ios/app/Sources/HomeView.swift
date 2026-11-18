@@ -7,18 +7,21 @@
 //  GameCatalog.json, while its game data (the user's ROM) is pushed by the
 //  desktop launcher into Documents/Games/<TITLEID>/. Each card is the game's
 //  SMDH icon in a square art area — the exported icon is 48×48, so the art
-//  keeps its native 1:1 aspect — followed by the title, publisher, game-data
-//  size, when it was last played and the state: AOT (ready), Checking
-//  (verifying the pushed ROM hash), Data missing (launcher push not done yet)
-//  or Error (a broken push). Tapping a card starts it or explains exactly what
-//  is wrong. There is no explanatory paragraph under the grid.
+//  keeps its native 1:1 aspect — followed by the title, publisher and the
+//  pushed game-data size · last-played line. A ready game has no corner badge:
+//  the app only runs AOT code, so an "AOT" badge said nothing, and the AOT
+//  state stays in the log and the diagnostics export. A badge is kept only for
+//  states that need attention: Checking (verifying the pushed ROM hash), Data
+//  missing (launcher push not done yet) and Error (a broken push). Tapping a
+//  card starts it or explains exactly what is wrong. There is no explanatory
+//  paragraph under the grid.
 //
-//  Each card also has a "..." menu that deletes the game after a second
-//  confirmation: the pushed game data (ROM, GameInfo.json, cover), the battery
-//  saves, the instant save states, the play history and the per-game settings
-//  are removed, and the title is hidden from the library until the desktop
-//  launcher pushes its data again. The AOT pack itself is inside the signed
-//  app and cannot be removed at run time.
+//  Long-pressing a card opens a context menu. Its "Delete Game" action asks a
+//  second time and then deletes the game: the pushed game data (ROM,
+//  GameInfo.json, cover), the battery saves, the instant save states, the play
+//  history and the per-game settings are removed, and the title is hidden from
+//  the library until the desktop launcher pushes its data again. The AOT pack
+//  itself is inside the signed app and cannot be removed at run time.
 //
 //  The library rescans Documents/Games at launch, whenever the app returns to
 //  the foreground and on pull-to-refresh; there is no refresh button.
@@ -151,81 +154,74 @@ struct HomeView: View {
         return Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: count)
     }
 
-    /// One library card: the cover and info block start the game, and the
-    /// "..." menu in the art's top-leading corner deletes it.
+    /// One library card: the cover and info block start the game; long-pressing
+    /// the card (the game icon) opens its context menu, whose "Delete Game"
+    /// action asks a second time and deletes it. There is no visible "..." menu
+    /// button on the card any more.
     private func gameCard(_ entry: GameEntry) -> some View {
         let state = cardState(entry)
-        return ZStack(alignment: .topLeading) {
-            Button {
-                model.start(entry)
-            } label: {
-                VStack(alignment: .leading, spacing: 7) {
-                    cover(for: entry, state: state)
-                    // The info block is one tight leading-aligned stack under the
-                    // square art: title (two lines reserved so a longer title cannot
-                    // push the publisher/size rows around), publisher, size and
-                    // last-played. Every row truncates instead of widening the card.
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(entry.title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(2, reservesSpace: true)
-                            .multilineTextAlignment(.leading)
-                            .allowsTightening(true)
-                            .frame(maxWidth: .infinity, alignment: .topLeading)
-                        if let publisher = entry.publisher {
-                            Text(publisher)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .accessibilityIdentifier("game-card-publisher")
-                        }
-                        Text(cardMetaText(for: entry))
+        return Button {
+            model.start(entry)
+        } label: {
+            VStack(alignment: .leading, spacing: 7) {
+                cover(for: entry, state: state)
+                // The info block is one tight leading-aligned stack under the
+                // square art: title (two lines reserved so a longer title cannot
+                // push the publisher/size rows around), publisher, size and
+                // last-played. Every row truncates instead of widening the card.
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(entry.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2, reservesSpace: true)
+                        .multilineTextAlignment(.leading)
+                        .allowsTightening(true)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    if let publisher = entry.publisher {
+                        Text(publisher)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                            .accessibilityIdentifier("game-card-meta")
-                        if entry.isLegacyBundled {
-                            Text(L10n.tr("From the previous build"))
-                                .font(.caption2)
-                                .foregroundStyle(.orange)
-                                .lineLimit(1)
-                        }
+                            .accessibilityIdentifier("game-card-publisher")
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(cardMetaText(for: entry))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .accessibilityIdentifier("game-card-meta")
+                    if entry.isLegacyBundled {
+                        Text(L10n.tr("From the previous build"))
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .lineLimit(1)
+                    }
                 }
-                .padding(10)
-                .background(cardBackground)
-                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
-            .disabled(model.isRuntimeActive)
-            .accessibilityIdentifier("game-card")
-            deleteMenu(for: entry)
-                .padding(8)
+            .padding(10)
+            .background(cardBackground)
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
-    }
-
-    /// The card's delete entry: a "..." menu over the cover art. The deletion
-    /// itself asks a second time (the alert), so a mis-tap cannot remove a game.
-    private func deleteMenu(for entry: GameEntry) -> some View {
-        Menu {
+        .buttonStyle(.plain)
+        // The card is disabled while a game runs (the home page is normally not
+        // visible then); the context menu and its accessibility action stay
+        // outside that disabled scope, exactly like the old visible menu.
+        .disabled(model.isRuntimeActive)
+        .accessibilityIdentifier("game-card")
+        .contextMenu {
             Button(role: .destructive) {
                 requestDeletion(entry)
             } label: {
-                Label("Delete Game", systemImage: "trash")
+                Label(L10n.tr("Delete Game"), systemImage: "trash")
             }
             .accessibilityIdentifier("game-delete-action")
-        } label: {
-            Image(systemName: "ellipsis.circle.fill")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(.primary)
-                .background(.regularMaterial, in: Circle())
         }
-        .accessibilityLabel(L10n.tr("Game actions"))
-        .accessibilityIdentifier("game-delete-menu")
+        // VoiceOver can reach the same deletion without a long press.
+        .accessibilityAction(named: Text(L10n.tr("Delete Game"))) {
+            requestDeletion(entry)
+        }
     }
 
     /// Second confirmation title: the exact game name, so the user can see that
@@ -282,11 +278,15 @@ struct HomeView: View {
         }
     }
 
-    /// What the badge says and its colour: green AOT means the game can start;
-    /// orange Data missing means the launcher has not pushed the game data yet;
-    /// red Error means the push is broken; Checking means the ROM SHA-256 check
-    /// is running. The tap always explains the exact state.
-    private func cardState(_ entry: GameEntry) -> (label: String, tint: Color) {
+    /// What the corner badge says and its colour, or nil when the game needs no
+    /// badge. A ready game shows nothing: the shell only runs AOT code, so the
+    /// old green "AOT" (and grey "No AOT") label was noise on every card, and
+    /// the AOT state is kept in the log and the diagnostics export instead. The
+    /// badge stays for the states that need attention: Checking (the ROM
+    /// SHA-256 check is running), Data missing (the launcher has not pushed the
+    /// game data yet) and Error (the push is broken). The tap always explains
+    /// the exact state.
+    private func cardState(_ entry: GameEntry) -> (label: String, tint: Color)? {
         switch entry.validation {
         case .invalid(let issues):
             let dataMissing = issues.contains { issue in
@@ -299,10 +299,7 @@ struct HomeView: View {
         case .checking:
             return (L10n.tr("Checking"), .orange)
         case .valid:
-            if library.aotAvailability(for: entry).isAvailable {
-                return (L10n.tr("AOT"), .green)
-            }
-            return (L10n.tr("No AOT"), .secondary)
+            return nil
         }
     }
 
@@ -345,7 +342,7 @@ struct HomeView: View {
     /// reason: the only artwork a game exports is its 1:1 SMDH icon, so a 16:9
     /// banner would letterbox it. The gradient is still the placeholder and the
     /// thin frame around the icon. No game art ships in the app.
-    private func cover(for entry: GameEntry, state: (label: String, tint: Color)) -> some View {
+    private func cover(for entry: GameEntry, state: (label: String, tint: Color)?) -> some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(
                 LinearGradient(
@@ -357,8 +354,10 @@ struct HomeView: View {
             .aspectRatio(1, contentMode: .fit)
             .overlay { coverArt(for: entry) }
             .overlay(alignment: .topTrailing) {
-                badge(label: state.label, tint: state.tint)
-                    .padding(6)
+                if let state = state {
+                    badge(label: state.label, tint: state.tint)
+                        .padding(6)
+                }
             }
             .accessibilityHidden(true)
     }
@@ -418,9 +417,11 @@ struct HomeView: View {
         return L10n.format("Last played %@", StorageFormat.relativeDate(lastPlayed))
     }
 
-    /// Corner state badge. The art area is the icon itself now rather than a
-    /// gradient banner, so the badge sits on a material capsule to stay legible
-    /// on top of bright cover art; it still stays inside a fixed-size capsule.
+    /// Corner state badge for the states that need attention (Checking / Data
+    /// missing / Error); a ready game has none. The art area is the icon itself
+    /// rather than a gradient banner, so the badge sits on a material capsule
+    /// to stay legible on top of bright cover art; it still stays inside a
+    /// fixed-size capsule.
     private func badge(label: String, tint: Color) -> some View {
         Text(label)
             .font(.system(size: 9, weight: .semibold))

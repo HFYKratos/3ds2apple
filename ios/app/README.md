@@ -22,7 +22,7 @@ views do not carry duplicated strings.
 
 | Page | Contents |
 |---|---|
-| **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`. Each card has a square art area at the icon's native 1:1 aspect: the game's own SMDH cover art (launcher-pushed `cover.png`, else the build's bundled cover, else the gradient placeholder) is enlarged to fill it with a small inset and a rounded, shadowed edge, and the per-card state badge (**AOT** / **Checking** / **Data missing** / **Error** / **No AOT**) sits in its corner. Under the art the card is deliberately compact: the title for the app language (up to two lines, truncated), the publisher, then the pushed game size · last-played state. There is **no explanatory paragraph under the grid**. iPhone shows two columns, iPad three. Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Pull-to-refresh rescans Documents, and the library also rescans at launch and when the app returns to the foreground; there is no refresh button. Each card's `...` menu deletes the game after a second confirmation (see "Deleting a game" below). The empty state explains the desktop launcher. No on-phone import. Settings entry. |
+| **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`. Each card has a square art area at the icon's native 1:1 aspect: the game's own SMDH cover art (launcher-pushed `cover.png`, else the build's bundled cover, else the gradient placeholder) is enlarged to fill it with a small inset and a rounded, shadowed edge, and a corner badge appears only when a game needs attention (**Checking** / **Data missing** / **Error**; a ready game has no AOT badge, since the app only runs AOT code and the AOT state stays in the log and the diagnostics export). Under the art the card is deliberately compact: the title for the app language (up to two lines, truncated), the publisher, then the pushed game size · last-played state. There is **no explanatory paragraph under the grid**. iPhone shows two columns, iPad three. Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Pull-to-refresh rescans Documents, and the library also rescans at launch and when the app returns to the foreground; there is no refresh button. Long-pressing a card opens its context menu; **Delete Game** asks a second confirmation and then deletes the game (see "Deleting a game" below). The empty state explains the desktop launcher. No on-phone import. Settings entry. |
 | **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback), status line (including the active fast-forward speed), on-screen controls, the optional FPS counter and the in-game menu. Portrait stacks the controls below the screens; landscape puts them in a top bar and two side rails so they never cover the screens. The FPS counter sits in the portrait title bar or in a slim landscape strip in the top safe area, outside the 3DS picture and clear of every control. When a title starts the 3DS software keyboard, a full-screen keyboard overlay collects the text and the applet's buttons while the frame loop is stopped; answering resumes the game. |
 | **Settings** | Display, Audio, Controls, Performance (fast-forward, system Metal HUD, FPS counter), Storage and About sections. |
 | **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. The page re-reads the selected game's files when it opens, when the library changes and after every action; there is no refresh button. |
@@ -65,8 +65,9 @@ on-screen controls, so no input or audio advances behind it.
   battery saves as a ZIP archive through the share sheet, import a ZIP archive or
   single save files back, and delete individual files. Import and delete are
   disabled while a game is running.
-- Deleting a game: the Home page card's `...` menu asks a second time and then
-  removes the game from this device — its pushed game data
+- Deleting a game: long-pressing a Home page card opens its context menu; its
+  **Delete Game** action asks a second time and then removes the game from this
+  device — its pushed game data
   (`Documents/Games/<TITLEID>/`: ROM, `GameInfo.json`, pushed cover), its battery
   saves (`Documents/data/<save namespace>/`), its instant save states
   (`Documents/states/<save namespace>/`), its play history and its per-game
@@ -208,9 +209,9 @@ fallback, not the launcher-first flow.
 
 ### Deleting a game
 
-The `...` menu on a Home page card deletes that game after a second confirmation;
-nothing is removed until the dialog's **Delete** button is pressed. Deleting
-removes, in one go:
+Long-press a game's icon on the Home page to open its context menu, then choose
+**Delete Game**: it asks a second time and nothing is removed until the dialog's
+**Delete** button is pressed. Deleting removes, in one go:
 
 | Data | Where |
 |---|---|
@@ -619,7 +620,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `App.swift` | SwiftUI entry point; cache directory, logging and the app delegate. |
 | `ApplicationDelegate.swift` | UIKit delegate used for the orientation preference. |
 | `ContentView.swift` | Root router: home page or game for the current session phase; applies settings to the session. |
-| `HomeView.swift` | Home page: the Documents/Games library grid (two columns on iPhone, three on iPad; square 1:1 SMDH cover art with the per-card state badge in the corner; compact title/publisher/size/last-played text; no explanatory paragraph under the grid), last-played dates, the exact per-game validation error on tap, the launcher empty state, a per-card `...` delete menu with its second confirmation and result banner, pull-to-refresh, settings entry. |
+| `HomeView.swift` | Home page: the Documents/Games library grid (two columns on iPhone, three on iPad; square 1:1 SMDH cover art with an attention-state badge in the corner (no AOT badge on a ready game); compact title/publisher/size/last-played text; no explanatory paragraph under the grid), last-played dates, the exact per-game validation error on tap, the launcher empty state, a long-press context menu with the Delete Game action, its second confirmation and result banner, pull-to-refresh, settings entry. |
 | `GameView.swift` | Running game: responsive portrait/landscape layout, screens, status line, on-screen controls, the optional FPS counter, in-game menu and the 3DS software-keyboard overlay. |
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, reset, display settings, save manager, diagnostics, exit) and quick toggles. |
 | `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. |
@@ -639,7 +640,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `GameInfo.swift` | The launcher's `Documents/Games/<TITLEID>/GameInfo.json` manifest (schema 1): authoritative display title, localized `displayNames`/`publisher`/`region` (optional SMDH base info), save namespace and pushed game-data size/SHA-256; the pack fields are informational metadata about the pack embedded in the IPA. |
 | `InstalledGame.swift` | Scans `Documents/Games` for pushed game data, validates it (folder/title ID, manifest, ROM presence/size/path containment), resolves the pushed `cover.png` and verifies the recorded SHA-256 in the background. |
 | `GameCatalog.swift` | The bundle `GameCatalog.json` schema (v2, v1 compatible): the build's game list plus per-game `packFile`/ABI/`registrationSymbol`. A base shell may ship an empty catalog. |
-| `GameLibrary.swift` | The library: bundle catalog joined with the pushed `Documents/Games` data, per-card title/publisher/size/cover (catalog fallback + placeholder), per-card states (AOT / Checking / Data missing / Error), background SHA-256 checks, `Documents/Library/playHistory.json` and `Documents/Library/removedGames.json` (games deleted on this device, hidden until the launcher pushes the data again); `deleteGame` removes a game's data, saves, save states and per-game state. No ROM importing. |
+| `GameLibrary.swift` | The library: bundle catalog joined with the pushed `Documents/Games` data, per-card title/publisher/size/cover (catalog fallback + placeholder), per-card states (Checking / Data missing / Error) and AOT availability, background SHA-256 checks, `Documents/Library/playHistory.json` and `Documents/Library/removedGames.json` (games deleted on this device, hidden until the launcher pushes the data again); `deleteGame` removes a game's data, saves, save states and per-game state. No ROM importing. |
 | `AOTPackageLoader.swift` | Resolves/loads the per-game `GamePack.dylib` from the signed app bundle, validates title/ABI/registration symbols before use, hands the launch the pushed (or legacy bundled) ROM, documents the C ABI, and falls back to the statically linked single-game build. |
 | `DebugLaunch.swift` | Headless launch hooks: `-openAOTTitleID` (start a library game), `-gamesRoot` (scan a Simulator fixture folder instead of Documents/Games), `-openLayoutPage` / `-openLayoutEditor screen\|control` (layout screenshots; the `-landscape` variants force that direction). |
 | `LegacyGameData.swift` | One-time migration for apps updated from 0.1.x: cartridge lookup for the statically linked title, play times, and renaming ROM-named save folders to the title-id namespace. |

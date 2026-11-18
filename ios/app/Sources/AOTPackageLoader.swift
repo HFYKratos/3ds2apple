@@ -136,7 +136,8 @@ enum AOTAvailability: Equatable {
     case available(AOTCodeSource)
     case unavailable(AOTUnavailableReason)
 
-    /// Whether this build can start the game (green AOT badge on the home page).
+    /// Whether this build can start the game (launch gate; the home card shows no
+    /// AOT badge, the AOT state is in the log and the diagnostics).
     var isAvailable: Bool {
         if case .unavailable = self { return false }
         return true
@@ -208,7 +209,8 @@ final class AOTPackageLoader {
         return .unavailable(.noLinkedCode)
     }
 
-    /// Whether this build can start the game (green AOT badge).
+    /// Whether this build can start the game (launch gate; no AOT badge on the
+    /// home card).
     func isAOTAvailable(_ game: GameEntry) -> Bool {
         if case .unavailable = availability(for: game) { return false }
         return true

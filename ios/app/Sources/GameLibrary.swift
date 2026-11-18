@@ -341,8 +341,8 @@ final class GameLibrary: ObservableObject {
         entries.first { $0.lastPlayedAt != nil }
     }
 
-    /// Where the AOT code for this game comes from (home-page badge and launch
-    /// gate share it).
+    /// Where the AOT code for this game comes from (the launch gate and the
+    /// diagnostics/log share it; the home card shows no AOT badge).
     func aotAvailability(for entry: GameEntry) -> AOTAvailability {
         AOTPackageLoader.shared.availability(for: entry)
     }

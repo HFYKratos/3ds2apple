@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # library-selfcheck.sh - static checks for the 0.1.3 game-library actions:
-#   1) deleting a game from the Home page: the pushed game data (ROM,
+#   1) deleting a game from the Home page (long-press a card to open its context
+#      menu; the visible "..." menu is gone): the pushed game data (ROM,
 #      GameInfo.json, pushed cover), battery saves, instant save states, play
 #      history and per-game settings/cover are removed, the bundled AOT title is
 #      hidden until the launcher pushes the data again, the second confirmation
@@ -10,7 +11,9 @@
 #      Manager while the automatic rescans (launch / foreground / data change /
 #      pull-to-refresh) stay;
 #   3) the Settings -> More rows (Save Manager / Export logs / About) share one
-#      blue-accent label (0.1.3 item 4).
+#      blue-accent label (0.1.3 item 4);
+#   4) the library cards have no AOT badge any more (the AOT state stays in the
+#      log and the diagnostics export) and no visible "..." menu button.
 #
 # Runs on a plain Linux host: no Xcode, no ROM, no game data. It reads only the
 # tracked Swift sources, the two Localizable.strings tables and the app README.
@@ -68,8 +71,13 @@ check "the hidden count updates immediately after a delete" contains "${LIB}" 'h
 check "a pending launch of the deleted title is failed" contains "${LIB}" 'notifyWaiters(titleID: titleID, state: .invalid([.folderMissing(titleID)]))'
 
 section 'Delete game: Home page (HomeView.swift)'
-check "each card has a delete menu" contains "${HOME}" 'accessibilityIdentifier("game-delete-menu")'
-check "the menu item is labelled Delete Game" contains "${HOME}" 'Label("Delete Game", systemImage: "trash")'
+check "long-pressing a card opens its context menu" contains "${HOME}" '.contextMenu {'
+check "the context menu carries the Delete Game action" contains "${HOME}" 'Label(L10n.tr("Delete Game"), systemImage: "trash")'
+check "the delete action keeps its accessibility id" contains "${HOME}" 'accessibilityIdentifier("game-delete-action")'
+check "VoiceOver gets a Delete Game action without a long press" contains "${HOME}" '.accessibilityAction(named: Text(L10n.tr("Delete Game")))'
+check "the visible ellipsis menu button is gone" lacks "${HOME}" 'ellipsis.circle.fill'
+check "the old visible-menu accessibility id is gone" lacks "${HOME}" 'game-delete-menu'
+check "HomeView has no visible Menu container left" lacks "${HOME}" ' Menu {'
 check "the delete action is destructive" contains "${HOME}" 'Button(role: .destructive) {'
 check "deleting asks a second time" contains "${HOME}" '.alert(deleteConfirmationTitle, isPresented: $isDeleteConfirmationPresented)'
 check "the confirmation names the exact game" contains "${HOME}" 'Delete “%@”?'
@@ -80,6 +88,17 @@ check "a running runtime is released before the files are removed" contains "${H
 check "the result banner reports a deletion" contains "${HOME}" 'accessibilityIdentifier("game-deleted")'
 check "a failed deletion shows an error banner" contains "${HOME}" 'accessibilityIdentifier("game-delete-error")'
 check "the empty state explains hidden deleted games" contains "${HOME}" 'library.hiddenGameCount > 0'
+
+section 'AOT badge removed from the library cards'
+check "HomeView no longer renders an AOT badge" lacks "${HOME}" 'L10n.tr("AOT")'
+check "HomeView no longer renders a No AOT badge" lacks "${HOME}" 'L10n.tr("No AOT")'
+check "the green AOT badge state is gone" lacks "${HOME}" 'return (L10n.tr("AOT"), .green)'
+check "a ready game returns no badge" contains "${HOME}" 'private func cardState(_ entry: GameEntry) -> (label: String, tint: Color)?'
+check "the remaining attention badge is optional" contains "${HOME}" 'if let state = state {'
+check "the attention badges keep their labels" contains "${HOME}" 'L10n.tr("Data missing")'
+check "AOT availability stays in the library model" contains "${LIB}" 'func aotAvailability(for entry: GameEntry) -> AOTAvailability'
+check "diagnostics still export the AOT fields" contains "${APP}/Sources/DiagnosticsReport.swift" 'aot_diagnostics='
+check "About still shows the AOT state" contains "${APP}/Sources/AboutView.swift" 'aboutRow("AOT code", model.aotStatus.title)'
 
 section 'Refresh buttons removed, automatic refresh kept'
 check "HomeView has no refresh-button identifier" lacks "${HOME}" 'library-refresh'
@@ -147,6 +166,9 @@ check "moreRowLabel shares one explicit composition" contains "${SETTINGS}" 'HSt
 
 section 'Docs describe the delete semantics'
 check "README documents Deleting a game" contains "${README}" '### Deleting a game'
+check "README documents the long-press context menu" contains "${README}" 'Long-press a game'
+check "README has no card ... menu left" lacks "${README}" '`...` menu'
+check "README says a ready card has no AOT badge" contains "${README}" 'no AOT badge'
 check "README says the deletion cannot be undone" contains "${README}" 'cannot be undone'
 check "README lists the removed data folders" contains "${README}" 'Documents/data/<save namespace>/'
 check "README documents the removedGames.json record" contains "${README}" 'Documents/Library/removedGames.json'
