@@ -161,6 +161,32 @@ it from a source tree).
 
 ## Evidence / QA
 
+### launcher 0.1.3 build 1 (final 0.1.3 release, 2026-11-18)
+
+The 0.1.3 package on the macOS VM (macOS 26.7.3, Xcode 26.6, headless):
+
+- xcodebuild: BUILD SUCCEEDED (Release), 0 errors; universal binary
+  (x86_64 + arm64, 7,155,520-byte executable), bundle
+  com.kratos.3ds2apple.launcher, version 0.1.3 build 1.
+- self-check: **212/212 checks passed** (exit 0), including the shell-runtime
+  identity check: the pinned ROM-free shell template is exactly 6,100,961 bytes,
+  sha256 54d26a8f…, carries the pinned 4,822,128-byte MoltenVK 1.4.2 framework
+  (sha256 6cd58884…), keeps the Metal HUD + Documents file-sharing Info.plist keys
+  and reports CFBundleShortVersionString 0.1.3 / CFBundleVersion 1. The packaged
+  app, freshly extracted from the ZIP, also passed 212/212.
+- screenshots: 18 non-game PNGs, English + Simplified Chinese, dark + light
+  (Library SMDH icons/names/publisher; Deploy hardware line and GameInfo push
+  steps; Settings "Version 0.1.3 (1)" + data folder + compile hardware); the 4
+  Settings shots were regenerated for 0.1.3, the other 14 stayed byte-identical.
+- artifact: out/launchers/3ds2apple-launcher-0.1.3-macos-app.zip
+  (5,509,112 bytes, sha256
+  913b82c74db5889e04493ed60793c6d8afaa0164e220784e807ff5707e42484b), one .app
+  plus LICENSE/NOTICE/THIRD_PARTY.md at the ZIP root (19 entries, 13,996,574 bytes
+  uncompressed) including Contents/Resources/MoltenVK.framework. The launcher
+  embeds the MoltenVK framework, but the macOS package is not self-contained yet
+  (a checkout + Xcode + the built tools are required). Real iPhone acceptance is
+  still NOT done (issue #1).
+
 ### launcher 0.1.2 build 1 (final 0.1.2 release, 2026-11-17)
 
 The 0.1.2 package on the macOS VM (macOS 26.7.3, Xcode 26.6, headless):
