@@ -94,7 +94,7 @@ public sealed class ToolLocator
         return null;
     }
 
-    /// <summary>Official Impactor v2.7.2 portable executable, bundled unmodified.</summary>
+    /// <summary>Official Impactor v2.7.3 portable executable, bundled unmodified.</summary>
     public string? FindImpactor() => Find(
         ImpactorTool,
         "THREEDS2APPLE_IMPACTOR",

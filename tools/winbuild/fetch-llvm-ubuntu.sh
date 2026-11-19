@@ -2,6 +2,11 @@
 # fetch-llvm-ubuntu.sh - install an LLVM/Clang + LLD toolchain without root,
 # from Ubuntu's llvm-toolchain-21 packages (no apt install, no sudo).
 #
+# NOTE (0.1.4): this helper still pins Ubuntu 26.04's LLVM 21.1.8 packages, the
+# previous winbuild toolchain. The current pin is LLVM 23.1.6 (see
+# llvm-manifest.json): on Linux/WSL use the official Linux tarball or your
+# distro's LLVM 23 packages. This script is kept for reproducible older builds.
+#
 # Part of 3ds2apple (Apache-2.0). Prototype/CI helper for the Linux/WSL side of
 # the local GamePack cross-build (tools/winbuild/build-gamepack.sh). It exists
 # because the legal no-Apple-SDK path only needs an official LLVM release; on

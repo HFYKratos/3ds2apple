@@ -7,7 +7,7 @@ namespace ThreeDsTwoApple.Launcher.Core.Signing;
 public sealed record PinnedBinary(string FileName, string Sha256, long Bytes);
 
 /// <summary>
-/// The pinned official Impactor release (v2.7.2) and its CLI <c>plumesign</c>.
+/// The pinned official Impactor release (v2.7.3) and its CLI <c>plumesign</c>.
 /// </summary>
 /// <remarks>
 /// This is the only signing path on Windows. The two executables are copied
@@ -21,9 +21,9 @@ public sealed record PinnedBinary(string FileName, string Sha256, long Bytes);
 /// </remarks>
 public static class ImpactorPins
 {
-    public const string TestedVersion = "2.7.2";
-    public const string ReleasePageUrl = "https://github.com/claration/impactor/releases/tag/v2.7.2";
-    public const string DownloadBaseUrl = "https://github.com/claration/impactor/releases/download/v2.7.2/";
+    public const string TestedVersion = "2.7.3";
+    public const string ReleasePageUrl = "https://github.com/claration/impactor/releases/tag/v2.7.3";
+    public const string DownloadBaseUrl = "https://github.com/claration/impactor/releases/download/v2.7.3/";
     public const string BundleRelativeDirectory = "ThirdParty/Impactor";
     public const string ImpactorFileName = "Impactor-windows-x86_64-portable.exe";
     public const string PlumeSignFileName = "plumesign-windows-x86_64.exe";
@@ -33,13 +33,13 @@ public static class ImpactorPins
 
     public static readonly PinnedBinary Impactor = new(
         ImpactorFileName,
-        "f493cd99081370dca7c677676e119d8808418ebccab49e1f219744b3b71e88ef",
-        18_213_888);
+        "ebf939f8c8e74b4cd693d2f9871db4b8304f12396181fdd17404a127427b9923",
+        18_259_968);
 
     public static readonly PinnedBinary PlumeSign = new(
         PlumeSignFileName,
-        "b965e51a613341cb8c7e0f3594b24c09243a235b4187f669ea958a548e6a2fe0",
-        10_718_720);
+        "94664749fbbceb9a16bf89583f473dafb9b35c8d058a9d8665dc963b3453c6fc",
+        10_759_168);
 
     public static IReadOnlyList<PinnedBinary> All { get; } = new[] { Impactor, PlumeSign };
 

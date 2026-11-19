@@ -1,44 +1,63 @@
 {
   "schema": "winbuild-llvm-manifest/1",
   "purpose": "Official open-source LLVM/Clang + LLD toolchain for locally cross-building 3ds2apple GamePack arm64/x86_64 Mach-O dylibs on Windows/Linux without Apple SDK files.",
-  "documented": "2026-11-14",
+  "documented": "2026-11-19",
   "pinned_llvm_release": {
-    "version": "21.1.8",
-    "tag": "llvmorg-21.1.8",
-    "published_at": "2025-12-16T10:23:31Z",
-    "release_page": "https://github.com/llvm/llvm-project/releases/tag/llvmorg-21.1.8",
+    "version": "23.1.6",
+    "tag": "llvmorg-23.1.6",
+    "published_at": "2026-11-17T16:32:45Z",
+    "release_page": "https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.6",
     "license": {
       "spdx": "Apache-2.0 WITH LLVM-exception",
       "license_url": "https://llvm.org/LICENSE.txt",
       "notes": "LLVM release binaries, clang, ld64.lld, llvm-ar, llvm-nm and llvm-objdump are redistributable under the LLVM licence with the licence text and copyright notices; keep the official files unmodified and pin SHA-256 (same policy as third_party/impactor)."
     },
+    "verification": {
+      "verified_on": "2026-11-19",
+      "method": "Asset sizes + SHA-256 from the GitHub REST API release metadata for llvmorg-23.1.6. The official Linux-X64 .tar.zst was downloaded and its SHA-256 matched this manifest, then tools/winbuild/build-gamepack.sh --selfcheck built and validated stand-in GamePacks for the arm64 device and x86_64 simulator targets with clang/ld64.lld 23.1.6 on WSL2 Ubuntu 26.04 (see tools/winbuild/README.md). The Windows MSI digests come from the same GitHub API metadata; executing the Windows payload still needs a Windows host.",
+      "release_notes_note": "LLVM 23.x Windows releases are published as MSI installers (x86_64 and woa64) and no longer as the NSIS .exe used by 21.1.8; binaries now carry Sigstore/SLSA provenance bundles named *.jsonl instead of a detached *.sig (only source tarballs still ship .sig)."
+    },
     "assets": [
       {
         "platform": "windows-x86_64",
-        "file": "LLVM-21.1.8-win64.exe",
-        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/LLVM-21.1.8-win64.exe",
-        "bytes": 374129373,
-        "sha256": "7a5386c26497db1691f320121e5b113364dd0274b98e55f15f4dbc00c0450113",
-        "signature": "https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/LLVM-21.1.8-win64.exe.sig",
-        "installer": "NSIS; default install C:\\Program Files\\LLVM; winget id LLVM.LLVM",
-        "extracted_bin_dir": "C:\\Program Files\\LLVM\\bin"
+        "file": "LLVM-23.1.6-win64.msi",
+        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.6/LLVM-23.1.6-win64.msi",
+        "bytes": 639686385,
+        "sha256": "81f7eb520ca698eb2d5cd8bc4b8f24f7add9ed66ed40a6f722a6e6f060737c00",
+        "attestation": "https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.6/LLVM-23.1.6-win64.msi.jsonl",
+        "attestation_bytes": 11359,
+        "attestation_sha256": "e066c24b6ae1dcc90f40fc26c187cc7ef28d10a40da8e3d063c81af431b82266",
+        "installer": "MSI; default install C:\\\\Program Files\\\\LLVM; winget id LLVM.LLVM; silent: msiexec /i LLVM-23.1.6-win64.msi /qn",
+        "extracted_bin_dir": "C:\\\\Program Files\\\\LLVM\\\\bin"
       },
       {
-        "platform": "windows-i686",
-        "file": "LLVM-21.1.8-win32.exe",
-        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/LLVM-21.1.8-win32.exe",
-        "bytes": 349589289,
-        "sha256": "0492c5c292e515ebbbc2533671e54c5895fe209e534812313f64257407233181",
-        "note": "32-bit x86 Windows only; not needed for a 64-bit launcher"
+        "platform": "windows-arm64",
+        "file": "LLVM-23.1.6-woa64.msi",
+        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.6/LLVM-23.1.6-woa64.msi",
+        "bytes": 577945755,
+        "sha256": "18b5b93305262760e107178de218f17fdd487642d34e1502e3a6dc8231e5a50d",
+        "attestation": "https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.6/LLVM-23.1.6-woa64.msi.jsonl",
+        "attestation_bytes": 11108,
+        "attestation_sha256": "f44694a713f2acc75f0a1aea37933d3bd02857584086b142ae94ef055ffeee60",
+        "note": "Windows on ARM64 only; not needed for a 64-bit x86_64 launcher"
       },
       {
         "platform": "linux-x86_64",
-        "file": "LLVM-21.1.8-Linux-X64.tar.xz",
-        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/LLVM-21.1.8-Linux-X64.tar.xz",
-        "bytes": 2019005384,
-        "sha256": "b3b7f2801d15d50736acea3c73982994d025b01c2f035b91ae3b49d1b575732b",
-        "install": "tar -xf ... -C /opt/llvm-21.1.8; export WINBUILD_LLVM_DIR=/opt/llvm-21.1.8/bin",
-        "note": "Checked 2026-11-14 against the GitHub release API digest field (not downloaded in full on the prototype host)."
+        "file": "LLVM-23.1.6-Linux-X64.tar.zst",
+        "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.6/LLVM-23.1.6-Linux-X64.tar.zst",
+        "bytes": 1198414275,
+        "sha256": "59e14234f145927f982b50627e8bafaf2fca50151b7d973d6a0b40796ddcfe9a",
+        "attestation": "https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.6/LLVM-23.1.6-Linux-X64.tar.zst.jsonl",
+        "attestation_bytes": 11319,
+        "attestation_sha256": "de013ddf198c462b1ef8c15b7cf19b766f92488d5300e50e9fafa9bfd6168761",
+        "alternate": {
+          "file": "LLVM-23.1.6-Linux-X64.tar.xz",
+          "bytes": 2014723508,
+          "sha256": "bd4d1c434ff69ef06d19e7934c04708da677e5f2eb51f5bcf052ab91818f0094",
+          "note": "Same payload as the .tar.zst, larger download; use whichever your host decompresses."
+        },
+        "install": "zstd -d LLVM-23.1.6-Linux-X64.tar.zst -c | tar -xf - -C /opt/llvm-23.1.6; export WINBUILD_LLVM_DIR=/opt/llvm-23.1.6/bin",
+        "note": "Downloaded and SHA-256-verified on 2026-11-19; --selfcheck passed (see README)."
       }
     ],
     "required_tools": [
@@ -48,7 +67,13 @@
       "llvm-nm",
       "llvm-objdump",
       "llvm-readobj"
-    ],
+    ]
+  },
+  "previous_pin": {
+    "version": "21.1.8",
+    "tag": "llvmorg-21.1.8",
+    "note": "Previous winbuild pin (0.1.0-0.1.3). Kept for reproducible older builds; the current pin is LLVM 23.1.6 above. The Ubuntu packages below were the no-root distro path for 21.1.8 and have not been re-checked for 23.1.6 (Ubuntu 26.04 carries llvm-toolchain-21); on Linux/WSL use the official 23.1.6 tarball or a distro's LLVM 23 packages.",
+    "windows_installer_note": "21.1.8 shipped as NSIS LLVM-21.1.8-win64.exe (374,129,373 B, sha256 7a5386c26497db1691f320121e5b113364dd0274b98e55f15f4dbc00c0450113).",
     "ubuntu_packages_prototype": {
       "distro": "Ubuntu 26.04 (resolute), llvm-toolchain-21 21.1.8-6ubuntu1",
       "install": "tools/winbuild/fetch-llvm-ubuntu.sh (apt-get download + dpkg-deb -x, no root; every .deb verified against apt's published SHA512)",
@@ -126,6 +151,6 @@
   "validation": {
     "script": "tools/winbuild/check-gamepack.py",
     "checks": "thin 64-bit Mach-O dylib; arch matches target; LC_BUILD_VERSION platform ios/iossimulator minos >= 16.0; install name @rpath/GamePack-<TITLE>.dylib; exports zk_gamepack_title_id/abi_version/register + the seven recomp tables; keeps zk_register_gamepack undefined; defines no Zakuro runtime symbol; reports unexpected undefined imports",
-    "evidence": "see tools/winbuild/README.md (Phase-2 prototype evidence)"
+    "evidence": "see tools/winbuild/README.md (Phase-2 prototype evidence and the 0.1.4 LLVM 23.1.6 re-verification)"
   }
 }

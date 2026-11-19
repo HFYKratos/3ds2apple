@@ -100,7 +100,7 @@ implemented by the runtime in `ios/zakuro-ios`; a pack registers itself with
 The shipped product is launcher-first: the Windows launcher
 ([launcher/windows/](../launcher/windows/)) imports the ROM with
 `3ds2apple-pack`, compiles the GamePack locally on the PC (3dsrecomp + the
-official LLVM 21.1.8 clang/ld64.lld toolchain plus the hand-written Darwin
+official LLVM 23.1.6 clang/ld64.lld toolchain plus the hand-written Darwin
 stubs in [tools/winbuild/](../tools/winbuild/)), composes the ROM-free IPA and
 pushes only `GameRom.cci` + optional `cover.png` + `GameInfo.json` to the phone. The macOS launcher
 compiles with Apple's toolchain on the Mac. `3ds2apple-pack` stays a pure

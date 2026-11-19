@@ -15,17 +15,17 @@ pinned commit 5171e34e3a236842af1160a84d955d037ddca3af), and S2Arm
 (Apache-2.0) as the API-usage reference for the device bridge. See
 THIRD_PARTY.md for the full list and licenses.
 
-The Windows launcher bundles the official Impactor v2.7.2 and plumesign release
+The Windows launcher bundles the official Impactor v2.7.3 and plumesign release
 files (unmodified) so the user can sign the base shell IPA with their own Apple ID;
 the macOS launcher signs through Xcode and does not bundle Impactor.
 Impactor is MIT (Copyright 2025 Samara M) and embeds apple-codesign 0.29.0 under
 MPL-2.0. The binaries are downloaded from the official GitHub release
-(https://github.com/claration/impactor/releases/tag/v2.7.2) at launcher packaging
+(https://github.com/claration/impactor/releases/tag/v2.7.3) at launcher packaging
 time, verified against pinned SHA-256 values, and are not committed to this
 repository; the MIT and MPL-2.0 license texts and source links are kept in
 licenses/impactor/. 3ds2apple does not implement Apple ID authentication
 and never receives or logs the user's password or session tokens. plumesign is the
-command-line signer from the same official Impactor v2.7.2 release; it is shipped
+command-line signer from the same official Impactor v2.7.3 release; it is shipped
 unmodified under the same upstream MIT licence and its SHA-256 is pinned as well.
 
 The iOS shell template and the macOS launcher bundle the unmodified MoltenVK 1.4.2
@@ -37,7 +37,7 @@ every release package from 0.1.1 on. See "License texts in the release packages"
 in THIRD_PARTY.md.
 
 The Windows single-file launcher is a self-contained .NET 10 application (MIT) using
-the Avalonia 12.1.5 UI framework (MIT), built only from the sources in this
+the Avalonia 12.1.6 UI framework (MIT), built only from the sources in this
 repository. The launcher embeds the project LICENSE/NOTICE/THIRD_PARTY texts and the
 relevant third-party licence files in its payload and extracts them on first run; the
 release zip also carries the three project texts at its root.
@@ -47,7 +47,7 @@ pushed by the user from their own machine to their own device; ROMs, IPAs and
 generated C code stay out of git.
 The Windows/Linux local-build path (tools/winbuild, the Windows launcher's only
 GamePack build path since 0.1.0) uses the official open-source LLVM/Clang/LLD
-21.1.8 release, licensed under the Apache License v2.0 WITH LLVM-exception
+23.1.6 release, licensed under the Apache License v2.0 WITH LLVM-exception
 (https://llvm.org/LICENSE.txt). No Apple
 SDK, iPhoneOS stub library or Xcode component is used, copied or redistributed by
 that path; it links the GamePack with -undefined dynamic_lookup so libSystem and

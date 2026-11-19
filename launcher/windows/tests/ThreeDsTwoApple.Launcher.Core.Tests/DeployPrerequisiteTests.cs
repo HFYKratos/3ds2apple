@@ -20,7 +20,7 @@ public sealed class DeployPrerequisiteTests
         bool shellManifest = true,
         bool shellVerified = true) => new(
         SigningToolsPinned: signingPinned,
-        SigningDetail: "Impactor v2.7.2 + plumesign",
+        SigningDetail: "Impactor v2.7.3 + plumesign",
         LocalToolchainResolved: localResolved,
         MissingLocalTools: missingLocalTools ?? Array.Empty<string>(),
         LocalToolchainDetail: "3dsrecomp · LLVM clang/llvm-ar/ld64.lld",

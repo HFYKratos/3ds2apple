@@ -77,7 +77,7 @@ travels as an internal devpush/plumesign command argument.
    values stay in the verification/log output and are not shown as raw digests in the UI.
    Install/push actions stay on the Deploy page.
 2. **Deploy**: the page opens with a prerequisite panel — five green/red status lights
-   (iPhone/iPad connected over USB, signing tools pinned to the Impactor v2.7.2 SHA-256,
+   (iPhone/iPad connected over USB, signing tools pinned to the Impactor v2.7.3 SHA-256,
    local build toolchain, devpush device bridge, shell template) with one short fix hint
    on every red row; **Refresh status** re-probes everything (opening Deploy does too) and
    **Open Impactor** covers the Apple-ID login the launcher cannot detect. Then tick one
@@ -88,7 +88,7 @@ travels as an internal devpush/plumesign command argument.
      and there is no silent fallback — a missing toolchain is one actionable error.
    - compose one ROM-free app IPA from the pinned shell template + all selected packs +
      a schema-2 GameCatalog.json, and **verify the packs + catalogue before signing**.
-   - sign and install the whole IPA with the bundled official Impactor v2.7.2 + plumesign
+   - sign and install the whole IPA with the bundled official Impactor v2.7.3 + plumesign
      (unmodified, SHA-256 pinned, MIT + MPL-2.0 licences preserved).
    - push each selected GameRom.cci + optional cover.png + GameInfo.json (last) into
      Documents/Games/<TITLEID>/ via the device bridge (devpush contract v1) using the
@@ -128,7 +128,7 @@ older than 0.1.2 have no marker yet: they are rebuilt once on the next Deploy or
 
 ## Stack
 
-- .NET 10 + **Avalonia 12.1.5** desktop UI (same stack family S2Arm's Windows
+- .NET 10 + **Avalonia 12.1.6** desktop UI (same stack family S2Arm's Windows
   launcher uses; our code is original — S2Arm is an Apache-2.0 reference only).
 - Projects: ThreeDsTwoApple.Launcher.Core (no UI: tool clients, contracts, batch
   Deploy pipeline + composed-IPA verifier, IPA composition, signing, push, localization
@@ -178,7 +178,7 @@ older than 0.1.2 have no marker yet: they are rebuilt once on the next Deploy or
       shell/                            shell template IPA placement + manifest example (unchanged):
                                         the template is ROM-free and pinned; packs are injected at install time
       docs/ui/                          rendered UI evidence (English + 简体中文 screenshots)
-      tools/                            fetch-impactor.ps1/.sh (verified official v2.7.2),
+      tools/                            fetch-impactor.ps1/.sh (verified official v2.7.3),
                                         prepare-dist.ps1 (multi-file dev package),
                                         prepare-dist-singlefile.sh/.ps1 (exe + licence-text ZIP)
       .gitignore                        excludes bin/obj and downloaded third-party binaries
@@ -197,7 +197,7 @@ unlocked during install/push; the user's own legally acquired decrypted ROMs.
 Developer: .NET 10 SDK (NuGet once); optional Rust for 3ds2apple-pack /
 devpush; PowerShell 5.1+ for the packaging scripts.
 
-Real AOT builds run locally: 3dsrecomp + the official LLVM 21.1.8 toolchain and
+Real AOT builds run locally: 3dsrecomp + the official LLVM 23.1.6 toolchain and
 the hand-written Darwin stubs in tools/winbuild (see tools/winbuild/README.md). No Mac,
 no Xcode and no Build Agent are required; the old remote macOS Build Agent stack
 was deleted on 2026-11-16.
@@ -227,7 +227,7 @@ errors), **125/125 tests passed** (3 consecutive runs). The final single-file pa
 `3ds2apple-launcher.exe` (156,653,598 B, SHA-256
 `42568da15a6de4856b32e8e363c9410240de6f67abd023435c1e1f5360d74207`). It embeds the
 0.2.2/build-10 shell template (incl. MoltenVK framework), pinned official Impactor
-v2.7.2/plumesign, the Bin tool CLIs, 3dsrecomp.exe and the official LLVM 21.1.8 payload
+v2.7.3/plumesign, the Bin tool CLIs, 3dsrecomp.exe and the official LLVM 23.1.6 payload
 (326 embedded files, staged explicitly with `THREEDS2APPLE_LLVM_DIR`). Its clean-folder `--self-test` PASSes on the Linux/WSL host
 (first-run extraction exercised with an isolated HOME) and on real Windows 11 (all checks
 PASS, no warnings, shell template v0.2.2). Real Windows window captures in English and
@@ -236,7 +236,7 @@ Simplified Chinese, plus a headless render of the red not-ready status light, ar
 
 ## Assemble a distribution (release step)
 
-    powershell -ExecutionPolicy Bypass -File tools/fetch-impactor.ps1   # official v2.7.2, verified
+    powershell -ExecutionPolicy Bypass -File tools/fetch-impactor.ps1   # official v2.7.3, verified
     powershell -ExecutionPolicy Bypass -File tools/prepare-dist.ps1 -Version 0.2.2
     # -SkipShell builds a preview package without the shell template IPA
 

@@ -14,7 +14,7 @@ macOS/Xcode path yet. It replaces the iPhoneOS SDK with hand-written ISO C stub
 headers and `-undefined dynamic_lookup`, and Apple's `ld64` with LLVM's
 `ld64.lld`. No Apple file is used, copied or redistributed.
 
-## Result at a glance (measured on the prototype host, 2026-11-14)
+## Result at a glance (0.1.x prototype pin, measured on the prototype host, 2026-11-14)
 
 Host: WSL2 Ubuntu 26.04 x86_64, 16 logical CPUs, LLVM 21.1.8 from Ubuntu debs
 (clang + ld64.lld + llvm-ar + llvm-nm + llvm-objdump), no Apple SDK, no Xcode.
@@ -29,6 +29,31 @@ Input: the real 3dsrecomp output of a retail title (`build/game/retail-title`, 6
 
 Full build wall time: **9 min 10 s** with `--jobs 16` (135 min 51 s user CPU; the
 compile is CPU-bound, about 6 s of CPU per 1.1-1.3 MB generated file).
+
+### LLVM 23.1.6 pin re-verification (0.1.4, 2026-11-19)
+
+The 0.1.4 winbuild pin moved from LLVM 21.1.8 to **23.1.6** (`llvmorg-23.1.6`,
+released 2026-11-17), the current upstream release. The official
+`LLVM-23.1.6-Linux-X64.tar.zst` was downloaded from the GitHub release, its
+SHA-256 was checked against `llvm-manifest.json`
+(1,198,414,275 B / `59e14234f145927f982b50627e8bafaf2fca50151b7d973d6a0b40796ddcfe9a`),
+and the toolchain selfcheck was rerun on the same WSL2 Ubuntu 26.04 host:
+
+* `clang --version` -> **clang version 23.1.6**; `ld64.lld --version` -> **LLD 23.1.6**.
+* `clang -print-resource-dir` -> `…/lib/clang/23` (the script discovers it; no path is hard-coded).
+* `tools/winbuild/build-gamepack.sh --selfcheck` -> **30 checks, 0 failures** (arm64 device
+  + x86_64 simulator: compile, archive, link with `ld64.lld`, Mach-O validation,
+  ABI exports, undefined `zk_register_gamepack`).
+* A minimal C file also compiled and linked directly to an arm64 `platform ios`
+  Mach-O dylib with `clang -target arm64-apple-ios16.0 -nostdinc` + `ld64.lld`.
+* Windows install moved from the NSIS `.exe` to the MSI
+  (`LLVM-23.1.6-win64.msi`, 639,686,385 B,
+  SHA-256 `81f7eb520ca698eb2d5cd8bc4b8f24f7add9ed66ed40a6f722a6e6f060737c00`, plus a
+  Sigstore `.jsonl` attestation); the staged payload layout
+  (`Bin/llvm/bin`, `Bin/llvm/lib/clang/23/include`) is unchanged.
+* The Windows payload itself was not re-run here (no Windows host in this change):
+  the MSI digests come from the GitHub API metadata and the Windows real-machine
+  `--self-test` remains the acceptance step.
 
 ### Compared with the Xcode-built 0.2.0-beta1 pack (same game)
 
@@ -75,10 +100,15 @@ user chooses the macOS path, and the user's own ROM.
 ### Linux / WSL2 (what was tested)
 
 ```sh
-# 1. toolchain: official LLVM 21.1.8 (release pins + sha256 in llvm-manifest.json).
-#    No root needed on Ubuntu: unpack the distro packages into a private prefix.
-tools/winbuild/fetch-llvm-ubuntu.sh --prefix "$HOME/.local/llvm-21"
-export WINBUILD_LLVM_DIR="$HOME/.local/llvm-21/usr/lib/llvm-21/bin"
+# 1. toolchain: official LLVM 23.1.6 (release pins + sha256 in llvm-manifest.json).
+#    Download the pinned Linux tarball, verify SHA-256, unpack anywhere (no root).
+curl -fL -o /tmp/llvm-23.1.6.tar.zst \
+  https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.6/LLVM-23.1.6-Linux-X64.tar.zst
+echo "59e14234f145927f982b50627e8bafaf2fca50151b7d973d6a0b40796ddcfe9a  /tmp/llvm-23.1.6.tar.zst" | sha256sum -c -
+mkdir -p "$HOME/.local/llvm-23.1.6"
+zstd -d -c /tmp/llvm-23.1.6.tar.zst | tar -xf - -C "$HOME/.local/llvm-23.1.6" --strip-components=1
+export WINBUILD_LLVM_DIR="$HOME/.local/llvm-23.1.6/bin"
+# Legacy: fetch-llvm-ubuntu.sh still installs the previous 21.1.8 distro packages.
 
 # 2. prove the toolchain works in 10 seconds on a fresh machine:
 tools/winbuild/build-gamepack.sh --selfcheck
@@ -101,9 +131,9 @@ for `--out`, `--jobs`, `--target`, `--llvm-dir`, `--pack-bin`, `--dry-run`,
 
 ### Windows 10/11
 
-1. Install official LLVM 21.1.8 (SHA-256 pinned in `llvm-manifest.json`):
-   `winget install LLVM.LLVM` or the NSIS installer
-   `LLVM-21.1.8-win64.exe` -> `C:\Program Files\LLVM\bin`.
+1. Install official LLVM 23.1.6 (SHA-256 pinned in `llvm-manifest.json`):
+   `winget install LLVM.LLVM` or the MSI installer
+   `LLVM-23.1.6-win64.msi` -> `C:\Program Files\LLVM\bin`.
    No Visual Studio, Windows SDK, iTunes or Apple files are needed.
 2. Get a POSIX shell for the script: Git for Windows (its bundled MinGit/Bash
    is enough; the launcher already bundles one) or use WSL2 (tested path).
@@ -195,14 +225,14 @@ with `Process.Start` and pipe logs. `<LLVM>` = `C:\Program Files\LLVM\bin`.
 rem 1. compile each generated .c (parallel across cores)
 %LLVM%\clang.exe -target arm64-apple-ios16.0 -O2 -ffp-contract=off -fno-math-errno -w ^
   -fPIC -fvisibility=hidden -nostdinc ^
-  -isystem "%LLVM%\..\lib\clang\21\include" ^
+  -isystem "%LLVM%\..\lib\clang\23\include" ^
   -isystem "<repo>\tools\winbuild\darwin-stubs\include" ^
   -I "<code-dir>" -c "<code-dir>\codeNNN.c" -o "<obj-dir>\codeNNN.o"
 
 rem 2. archive + compile the shim (not hidden: it exports the GamePack ABI)
 %LLVM%\llvm-ar.exe rcs "<obj-dir>\librecomp.a" "<obj-dir>\*.o"
 %LLVM%\clang.exe -target arm64-apple-ios16.0 -O2 -fPIC -nostdinc ^
-  -isystem "%LLVM%\..\lib\clang\21\include" ^
+  -isystem "%LLVM%\..\lib\clang\23\include" ^
   -isystem "<repo>\tools\winbuild\darwin-stubs\include" ^
   -I "<repo>\ios\zakuro-ios\include" -DZK_GAMEPACK_TITLE_ID=0x0004000000055E00ULL ^
   -c "<repo>\ios\zakuro-ios\gamepack\zk_gamepack_shim.c" -o "<work>\zk_gamepack_shim.o"
@@ -256,7 +286,7 @@ back to llvm-nm/llvm-objdump checks). A failing check fails the build.
   know the phone's SDK); dyld only checks `minos`/platform at load. `arm64e` is
   not emitted (device packs are plain `arm64`).
 * **Windows-native run:** the Windows launcher compiled GamePacks with this path on
-  Windows 11 for 0.1.0 (same official LLVM 21.1.8 release, same commands as below).
+  Windows 11 for 0.1.0 (the LLVM 21.1.8 release that was current then; the commands are the same).
   The standalone `--selfcheck` on a clean Windows machine still needs only the LLVM
   installer and no Apple SDK, and is worth running for new machines.
 * **Runtime symbol availability:** a symbol only resolved at `dlopen` because a
@@ -283,10 +313,10 @@ back to llvm-nm/llvm-objdump checks). A failing check fails the build.
 | `build-gamepack.sh` | main cross-build driver (compile, archive, link, validate, optional `--pack-bin` record) |
 | `check-gamepack.py` | pure-Python Mach-O/GamePack ABI validator + JSON report |
 | `darwin-stubs/include/*.h` | hand-written ISO C headers replacing the SDK headers (see its README) |
-| `fetch-llvm-ubuntu.sh` | no-root LLVM install for Ubuntu/WSL from apt packages, SHA512-verified |
+| `fetch-llvm-ubuntu.sh` | legacy no-root LLVM 21.1.8 install for Ubuntu/WSL from apt packages, SHA512-verified (previous pin) |
 | `darwin-cc.sh` | `$CC` wrapper that turns a host tool's C compile into an arm64-apple-ios compile with the darwin stubs (no Apple SDK) |
 | `recomp-port.sh` | ROM -> generated C -> arm64 objects on Linux/WSL/macOS via 3dsrecomp + `darwin-cc.sh` (the host half of the local build) |
-| `llvm-manifest.json` | pinned LLVM 21.1.8 release URLs + SHA-256 + licence facts + tool requirements |
+| `llvm-manifest.json` | pinned LLVM 23.1.6 release URLs + SHA-256 + attestation + licence facts + tool requirements |
 
 ## Launcher integration (shipped in 0.1.0)
 
@@ -303,9 +333,9 @@ and the preview providers are gone, and there is no feature flag to turn on):
 3. Mach-O validation (thin arm64 dylib) and `3ds2apple-pack packages record` so
    `GameInfo.json` keeps its single schema writer.
 
-The bundled official LLVM 21.1.8 payload is what makes this work without a Mac:
+The bundled official LLVM 23.1.6 payload is what makes this work without a Mac:
 it is staged into the launcher's single-file payload, verified against the pins
 in `llvm-manifest.json`, and shown as a readiness row. Tests: command
 construction/environment, missing-tool errors, recompile/link failures, invalid
 Mach-O rejection (`LocalWinbuildPackProviderTests`; the full launcher suite is
-147 tests). See [launcher/windows/README.md](../../launcher/windows/README.md).
+212 tests). See [launcher/windows/README.md](../../launcher/windows/README.md).

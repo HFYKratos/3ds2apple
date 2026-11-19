@@ -14,7 +14,7 @@
   platform packages and are never separate Release assets (see CONTRIBUTING.md#release-policy).
   The clean-run-win folder still holds only the exe.
 
-  The official LLVM 21.1.8 toolchain is staged under Bin/llvm when present
+  The official LLVM 23.1.6 toolchain is staged under Bin/llvm when present
   (THREEDS2APPLE_LLVM_DIR, default <repo>/build/win-toolchain/llvm). It is never faked: without
   it the packaged launcher's Deploy page shows one actionable local-toolchain error + Retry.
 
@@ -95,7 +95,7 @@ if (Test-Path -LiteralPath $recomp) {
     Write-Warning 'Bin/3dsrecomp.exe is missing; Deploy will show one actionable local-toolchain error'
 }
 
-# 3c. Optional official LLVM 21.1.8 toolchain (real local GamePack compile).
+# 3c. Optional official LLVM 23.1.6 toolchain (real local GamePack compile).
 $llvmSource = $env:THREEDS2APPLE_LLVM_DIR
 if ([string]::IsNullOrWhiteSpace($llvmSource)) { $llvmSource = Join-Path $repoRoot 'build/win-toolchain/llvm' }
 $llvmStage = Join-Path $windowsRoot 'Bin/llvm'
@@ -122,7 +122,7 @@ if ((Test-Path -LiteralPath (Join-Path $llvmSource 'bin/clang.exe')) -and (Test-
     }
     Write-Host "[single] LLVM staged under Bin/llvm"
 } else {
-    Write-Warning "official LLVM 21.1.8 not found at $llvmSource; packaging without it (Deploy shows one actionable local-toolchain error)"
+    Write-Warning "official LLVM 23.1.6 not found at $llvmSource; packaging without it (Deploy shows one actionable local-toolchain error)"
 }
 
 # 4. Single-file self-contained publish (Release embeds the payload).

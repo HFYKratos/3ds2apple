@@ -381,9 +381,9 @@ public sealed class ImpactorBundleTests
     [Fact]
     public void PinsMatchTheOfficialRelease()
     {
-        Assert.Equal("2.7.2", ImpactorPins.TestedVersion);
-        Assert.Equal("f493cd99081370dca7c677676e119d8808418ebccab49e1f219744b3b71e88ef", ImpactorPins.Impactor.Sha256);
-        Assert.Equal("b965e51a613341cb8c7e0f3594b24c09243a235b4187f669ea958a548e6a2fe0", ImpactorPins.PlumeSign.Sha256);
+        Assert.Equal("2.7.3", ImpactorPins.TestedVersion);
+        Assert.Equal("ebf939f8c8e74b4cd693d2f9871db4b8304f12396181fdd17404a127427b9923", ImpactorPins.Impactor.Sha256);
+        Assert.Equal("94664749fbbceb9a16bf89583f473dafb9b35c8d058a9d8665dc963b3453c6fc", ImpactorPins.PlumeSign.Sha256);
         Assert.Contains("github.com/claration/impactor", ImpactorPins.ReleasePageUrl);
     }
 

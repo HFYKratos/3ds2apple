@@ -123,7 +123,7 @@ if (Test-Path -LiteralPath $readme) { Copy-Item -Force -LiteralPath $readme -Des
 @"
 3ds2apple launcher (Windows) $Version
 Built: $(Get-Date -Format o)
-Pinned Impactor: v2.7.2 (see ThirdParty/Impactor/PINS.json)
+Pinned Impactor: v2.7.3 (see ThirdParty/Impactor/PINS.json)
 Base shell: $(if (Test-Path -LiteralPath (Join-Path $shellTarget 'manifest.json')) { 'bundled' } else { 'NOT bundled (preview package)' })
 Notes: only use ROMs you own; the package contains no game data, no keys and no Apple credentials.
 "@ | Set-Content -Encoding UTF8 (Join-Path $outputPath 'build-info.txt')

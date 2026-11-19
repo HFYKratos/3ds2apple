@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetch and verify the official Impactor v2.7.2 + plumesign Windows binaries.
+# Fetch and verify the official Impactor v2.7.3 + plumesign Windows binaries.
 #
 # Modes:
 #   tools/fetch-impactor.sh                 fetch (if missing) and verify into vendor/impactor
@@ -19,7 +19,7 @@ if [[ $# -ge 1 ]]; then
     --print-pins) MODE="print" ;;
     --verify) MODE="verify"; DEST="$2" ;;
     --fetch) MODE="fetch" ;;
-    *) echo "usage: $0 [--print-pins | --verify DIR]" >&2; exit 2 ;;
+    *) MODE="fetch"; DEST="$1" ;;  # positional destination directory (prepare-dist-singlefile.sh)
   esac
 fi
 
@@ -83,4 +83,4 @@ if [[ "$failures" -gt 0 ]]; then
   echo "Impactor bundle is NOT ready ($failures problem(s))." >&2
   exit 1
 fi
-echo "Impactor v2.7.2 + plumesign verified (SHA-256 pinned, official unmodified release)."
+echo "Impactor v2.7.3 + plumesign verified (SHA-256 pinned, official unmodified release)."

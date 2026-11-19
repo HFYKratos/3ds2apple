@@ -1,4 +1,4 @@
-Impactor v2.7.2 + plumesign — third-party signing tool bundled with the 3ds2apple launcher for Windows
+Impactor v2.7.3 + plumesign — third-party signing tool bundled with the 3ds2apple launcher for Windows
 =============================================================================================
 
 What these files are
@@ -11,7 +11,7 @@ There are two executable files in this directory when the launcher is bundled:
 
 They are the unmodified official files from the GitHub release:
 
-  https://github.com/claration/impactor/releases/tag/v2.7.2
+  https://github.com/claration/impactor/releases/tag/v2.7.3
 
 Neither file is rebuilt, patched, renamed, re-signed or distributed by 3ds2apple as our own
 work. The SHA-256 values are pinned in PINS.json and in the launcher (Signing/ImpactorPins.cs).
@@ -26,7 +26,7 @@ Impactor is MIT-licensed: see LICENSE-Impactor-MIT.txt (Copyright 2025 Samara M)
 Impactor embeds the apple-codesign 0.29.0 library, which is MPL-2.0: see
 LICENSE-apple-codesign-MPL-2.0.txt. Its source is available here:
 
-  https://github.com/claration/impactor/tree/v2.7.2/3rdparty/apple-codesign-0.29.0
+  https://github.com/claration/impactor/tree/v2.7.3/3rdparty/apple-codesign-0.29.0
 
 The launcher does not modify or statically link either project; it only starts the official
 binaries. Under MPL-2.0 the source-offer obligation for the embedded library is satisfied by the

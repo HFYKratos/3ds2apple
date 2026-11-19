@@ -29,7 +29,7 @@
     <!-- v2 local build payload: 3dsrecomp.exe plus the hand-written Darwin stubs, the
          pack shim source and the zakuro GamePack header, so a packaged launcher can
          compile GamePacks on the user's PC with no Mac and no Apple SDK. The official
-         LLVM 21.1.8 tools are optional (staged under Bin/llvm by
+         LLVM 23.1.6 tools are optional (staged under Bin/llvm by
          tools/prepare-dist-singlefile.sh); when absent the Deploy page shows one
          actionable local-toolchain error instead of a silent fallback. -->
     <EmbeddedResource Include="$(LauncherWindowsRoot)/Bin/3dsrecomp.exe" LogicalName="Payload/Bin/3dsrecomp.exe" Condition="Exists('$(LauncherWindowsRoot)/Bin/3dsrecomp.exe')" />

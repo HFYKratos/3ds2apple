@@ -27,7 +27,7 @@ public sealed record PlumeSignResult(
     SigningError? Error);
 
 /// <summary>
-/// Runs the official <c>plumesign</c> CLI (same release as Impactor v2.7.2,
+/// Runs the official <c>plumesign</c> CLI (same release as Impactor v2.7.3,
 /// SHA-256 pinned, unmodified). Account storage and Apple ID authentication stay
 /// inside Impactor/plumesign; this class only builds argv and maps failures.
 /// </summary>

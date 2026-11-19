@@ -179,7 +179,7 @@ find_llvm_dir() {
     "${PROGRAMFILES:-}/LLVM/bin" \
     "${ProgramFiles:-}/LLVM/bin" \
     "${LOCALAPPDATA:-}/Programs/LLVM/bin" \
-    "/usr/lib/llvm-21/bin" /usr/lib/llvm-20/bin /usr/lib/llvm-19/bin /usr/lib/llvm-18/bin; do
+    "/usr/lib/llvm-23/bin" /usr/lib/llvm-22/bin /usr/lib/llvm-21/bin /usr/lib/llvm-20/bin /usr/lib/llvm-19/bin /usr/lib/llvm-18/bin; do
     if [[ -d "${cand}" ]] && tool_in "${cand}" clang >/dev/null 2>&1; then
       printf '%s\n' "${cand}"; return 0
     fi
@@ -190,8 +190,8 @@ find_llvm_dir() {
 LLVM_DIR="$(find_llvm_dir || true)"
 [[ -n "${LLVM_DIR}" ]] || die "LLVM not found.
   Install an official LLVM release (manifest: tools/winbuild/llvm-manifest.json):
-    Windows: winget install LLVM.LLVM   (or https://github.com/llvm/llvm-project/releases)
-    Ubuntu/WSL: tools/winbuild/fetch-llvm-ubuntu.sh   (no root needed)
+    Windows: winget install LLVM.LLVM   (or the pinned MSI from https://github.com/llvm/llvm-project/releases)
+    Linux/WSL: unpack the official LLVM 23.1.6 tarball (pinned SHA-256) or install LLVM 23 from your distro
   Or pass --llvm-dir DIR / set WINBUILD_LLVM_DIR."
 CC="$(tool_in "${LLVM_DIR}" clang)" || die "clang not found in ${LLVM_DIR}"
 AR="$(tool_in "${LLVM_DIR}" llvm-ar)" || die "llvm-ar not found in ${LLVM_DIR}"

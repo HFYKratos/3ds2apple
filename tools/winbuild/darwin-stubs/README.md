@@ -14,13 +14,13 @@ copied, and none may be: Apple's SDK is not redistributable.
 ```sh
 clang -target arm64-apple-ios16.0 -O2 -fPIC -fvisibility=hidden \
       -nostdinc \
-      -isystem "<llvm>/lib/clang/21/include" \
+      -isystem "<llvm>/lib/clang/23/include" \
       -isystem "tools/winbuild/darwin-stubs/include" \
       -I <generated-C-dir> -c codeNNN.c -o codeNNN.o
 ```
 
 * `-nostdinc` removes the host C library headers entirely.
-* `<llvm>/lib/clang/21/include` is Clang's own freestanding resource-header set
+* `<llvm>/lib/clang/23/include` is Clang's own freestanding resource-header set
   (that is where the working `<stdint.h>`, `<stddef.h>`, `<stdarg.h>`,
   `<stdbool.h>`, `<limits.h>`, `<float.h>` come from) — part of the LLVM
   release, not Apple.

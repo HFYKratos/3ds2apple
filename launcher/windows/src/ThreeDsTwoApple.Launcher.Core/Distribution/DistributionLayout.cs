@@ -98,7 +98,7 @@ public static class DistributionLayout
     };
 
     /// <summary>
-    /// Optional payload paths: the official LLVM 21.1.8 toolchain. It is staged under
+    /// Optional payload paths: the official LLVM 23.1.6 toolchain. It is staged under
     /// Bin/llvm when the packaging machine has it; without it the launcher still works
     /// for import/push but Deploy shows ONE actionable local-toolchain error and Retry.
     /// </summary>

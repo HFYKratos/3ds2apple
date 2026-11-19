@@ -11,8 +11,8 @@
 # assets (see CONTRIBUTING.md#release-policy). The clean-run-win folder still
 # holds only the exe, so the clean-folder --self-test semantics are unchanged.
 #
-# The official LLVM 21.1.8 toolchain (clang.exe / llvm-ar.exe / ld64.lld.exe +
-# lib/clang/21/include) is staged under Bin/llvm when available (THREEDS2APPLE_LLVM_DIR,
+# The official LLVM 23.1.6 toolchain (clang.exe / llvm-ar.exe / ld64.lld.exe +
+# lib/clang/23/include) is staged under Bin/llvm when available (THREEDS2APPLE_LLVM_DIR,
 # default build/win-toolchain/llvm or third_party/llvm-win). Only the tool executables and
 # clang's resource headers are embedded; the release folder's LLVM-C/libclang/LTO/libLLDB
 # DLLs and PDBs are not needed (tools import system DLLs only). It is NOT faked: without
@@ -61,7 +61,7 @@ if [ -n "$PINNED_SHA" ] && [ "$SHELL_SHA" != "$PINNED_SHA" ]; then
 fi
 echo "[single] shell template verified ($SHELL_SHA)"
 
-# 2. Pinned official Impactor v2.7.2 + plumesign (fetch + verify when absent).
+# 2. Pinned official Impactor v2.7.3 + plumesign (fetch + verify when absent).
 if [ ! -f "$WINDOWS_ROOT/vendor/impactor/Impactor-windows-x86_64-portable.exe" ]; then
   "$WINDOWS_ROOT/tools/fetch-impactor.sh" "$WINDOWS_ROOT/vendor/impactor"
 fi
@@ -91,7 +91,7 @@ else
   echo "[single] WARN: Bin/3dsrecomp.exe is missing; the packaged launcher will show one actionable local-toolchain error on Deploy"
 fi
 
-# 3c. Optional official LLVM 21.1.8 toolchain (real local GamePack compile).
+# 3c. Optional official LLVM 23.1.6 toolchain (real local GamePack compile).
 LLVM_SOURCE="${THREEDS2APPLE_LLVM_DIR:-$REPO_ROOT/build/win-toolchain/llvm}"
 if [ -d "$LLVM_SOURCE/lib/clang" ] && [ -f "$LLVM_SOURCE/bin/clang.exe" ]; then
   LLVM_STAGE="$WINDOWS_ROOT/Bin/llvm"
@@ -116,7 +116,7 @@ if [ -d "$LLVM_SOURCE/lib/clang" ] && [ -f "$LLVM_SOURCE/bin/clang.exe" ]; then
   done
   echo "[single] LLVM staged under Bin/llvm ($(du -sh "$LLVM_STAGE" | cut -f1))"
 else
-  echo "[single] WARN: official LLVM 21.1.8 not found at $LLVM_SOURCE; packaging without it (Deploy shows one actionable local-toolchain error; set THREEDS2APPLE_LLVM_DIR to stage it)"
+  echo "[single] WARN: official LLVM 23.1.6 not found at $LLVM_SOURCE; packaging without it (Deploy shows one actionable local-toolchain error; set THREEDS2APPLE_LLVM_DIR to stage it)"
 fi
 
 echo "[single] Bin tools: $(ls "$WINDOWS_ROOT/Bin" | tr '\n' ' ')"

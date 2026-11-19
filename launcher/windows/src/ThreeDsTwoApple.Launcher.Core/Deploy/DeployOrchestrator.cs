@@ -551,8 +551,8 @@ public sealed class DeployOrchestrator
 
     /// <summary>One actionable message for a missing Windows LLVM/3dsrecomp payload.</summary>
     public const string LocalBuildFix =
-        "This launcher needs 3dsrecomp.exe and the official LLVM 21.1.8 tools (clang.exe, llvm-ar.exe, ld64.lld.exe, lib/clang/21/include). "
-        + "Install LLVM 21.1.8 for Windows x86_64 and build 3dsrecomp once, or place both under the launcher's distribution Bin/ (Bin/3dsrecomp.exe and Bin/llvm/), then press Retry.";
+        "This launcher needs 3dsrecomp.exe and the official LLVM 23.1.6 tools (clang.exe, llvm-ar.exe, ld64.lld.exe, lib/clang/23/include). "
+        + "Install LLVM 23.1.6 for Windows x86_64 and build 3dsrecomp once, or place both under the launcher's distribution Bin/ (Bin/3dsrecomp.exe and Bin/llvm/), then press Retry.";
 
     /// <summary>
     /// Reuse decision for one selected game: only a recorded buildCompatVersion + ROM

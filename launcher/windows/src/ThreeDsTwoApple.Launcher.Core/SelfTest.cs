@@ -176,13 +176,13 @@ public static class SelfTest
                 coverPath ?? "cover.png was not resolved");
             Line(GameNames.ResolvePublisher("  Nintendo  ") == "Nintendo" ? "PASS" : "FAIL", "SMDH publisher normalization", "publisher trimmed");
 
-            // 2. Pinned Impactor digests must be exactly the official v2.7.2 assets.
+            // 2. Pinned Impactor digests must be exactly the official v2.7.3 assets.
             var pinsOk =
-                ImpactorPins.Impactor.Sha256 == "f493cd99081370dca7c677676e119d8808418ebccab49e1f219744b3b71e88ef"
-                && ImpactorPins.PlumeSign.Sha256 == "b965e51a613341cb8c7e0f3594b24c09243a235b4187f669ea958a548e6a2fe0"
-                && ImpactorPins.Impactor.Bytes == 18_213_888
-                && ImpactorPins.PlumeSign.Bytes == 10_718_720;
-            Line(pinsOk ? "PASS" : "FAIL", "pinned Impactor v2.7.2 digests", pinsOk ? "match official release assets" : "launcher constants were modified");
+                ImpactorPins.Impactor.Sha256 == "ebf939f8c8e74b4cd693d2f9871db4b8304f12396181fdd17404a127427b9923"
+                && ImpactorPins.PlumeSign.Sha256 == "94664749fbbceb9a16bf89583f473dafb9b35c8d058a9d8665dc963b3453c6fc"
+                && ImpactorPins.Impactor.Bytes == 18_259_968
+                && ImpactorPins.PlumeSign.Bytes == 10_759_168;
+            Line(pinsOk ? "PASS" : "FAIL", "pinned Impactor v2.7.3 digests", pinsOk ? "match official release assets" : "launcher constants were modified");
 
             // 3. Optional: cross-check against a checked-in PINS.json when running from the repo.
             var pinsFile = FindRepoFile("launcher/windows/vendor/impactor/PINS.json");
@@ -234,7 +234,7 @@ public static class SelfTest
                 localMissing.Count == 0
                     ? $"resolved: {localTools.RecompilerPath} + {localTools.LlvmBinDirectory}"
                     : "not complete: " + string.Join("; ", localMissing)
-                      + " — Deploy shows one actionable error and Retry; install LLVM 21.1.8 + 3dsrecomp (tools/winbuild/README.md)");
+                      + " — Deploy shows one actionable error and Retry; install LLVM 23.1.6 + 3dsrecomp (tools/winbuild/README.md)");
 
             // 5. Workspace + persisted state round-trip.
             var workspace = LauncherState.LauncherWorkspace.Open(temporaryRoot);
@@ -393,7 +393,7 @@ public static class SelfTest
                 Line(llvmEmbedded ? "PASS" : "WARN", "bundled LLVM payload",
                     llvmEmbedded
                         ? "Bin/llvm/** is embedded (full local build works offline)"
-                        : "Bin/llvm is not bundled in this build; Deploy shows one actionable local-toolchain error until the official LLVM 21.1.8 tools are staged (known packaging gap)");
+                        : "Bin/llvm is not bundled in this build; Deploy shows one actionable local-toolchain error until the official LLVM 23.1.6 tools are staged (known packaging gap)");
             }
 
             output.WriteLine();

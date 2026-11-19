@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Fetch and verify the official Impactor v2.7.2 + plumesign binaries for the launcher bundle.
+  Fetch and verify the official Impactor v2.7.3 + plumesign binaries for the launcher bundle.
 
 .DESCRIPTION
   Downloads the two official Windows x86_64 files from the GitHub release, verifies their
@@ -95,7 +95,7 @@ foreach ($name in $companions) {
 }
 
 if ($failures -gt 0) {
-    Write-Error "Impactor bundle is NOT ready ($failures problem(s)); see https://github.com/claration/impactor/releases/tag/v2.7.2"
+    Write-Error "Impactor bundle is NOT ready ($failures problem(s)); see https://github.com/claration/impactor/releases/tag/v2.7.3"
     exit 1
 }
 Write-Host "Impactor v$($pins.testedVersion) + plumesign verified (SHA-256 pinned, official unmodified release)."

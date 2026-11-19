@@ -229,7 +229,7 @@ public sealed class LauncherServices
 
         var localTools = LocalTools;
         IReadOnlyList<string> missingLocalTools = localTools is null
-            ? new[] { "3dsrecomp.exe + LLVM 21.1.8" }
+            ? new[] { "3dsrecomp.exe + LLVM 23.1.6" }
             : localTools.MissingTools().Select(ShortToolName).ToArray();
 
         var shell = Shell ?? await LoadShellAsync(cancellationToken).ConfigureAwait(false);

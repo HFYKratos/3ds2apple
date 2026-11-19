@@ -44,10 +44,10 @@ public sealed record LocalToolchain(
         // --self-test run of the packaged payload on a Linux/WSL CI host reports the truth
         // (the tools are present) instead of a false warning.
         if (!IsToolFile(file, RecompilerPath)) missing.Add("3dsrecomp.exe (missing from the launcher payload; expected at Bin/3dsrecomp.exe)");
-        if (!IsToolFile(file, ClangPath)) missing.Add("clang.exe (install the official LLVM 21.1.8 release; the launcher also looks in Bin/llvm)");
+        if (!IsToolFile(file, ClangPath)) missing.Add("clang.exe (install the official LLVM 23.1.6 release; the launcher also looks in Bin/llvm)");
         if (!IsToolFile(file, LlvmArPath)) missing.Add("llvm-ar.exe (part of the LLVM release)");
         if (!IsToolFile(file, Ld64LldPath)) missing.Add("ld64.lld.exe (part of the LLVM release)");
-        if (!IsDirectory(directory, ResourceIncludeDirectory)) missing.Add("LLVM clang resource headers (lib/clang/21/include)");
+        if (!IsDirectory(directory, ResourceIncludeDirectory)) missing.Add("LLVM clang resource headers (lib/clang/23/include)");
         if (!IsDirectory(directory, DarwinStubsDirectory)) missing.Add("tools/winbuild/darwin-stubs/include (hand-written ISO C headers, no Apple SDK)");
         if (!IsFile(file, ShimSourcePath)) missing.Add("ios/zakuro-ios/gamepack/zk_gamepack_shim.c");
         if (!IsDirectory(directory, GamePackIncludeDirectory)) missing.Add("ios/zakuro-ios/include (zakuro_gamepack.h)");
@@ -208,7 +208,7 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
         if (_tools is null)
         {
             return PackBuildOutcome.Failure(MissingToolsCode,
-                "No local build toolchain was resolved. The launcher expects Bin/3dsrecomp.exe and the official LLVM 21.1.8 tools in Bin/llvm (or an installed LLVM on PATH); this single message is shown instead of a hidden fallback.");
+                "No local build toolchain was resolved. The launcher expects Bin/3dsrecomp.exe and the official LLVM 23.1.6 tools in Bin/llvm (or an installed LLVM on PATH); this single message is shown instead of a hidden fallback.");
         }
         var missing = _tools.MissingTools(_fileExists, _directoryExists);
         if (missing.Count > 0)
