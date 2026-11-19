@@ -1,6 +1,6 @@
 # 3ds2apple launcher for Windows (MVP)
 
-Status: **launcher 0.1.3 (build 1, 2026-11-18 release build)** — portable data
+Status: **launcher 0.1.4-beta1 (build 1, 2026-11-19 local pre-release build)** — portable data
 folder beside the exe (LocalAppData only when read-only, with one-time migration),
 hardware-aware compile line (cores/RAM + 3dsrecomp auto-parallelism), ROM metadata UI
 from the pack CLI (SMDH `cover.png` icon, localized `displayNames`, `publisher`; no
@@ -23,13 +23,15 @@ errors) and its **212 unit/integration tests pass**. The packaged single-file ex
 `--self-test` on Linux/WSL with the embedded payload (32 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a minimal Settings gear; it is
 localized (English / 简体中文) and uses the iOS app icon. The user-facing package is a ZIP
-with exactly one self-contained exe (the 0.1.3 package: 149,466,869 B, SHA-256
-`f9666124…f26b1dff1`; the 0.1.2 package was 149,164,597 B).
+with exactly one self-contained exe (the 0.1.4-beta1 package: 157,306,178 B, SHA-256
+`93814ba3…c21b8675`; the 0.1.3 package was 149,466,869 B; the 0.1.4-beta1
+package embeds the LLVM 23.1.6 Windows toolchain, so its size grows by the
+staged toolchain).
 Synthetic (non-game) UI captures (pre-0.1.2) are in `docs/ui/v4-*.png`; the 0.1.2
 Deploy-prerequisite and Settings renders are generated into `out/ui-smoke/` (gitignored)
 by the developer-only `--ui-smoke` mode. The Windows 11 device path (import, local
 compile, Impactor signing, devpush and launch) was verified by the maintainers on the
-0.1.0 build; the 0.1.1/0.1.2 additions still need a device pass (device acceptance
+0.1.0 build; the 0.1.1-0.1.4-beta1 additions still need a device pass (device acceptance
 steps: see the root [README.md](../../README.md) usage section).
 
 Architecture correction (Lead, 2026-11-14): iOS cannot dlopen a loose unsigned
@@ -53,10 +55,11 @@ re-checked by the shell), `launcherVersion` and `pushedAt`. `schemaVersion` stay
 
 Shell-template identity is validated before signing: version >= 0.1.0, build >= 1
 (manifest and Info.plist), bundle catalogue schema 2 + empty for the template, no
-Roms/. The shipped template is **0.1.3 / build 1** (6,100,961 B, SHA-256
-`54d26a8f…e1b293a6e`; rebuilt from current main for the 0.1.3 release with the
-fast-math shader build and the new GPU timing / fragment-build patches; the
-pre-reset template was 0.2.2 build 10) and additionally contains
+Roms/. The shipped template is **0.1.4 / build 1** (6,140,904 B, SHA-256
+`2b80bdf8…9e9e4b75b`; rebuilt from current main for the 0.1.4-beta1 pre-release
+with Zakuro pinned to upstream fdf67b2 and the seven re-based GPU diagnostic
+patches; the product version is 0.1.4-beta1 while the shell's CFBundle version
+stays numeric 0.1.4; the pre-reset template was 0.2.2 build 10) and additionally contains
 `Frameworks/MoltenVK.framework` (GPU renderer + Metal HUD); `IpaComposer` copies
 every non-GamePack template entry, so the framework survives composition and is signed
 with the app. Device identifiers (UDID, usbmux id, serial number, ECID) are never

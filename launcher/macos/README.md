@@ -1,7 +1,8 @@
 # 3ds2apple macOS launcher
 
 A SwiftUI macOS app for the AOT-first product flow (v2: Library -> Deploy),
-aligned with the Windows launcher (current product version **0.1.3 build 1**;
+aligned with the Windows launcher (current product version **0.1.4-beta1 build 1**;
+CFBundleShortVersionString stays numeric **0.1.4**;
 0.2.x numbers below are the pre-reset history):
 
     Library: import your own decrypted .3ds/.cci; cards show the ROM's own SMDH
@@ -160,6 +161,33 @@ it from a source tree).
     screenshots/               generated non-game UI evidence (committed)
 
 ## Evidence / QA
+
+### launcher 0.1.4-beta1 build 1 (local 0.1.4-beta1 pre-release, 2026-11-19)
+
+The 0.1.4-beta1 package on the macOS VM (macOS 26.7.3, Xcode 26.6, headless):
+
+- xcodebuild: BUILD SUCCEEDED (Release), 0 errors; universal binary
+  (x86_64 + arm64, 7,155,312-byte executable), bundle
+  com.kratos.3ds2apple.launcher, version 0.1.4 build 1 (the numeric CFBundle
+  version; the product version is 0.1.4-beta1).
+- self-check: **212/212 checks passed** (exit 0), including the shell-runtime
+  identity check: the pinned ROM-free shell template is exactly 6,140,904 bytes,
+  sha256 2b80bdf8…, carries the pinned 4,822,128-byte MoltenVK 1.4.2 framework
+  (sha256 6cd58884…), keeps the Metal HUD + Documents file-sharing Info.plist keys
+  and reports CFBundleShortVersionString 0.1.4 / CFBundleVersion 1. The packaged
+  app, freshly extracted from the ZIP, also passed 212/212.
+- screenshots: 18 non-game PNGs, English + Simplified Chinese, dark + light
+  (Library SMDH icons/names/publisher; Deploy hardware line and GameInfo push
+  steps; Settings "Version 0.1.4 (1)" + data folder + compile hardware); the 4
+  Settings shots were regenerated for 0.1.4, the other 14 stayed byte-identical.
+- artifact: out/launchers/3ds2apple-launcher-0.1.4-beta1-macos-app.zip
+  (5,509,368 bytes, sha256
+  000a46a36c2272024477a81fb3d72174a3aa945f9c873b508640e92439616978), one .app
+  plus LICENSE/NOTICE/THIRD_PARTY.md at the ZIP root (19 entries, 13,996,817 bytes
+  uncompressed) including Contents/Resources/MoltenVK.framework. The launcher
+  embeds the MoltenVK framework, but the macOS package is not self-contained yet
+  (a checkout + Xcode + the built tools are required). Real iPhone acceptance is
+  still NOT done (issue #1).
 
 ### launcher 0.1.3 build 1 (final 0.1.3 release, 2026-11-18)
 

@@ -26,11 +26,14 @@ export PATH=/usr/local/bin:$PATH
 CONFIG="${CONFIG:-Release}"
 LOG=/tmp/zl-launcher-build.log
 VERSION="$(sed -n 's/^        MARKETING_VERSION: "\(.*\)"/\1/p' project.yml | head -1)"
-[ -n "$VERSION" ] || VERSION="0.1.3"
+[ -n "$VERSION" ] || VERSION="0.1.4"
+# The bundle version stays numeric (CFBundleShortVersionString); the package file
+# name can carry a pre-release suffix (THREEDS2APPLE_PACKAGE_VERSION).
+PACKAGE_VERSION="${THREEDS2APPLE_PACKAGE_VERSION:-$VERSION}"
 BUILD_NUMBER="$(sed -n 's/^        CURRENT_PROJECT_VERSION: "\(.*\)"/\1/p' project.yml | head -1)"
 [ -n "$BUILD_NUMBER" ] || BUILD_NUMBER="1"
 OUT_DIR="$ROOT/out/launchers"
-PACKAGE_NAME="3ds2apple-launcher-${VERSION}-macos-app"
+PACKAGE_NAME="3ds2apple-launcher-${PACKAGE_VERSION}-macos-app"
 LICENSE_TEXTS=(LICENSE NOTICE THIRD_PARTY.md)
 STATUS=0
 
