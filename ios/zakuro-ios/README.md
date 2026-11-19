@@ -311,7 +311,9 @@ restored memory on the next frame.
 `recomp_modules` tables. Compile that C for `arm64-apple-ios` into `libgame.a`
 and link it into the app. `zk_create` builds Zakuro's `Linked` value from those
 tables; the loader checks the title ID and interface version and falls back to
-the interpreter when they do not match.
+the interpreter when they do not match. The accepted interface range is
+`recomp-abi`'s `OLDEST_ABI..=ABI` (currently 4..=8): code generated for an
+older interface still runs, and the pinned 3dsrecomp generates interface 8.
 
 A port can have a **single code unit**: 3dsrecomp writes the module count as
 `units.len() - 1`, so a program with no CRO modules has

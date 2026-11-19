@@ -1,5 +1,5 @@
 diff --git a/crates/zakuro-gpu/src/lib.rs b/crates/zakuro-gpu/src/lib.rs
-index 85420d4..c1807ab 100644
+index 8c3c2a5..420ad19 100644
 --- a/crates/zakuro-gpu/src/lib.rs
 +++ b/crates/zakuro-gpu/src/lib.rs
 @@ -29,7 +29,7 @@ pub use renderer::{DrawCall, Renderer, RendererKind, SoftwareRenderer};
@@ -8,13 +8,13 @@ index 85420d4..c1807ab 100644
  #[cfg(feature = "vulkan")]
 -pub use raster::{GpuTimes, PassTimes, GPU_WORK};
 +pub use raster::{GpuTimes, PassTimes, SortCounts, BREAK_KINDS, GPU_WORK, SORT_REASONS};
- 
- /// how the GPU reaches guest memory.
+
+ /// how the GPU reaches guest memory
  pub trait GpuMemory {
-@@ -814,6 +814,16 @@ impl Gpu {
+@@ -782,6 +782,16 @@ impl Gpu {
          self.resources.hardware.as_ref().map_or_else(Vec::new, |hardware| hardware.gpu_passes())
      }
- 
+
 +    /// the last window's per-pass report (`ZAKURO_GPU_TIMES=1`): the render
 +    /// target that cost most, its passes in recording order with each one's
 +    /// GPU milliseconds, draws, depth and twin, what ended the pass before it,
@@ -25,11 +25,11 @@ index 85420d4..c1807ab 100644
 +        self.resources.hardware.as_ref().map_or_else(String::new, |hardware| hardware.gpu_passes_line().to_owned())
 +    }
 +
-     /// how many times the console's resolution the host's GPU draws at, 1
-     /// when drawing in software.
+     /// how many times the console's res the host's GPU draws at, 1 when drawing in software
      pub fn scale(&self) -> u32 {
+         #[cfg(feature = "vulkan")]
 diff --git a/crates/zakuro-gpu/src/raster.rs b/crates/zakuro-gpu/src/raster.rs
-index 8e53009..7c77011 100644
+index 1de3ed6..4dc066b 100644
 --- a/crates/zakuro-gpu/src/raster.rs
 +++ b/crates/zakuro-gpu/src/raster.rs
 @@ -11,7 +11,49 @@ use crate::lighting::{Lighting, Tables};
@@ -80,7 +80,7 @@ index 8e53009..7c77011 100644
 +        }
 +    }
 +}
- 
+
  /// the GPU's own time, from the timestamps it writes as the work changes
  /// kind, `ZAKURO_GPU_TIMES=1` turns it on. Cumulative since the renderer
 @@ -22,7 +64,7 @@ pub struct GpuTimes {
@@ -114,7 +114,7 @@ index 8e53009..7c77011 100644
 +    /// see `ZAKURO_DEDUPE_CAPTURE`.
 +    pub captures_skipped: u64,
  }
- 
+
  #[cfg(feature = "vulkan")]
  impl GpuTimes {
      /// the milliseconds per kind of work between an earlier reading and this
@@ -123,22 +123,22 @@ index 8e53009..7c77011 100644
 +    pub fn since(&self, earlier: &GpuTimes) -> [f64; GPU_WORK.len()] {
          std::array::from_fn(|i| (self.milliseconds[i] - earlier.milliseconds[i]).max(0.0))
      }
- 
+
 diff --git a/crates/zakuro-gpu/src/raster/hardware.rs b/crates/zakuro-gpu/src/raster/hardware.rs
-index fdfa6c4..21feae8 100644
+index a4c2b5a..6c30177 100644
 --- a/crates/zakuro-gpu/src/raster/hardware.rs
 +++ b/crates/zakuro-gpu/src/raster/hardware.rs
-@@ -839,6 +839,9 @@ struct Capture {
+@@ -784,6 +784,9 @@ struct Capture {
      batch: u64,
-     /// nothing changed the surface since.
+     /// nothing changed the surface since
      current: bool,
 +    /// the surface's generation at the capture, so a capture of the same
 +    /// batch that has not changed since can be skipped.
 +    generation: u64,
-     /// a screen shows the surface, so each picture is read out of the
-     /// buffer as its batch finishes, before a later one fills it again.
+     /// a screen shows the surface, so each picture gets read out of the buffer as its batch finishes, b4 a later one fills it again
      watched: bool,
-@@ -858,9 +861,15 @@ enum Work {
+     /// the last pictures read out, and the batches that drew them
+@@ -802,9 +805,15 @@ enum Work {
      Copy,
      Download,
      Barrier,
@@ -149,15 +149,15 @@ index fdfa6c4..21feae8 100644
 +    /// write-back of guest memory needs.
 +    Readback,
  }
- 
+
 -const WORK_NAMES: [&str; 9] = ["other", "draw", "upload", "clear", "transfer", "capture", "copy", "download", "barrier"];
 +const WORK_NAMES: [&str; 11] = super::GPU_WORK;
- 
- /// what the pipeline statistics count, in the order the results come.
+
+ /// what the pipeline statistics count, in the order the results come
  const STATISTICS: vk::QueryPipelineStatisticFlags = vk::QueryPipelineStatisticFlags::from_raw(
-@@ -875,13 +884,28 @@ const TIMESTAMPS: u32 = 4096;
+@@ -819,13 +828,28 @@ const TIMESTAMPS: u32 = 4096;
  const TIMED_BATCHES: u32 = 600;
- 
+
  /// a timestamp's place: the kind of work the time after it goes to, and the
 -/// render target whose pass recorded it, u32::MAX outside a render pass.
 +/// render pass whose work it is, an index into [`Timing::pass_detail`],
@@ -167,7 +167,7 @@ index fdfa6c4..21feae8 100644
      work: Work,
      pass: u32,
  }
- 
+
 +/// one render pass as it was recorded, for the per-pass report: the target it
 +/// drew into, its size and depth, whether it drew into the target's twin,
 +/// what needed the pass before it, and the milliseconds and draws it took.
@@ -185,7 +185,7 @@ index fdfa6c4..21feae8 100644
  /// one render target's cumulative share of the GPU's time, its passes and its
  /// draws, and what the last log line reported of them.
  struct PassTotal {
-@@ -903,9 +927,24 @@ struct Timing {
+@@ -846,9 +870,24 @@ struct Timing {
      /// whose pass recorded it) between them.
      pools: HashMap<vk::CommandBuffer, (vk::QueryPool, Vec<Mark>)>,
      current: Work,
@@ -209,13 +209,13 @@ index fdfa6c4..21feae8 100644
 +    work_ops: [u64; WORK_NAMES.len()],
 +    /// the front-to-back sort's draws as of the last log line.
 +    logged_sort: super::SortCounts,
-     /// milliseconds per kind of work, cumulative since the renderer started.
+     /// milliseconds per kind of work
      totals: [f64; WORK_NAMES.len()],
      /// the totals as of the last log line, so each line reports its own
-@@ -961,6 +1000,71 @@ fn sort_opaque() -> bool {
+@@ -902,6 +941,71 @@ fn sort_opaque() -> bool {
      *ON.get_or_init(|| std::env::var_os("ZAKURO_SORT_OPAQUE").is_some_and(|value| value != "0"))
  }
- 
+
 +/// whether a draw that would begin a render pass of its own because the
 +/// guest bound no depth buffer keeps the pass already open on the same color
 +/// buffer instead, drawing with the depth the pass has and no depth test or
@@ -281,10 +281,10 @@ index fdfa6c4..21feae8 100644
 +    stencil_writes: bool,
 +}
 +
- /// what the host waited for the GPU for.
+ /// what the host waited for the GPU for
  #[derive(Clone, Copy)]
  enum Wait {
-@@ -1778,10 +1882,22 @@ pub struct Hardware {
+@@ -1669,10 +1773,22 @@ pub struct Hardware {
      /// opaque draws held back to record front to back, the nearest first,
      /// with the depth that orders them, see hold_back.
      held_back: Vec<(Recorded, f32)>,
@@ -308,10 +308,10 @@ index fdfa6c4..21feae8 100644
 +    last_break: Break,
 +    /// the last window's per-pass report, for the diagnostics export.
 +    last_passes_line: String,
-     /// textures copied from twins, as copies has those from surfaces.
+     /// textures copied from twins, as copies has those from surfaces
      twin_copies: QuickMap<DrawnTexture, Copied>,
-     /// the batch the draw a draw in between follows staged its vertices
-@@ -2030,8 +2146,12 @@ impl Hardware {
+     /// the batch the draw a draw in between follows staged its vertices and indices in, and where, the one in between reads them too
+@@ -1910,8 +2026,12 @@ impl Hardware {
                  twins: false,
                  twin_draws: Vec::new(),
                  held_back: Vec::new(),
@@ -326,7 +326,7 @@ index fdfa6c4..21feae8 100644
                  twin_copies: QuickMap::default(),
                  twinned_inputs: None,
                  batch: 0,
-@@ -2046,6 +2166,12 @@ impl Hardware {
+@@ -1926,6 +2046,12 @@ impl Hardware {
                          pools: HashMap::new(),
                          current: Work::Other,
                          current_pass: u32::MAX,
@@ -339,7 +339,7 @@ index fdfa6c4..21feae8 100644
                          totals: [0.0; WORK_NAMES.len()],
                          logged: [0.0; WORK_NAMES.len()],
                          batches: 0,
-@@ -2123,8 +2249,11 @@ impl Hardware {
+@@ -2002,8 +2128,11 @@ impl Hardware {
              waited_done_count: u64::from(dones),
              shaded: timing.counts,
              pipeline_statistics: timing.statistics.is_some(),
@@ -352,11 +352,11 @@ index fdfa6c4..21feae8 100644
 +            captures_skipped: self.captures_skipped,
          })
      }
- 
-@@ -2149,6 +2278,14 @@ impl Hardware {
+
+@@ -2028,6 +2157,14 @@ impl Hardware {
          passes
      }
- 
+
 +    /// the last window's per-pass report (`ZAKURO_GPU_TIMES=1`): the render
 +    /// target that cost most, its passes in recording order with each one's
 +    /// GPU milliseconds, draws, depth and twin, what ended the pass before
@@ -365,10 +365,10 @@ index fdfa6c4..21feae8 100644
 +        &self.last_passes_line
 +    }
 +
-     /// whether it runs vertex shaders.
+     /// does it run vertex shaders
      pub(crate) fn shades(&self) -> bool {
          self.shades
-@@ -2403,6 +2540,11 @@ impl Hardware {
+@@ -2275,6 +2412,11 @@ impl Hardware {
          if !self.recording || (timing.current == work && !ended) {
              return;
          }
@@ -379,10 +379,10 @@ index fdfa6c4..21feae8 100644
 +        }
          if let Some((pool, marks)) = timing.pools.get_mut(&commands) {
              if (marks.len() as u32) + 1 < TIMESTAMPS {
-                 // SAFETY: recording, the query was reset when the batch began
-@@ -2414,8 +2556,8 @@ impl Hardware {
+                 // safe bc we're recording, the query was reset when the batch began
+@@ -2286,8 +2428,8 @@ impl Hardware {
      }
- 
+
      /// stamps the end of the work before a render pass begins, or of the pass
 -    /// just ended, so each pass's time goes to the target it drew into, and
 -    /// sets the pass the work after it goes to, u32::MAX outside one.
@@ -391,7 +391,7 @@ index fdfa6c4..21feae8 100644
      fn mark_pass(&mut self, pass: u32) {
          let commands = self.commands;
          let Some(timing) = &mut self.timing else { return };
-@@ -2450,8 +2592,13 @@ impl Hardware {
+@@ -2322,8 +2464,13 @@ impl Hardware {
              for (i, mark) in marks.iter().enumerate() {
                  let milliseconds = stamps[i + 1].wrapping_sub(stamps[i]) as f64 * timing.period / 1e6;
                  timing.totals[mark.work as usize] += milliseconds;
@@ -406,7 +406,7 @@ index fdfa6c4..21feae8 100644
                  }
              }
              marks.clear();
-@@ -2559,6 +2706,79 @@ impl Hardware {
+@@ -2431,6 +2578,79 @@ impl Hardware {
                      reported.join(", "),
                  );
              }
@@ -486,13 +486,9 @@ index fdfa6c4..21feae8 100644
              timing.batches = 0;
          }
          Ok(())
-@@ -2623,12 +2843,19 @@ impl Hardware {
-     }
- 
-     /// ends the rendering, and draws what waits to go into twins, before
--    /// anything else reads or writes them.
-+    /// anything else reads or writes them. what needs it says why through
-+    /// pending_break first, so the per-pass report says what breaks a pass.
+@@ -2495,10 +2715,16 @@ impl Hardware {
+
+     /// ends the rendering and draws what waits to go into twins, b4 anything else reads or writes them
      fn end_rendering(&mut self) {
 +        let why = self.pending_break;
 +        self.pending_break = Break::Other;
@@ -504,18 +500,18 @@ index fdfa6c4..21feae8 100644
 +            if let Some(timing) = &mut self.timing {
 +                timing.pass_breaks[why as usize] += 1;
 +            }
-             // SAFETY: rendering was begun in this command buffer
+             // safe bc rendering was begun in this command buffer
              unsafe { self.device.cmd_end_rendering(self.commands) };
          }
-@@ -2729,6 +2956,7 @@ impl Hardware {
-     /// clears rows of memory of a surface to one pixel, on the GPU.
+@@ -2594,6 +2820,7 @@ impl Hardware {
+     /// clears rows of memory of a surface to one pixel, on the GPU
      fn clear_rows(&mut self, index: usize, rows: (u32, u32), pixel: &[u8]) -> Result<(), String> {
          self.begin()?;
 +        self.pending_break = Break::Clear;
          self.mark(Work::Clear, false);
          self.end_rendering();
          self.barrier();
-@@ -4243,7 +4471,7 @@ impl Hardware {
+@@ -4045,7 +4272,7 @@ impl Hardware {
          };
          let raise = (height - draw.height) as i32;
          // a flush looking one of them up drops what the other had checked
@@ -524,10 +520,10 @@ index fdfa6c4..21feae8 100644
              let size = (draw.width, height);
              let color = self.surface_rows(memory, draw.target, size, Kind::Color(draw.format), true, Some(rows))?;
              let depth = match draw.depth {
-@@ -4286,6 +4514,21 @@ impl Hardware {
+@@ -4085,6 +4312,21 @@ impl Hardware {
          let real = pass != Pass::Twin;
          let twin = twinned && pass != Pass::Twinned;
- 
+
 +        // a draw the guest gives no depth buffer, into the color buffer a
 +        // pass with depth is already drawing into, keeps that pass and draws
 +        // with the depth attachment it has and no depth test or write: the
@@ -546,9 +542,9 @@ index fdfa6c4..21feae8 100644
          // a texture taken from a buffer this pass drew into has to see those
          // draws: record what was held back first, or its copy would read what
          // the buffer held before them
-@@ -4403,6 +4646,14 @@ impl Hardware {
-         // the stencil's operations apply with its test's bit clear too, the
-         // test then passing always, see Stencil::read
+@@ -4200,6 +4442,14 @@ impl Hardware {
+         let depth_write = writable && mask & (1 << 12) != 0;
+         // the stencil's ops apply w/ its test's bit clear too, the test then always passing, see Stencil::read
          let stencil_test = draw.depth.is_some_and(|(_, bytes)| bytes == 4) && super::Stencil::read(r, writable).is_some();
 +        // a draw merged into a depth-buffered pass, see above, draws with no
 +        // depth test, write or stencil: what it would do in a pass without
@@ -561,8 +557,8 @@ index fdfa6c4..21feae8 100644
          let stencil_compare = match r[REG_STENCIL_TEST] & 1 {
              0 => r[REG_STENCIL_TEST] & !0x70 | 0x10,
              _ => r[REG_STENCIL_TEST],
-@@ -4450,12 +4701,14 @@ impl Hardware {
- 
+@@ -4243,12 +4493,14 @@ impl Hardware {
+
          self.mark(Work::Draw, false);
          if self.uploads {
 +            self.pending_break = Break::Uploads;
@@ -576,7 +572,7 @@ index fdfa6c4..21feae8 100644
                  self.end_rendering();
                  if fast_barriers() {
                      self.barrier_rendering();
-@@ -4553,11 +4806,14 @@ impl Hardware {
+@@ -4343,11 +4595,14 @@ impl Hardware {
              count: vertex_count as u32,
              topology,
          };
@@ -592,7 +588,7 @@ index fdfa6c4..21feae8 100644
                  self.flush_held_back();
                  self.record(&recorded);
              }
-@@ -4572,44 +4828,43 @@ impl Hardware {
+@@ -4362,44 +4617,43 @@ impl Hardware {
      /// opaque draws front to back, the nearest first, so the GPU's early depth
      /// test drops the fragments hidden behind them; false records it now, and
      /// records what was held back first, in its place. `ZAKURO_SORT_OPAQUE=1`
@@ -668,9 +664,9 @@ index fdfa6c4..21feae8 100644
 +            }
 +        }
      }
- 
+
      /// records the draws held back, front to back: the nearest first, so the
-@@ -4628,13 +4883,64 @@ impl Hardware {
+@@ -4418,13 +4672,64 @@ impl Hardware {
              // stable, so draws at the same depth keep the title's order
              held.sort_by(|a, b| b.1.total_cmp(&a.1));
          }
@@ -681,7 +677,7 @@ index fdfa6c4..21feae8 100644
              self.record(recorded);
          }
      }
- 
+
 +    /// a draw's front-to-back key when its state lets the pass record it in a
 +    /// different order, and why not otherwise, see [`SortState`].
 +    fn sort_key(state: SortState, placed: Option<&[super::Screen]>) -> Result<f32, SortReason> {
@@ -734,10 +730,10 @@ index fdfa6c4..21feae8 100644
 +            && registers[REG_STENCIL_OP] & 0x777 != 0
 +    }
 +
-     /// records a draw, inside the rendering into its buffers or their twins.
+     /// records a draw inside the rendering into its buffers or their twins
      fn record(&mut self, recorded: &Recorded) {
          let r = recorded;
-@@ -4769,10 +5075,13 @@ impl Hardware {
+@@ -4557,10 +4862,13 @@ impl Hardware {
              }
              self.draws += 1;
              if let Some(timing) = &mut self.timing {
@@ -753,9 +749,9 @@ index fdfa6c4..21feae8 100644
              }
              match vertex_infos {
                  Some(infos) => match r.shaded.and_then(|staged| staged.index_type) {
-@@ -4800,14 +5109,29 @@ impl Hardware {
-     /// begins rendering into views the size of a color surface, its own
-     /// image and its depth surface's or their twins.
+@@ -4587,14 +4895,29 @@ impl Hardware {
+
+     /// begins rendering into views the size of a color surface, its own image and its depth surface's or their twins
      fn begin_rendering_into(&mut self, color: usize, color_view: vk::ImageView, depth_view: Option<vk::ImageView>) {
 -        let (addr, width, height) = {
 +        let (addr, width, height, twin) = {
@@ -788,25 +784,25 @@ index fdfa6c4..21feae8 100644
              let total = timing.passes.entry(addr).or_insert(PassTotal {
                  width,
                  height,
-@@ -5021,6 +5345,7 @@ impl Hardware {
-     /// records the transfer shader going over size pixels, from one image
-     /// to another, as the constants say.
+@@ -4796,6 +5119,7 @@ impl Hardware {
+
+     /// records the transfer shader going over size pixels, from one image to another, like the constants say
      fn dispatch_transfer(&mut self, (source, target): (vk::ImageView, vk::ImageView), constants: [i32; 11], size: (u32, u32)) -> Result<(), String> {
 +        self.pending_break = Break::Transfer;
          self.mark(Work::Transfer, false);
          let (layout, pipeline) = self.transfer_pipeline()?;
          self.end_rendering();
-@@ -5141,6 +5466,7 @@ impl Hardware {
-     /// surface's last row has the rows past it as memory holds them. a twin
-     /// one is copied from the surface's twin, when it has one.
+@@ -4909,6 +5233,7 @@ impl Hardware {
+     /// a texture reaching past the surface's last row has the rows past it as memory holds them,
+     /// a twin one gets copied from the surface's twin when it has one
      fn copy_texture(&mut self, texture: &DrawnTexture, bound: &BoundTexture, twin: bool) -> Result<vk::ImageView, String> {
 +        self.pending_break = Break::Copy;
          self.mark(Work::Copy, false);
          let (source, row) = self.texture_source(texture).ok_or("the buffer a texture was drawn into is gone")?;
          let twin = twin && self.surfaces[source].twinned;
-@@ -5310,12 +5636,22 @@ impl Hardware {
- 
-     /// records a copy of a surface for the host to read later.
+@@ -5076,12 +5401,22 @@ impl Hardware {
+
+     /// records a copy of a surface for the host to read later
      fn capture(&mut self, index: usize) -> Result<(), String> {
 -        self.mark(Work::Capture, false);
 +        // asking again for the same batch, with nothing drawn since the last
@@ -829,7 +825,7 @@ index fdfa6c4..21feae8 100644
          }
          self.end_rendering();
          self.barrier();
-@@ -5324,6 +5660,7 @@ impl Hardware {
+@@ -5090,6 +5425,7 @@ impl Hardware {
              self.barrier();
          }
          let batch = self.batch;
@@ -837,7 +833,7 @@ index fdfa6c4..21feae8 100644
          let surface = &mut self.surfaces[index];
          let source = surface.native.as_ref().unwrap_or(&surface.image).image;
          let Some(capture) = surface.capture.as_mut() else { unreachable!("made above") };
-@@ -5343,6 +5680,7 @@ impl Hardware {
+@@ -5108,6 +5444,7 @@ impl Hardware {
              self.device.cmd_pipeline_barrier2(self.commands, &vk::DependencyInfo::default().memory_barriers(&to_host));
          }
          capture.batch = batch;
@@ -845,7 +841,7 @@ index fdfa6c4..21feae8 100644
          capture.current = true;
          Ok(())
      }
-@@ -5352,13 +5690,14 @@ impl Hardware {
+@@ -5117,13 +5454,14 @@ impl Hardware {
          if self.direct {
              return self.upright_image(index, false);
          }
@@ -862,9 +858,9 @@ index fdfa6c4..21feae8 100644
          }
          let (layout, pipeline) = self.upright_pipeline()?;
          self.end_rendering();
-@@ -5405,7 +5744,8 @@ impl Hardware {
-     /// first barrier waits for the presents submitted before, which may
-     /// still read the image.
+@@ -5168,7 +5506,8 @@ impl Hardware {
+     /// records a surface turned upright into the image a presenter sharing the device draws it from, or its twin into the twin's
+     /// the batch's first barrier waits for the presents submitted b4, which may still read the image
      fn upright_image(&mut self, index: usize, twin: bool) -> Result<(), String> {
 -        self.mark(Work::Capture, false);
 +        self.pending_break = Break::Capture;
@@ -872,15 +868,15 @@ index fdfa6c4..21feae8 100644
          // a row of the surface is a column of the screen
          let (width, height) = (self.surfaces[index].height * self.scale, self.surfaces[index].width * self.scale);
          let made = match twin {
-@@ -5977,6 +6317,7 @@ impl Hardware {
-     /// when those still hold them, else running the batch and reading them
-     /// back.
+@@ -5716,6 +6055,7 @@ impl Hardware {
+     /// writes the given surfaces back to guest memory, from their captures when those still hold them,
+     /// otherwise running the batch and reading them back
      fn write_back<M: GpuMemory>(&mut self, memory: &mut M, dirty: Vec<usize>) -> Result<(), String> {
 +        self.pending_break = Break::Sync;
          self.mark(Work::Download, false);
          let (captured, others): (Vec<usize>, Vec<usize>) =
              dirty.into_iter().partition(|&i| self.surfaces[i].captured().is_some());
-@@ -6859,4 +7200,65 @@ mod tests {
+@@ -6568,4 +6908,65 @@ mod tests {
          draws.sort_by(|a, b| b.0.total_cmp(&a.0));
          assert_eq!(draws.map(|(_, at)| at), [1, 2, 0]);
      }

@@ -1,5 +1,5 @@
 diff --git a/crates/zakuro-gpu/src/lib.rs b/crates/zakuro-gpu/src/lib.rs
-index c1807ab..7402cf3 100644
+index 420ad19..a244308 100644
 --- a/crates/zakuro-gpu/src/lib.rs
 +++ b/crates/zakuro-gpu/src/lib.rs
 @@ -29,7 +29,10 @@ pub use renderer::{DrawCall, Renderer, RendererKind, SoftwareRenderer};
@@ -11,17 +11,17 @@ index c1807ab..7402cf3 100644
 +    draw_class_name, draw_class_parts, GpuTimes, PassTimes, SortCounts, BREAK_KINDS, DRAW_ALPHA_TESTS, DRAW_BLENDS,
 +    DRAW_CLASSES, DRAW_COVERAGES, DRAW_TEXTURES, DRAW_WRITES, GPU_WORK, SORT_REASONS,
 +};
- 
- /// how the GPU reaches guest memory.
+
+ /// how the GPU reaches guest memory
  pub trait GpuMemory {
 diff --git a/crates/zakuro-gpu/src/raster.rs b/crates/zakuro-gpu/src/raster.rs
-index 7c77011..cbdb4f5 100644
+index 4dc066b..bbc6ea4 100644
 --- a/crates/zakuro-gpu/src/raster.rs
 +++ b/crates/zakuro-gpu/src/raster.rs
 @@ -28,6 +28,70 @@ pub const SORT_REASONS: [&str; 12] = [
  #[cfg(feature = "vulkan")]
  pub const BREAK_KINDS: [&str; 9] = ["other", "uploads", "target", "twin", "clear", "transfer", "capture", "copy", "sync"];
- 
+
 +/// the render pass a draw's time belongs to more than one class of, see
 +/// [`GpuTimes::draw_class_ms`]: a draw's state and the pixels its triangles
 +/// estimate to cover, broken into small buckets. The GPU's timestamps are
@@ -146,7 +146,7 @@ index 7c77011..cbdb4f5 100644
 +        }
 +    }
  }
- 
+
  #[cfg(feature = "vulkan")]
 @@ -108,6 +215,16 @@ impl GpuTimes {
      pub fn added_milliseconds(&self, earlier: &GpuTimes) -> f64 {
@@ -163,12 +163,12 @@ index 7c77011..cbdb4f5 100644
 +        )
 +    }
  }
- 
+
  /// one render target's share of the GPU's own time, cumulative since the
-@@ -1448,6 +1565,22 @@ pub(super) fn front_to_back_key(vertices: &[Screen]) -> Option<f32> {
+@@ -1383,6 +1500,22 @@ pub(super) fn front_to_back_key(vertices: &[Screen]) -> Option<f32> {
      vertices.iter().map(|vertex| vertex.z).reduce(f32::max)
  }
- 
+
 +/// the pixels a draw the CPU placed estimates to cover: the area of its
 +/// triangles in window pixels, added up whether they overlap or not, which is
 +/// what the GPU shades. The estimate is for attribution, not for a picture:
@@ -189,13 +189,13 @@ index 7c77011..cbdb4f5 100644
      let (vx, vy, vw, vh) = viewport;
      let w = vertex.clip[3];
 diff --git a/crates/zakuro-gpu/src/raster/hardware.rs b/crates/zakuro-gpu/src/raster/hardware.rs
-index 21feae8..4c2a737 100644
+index 6c30177..04febd6 100644
 --- a/crates/zakuro-gpu/src/raster/hardware.rs
 +++ b/crates/zakuro-gpu/src/raster/hardware.rs
-@@ -883,13 +883,19 @@ const TIMESTAMPS: u32 = 4096;
- /// batches the times are added up over before they are logged.
+@@ -827,13 +827,19 @@ const TIMESTAMPS: u32 = 4096;
+ /// batches the times get added up over b4 they're logged
  const TIMED_BATCHES: u32 = 600;
- 
+
 -/// a timestamp's place: the kind of work the time after it goes to, and the
 +/// the class a draw's time goes to before one changes it, see
 +/// [`super::DRAW_CLASSES`].
@@ -212,9 +212,9 @@ index 21feae8..4c2a737 100644
      pass: u32,
 +    class: u16,
  }
- 
+
  /// one render pass as it was recorded, for the per-pass report: the target it
-@@ -972,6 +978,20 @@ struct Timing {
+@@ -913,6 +919,20 @@ struct Timing {
      logged_waited: [(f64, u32); 2],
      /// each render target's cumulative GPU time, passes and draws.
      passes: HashMap<u32, PassTotal>,
@@ -233,12 +233,12 @@ index 21feae8..4c2a737 100644
 +    logged_draw_class_draws: [u64; super::DRAW_CLASSES],
 +    logged_draw_class_pixels: [u64; super::DRAW_CLASSES],
  }
- 
+
  /// whether clears are done as image clears where they can be, which writes
-@@ -1018,6 +1038,33 @@ fn dedupe_captures() -> bool {
+@@ -959,6 +979,33 @@ fn dedupe_captures() -> bool {
      *ON.get_or_init(|| std::env::var_os("ZAKURO_DEDUPE_CAPTURE").is_some_and(|value| value != "0"))
  }
- 
+
 +/// whether every draw shades a flat color instead of running the title's
 +/// combiners, texture fetches and lighting: ZAKURO_MEASURE_FLAT=1 (a
 +/// measurement profile; the picture is wrong) turns it on, so the GPU time a
@@ -269,7 +269,7 @@ index 21feae8..4c2a737 100644
  /// why a render pass ended, in the order [`super::BREAK_KINDS`] has them.
  #[derive(Clone, Copy, PartialEq, Eq)]
  enum Break {
-@@ -1891,6 +1938,13 @@ pub struct Hardware {
+@@ -1782,6 +1829,13 @@ pub struct Hardware {
      /// captures skipped as the surface still held the batch's picture
      /// (ZAKURO_DEDUPE_CAPTURE=1).
      captures_skipped: u64,
@@ -283,7 +283,7 @@ index 21feae8..4c2a737 100644
      /// what needs the rendering's drawings, so the next end_rendering says
      /// why the pass ended, see [`Break`].
      pending_break: Break,
-@@ -2149,6 +2203,10 @@ impl Hardware {
+@@ -2029,6 +2083,10 @@ impl Hardware {
                  sort: super::SortCounts::default(),
                  merged_draws: 0,
                  captures_skipped: 0,
@@ -294,7 +294,7 @@ index 21feae8..4c2a737 100644
                  pending_break: Break::Other,
                  last_break: Break::Other,
                  last_passes_line: String::new(),
-@@ -2186,6 +2244,13 @@ impl Hardware {
+@@ -2066,6 +2124,13 @@ impl Hardware {
                          waited: [(0.0, 0); 2],
                          logged_waited: [(0.0, 0); 2],
                          passes: HashMap::new(),
@@ -308,7 +308,7 @@ index 21feae8..4c2a737 100644
                      }),
                  barriers: 0,
                  unfenced: true,
-@@ -2254,6 +2319,11 @@ impl Hardware {
+@@ -2133,6 +2198,11 @@ impl Hardware {
              breaks: timing.pass_breaks,
              work_ops: timing.work_ops,
              captures_skipped: self.captures_skipped,
@@ -319,18 +319,18 @@ index 21feae8..4c2a737 100644
 +            safe_skipped_pixels: self.safe_skipped_pixels,
          })
      }
- 
-@@ -2504,6 +2574,7 @@ impl Hardware {
+
+@@ -2377,6 +2447,7 @@ impl Hardware {
          };
          timing.current = Work::Other;
          timing.current_pass = u32::MAX;
 +        timing.current_class = NO_CLASS;
-         // SAFETY: recording, outside rendering
+         // safe bc we're recording, outside rendering
          unsafe {
              self.device.cmd_reset_query_pool(commands, pool, 0, TIMESTAMPS);
-@@ -2549,10 +2620,13 @@ impl Hardware {
+@@ -2421,10 +2492,13 @@ impl Hardware {
              if (marks.len() as u32) + 1 < TIMESTAMPS {
-                 // SAFETY: recording, the query was reset when the batch began
+                 // safe bc we're recording, the query was reset when the batch began
                  unsafe { self.device.cmd_write_timestamp2(commands, vk::PipelineStageFlags2::ALL_COMMANDS, *pool, marks.len() as u32 + 1) };
 -                marks.push(Mark { work: timing.current, pass: timing.current_pass });
 +                marks.push(Mark { work: timing.current, pass: timing.current_pass, class: timing.current_class });
@@ -341,9 +341,9 @@ index 21feae8..4c2a737 100644
 +            timing.current_class = NO_CLASS;
 +        }
      }
- 
+
      /// stamps the end of the work before a render pass begins, or of the pass
-@@ -2568,10 +2642,30 @@ impl Hardware {
+@@ -2440,10 +2514,30 @@ impl Hardware {
              if (marks.len() as u32) + 1 < TIMESTAMPS {
                  // SAFETY: recording, the query was reset when the batch began
                  unsafe { self.device.cmd_write_timestamp2(commands, vk::PipelineStageFlags2::ALL_COMMANDS, *pool, marks.len() as u32 + 1) };
@@ -373,9 +373,9 @@ index 21feae8..4c2a737 100644
 +        }
 +        timing.current_class = class;
      }
- 
-     /// adds up a finished batch's times, and logs them every so many.
-@@ -2600,6 +2694,11 @@ impl Hardware {
+
+     /// adds up a finished batch's times and logs them every so many
+@@ -2472,6 +2566,11 @@ impl Hardware {
                          total.milliseconds += milliseconds;
                      }
                  }
@@ -387,7 +387,7 @@ index 21feae8..4c2a737 100644
              }
              marks.clear();
          }
-@@ -2779,6 +2878,51 @@ impl Hardware {
+@@ -2651,6 +2750,51 @@ impl Hardware {
                      reasons.join(", "),
                  );
              }
@@ -439,10 +439,10 @@ index 21feae8..4c2a737 100644
              timing.batches = 0;
          }
          Ok(())
-@@ -4592,14 +4736,44 @@ impl Hardware {
+@@ -4390,14 +4534,44 @@ impl Hardware {
          };
- 
- 
+
+
 -        let r = draw.registers;
 +        // the flat measurement profile draws every fragment as one color: a
 +        // copy of the registers neutralizes the combiners, the texture units,
@@ -486,7 +486,7 @@ index 21feae8..4c2a737 100644
          words.extend([r[REG_UPDATE_BUFFER], r[REG_BUFFER_COLOR], r[REG_ALPHA_TEST], texture_config]);
          for base in TEXTURE_UNIT_BASES {
              words.extend([r[base + 2], r[base], 0, 0]);
-@@ -4617,10 +4791,10 @@ impl Hardware {
+@@ -4414,10 +4588,10 @@ impl Hardware {
              Geometry::Shaded(_) if [mapped.0, mapped.1].iter().all(|d| (0.0..=1.0).contains(d)) => (false, mapped),
              Geometry::Shaded(_) => (true, (0.0, 1.0)),
          };
@@ -500,10 +500,10 @@ index 21feae8..4c2a737 100644
          }
          let procedural = [
              proctex::REG_CONFIG,
-@@ -4660,7 +4834,11 @@ impl Hardware {
+@@ -4455,7 +4629,11 @@ impl Hardware {
+             _ => r[REG_STENCIL_TEST],
          };
-         // only the bits compile_pipeline reads, so draws that differ
-         // elsewhere share a pipeline
+         // only the bits compile_pipeline reads, so draws that differ elsewhere share a pipeline
 -        let blend = (r[REG_COLOR_OPERATION] & 0x100 != 0).then_some(r[REG_BLEND_FUNC] & 0xFFFF_0707);
 +        let blend = if measure_noblend() {
 +            None
@@ -513,7 +513,7 @@ index 21feae8..4c2a737 100644
          let mut logic_op = LogicOp::read(r);
          let mut color_mask = color_mask;
          if !self.logic_ops {
-@@ -4671,6 +4849,22 @@ impl Hardware {
+@@ -4465,6 +4643,22 @@ impl Hardware {
              }
              logic_op = None;
          }
@@ -533,10 +533,10 @@ index 21feae8..4c2a737 100644
 +                return Ok(());
 +            }
 +        }
-         // only the bits the shader reads, so draws that differ elsewhere
-         // share a pipeline
+         // only the bits the shader reads, so draws that differ elsewhere share a pipeline
          let mut fragment = [0u32; FRAGMENT_CONSTANTS];
-@@ -4682,7 +4876,7 @@ impl Hardware {
+         for (i, base) in STAGE_REGISTERS.into_iter().enumerate() {
+@@ -4475,7 +4669,7 @@ impl Hardware {
          }
          fragment[24] = r[REG_UPDATE_BUFFER] & 0xFF00;
          fragment[25] = texture_config & 0x2707;
@@ -544,8 +544,8 @@ index 21feae8..4c2a737 100644
 +        fragment[26] = lighting_on as u32;
          fragment[27] = r[REG_ALPHA_TEST] & 0x71;
          fragment[28] = depth_flags | ((writes_depth as u32) * WRITES_DEPTH);
-         // what stands in for a translated program's pipeline, the
-@@ -4697,9 +4891,21 @@ impl Hardware {
+         // what stands in for a translated program's pipeline (the interpreter) has the program staged and bound anyway
+@@ -4489,9 +4683,21 @@ impl Hardware {
              vertex,
              fragment,
          };
@@ -555,7 +555,7 @@ index 21feae8..4c2a737 100644
 +            Self::draw_class_of(r, &draw.geometry, draw.width, draw.height, self.scale, color_mask, depth_write)
 +        });
          let pipeline = self.pipeline_for(key, translating)?;
- 
+
          self.mark(Work::Draw, false);
 +        if let Some((class, pixels)) = class {
 +            if let Some(timing) = &mut self.timing {
@@ -567,10 +567,10 @@ index 21feae8..4c2a737 100644
          if self.uploads {
              self.pending_break = Break::Uploads;
              self.end_rendering();
-@@ -4941,6 +5147,81 @@ impl Hardware {
+@@ -4730,6 +4936,81 @@ impl Hardware {
              && registers[REG_STENCIL_OP] & 0x777 != 0
      }
- 
+
 +    /// whether a blend configuration leaves the destination as it is for every
 +    /// fragment: both equations add, and the source factor is zero and the
 +    /// destination one, so the result is the destination either way. A draw
@@ -646,10 +646,10 @@ index 21feae8..4c2a737 100644
 +        (class as u16, pixels)
 +    }
 +
-     /// records a draw, inside the rendering into its buffers or their twins.
+     /// records a draw inside the rendering into its buffers or their twins
      fn record(&mut self, recorded: &Recorded) {
          let r = recorded;
-@@ -5131,6 +5412,7 @@ impl Hardware {
+@@ -4917,6 +5198,7 @@ impl Hardware {
              });
              timing.current_pass = id;
              timing.current_pass_addr = addr;

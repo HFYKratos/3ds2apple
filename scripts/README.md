@@ -10,7 +10,7 @@ developer guide for the scripts.
 
 | Script | Purpose |
 |---|---|
-| `build-zakuro-ios.sh` | Clone/pin Zakuro, apply `ios/zakuro-ios/patches/*.patch`, add the iOS crate and build `build/ios/libzakuro_ios.a` |
+| `build-zakuro-ios.sh` | Clone/pin Zakuro (`fdf67b2`, 2026-11-19), apply `ios/zakuro-ios/patches/*.patch`, pin the checkout's `recomp-abi` lock entry to the 3dsrecomp revision `build-recomp-ios.sh` uses, add the iOS crate and build `build/ios/libzakuro_ios.a` |
 | `build-ios-app.sh` | `xcodegen` + `xcodebuild` for the unsigned shell `.app` (empty schema-2 catalog) |
 | `package-ipa.sh` | Wrap an unsigned `.app` into `IPA/<name>.ipa` and print its SHA-256; `--manifest FILE` writes the launcher shell `manifest.json` (version/build from the app Info.plist, bundle id, bytes, SHA-256) |
 | `build-gpu-diagnostic-ipa.sh` | Package the ROM-free shell as GPU A/B diagnostic IPAs (one Info.plist GPU profile each: `baseline`/`baseline2`/`baseline3`/`baseline4`/`mvk`/`renderer`/`sort`/`sort2`/`merge`/`capture`/`noblend`/`flat`/`2x3x`/`safe`/`combo`), with MoltenVK embedded; outputs stay under `out/gpu-diag*/` (gitignored) |

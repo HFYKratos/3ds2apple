@@ -1,5 +1,5 @@
 diff --git a/crates/zakuro-gpu/src/lib.rs b/crates/zakuro-gpu/src/lib.rs
-index 4352cd9..89bbd8d 100644
+index 8484009..53e5706 100644
 --- a/crates/zakuro-gpu/src/lib.rs
 +++ b/crates/zakuro-gpu/src/lib.rs
 @@ -28,6 +28,8 @@ pub use backend::{layout, place, GpuScreen, Overlay, OverlayMesh, OverlayTexture
@@ -8,13 +8,13 @@ index 4352cd9..89bbd8d 100644
  pub use device::SharedDevice;
 +#[cfg(feature = "vulkan")]
 +pub use raster::{GpuTimes, GPU_WORK};
- 
- /// how the GPU reaches guest memory.
+
+ /// how the GPU reaches guest memory
  pub trait GpuMemory {
-@@ -794,6 +796,15 @@ impl Gpu {
+@@ -762,6 +764,15 @@ impl Gpu {
          None
      }
- 
+
 +    /// the GPU's own timings, when they are being measured
 +    /// (`ZAKURO_GPU_TIMES=1`), see [`GpuTimes`]; `None` in software, before
 +    /// the renderer started and when the timings are off. Cumulative since
@@ -24,17 +24,17 @@ index 4352cd9..89bbd8d 100644
 +        self.resources.hardware.as_ref().and_then(|hardware| hardware.gpu_times())
 +    }
 +
-     /// how many times the console's resolution the host's GPU draws at, 1
-     /// when drawing in software.
+     /// how many times the console's res the host's GPU draws at, 1 when drawing in software
      pub fn scale(&self) -> u32 {
+         #[cfg(feature = "vulkan")]
 diff --git a/crates/zakuro-gpu/src/raster.rs b/crates/zakuro-gpu/src/raster.rs
-index 0f238bf..f7b50c2 100644
+index 96ceff6..11ce64a 100644
 --- a/crates/zakuro-gpu/src/raster.rs
 +++ b/crates/zakuro-gpu/src/raster.rs
 @@ -8,6 +8,53 @@ use rayon::prelude::*;
  use crate::registers::*;
  use crate::lighting::{Lighting, Tables};
- 
+
 +/// the kinds of work the GPU's timestamps tell apart, in the order
 +/// [`GpuTimes::milliseconds`] has them.
 +#[cfg(feature = "vulkan")]
@@ -86,15 +86,12 @@ index 0f238bf..f7b50c2 100644
  pub(crate) mod hardware;
  use crate::texture::TextureFormat;
 diff --git a/crates/zakuro-gpu/src/raster/hardware.rs b/crates/zakuro-gpu/src/raster/hardware.rs
-index 275cca8..eaeef2c 100644
+index 955ab30..57b7da4 100644
 --- a/crates/zakuro-gpu/src/raster/hardware.rs
 +++ b/crates/zakuro-gpu/src/raster/hardware.rs
-@@ -882,20 +882,47 @@ struct Timing {
-     /// each command buffer's timestamps, and the work between them.
-     pools: HashMap<vk::CommandBuffer, (vk::QueryPool, Vec<Work>)>,
+@@ -827,16 +827,43 @@ struct Timing {
      current: Work,
--    /// milliseconds per kind of work.
-+    /// milliseconds per kind of work, cumulative since the renderer started.
+     /// milliseconds per kind of work
      totals: [f64; WORK_NAMES.len()],
 +    /// the totals as of the last log line, so each line reports its own
 +    /// window.
@@ -107,17 +104,13 @@ index 275cca8..eaeef2c 100644
      draws: u64,
 +    /// the counters as of the last log line.
 +    logged_counts: [u64; 3],
-     /// each command buffer's pipeline statistics, when the device keeps
-     /// them, and the vertices, primitives past clipping, fragments and
--    /// compute invocations they added up to.
-+    /// compute invocations they added up to, cumulative.
+     /// each command buffer's pipeline statistics, when the device keeps them, and the vertices,
+     /// primitives past clipping, fragments and compute invocations they added up to
      statistics: Option<HashMap<vk::CommandBuffer, vk::QueryPool>>,
      counts: [u64; 4],
 +    /// the counts as of the last log line.
 +    logged_shaded: [u64; 4],
-     /// milliseconds the host waited for the GPU and how many times, for a
--    /// batch to record the next in, then for what it needed done.
-+    /// batch to record the next in, then for what it needed done, cumulative.
+     /// ms the host waited for the GPU and how many times, for a batch to record the next in, then for what it needed done
      waited: [(f64, u32); 2],
 +    /// the waits as of the last log line.
 +    logged_waited: [(f64, u32); 2],
@@ -138,9 +131,9 @@ index 275cca8..eaeef2c 100644
 +    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 +    *ON.get_or_init(|| std::env::var_os("ZAKURO_FAST_BARRIERS").is_some_and(|value| value != "0"))
  }
- 
- /// what the host waited for the GPU for.
-@@ -1973,13 +2000,18 @@ impl Hardware {
+
+ /// what the host waited for the GPU for
+@@ -1853,13 +1880,18 @@ impl Hardware {
                          pools: HashMap::new(),
                          current: Work::Other,
                          totals: [0.0; WORK_NAMES.len()],
@@ -159,10 +152,10 @@ index 275cca8..eaeef2c 100644
                      }),
                  barriers: 0,
                  unfenced: true,
-@@ -2023,6 +2055,29 @@ impl Hardware {
+@@ -1902,6 +1934,29 @@ impl Hardware {
          &self.name
      }
- 
+
 +    /// the GPU's own timings, when they are being measured
 +    /// (`ZAKURO_GPU_TIMES=1` on a queue that counts time): time per kind of
 +    /// work, draws, render passes, barriers, the host's waits for the GPU and
@@ -186,10 +179,10 @@ index 275cca8..eaeef2c 100644
 +        })
 +    }
 +
-     /// whether it runs vertex shaders.
+     /// does it run vertex shaders
      pub(crate) fn shades(&self) -> bool {
          self.shades
-@@ -2322,17 +2377,31 @@ impl Hardware {
+@@ -2194,17 +2249,31 @@ impl Hardware {
          timing.renderings += renderings;
          timing.draws += draws;
          timing.batches += 1;
@@ -224,7 +217,7 @@ index 275cca8..eaeef2c 100644
                      format!(
                          ", shaded {:.2}M vertices, {:.2}M primitives, {:.2}M fragments, {:.2}M compute",
                          millions[0], millions[1], millions[2], millions[3]
-@@ -2340,23 +2409,27 @@ impl Hardware {
+@@ -2212,23 +2281,27 @@ impl Hardware {
                  }
                  None => String::new(),
              };
@@ -263,10 +256,10 @@ index 275cca8..eaeef2c 100644
          }
          Ok(())
      }
-@@ -2383,6 +2456,42 @@ impl Hardware {
+@@ -2254,6 +2327,42 @@ impl Hardware {
          }
      }
- 
+
 +    /// the barrier a render pass about to begin on other buffers waits for,
 +    /// narrower than a full one: what the pass before wrote is made visible to
 +    /// the attachment reads and writes of this one and to the draws that
@@ -303,12 +296,12 @@ index 275cca8..eaeef2c 100644
 +        }
 +    }
 +
-     /// ends the rendering, and draws what waits to go into twins, before
-     /// anything else reads or writes them.
+     /// ends the rendering and draws what waits to go into twins, b4 anything else reads or writes them
      fn end_rendering(&mut self) {
-@@ -2501,6 +2610,11 @@ impl Hardware {
- 
-     /// records clearing rows of a surface's image or its twin's.
+         if self.rendering.take().is_some() {
+@@ -2366,6 +2475,11 @@ impl Hardware {
+
+     /// records clearing rows of a surface's image or its twin's
      fn clear_rows_of(&mut self, index: usize, view: vk::ImageView, rows: (u32, u32), pixel: &[u8]) {
 +        // an image clear writes the rows and nothing else: no render pass, no
 +        // attachment load or store. ZAKURO_FAST_CLEARS=1 (A/B, default off).
@@ -318,10 +311,10 @@ index 275cca8..eaeef2c 100644
          let surface = &self.surfaces[index];
          let (width, height, kind) = (surface.width, surface.height, surface.kind);
          let scale = self.scale;
-@@ -2552,6 +2666,53 @@ impl Hardware {
+@@ -2415,6 +2529,53 @@ impl Hardware {
          }
      }
- 
+
 +    /// clears whole rows of a surface with an image clear, which writes them
 +    /// and nothing else: no render pass and no attachment load or store, the
 +    /// way a render pass clear of the same rows would read and write the whole
@@ -369,10 +362,10 @@ index 275cca8..eaeef2c 100644
 +        true
 +    }
 +
-     /// the height of the tallest surface of a kind at an address and width,
-     /// at least height, the one a draw of that height goes into.
+     /// the height of the tallest surface of a kind at an addr and width, at least height, the one a draw of that height goes into
      fn taller(&self, addr: u32, kind: Kind, width: u32, height: u32) -> u32 {
-@@ -4157,7 +4318,11 @@ impl Hardware {
+         self.surfaces
+@@ -3950,7 +4111,11 @@ impl Hardware {
          if real {
              if self.rendering != Some((color, depth)) {
                  self.end_rendering();

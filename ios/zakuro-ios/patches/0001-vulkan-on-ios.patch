@@ -1,19 +1,17 @@
 diff --git a/crates/zakuro-gpu/src/instance.rs b/crates/zakuro-gpu/src/instance.rs
-index 6bacdf9..7749454 100644
+index 057d0e7..e8d7fc8 100644
 --- a/crates/zakuro-gpu/src/instance.rs
 +++ b/crates/zakuro-gpu/src/instance.rs
-@@ -1,5 +1,5 @@
--//! the system's Vulkan library and an instance of it, on any host, macOS's
--//! included, where Vulkan is MoltenVK over Metal and only shows up to an
-+//! the system's Vulkan library and an instance of it, on any host, macOS's and
-+//! iOS's included, where Vulkan is MoltenVK over Metal and only shows up to an
- //! instance that asks for portable drivers.
- 
+@@ -1,4 +1,4 @@
+-//! the system's Vulkan library and an instance of it, on any host incl macOS,
++//! the system's Vulkan library and an instance of it, on any host incl macOS and iOS,
+ //! where Vulkan is MoltenVK over Metal and only shows up to an instance that asks for portable drivers
+
  use ash::vk;
-@@ -16,6 +16,15 @@ const MACOS_LIBRARIES: [&str; 4] = [
+@@ -15,6 +15,15 @@ const MACOS_LIBRARIES: [&str; 4] = [
      "/usr/local/lib/libMoltenVK.dylib",
  ];
- 
+
 +/// where an iOS app keeps MoltenVK: as a framework it embeds, whose install
 +/// name is `@rpath/MoltenVK.framework/MoltenVK`, or as a dylib of its own.
 +/// `ZAKURO_VULKAN_LIBRARY` names another path first.
@@ -23,10 +21,10 @@ index 6bacdf9..7749454 100644
 +    "@rpath/libMoltenVK.dylib",
 +];
 +
- /// the MoltenVK Zakuro.app comes with, in its Frameworks folder, which asks
- /// nothing of the computer.
+ /// the MoltenVK Zakuro.app ships w/, in its Frameworks folder, it asks nothing of the computer
  #[cfg(target_os = "macos")]
-@@ -36,6 +45,14 @@ pub(crate) fn entry() -> Result<ash::Entry, ash::LoadingError> {
+ fn bundled() -> Option<std::path::PathBuf> {
+@@ -33,6 +42,14 @@ pub(crate) fn entry() -> Result<ash::Entry, ash::LoadingError> {
              return Ok(entry);
          }
      }
@@ -38,10 +36,10 @@ index 6bacdf9..7749454 100644
 +            return Ok(entry);
 +        }
 +    }
-     // SAFETY: loads the system's Vulkan library, which is the documented way
-     // to start
+     // safe bc loading the system's Vulkan library is the documented way to start
      let error = match unsafe { ash::Entry::load() } {
-@@ -49,6 +66,13 @@ pub(crate) fn entry() -> Result<ash::Entry, ash::LoadingError> {
+         Ok(entry) => return Ok(entry),
+@@ -45,6 +62,13 @@ pub(crate) fn entry() -> Result<ash::Entry, ash::LoadingError> {
              return Ok(entry);
          }
      }
@@ -54,4 +52,4 @@ index 6bacdf9..7749454 100644
 +    }
      Err(error)
  }
- 
+
