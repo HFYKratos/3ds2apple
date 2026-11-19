@@ -262,8 +262,7 @@ struct SettingsView: View {
             Button {
                 exportDiagnostics()
             } label: {
-                moreRowLabel("Export logs", systemImage: "square.and.arrow.up.fill",
-                             iconColor: .primary)
+                moreRowLabel("Export logs", systemImage: "square.and.arrow.up.fill")
             }
             .tint(.primary)
             .accessibilityIdentifier("settings-export-logs")
