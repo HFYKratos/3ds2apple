@@ -143,7 +143,7 @@ struct AboutView: View {
             acknowledgement("Pocket Native (MIT): AOT linking and renderer reference.")
             acknowledgement("MoltenVK (Apache-2.0): Vulkan over Metal, used by the presented renderer.")
             acknowledgement("idevice (MIT): usbmuxd / AFC device bridge used by tools/devpush.")
-            acknowledgement("LLVM/Clang/LLD 21.1.8 (Apache-2.0 with LLVM exception): local GamePack build on Windows and Linux.")
+            acknowledgement("LLVM/Clang/LLD 23.1.6 (Apache-2.0 with LLVM exception): local GamePack build on Windows and Linux.")
             acknowledgement("Impactor / plumesign (MIT): signing and install on Windows.")
             acknowledgement("Avalonia 12 / .NET 10 (MIT): Windows launcher UI and runtime.")
             Text("Azahar / Citra (GPL, behaviour reference only): emulation semantics references; no GPL code is linked into this app.")

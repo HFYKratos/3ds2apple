@@ -502,7 +502,7 @@
 "This app ships without any game data: no ROMs, decryption keys, system files or game assets. Use only game dumps you made from your own console." = "This app ships without any game data: no ROMs, decryption keys, system files or game assets. Use only game dumps you made from your own console.";
 "3ds2apple is free and open source under the Apache-2.0 licence; the bundled third-party components keep their own licences." = "3ds2apple is free and open source under the Apache-2.0 licence; the bundled third-party components keep their own licences.";
 "idevice (MIT): usbmuxd / AFC device bridge used by tools/devpush." = "idevice (MIT): usbmuxd / AFC device bridge used by tools/devpush.";
-"LLVM/Clang/LLD 21.1.8 (Apache-2.0 with LLVM exception): local GamePack build on Windows and Linux." = "LLVM/Clang/LLD 21.1.8 (Apache-2.0 with LLVM exception): local GamePack build on Windows and Linux.";
+"LLVM/Clang/LLD 23.1.6 (Apache-2.0 with LLVM exception): local GamePack build on Windows and Linux." = "LLVM/Clang/LLD 23.1.6 (Apache-2.0 with LLVM exception): local GamePack build on Windows and Linux.";
 "Impactor / plumesign (MIT): signing and install on Windows." = "Impactor / plumesign (MIT): signing and install on Windows.";
 "Avalonia 12 / .NET 10 (MIT): Windows launcher UI and runtime." = "Avalonia 12 / .NET 10 (MIT): Windows launcher UI and runtime.";
 "Azahar / Citra (GPL, behaviour reference only): emulation semantics references; no GPL code is linked into this app." = "Azahar / Citra (GPL, behaviour reference only): emulation semantics references; no GPL code is linked into this app.";
