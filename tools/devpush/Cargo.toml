@@ -2,8 +2,9 @@
 # Talks to Apple's usbmuxd over USB or Wi-Fi, uses house_arrest (VendContainer) + AFC
 # to read/write an installed app's container, and installation_proxy to install,
 # uninstall and query app attributes. Modelled on S2Arm's s2a-devpush (Apache-2.0);
-# the idevice dependency is pinned to the same upstream commit that official
-# Impactor v2.7.2 uses. See tools/devpush/README.md and THIRD_PARTY.md.
+# the idevice dependency is pinned to the v0.1.68 release; official Impactor
+# v2.7.3 pins an older revision internally (the protocol is unchanged). See
+# tools/devpush/README.md and THIRD_PARTY.md.
 [package]
 name = "devpush"
 version = "0.1.3"
@@ -17,7 +18,7 @@ name = "devpush"
 path = "src/main.rs"
 
 [dependencies]
-# MIT, https://github.com/jkcoxson/idevice — pinned to the commit used by official Impactor v2.7.2.
+# MIT, https://github.com/jkcoxson/idevice — pinned to the v0.1.68 release (official Impactor v2.7.3 pins an older revision internally; protocol unchanged).
 # "ring" keeps TLS pure-Rust (no OpenSSL) so the same crate builds on Windows/macOS/Linux.
 idevice = { git = "https://github.com/jkcoxson/idevice", rev = "d32c8189c51c2789496b0768039419c3705498c3", default-features = false, features = ["house_arrest", "installation_proxy", "usbmuxd", "ring"] }
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "fs", "io-util", "time"] }

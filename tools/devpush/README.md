@@ -29,8 +29,8 @@ scope here.
     cargo test --manifest-path tools/devpush/Cargo.toml
 
 The binary is `tools/devpush/target/release/devpush` (Windows: `devpush.exe`).
-Dependencies: `idevice` (MIT, pinned to the same upstream commit official
-Impactor v2.7.2 uses), tokio, plist, clap, serde, sha2. See THIRD_PARTY.md.
+Dependencies: `idevice` (MIT, pinned to the v0.1.68 release; official Impactor
+v2.7.3 pins an older revision internally, the protocol is unchanged), tokio, plist, clap, serde, sha2. See THIRD_PARTY.md.
 
 The unit/integration tests cover the tar stream, stall watchdog, NDJSON/exit-code
 contract and a full mock-device roundtrip; they do not need an iPhone.
