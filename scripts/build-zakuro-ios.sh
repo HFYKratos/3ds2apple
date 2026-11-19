@@ -13,7 +13,7 @@ ZAKURO_DIR="${ZAKURO_DIR:-$ROOT/third_party/zakuro}"
 # 3fe7b15. The local patches in ios/zakuro-ios/patches are rebased onto exactly
 # this revision, so the library build is reproducible while upstream main moves.
 # ZAKURO_REF is for local experiments only, never for a release build.
-ZAKURO_PIN="fdf67b2b6398a7ad0dc2309b09ea4c03c45e9d8"
+ZAKURO_PIN="fdf67b29b6398a7ad0dc2309b09ea4c03c45e9d8"
 ZAKURO_REF="${ZAKURO_REF:-$ZAKURO_PIN}"
 # The host's recomp-abi crate (pinned by Zakuro's Cargo.lock) and the 3dsrecomp
 # CLI scripts/build-recomp-ios.sh runs must be the same revision: recomp-abi is
