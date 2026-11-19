@@ -19,7 +19,7 @@ path = "src/main.rs"
 [dependencies]
 # MIT, https://github.com/jkcoxson/idevice — pinned to the commit used by official Impactor v2.7.2.
 # "ring" keeps TLS pure-Rust (no OpenSSL) so the same crate builds on Windows/macOS/Linux.
-idevice = { git = "https://github.com/jkcoxson/idevice", rev = "5171e34e3a236842af1160a84d955d037ddca3af", default-features = false, features = ["house_arrest", "installation_proxy", "usbmuxd", "ring"] }
+idevice = { git = "https://github.com/jkcoxson/idevice", rev = "d32c8189c51c2789496b0768039419c3705498c3", default-features = false, features = ["house_arrest", "installation_proxy", "usbmuxd", "ring"] }
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "fs", "io-util", "time"] }
 plist = "1"
 serde = { version = "1", features = ["derive"] }

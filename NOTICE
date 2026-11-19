@@ -11,7 +11,7 @@ decrypted game dumps.
 The project contains original source code, build scripts and documentation.
 It depends on third-party software, including Zakuro and 3dsrecomp (MIT), the
 idevice crate used by tools/devpush (MIT, https://github.com/jkcoxson/idevice,
-pinned commit 5171e34e3a236842af1160a84d955d037ddca3af), and S2Arm
+pinned commit d32c8189c51c2789496b0768039419c3705498c3, v0.1.68), and S2Arm
 (Apache-2.0) as the API-usage reference for the device bridge. See
 THIRD_PARTY.md for the full list and licenses.
 
