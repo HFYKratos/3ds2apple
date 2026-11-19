@@ -180,6 +180,10 @@ enum DiagnosticsExporter {
         let info = Bundle.main.infoDictionary ?? [:]
         let version = info["CFBundleShortVersionString"] as? String ?? "?"
         let build = info["CFBundleVersion"] as? String ?? "?"
+        // The bundle version is numeric for Apple; this key carries the package
+        // label (0.1.4-beta2, 0.1.4, ...) so an exported log identifies the exact
+        // build the tester installed.
+        let packageVersion = info["ThreeDS2ApplePackageVersion"] as? String ?? "-"
         let device = UIDevice.current
         let screen = UIScreen.main
         let timing = model.frameStats.timing
@@ -213,6 +217,7 @@ enum DiagnosticsExporter {
         3ds2apple diagnostics
         date=\(Date())
         app=\(version) (\(build))
+        package_version=\(packageVersion)
         device=\(device.model) · \(device.systemName) \(device.systemVersion)
         screen=\(Int(screen.bounds.width * screen.scale))x\(Int(screen.bounds.height * screen.scale)) @\(screen.scale)x
         phase=\(phaseDescription(model.phase))

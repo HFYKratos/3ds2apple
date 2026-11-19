@@ -262,8 +262,10 @@ struct SettingsView: View {
             Button {
                 exportDiagnostics()
             } label: {
-                moreRowLabel("Export logs", systemImage: "square.and.arrow.up.fill")
+                moreRowLabel("Export logs", systemImage: "square.and.arrow.up.fill",
+                             iconColor: .primary)
             }
+            .tint(.primary)
             .accessibilityIdentifier("settings-export-logs")
             if let diagnosticsHint {
                 Text(diagnosticsHint)
@@ -298,11 +300,12 @@ struct SettingsView: View {
     /// the primary text colour, independent of the Form's default Button /
     /// NavigationLink tint (0.1.3 item 4: the Export logs icon was blue while
     /// the two navigation rows were not).
-    private func moreRowLabel(_ title: LocalizedStringKey, systemImage: String) -> some View {
+    private func moreRowLabel(_ title: LocalizedStringKey, systemImage: String,
+                             iconColor: Color = .accentColor) -> some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
                 .font(.body)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(iconColor)
                 .frame(width: 24, alignment: .center)
             Text(title)
                 .foregroundStyle(.primary)

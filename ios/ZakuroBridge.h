@@ -569,6 +569,17 @@ int32_t zk_set_render_scale(uint32_t scale);
  */
 const char *zk_hardware_status(zk_system_t system);
 
+/**
+ * Draws the 3D on the host GPU (Vulkan through MoltenVK on iOS) for the next
+ * zk_create()/zk_create_presented(). 0 is software, 1 is the GPU; the setting
+ * is process-wide and read while a system loads. A presented load always asks
+ * for the GPU; a plain zk_create() (the readback layout) needs this call so the
+ * 3D still runs on Metal and only the screen copy is read back.
+ *
+ * Returns 0.
+ */
+int32_t zk_set_hardware_renderer(int32_t enabled);
+
 /* ------------------------------------------------------ frame diagnostics -- */
 
 /**

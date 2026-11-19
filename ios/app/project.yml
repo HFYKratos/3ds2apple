@@ -90,6 +90,9 @@ targets:
         # MARKETING_VERSION/CURRENT_PROJECT_VERSION unless named here.
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Package label for diagnostics: Apple's short version stays numeric,
+        # this key carries the beta label so an exported log names the build.
+        ThreeDS2ApplePackageVersion: "0.1.4-beta2"
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
         UIApplicationSceneManifest:

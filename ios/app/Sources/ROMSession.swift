@@ -1697,6 +1697,15 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             return
         }
 
+        // A full-screen custom layout has no CAMetalLayer presenter, so the
+        // load goes through the plain zk_create() readback path. Ask for the
+        // GPU renderer explicitly: the 3D still draws on Metal, only the screen
+        // copy is read back, instead of falling back to the software PICA200.
+        // A presented load forces the same switch on its own.
+        zk_set_hardware_renderer(1)
+        if presenter == nil {
+            AppLog.log("[3ds2apple] readback presentation: asking for the GPU renderer")
+        }
         // Replacing a game always releases the previous handle first, and that
         // release is when Zakuro writes the pipelines it compiled to its cache
         // (Caches/zakuro/pipelines, one file per title). Read the directory
