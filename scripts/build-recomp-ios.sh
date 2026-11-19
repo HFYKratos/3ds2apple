@@ -25,6 +25,8 @@
 # generated C uses the exact ABI the linked Zakuro accepts. If the Zakuro
 # checkout is missing, a built-in fallback revision is used and a warning is
 # printed; run scripts/build-zakuro-ios.sh first for the authoritative pin.
+# scripts/build-zakuro-ios.sh pins both sides to the same revision (2026-11-19:
+# 4b6de5d, interface ABI 8 / generation 6; ABI 4 and 5 code still runs).
 #
 # Split/incremental path (2026-11-12 VM run): the generation step does not have
 # to happen on the same machine/run as the iOS compile. All of these reuse
@@ -55,9 +57,11 @@ AOT_LOG_PREFIX="build-recomp-ios"
 # shellcheck source=lib/aot-common.sh
 source "${SCRIPT_DIR}/lib/aot-common.sh"
 
-# Built-in fallback: recomp-abi rev pinned by Zakuro's Cargo.lock at the time
-# scripts/README.md was written (§8.4: ABI 5 / generation 5). Prefer the Cargo.lock pin.
-DEFAULT_RECOMP_REV="df82e6e3"
+# Built-in fallback for a machine without a Zakuro checkout: the revision
+# scripts/build-zakuro-ios.sh pins (2026-11-19: interface ABI 8 / generation 6,
+# the comment cleanup after 730fbac; ABI 4 and 5 code still runs). Prefer the
+# Zakuro Cargo.lock pin, which build-zakuro-ios.sh has synced to this revision.
+DEFAULT_RECOMP_REV="4b6de5d884b0d8bc337e16c07b84a0824e55a0e1"
 
 RECOMP_REPO_URL="https://github.com/fearkov/3dsrecomp"
 IOS_TARGET="arm64-apple-ios16.0"

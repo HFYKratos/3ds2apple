@@ -9,7 +9,7 @@ is not vendored here.
 | Component | License | Role |
 |---|---|---|
 | [Zakuro](https://github.com/fearkov/zakuro) | MIT | 3DS HLE runtime that runs AOT code without a CPU JIT; pinned at commit `fdf67b2` (2026-11-19) by `scripts/build-zakuro-ios.sh`, which also syncs the `recomp-abi` lock entry to the 3dsrecomp pin below |
-| [3dsrecomp](https://github.com/fearkov/3dsrecomp) | MIT (declared in Cargo.toml; no LICENSE file upstream — build tool only, never vendored) | ARM / Thumb / VFP → C static recompiler |
+| [3dsrecomp](https://github.com/fearkov/3dsrecomp) | MIT (declared in Cargo.toml; no LICENSE file upstream — build tool only, never vendored) | ARM / Thumb / VFP → C static recompiler; pinned at commit `4b6de5d` (2026-11-19, interface ABI 8 / generation 6; generated code of ABI 4 and 5 still runs) |
 | [Pocket Native](https://github.com/whovian64/pocket-native) v0.6.1 | MIT | Zakuro + 3dsrecomp AOT fork, reference only (not vendored, linked or redistributed): static Linked integration, GLES rendering and per-game profile reference for the iOS port |
 | [MoltenVK](https://github.com/KhronosGroup/MoltenVK) 1.4.2 | Apache-2.0 | Vulkan → Metal compatibility layer for the PICA200 renderer. The pinned ios-arm64 dynamic framework (SHA-256 pinned in the shell template and the macOS launcher) is embedded in the iOS shell template and in the macOS launcher; a build/packaging input, not committed to git. 1.4.2 is the latest release (checked 2026-11-19); no upgrade is needed |
 | [idevice](https://github.com/jkcoxson/idevice) | MIT | Rust usbmuxd/lockdownd/AFC/installation_proxy client used by tools/devpush (pinned to commit 5171e34e3a236842af1160a84d955d037ddca3af) |

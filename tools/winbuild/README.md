@@ -162,8 +162,10 @@ clang + Darwin stubs.
 
 ```sh
 # once per machine: Rust + a 3dsrecomp checkout at the pinned revision
+# (2026-11-19: 4b6de5d, interface ABI 8 / generation 6; the 2026-11-15 evidence
+# below was generated with df82e6e, interface ABI 5, which still runs)
 git clone https://github.com/fearkov/3dsrecomp third_party/3dsrecomp
-(cd third_party/3dsrecomp && git checkout df82e6e && cargo build --release)
+(cd third_party/3dsrecomp && git checkout 4b6de5d && cargo build --release)
 
 # generate C for the user's own ROM and compile it for arm64 iOS (one step):
 tools/winbuild/recomp-port.sh "ROM/a retail title.cci" build/game/retail-title-host
