@@ -1,7 +1,7 @@
 # 3ds2apple macOS launcher
 
 A SwiftUI macOS app for the AOT-first product flow (v2: Library -> Deploy),
-aligned with the Windows launcher (current product version **0.1.4-beta2 build 1**;
+aligned with the Windows launcher (current product version **0.1.4 build 1**;
 CFBundleShortVersionString stays numeric **0.1.4**;
 0.2.x numbers below are the pre-reset history):
 
@@ -161,6 +161,31 @@ it from a source tree).
     screenshots/               generated non-game UI evidence (committed)
 
 ## Evidence / QA
+
+### launcher 0.1.4 build 1 (0.1.4 release, 2026-11-19)
+
+The 0.1.4 package on the macOS VM (macOS 26.7.3, Xcode 26.6, headless):
+
+- xcodebuild: BUILD SUCCEEDED (Release), 0 errors; universal binary
+  (x86_64 + arm64, 7,155,136-byte executable), bundle
+  com.kratos.3ds2apple.launcher, version 0.1.4 build 1.
+- self-check: **212/212 checks passed** (exit 0), including the shell-runtime
+  identity check: the pinned ROM-free shell template is exactly 6,141,211 bytes,
+  sha256 8f3e24a3…, carries the pinned 4,822,128-byte MoltenVK 1.4.2 framework
+  (sha256 6cd58884…), keeps the Metal HUD + Documents file-sharing Info.plist keys
+  and reports CFBundleShortVersionString 0.1.4 / CFBundleVersion 1. The packaged
+  app, freshly extracted from the ZIP, also passed 212/212.
+- screenshots: 18 non-game PNGs, English + Simplified Chinese, dark + light;
+  the Settings version label is unchanged ("Version 0.1.4 (1)"), so all 18 stayed
+  byte-identical to the committed ones (no regeneration needed).
+- artifact: out/launchers/3ds2apple-launcher-0.1.4-macos-app.zip
+  (5,509,291 bytes, sha256
+  d7e006323597076fcbeeaa7327abc98c10b3cd8689ccd56a2b1cd5df1023a0f3), one .app
+  plus LICENSE/NOTICE/THIRD_PARTY.md at the ZIP root (19 entries, 13,996,641 bytes
+  uncompressed) including Contents/Resources/MoltenVK.framework. The launcher
+  embeds the MoltenVK framework, but the macOS package is not self-contained yet
+  (a checkout + Xcode + the built tools are required). Real iPhone acceptance is
+  still NOT done (issue #1).
 
 ### launcher 0.1.4-beta2 build 1 (local 0.1.4-beta2 pre-release, 2026-11-19)
 
