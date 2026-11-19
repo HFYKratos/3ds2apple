@@ -59,7 +59,10 @@ on-screen controls, so no input or audio advances behind it.
 - Instant save states: three slots per game, one file per slot under
   `Documents/states/<title id>/`. The in-game menu saves to and loads from slot 1;
   the Save Manager page lists and deletes the selected game's slots even while it
-  is not running, and saves or loads them only while that game runs.
+  is not running, and saves or loads them only while that game runs. A background
+  recovery snapshot lives next to the slots
+  (`Documents/states/<save namespace>/background.bin`, named by
+  `Documents/states/background.json`; see "Background lifecycle (0.1.4)").
 - Save-data management: the Save Manager's game picker manages every game in the
   library, not just the one that was last started: export the selected game's
   battery saves as a ZIP archive through the share sheet, import a ZIP archive or
@@ -147,6 +150,8 @@ Documents/
   Library/playHistory.json    last-played times (written by the shell)
   data/<save namespace>/      battery saves (written by the runtime)
   states/<save namespace>/    instant save-state slots
+  states/<save namespace>/background.bin   background recovery snapshot (0.1.4)
+  states/background.json      the game that snapshot belongs to (0.1.4)
 ```
 
 `GameInfo.json` is schemaVersion 1 and is authoritative for the pushed game
@@ -508,8 +513,8 @@ localized.
   audio engine; the runtime handle is kept. Resuming starts a new loop and
   restarts the audio engine.
 - Paused wall time is excluded from the frame statistics. The in-game menu, a
-  save-state operation, the software keyboard and scene transitions record when
-  the pause starts and ends; the first frame after a resume rebases the
+  save-state operation, the software keyboard, scene transitions and a move to the
+  background record when the pause starts and ends; the first frame after a resume rebases the
   start-to-start interval and restarts the 0.5 s FPS window instead of measuring
   the pause. A three-second keyboard pause therefore resumes at a normal frame
   rate instead of logging `fps=0.5` with one multi-second `stutter=` spike, and
@@ -521,12 +526,11 @@ localized.
   save data directory; battery saves are kept.
 - Exit releases the runtime and returns to the home page. The ROM file and save
   data stay in the app container.
-- Moving the app to the background releases the runtime (iOS may jettison a
-  backgrounded process); the home page then offers to load the ROM again.
-  Losing scene activity without backgrounding (Control Center, the app switcher,
+- Losing scene activity without backgrounding (Control Center, the app switcher,
   an incoming call, a system alert) only pauses: the loop and the audio engine
   stop, and returning resumes the same session with its statistics preserved
-  and the inactive minutes excluded.
+  and the inactive minutes excluded. 0.1.4 treats a move to the background the
+  same way instead of releasing the runtime; see "Background lifecycle (0.1.4)".
 - Fast-forward is a property of the frame loop, so pause, save states, reset and
   unload suspend it together with the loop; resuming continues at the setting's
   speed. The in-game menu's speed control applies on resume.
@@ -536,6 +540,62 @@ localized.
   the frame the title waited in; the overlay's text, limit, buttons and confirming
   rule all come from the applet request, so it works for any title that uses the
   keyboard.
+
+## Background lifecycle (0.1.4)
+
+- A move to the background keeps the session. `scenePhase` drives it:
+  `.inactive` pauses the frame loop (Control Center, the app switcher, an incoming
+  call, a system alert), `.background` additionally clears input and takes the
+  recovery snapshot, and `.active` resumes the same console with the frame
+  statistics preserved and the paused minutes excluded. The home page is not
+  shown; the runtime handle is not released on the way out.
+- The audio engine stops with the loop and starts again on return. The in-game
+  menu and the software keyboard keep their own pause: a game backgrounded while
+  the menu is open stays paused until the menu's Resume is used (a save-state
+  operation that finishes while backgrounded leaves the loop to the return to the
+  active scene).
+- A load that is still running when the app backgrounds finishes in the
+  background; its frame loop starts on the return to the foreground instead of
+  running while the process is suspended.
+- **Recovery snapshot.** iOS may still jettison a backgrounded process under
+  memory pressure. `ROMSession.suspendForBackground()` asks
+  `SaveStateSupport.captureBackgroundSnapshot` to serialize the console into
+  `Documents/states/<save namespace>/background.bin` and to write
+  `Documents/states/background.json` (title id, display name, namespace,
+  timestamp, bytes); the write runs inside a UIKit background task. The capture
+  is skipped when the process has less than 700 MiB of jetsam headroom, when the
+  disk has less than 1 GiB free, while a save-state operation is running, or when
+  no game is loaded. After a cold launch the home page shows a "Game paused in
+  the background" card: **Resume** starts the game and applies the snapshot once
+  the runtime is loaded; **Discard** (or starting the game from its own card)
+  removes the snapshot. The files are deleted as soon as the running session
+  comes back to the foreground, so a snapshot can never replace newer progress;
+  Unload and Reset delete them too.
+- **Privacy cover.** While the scene is not active the game view draws an opaque
+  "Paused" cover above the menu and the keyboard overlay, so the app switcher
+  snapshot and the lock screen do not show the game.
+- **Memory warnings.** `applicationDidReceiveMemoryWarning` is logged
+  (`[3ds2apple] memory warning: ...`) and counted as `memory_warnings=` in the
+  diagnostics. The runtime owns the large allocations, so the shell reports the
+  warning rather than freeing memory; the same headroom rule guards the snapshot.
+
+Device verification for this change:
+
+1. Load a game and let it run, then press Home (or switch to another app) and
+   wait 10 s; return: the game is still on its picture and keeps running, and the
+   home page does not appear. Repeat with a 1-minute stay, with a switch to
+   another app, and after locking and unlocking the screen.
+2. The device log shows `scene background: paused (frame loop and audio stopped,
+   runtime kept)` on the way out and `scene active: frame loop resumed` on the
+   way back; the exported diagnostics report `background_suspended=0` after the
+   return and a `frame_pause_count=` / `frame_pause_ms_total=` increment for the
+   stay.
+3. Background the game, swipe the app away in the app switcher (an explicit
+   kill), relaunch: the home page offers "Game paused in the background"; Resume
+   continues that scene instead of a fresh boot. After a normal return to the
+   foreground `Documents/states/background.json` is gone.
+4. Open the app switcher while playing: its snapshot shows the "Paused" cover,
+   not the game.
 
 ## Build
 
@@ -690,8 +750,9 @@ The app has one presentation path and one fallback:
   presenter uploads the CPU pixels, so the app still never builds a `CGImage`.
 - The Metal view and presenter are created on the main queue and kept for the
   app's lifetime, so a later load reuses the same layer and Vulkan device. The
-  frame loop stops presenting when the runtime stops (Unload, background,
-  exit/fault); the presenter is released with the app. A display change (layout,
+  frame loop stops presenting when the runtime stops (Unload, exit/fault) or the
+  app is in the background (0.1.4: the loop stops, the runtime, presenter and
+  Vulkan device are kept and used again on return); the presenter is released with the app. A display change (layout,
   rotation, render scale) resizes the layer's drawable and the presenter's
   swapchain on the runtime queue, so the next frame uses it; that costs one
   out-of-date present. For the render scale that only resizes the drawable: the
@@ -836,6 +897,7 @@ Two kinds of data stay on the device:
 |---|---|---|
 | Battery saves | `Documents/data/<save namespace>/` | The game's own save menu writes them; the Save Manager lists, exports, imports and deletes them. |
 | Instant save states | `Documents/states/<save namespace>/slot1.bin` … `slot3.bin` | Save State / Load State in the in-game menu (slot 1) and the Save Manager (all three slots). |
+| Background recovery snapshot | `Documents/states/<save namespace>/background.bin`, named by `Documents/states/background.json` | Written when the app moves to the background (0.1.4) and deleted when the session returns to the foreground or is unloaded; after a cold launch the home page offers Resume. |
 | Deleted-game record | `Documents/Library/removedGames.json` | The Home page's delete action writes it; pushing the game's data again with the launcher clears it. |
 
 The save namespace is the title ID by default; a launcher may set `saveNamespace`
@@ -1174,8 +1236,11 @@ the new `run-gpu` / `run-cpu` labels.
   60 fps there.
 - A cold pipeline cache makes a first session's scene compiles visible; the same
   scene on a warm cache compiles much less. The cache is flushed by `zk_destroy`
-  (a clean Unload or a move to the background), so a force-quit while playing
-  loses the session's compiles and the next launch is cold again.
+  (a clean Unload or exit). 0.1.4 no longer destroys the runtime when the app is
+  backgrounded, and the runtime still saves the cache every 5 s while it runs, so
+  a process the system jettisons in the background keeps the compiles from the
+  last few seconds; a force-quit while playing still loses the compiles since the
+  last save.
 
 #### A/B a change on device
 
@@ -1183,7 +1248,7 @@ the new `run-gpu` / `run-cpu` labels.
    scene compile: record `pipeline_cache_at_load=`,
    `timing_ms_run_gpu=` maximum, `stutter_pipeline_compile_suspects=` and the
    worst `stutter_event=`.
-2. Play, Unload (or background) the game and check the log for
+2. Play, Unload the game and check the log for
    `pipeline cache after zk_destroy:`; load again. `pipeline_cache_at_load=`
    must show the cache and the compile numbers must drop. A second session that
    still compiles is a cache-persistence bug, not a renderer problem.
@@ -1196,9 +1261,11 @@ The diagnostics header carries the block `stutter_definition=`,
 `stutter_count=`, `stutter_per_min=`, `stutter_severe_count=`,
 `stutter_worst_ms=`, `stutter_top_phase=`, `stutter_gpu_walk_bound_frames=`,
 `stutter_pipeline_compile_suspects=`, `stutter_phase_share=`,
-`stutter_events=` and the pause block `frame_pause_count=` /
-`frame_pause_ms_total=` / `frame_pause_ms_last=` / `frame_pause_definition=`,
-followed by one `stutter_event=` line per spike. The frame
+`stutter_events=`, the pause block `frame_pause_count=` /
+`frame_pause_ms_total=` / `frame_pause_ms_last=` / `frame_pause_definition=` and
+the background block `background_suspended=` / `background_snapshot=` /
+`memory_warnings=` / `background_definition=`, followed by one `stutter_event=`
+line per spike. The frame
 path only does a few tick comparisons; nothing is written to disk while the
 game runs and the tracker takes no lock (it is read on the runtime queue at the
 existing 0.5 s stats boundary). The same numbers are appended to the periodic

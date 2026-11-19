@@ -267,9 +267,9 @@ The app provides:
    preferred present mode is mailbox (no vblank wait); FIFO is the fallback.
 5. **Lifecycle**: the view and the presenter are made on the main queue; the
    system is loaded on the presenter's device and destroyed before the presenter.
-   Stopping the frame loop (Unload, background, exit/fault) stops presenting; the
-   presenter, its device and the layer are kept for the next load, and are
-   released with the app. A size change marks the swapchain stale and it is
+   Stopping the frame loop (Unload, exit/fault, or the app moving to the
+   background in the 0.1.4 app) stops presenting; the presenter, its device and
+   the layer are kept for the next load, and are released with the app. A size change marks the swapchain stale and it is
    rebuilt on the next present.
 6. **C API** (implemented in `ios/zakuro-ios/src/presenter.rs`, declared in
    `ios/ZakuroBridge.h`):
@@ -935,7 +935,7 @@ Then record a steady-state `zk_perf` line from the second or third window:
 | R11 | swapchain rebuild (rotation/resize, layer property updates) runs on the renderer's serial queue, not the main queue | medium/low | the app sets `CAMetalLayer.drawableSize` on the main queue first, then resizes the presenter on the render queue; a size change costs one out-of-date present. Device verification point: rotation and split view |
 | R12 | first present before the `UIView` is in the window hierarchy (very fast load) | low/low | the load takes much longer than SwiftUI's layout pass, and the layer holds a provisional drawable size before layout; verify on device that the first frame appears |
 | R13 | presenter/swapchain failure leaves a black layer | low/medium | the app counts `zk_present` failures and falls back to the CGImage readback path after about a second; the Metal view stays alive for the presenter |
-| R14 | the Vulkan device/Metal layer is suspended with the app and the GPU takes it away | low/low | the frame loop and presenting stop in the background; on return the same device is used again. If the first frames after resume fail, `zk_present` errors fall back to the readback path (R13). Device verification point |
+| R14 | the Vulkan device/Metal layer is suspended with the app and the GPU takes it away | low/low | the frame loop and presenting stop in the background; on return the same device is used again. This is the path the 0.1.4 app relies on: it keeps the runtime and the layer across a move to the background. If the first frames after resume fail, `zk_present` errors fall back to the readback path (R13). Device verification point |
 | R15 | the graphics warm-up delays a first load by up to 5 s | low/none | **removed in 0.1.1**: the app-level warm-up option and its "Preparing graphics" overlay were deleted (10.3 is kept as a design record). The runtime pipeline cache (10.1–10.2) still makes later loads warm |
 | R16 | a live layout/rotation change races a `zk_present` | low/medium | the app sends `zk_presenter_set_layout` / `zk_presenter_set_orientation` / `zk_presenter_resize` on the same serial queue as `zk_present`, so the next frame uses them; the presenter is only configured on the main queue while the frame loop is stopped (load start). Device verification point: switch layouts repeatedly during play |
 
@@ -996,8 +996,10 @@ the translated module arrives.
   so a first session that ends badly (force quit, jetsam) still keeps most of
   the pipelines it compiled.
 - **Clean exits.** `Hardware::drop` waits for the GPU and saves the cache, so
-  Unload, Change ROM and the move to the background — all of which destroy the
-  runtime — write the latest cache. The app logs the directory contents after
+  Unload and Change ROM — which destroy the runtime — write the latest cache.
+  (0.1.3 and earlier the move to the background destroyed the runtime too; the
+  0.1.4 app keeps it and only stops the loop, so there the periodic save and the
+  eventual release cover it.) The app logs the directory contents after
   `zk_destroy` so a device log or the exported diagnostics proves it.
 - **Size cap.** Upstream compiles from scratch again if the cache grows past
   `MOST_PIPELINE_BYTES` (64 MiB); a normal title's cache is far smaller.
@@ -1102,7 +1104,7 @@ pipeline cache at load: cold (no cached pipelines)
 graphics warm-up: starting (cold cache, full run)
 graphics warm-up: warm-up ready in 2.40 s · 146 frames · max 586 ms · 3 spiky (>50 ms)
 pipeline cache after warm-up: 1 file, 640 KB, newest 0004000000055E00.bin at ...
-pipeline cache after zk_destroy: 1 file, 640 KB, newest ...      # Unload / background
+pipeline cache after zk_destroy: 1 file, 640 KB, newest ...      # Unload (0.1.3: also background)
 ```
 
 The diagnostics report adds:
@@ -1140,7 +1142,7 @@ frame time.
    game). Note the warm-up duration and max frame.
 3. Play: the game must be revealed without a visible freeze; watch for a
    second or two after the reveal and record any hitch with its log time.
-4. Unload the ROM (or send the app to the background) and check the log for
+4. Unload the ROM and check the log for
    `pipeline cache after zk_destroy: 1 file, ...`.
 5. Load the ROM again: the log should show `pipeline cache at load: 1 file, …`
    and `planned short (pipelines cached)`; the warm-up should finish well
@@ -1149,7 +1151,8 @@ frame time.
    next load must run the full warm-up again.
 7. Regression: a build without MoltenVK (software renderer) must reveal
    immediately with `warmup_outcome=skipped-software-renderer`, and
-   background/Unload/Load-last/rotation must behave as before.
+   Unload/Load-last/rotation must behave as before, and in the 0.1.4 app a
+   move to the background must continue the same session on return.
 
 Not verified on the development host: all of the above, plus `xcodebuild`. The
 patch, the native parse of the Swift sources and the host `cargo check` of the

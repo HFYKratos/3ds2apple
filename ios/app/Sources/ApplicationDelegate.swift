@@ -49,4 +49,29 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> UIInterfaceOrientationMask {
         AppOrientation.currentMask()
     }
+
+    /// iOS warns before memory pressure turns into a termination. The runtime
+    /// owns the large allocations (FCRAM, the software renderer, the GPU
+    /// resources), so the shell cannot free much here; it records the warning so
+    /// a device log and the exported diagnostics say whether a session ran
+    /// through memory pressure.
+    func applicationDidReceiveMemoryWarning(_ application: UIApplication) {
+        AppMemoryPressure.shared.noteWarning()
+        AppLog.log(
+            "[3ds2apple] memory warning: the system is low on memory (warning %ld of this app run)",
+            AppMemoryPressure.shared.count
+        )
+    }
+}
+
+/// Memory-pressure warnings observed during this app run. Diagnostics only: the
+/// runtime owns the memory, the shell can only report what the system did.
+final class AppMemoryPressure {
+    static let shared = AppMemoryPressure()
+    /// Number of `applicationDidReceiveMemoryWarning` callbacks this run.
+    private(set) var count = 0
+
+    func noteWarning() {
+        count += 1
+    }
 }

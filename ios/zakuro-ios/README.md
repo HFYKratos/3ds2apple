@@ -106,8 +106,10 @@ plus app-side behaviour that keeps the first-run cost on a loading screen:
   part of the build.
 - **Durability.** `patches/0002-pipeline-cache-save-every.patch` lowers
   Zakuro's `SAVE_EVERY` from 60 s to 5 s, so an early exit keeps most of the
-  compiled pipelines; `zk_destroy` (Unload, Change ROM, background) also saves
-  the cache on the way out. The app logs the directory contents after
+  compiled pipelines; `zk_destroy` (Unload, Change ROM) also saves the cache on
+  the way out. The 0.1.4 app keeps the runtime when it moves to the background
+  (it only stops the loop), so the cache is written when the runtime is finally
+  released or by the periodic save. The app logs the directory contents after
   `zk_destroy` so this is visible in device logs and diagnostics.
 - **Warm-up (removed in 0.1.1).** The app-level "Preparing graphics" warm-up
   overlay was removed together with its Settings option; a game is revealed as

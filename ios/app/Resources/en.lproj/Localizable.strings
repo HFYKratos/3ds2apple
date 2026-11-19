@@ -284,7 +284,6 @@
 "The interface stays portrait." = "The interface stays portrait.";
 "The on-screen pad and a connected controller are merged. Dragging on the lower screen is the 3DS touchscreen." = "The on-screen pad and a connected controller are merged. Dragging on the lower screen is the 3DS touchscreen.";
 "The runtime is released and the game closes. Imported ROMs and save data stay on the device." = "The runtime is released and the game closes. Imported ROMs and save data stay on the device.";
-"The runtime was stopped when the app went to the background. Open the game again to continue." = "The runtime was stopped when the app went to the background. Open the game again to continue.";
 "The save data is too large for a ZIP archive (4 GB limit)." = "The save data is too large for a ZIP archive (4 GB limit).";
 "The selected file is empty." = "The selected file is empty.";
 "The selected file is not a ZIP archive." = "The selected file is not a ZIP archive.";
@@ -586,4 +585,16 @@
 "Editing the %@ layout" = "Editing the %@ layout";
 "Drag to move, pinch to scale. The controls are shown for reference." = "Drag to move, pinch to scale. The controls are shown for reference.";
 "Tap a control, then drag or pinch it. The screens show the current screen layout." = "Tap a control, then drag or pinch it. The screens show the current screen layout.";
+/* --- 0.1.4: background pause/resume and the recovery snapshot --- */
+"%@ was interrupted when the app left the foreground." = "%@ was interrupted when the app left the foreground.";
+"Could not resume the game" = "Could not resume the game";
+"Could not write the recovery snapshot: %@" = "Could not write the recovery snapshot: %@";
+"Discard" = "Discard";
+"Game paused in the background" = "Game paused in the background";
+"Its game data is no longer in this app." = "Its game data is no longer in this app.";
+"Resume" = "Resume";
+"The game stopped before the recovery snapshot could be saved." = "The game stopped before the recovery snapshot could be saved.";
+"The game stopped before the recovery snapshot could be restored." = "The game stopped before the recovery snapshot could be restored.";
+"The game was busy with another save-state operation." = "The game was busy with another save-state operation.";
+"The recovery snapshot could not be restored, so the game starts from the beginning." = "The recovery snapshot could not be restored, so the game starts from the beginning.";
 

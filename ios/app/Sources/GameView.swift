@@ -39,6 +39,10 @@ struct GameView: View {
     @ObservedObject var settings: AppSettings
 
     @Environment(\.displayScale) private var displayScale
+    /// Scene phase for the multi-tasking privacy cover: while the app is not
+    /// active (app switcher, lock screen, Control Center) the game is covered so
+    /// its picture never appears in a system snapshot.
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var isMenuPresented = false
     @State private var sheet: GameSheet?
@@ -117,6 +121,15 @@ struct GameView: View {
                         model.answerKeyboard(text: text, button: button)
                     }
                     .zIndex(10)
+                }
+
+                // Multi-tasking privacy: the app switcher's snapshot and the
+                // lock screen must not show the game. The opaque cover sits
+                // above the menu and the keyboard overlay and disappears when
+                // the scene is active again.
+                if scenePhase != .active {
+                    privacyCover
+                        .zIndex(20)
                 }
             }
             .onAppear {
@@ -311,6 +324,25 @@ struct GameView: View {
         )
         .ignoresSafeArea()
         .accessibilityIdentifier("touch-controls-overlay")
+    }
+
+    // MARK: - Multi-tasking privacy
+
+    /// Opaque cover shown while the scene is not active: the app switcher's
+    /// snapshot and the lock screen show this instead of the game.
+    private var privacyCover: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 10) {
+                Image(systemName: "pause.circle.fill")
+                    .font(.system(size: 46, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.75))
+                Text(L10n.tr("Paused"))
+                    .font(.headline)
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+        }
+        .accessibilityIdentifier("background-privacy-cover")
     }
 
     // MARK: - Menu

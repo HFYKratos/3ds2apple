@@ -218,6 +218,9 @@ enum DiagnosticsExporter {
         phase=\(phaseDescription(model.phase))
         game=\(model.currentGame.map { "\($0.title) (\($0.titleID))" } ?? "none")
         paused=\(model.isPaused ? 1 : 0)
+        background_suspended=\(model.isBackgroundSuspended ? 1 : 0)
+        background_snapshot=\(model.backgroundSnapshotDiagnostics)
+        memory_warnings=\(AppMemoryPressure.shared.count)
         aot=\(model.aotStatus.label)
         aot_diagnostics=\(model.aotDiagnostics.label)
         aot_linked_code=\(model.aotDiagnostics.linkedCode ? 1 : 0)
@@ -282,7 +285,8 @@ enum DiagnosticsExporter {
         frame_pause_count=\(pauses.count)
         frame_pause_ms_total=\(String(format: "%.1f", pauses.totalMilliseconds))
         frame_pause_ms_last=\(String(format: "%.1f", pauses.lastMilliseconds))
-        frame_pause_definition=paused wall time (software keyboard, in-game menu, save states, scene transitions) is excluded from fps, stutter and start-to-start timing; a pause stops or restarts the loop instead of counting as a frame
+        frame_pause_definition=paused wall time (software keyboard, in-game menu, save states, scene transitions, background) is excluded from fps, stutter and start-to-start timing; a pause stops or restarts the loop instead of counting as a frame
+        background_definition=0.1.4: a move to the background pauses the frame loop, the audio engine and the timing windows but keeps the runtime handle, so the return to the active scene continues the same console with its statistics preserved. background_snapshot is the recovery snapshot written on the way out; it is only used after a cold launch (the process was jettisoned) and is discarded when the running session returns to the foreground. memory_warnings counts the system's low-memory warnings during this app run
         timing_ms_total=\(String(format: "%.2f/%.2f/%.2f", timing.renderTotal.average, timing.renderTotal.maximum, timing.renderTotal.last))
         timing_ms_run=\(String(format: "%.2f/%.2f/%.2f", timing.runFrame.average, timing.runFrame.maximum, timing.runFrame.last))
         timing_ms_run_gpu=\(String(format: "%.2f/%.2f/%.2f", timing.runGPU.average, timing.runGPU.maximum, timing.runGPU.last))

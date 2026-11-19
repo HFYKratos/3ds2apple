@@ -61,6 +61,7 @@ struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     header
+                    backgroundResume
                     librarySection
                     footer
                 }
@@ -111,6 +112,50 @@ struct HomeView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
             .accessibilityIdentifier("settings-link")
+        }
+    }
+
+    // MARK: - Background resume
+
+    /// A session the system ended while the app was in the background. The
+    /// runtime writes a recovery snapshot when the app moves to the background
+    /// (0.1.4); if the process was jettisoned, this card continues that session
+    /// instead of starting the game from the beginning.
+    @ViewBuilder
+    private var backgroundResume: some View {
+        if let snapshot = model.backgroundSnapshot {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "play.circle.fill")
+                    Text("Game paused in the background")
+                        .font(.caption.weight(.semibold))
+                }
+                .foregroundStyle(.blue)
+                Text(L10n.format("%@ was interrupted when the app left the foreground.", snapshot.title))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 16) {
+                    Button(L10n.tr("Resume")) {
+                        model.resumeBackgroundSnapshot()
+                    }
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityIdentifier("background-resume-continue")
+                    Button(L10n.tr("Discard"), role: .destructive) {
+                        model.discardBackgroundSnapshot()
+                    }
+                    .font(.caption.weight(.medium))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("background-resume-discard")
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(cardBackground)
+            .accessibilityIdentifier("background-resume")
         }
     }
 
@@ -272,6 +317,8 @@ struct HomeView: View {
                     )
                 }
                 deletionStatus = message
+                // A deleted game cannot be resumed: refresh the card.
+                model.refreshBackgroundSnapshot()
             case .failure(let error):
                 deletionError = error.localizedDescription
             }

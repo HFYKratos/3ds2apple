@@ -99,21 +99,30 @@ struct ContentView: View {
             }
         }
         .onChange(of: scenePhase) { newPhase in
-            // iOS may jettison a backgrounded process; release the runtime.
-            if newPhase == .background {
-                model.stopForBackground()
-            } else if newPhase == .inactive {
+            switch newPhase {
+            case .background:
+                // 0.1.4: keep the runtime and pause. Returning to the foreground
+                // continues the same game; the session writes a recovery
+                // snapshot in case iOS jettisons the process while it is
+                // backgrounded.
+                model.suspendForBackground()
+            case .inactive:
                 // Control Center, the app switcher, an incoming call or a system
                 // alert: pause the loop so the inactive time is excluded from
                 // fps/stutter (ROMSession.applyPendingPauseResume).
                 model.pauseForInactiveScene()
-            } else if newPhase == .active {
-                // Returned from a scene transition: continue the same session
-                // with its running statistics preserved.
+            case .active:
+                // Returned from a scene transition or from the background:
+                // continue the same session with its running statistics kept.
                 model.resumeAfterInactiveScene()
                 // The launcher (or the Files app) can add or replace games while
                 // the app is not in front: rescan Documents/Games on return.
                 library.refresh()
+                // A recovery snapshot may have appeared or been dropped while
+                // the app was in the background.
+                model.refreshBackgroundSnapshot()
+            @unknown default:
+                break
             }
         }
         .onChange(of: settings.audioMuted) { muted in

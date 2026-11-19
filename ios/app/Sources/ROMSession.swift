@@ -18,6 +18,12 @@
 //          layer/presenter cannot be made the session falls back to the
 //          `zk_read_screen` + CGImage path unchanged.
 //
+//  0.1.4: scene lifecycle. The inactive/background scene pauses the frame loop
+//         and the audio engine but keeps the runtime, so the active scene
+//         resumes the same session instead of returning to the home page. A
+//         recovery snapshot is written while the app is in the background, so a
+//         process the system jettisons can be resumed after the next launch.
+//
 //  Threading contract (ios/zakuro-ios/README.md, ios/zakuro-ios/README.md):
 //  - every zk_* call that takes a handle runs on `runtimeQueue`, a single
 //    serial queue;
@@ -393,6 +399,26 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// loop; main queue only. Kept apart from `isPaused` (the in-game menu) so
     /// returning to the app only resumes what the scene pause stopped.
     private var scenePauseActive = false
+    /// True between the move to the background and the return to the active
+    /// scene (0.1.4): the runtime is kept, the frame loop and audio are stopped,
+    /// and the scene pause resumes the session instead of unloading it. Main
+    /// queue only.
+    private var backgroundSuspended = false
+    /// Recovery snapshot the home page can offer after a cold launch, nil when
+    /// there is none. Read at launch and refreshed after a library change.
+    @Published private(set) var backgroundSnapshot: BackgroundSnapshot?
+    /// Recovery snapshot the user asked to restore; applied once the runtime is
+    /// loaded. Main queue only.
+    private var pendingBackgroundSnapshot: BackgroundSnapshot?
+    /// Generation guard for an in-flight snapshot write: the return to the
+    /// foreground makes the write stale. Main queue only.
+    private var backgroundSnapshotGeneration: UInt64 = 0
+    /// Generation of the snapshot write in flight, nil when none is running.
+    /// Main queue only.
+    private var backgroundSnapshotInFlight: UInt64?
+    /// UIKit background-task id that keeps the snapshot write alive after the
+    /// scene backgrounded. Main queue only.
+    private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
 
     /// Paused wall time excluded from the frame statistics (diagnostics header).
     var framePauseStats: FramePauseStats { framePauseClock.snapshot() }
@@ -414,6 +440,17 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         // The catalog decides what exists; log it once like the old shell logged
         // the ROMs it had imported.
         AppLog.log("[3ds2apple] game library: %ld game(s)", GameLibrary.shared.entries.count)
+        // A recovery snapshot left by a session the system jettisoned while in
+        // the background: the home page offers to continue it.
+        backgroundSnapshot = SaveStateSupport.pendingBackgroundSnapshot()
+        if let snapshot = backgroundSnapshot {
+            AppLog.log(
+                "[3ds2apple] background snapshot: offering to resume %@ (%@, captured %@)",
+                snapshot.titleID,
+                StorageFormat.size(snapshot.bytes),
+                StorageFormat.date(snapshot.capturedAt)
+            )
+        }
     }
 
     deinit {
@@ -457,6 +494,15 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     func start(_ entry: GameEntry) {
         guard !isRuntimeActive else { return }
         let latest = GameLibrary.shared.entry(titleID: entry.titleID) ?? entry
+        // Starting a game fresh replaces the interrupted session the home page
+        // offered to resume, so its recovery snapshot is stale from here. (The
+        // explicit Resume path clears `backgroundSnapshot` before calling this,
+        // so it never reaches this branch.)
+        if let snapshot = backgroundSnapshot, snapshot.titleID == latest.titleID {
+            backgroundSnapshot = nil
+            pendingBackgroundSnapshot = nil
+            discardBackgroundSnapshot(foregroundReturn: false)
+        }
         switch latest.validation {
         case .invalid(let issues):
             presentInstallationProblem(for: latest, issues: issues)
@@ -612,6 +658,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// file is missing, or the size/SHA-256 mismatch, and what to do about it.
     func presentInstallationProblem(for entry: GameEntry, issues: [GameValidationIssue]) {
         guard !issues.isEmpty else { return }
+        // The resume of an interrupted session cannot continue without the game
+        // data: drop the pending restore (the snapshot file stays, so a later
+        // launch can still offer it).
+        pendingBackgroundSnapshot = nil
         let hasMissingData = issues.contains { issue in
             if case .gameDataMissing = issue { return true }
             return false
@@ -666,6 +716,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     func presentNoAOTMessage(_ message: String) {
         currentGame = nil
         aotStatus = .notLoaded
+        pendingBackgroundSnapshot = nil
         presentNotice(
             title: L10n.tr("No AOT build for this game"),
             message: message,
@@ -683,6 +734,11 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         stopAudio()
         inputState.clearAll()
         isPaused = false
+        // An explicit exit ends the interrupted session too: its recovery
+        // snapshot must not be offered again.
+        backgroundSuspended = false
+        pendingBackgroundSnapshot = nil
+        discardBackgroundSnapshot(foregroundReturn: false)
         runtimeQueue.async { [weak self] in
             guard let self else {
                 DispatchQueue.main.async { completion?() }
@@ -703,31 +759,36 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         }
     }
 
-    /// Stops the frame loop and releases the runtime when the app moves to the
-    /// background: iOS may jettison a backgrounded process at any time, so the
-    /// handle must not outlive the active scene.
-    func stopForBackground() {
-        // The background transition is a pause too: record it so a report made
-        // after returning cannot count the inactive time as a frame.
-        framePauseClock.pause(at: FrameClock.now())
+    /// Pauses the session when the app moves to the background (0.1.4).
+    ///
+    /// The runtime handle is kept. iOS suspends a backgrounded process in the
+    /// normal case, and returning to the active scene continues the same console
+    /// where it stopped. The frame loop and the audio engine are stopped right
+    /// away so no frame runs while the system suspends the process, and the
+    /// suspended wall time is excluded from the frame statistics. A recovery
+    /// snapshot is written for the case where the system does jettison the
+    /// process (`SaveStateSupport.captureBackgroundSnapshot`).
+    func suspendForBackground() {
+        guard !backgroundSuspended else { return }
+        backgroundSuspended = true
+        // Open the pause exactly once. iOS sends .inactive before .background,
+        // so the scene pause usually already owns it; a game paused by its own
+        // in-game menu keeps that pause (its resume path owns it).
+        if !scenePauseActive {
+            scenePauseActive = true
+            framePauseClock.pause(at: FrameClock.now())
+        }
         stopFrameLoop()
         stopAudio()
         inputState.clearAll()
-        isPaused = false
-        scenePauseActive = false
-        runtimeQueue.async { [weak self] in
-            guard let self else { return }
-            let hadRuntime = self.system != nil
-            self.destroySystem()
-            guard hadRuntime else { return }
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.clearScreens()
-                self.warmUp = GraphicsWarmUpStatus()
-                self.setPhase(.finished(
-                    message: L10n.tr("The runtime was stopped when the app went to the background. Open the game again to continue.")
-                ))
-            }
+        switch phase {
+        case .loaded:
+            AppLog.log("[3ds2apple] scene background: paused (frame loop and audio stopped, runtime kept)")
+            requestBackgroundSnapshot()
+        case .starting, .preparing:
+            AppLog.log("[3ds2apple] scene background: load in progress; the loop starts when the app returns")
+        case .idle, .failed, .finished:
+            AppLog.log("[3ds2apple] scene background: no running session")
         }
     }
 
@@ -1030,6 +1091,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Continues a session paused by `pauseForMenu()`.
     func resumeFromMenu() {
         guard isPaused else { return }
+        // Nothing runs while the app is in the background; the menu's resume
+        // takes effect on the return to the active scene.
+        guard !backgroundSuspended else { return }
         isPaused = false
         // Close the recorded pause before the loop is restarted: the restart
         // resets every timing baseline, so the pause only counts in the
@@ -1050,6 +1114,11 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         stopFrameLoop()
         stopAudio()
         inputState.clearAll()
+        // The restart is a new session: the recovery snapshot belongs to the
+        // session being replaced.
+        backgroundSuspended = false
+        pendingBackgroundSnapshot = nil
+        discardBackgroundSnapshot(foregroundReturn: false)
         setPhase(.idle)
         start(game)
     }
@@ -1094,6 +1163,13 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         guard suspended else { return }
         guard case .loaded = phase, let game = currentGame else { return }
         isPaused = false
+        guard !backgroundSuspended else {
+            // The app moved to the background while the state was serialized:
+            // leave the loop stopped. The return to the active scene resumes it
+            // and the open pause clock records the whole pause.
+            AppLog.log("[3ds2apple] save-state work finished in the background; the loop restarts on return")
+            return
+        }
         framePauseClock.resume(at: FrameClock.now())
         startFrameLoop(warmUp: nil, romKey: game.titleID)
         startAudio()
@@ -1111,7 +1187,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// software keyboard is left alone: its own resume path owns it.
     func pauseForInactiveScene() {
         guard case .loaded = phase, !isPaused, keyboardRequest == nil,
-              !scenePauseActive else { return }
+              !scenePauseActive, !backgroundSuspended else { return }
         scenePauseActive = true
         inputState.clearAll()
         framePauseClock.pause(at: FrameClock.now())
@@ -1123,15 +1199,217 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Continues a session paused by `pauseForInactiveScene()`. Unlike the
     /// in-game menu, the loop is only restarted: the session keeps its running
     /// frame statistics, and the pause is excluded from them instead of
-    /// resetting them.
+    /// resetting them. The same path returns from the background (0.1.4): the
+    /// runtime was kept, so the game simply continues here.
     func resumeAfterInactiveScene() {
-        guard scenePauseActive else { return }
+        let returnedFromBackground = backgroundSuspended
+        backgroundSuspended = false
+        if returnedFromBackground {
+            // The session goes on from here, so a snapshot of the older state is
+            // stale: the running console is newer. A pending restore still owns
+            // its snapshot file, so that one is kept until it has been applied.
+            if pendingBackgroundSnapshot == nil {
+                discardBackgroundSnapshot(foregroundReturn: true)
+            } else {
+                backgroundSnapshotGeneration &+= 1
+                backgroundSnapshotInFlight = nil
+                backgroundSnapshot = nil
+                endBackgroundSnapshotTask()
+            }
+        }
+        guard scenePauseActive else {
+            // A load that finished while the app was in the background clears
+            // the scene pause on completion: restart the loop here.
+            if returnedFromBackground, case .loaded = phase, !isPaused,
+               keyboardRequest == nil, let game = currentGame {
+                framePauseClock.resume(at: FrameClock.now())
+                startLoadedSession(romKey: game.titleID)
+                AppLog.log("[3ds2apple] scene active: frame loop resumed after the load completed in the background")
+            }
+            return
+        }
         scenePauseActive = false
-        guard case .loaded = phase, !isPaused, keyboardRequest == nil else { return }
-        framePauseClock.resume(at: FrameClock.now())
-        rearmFrameLoop()
+        let loadInProgress: Bool
+        switch phase {
+        case .starting, .preparing:
+            loadInProgress = true
+        case .idle, .loaded, .failed, .finished:
+            loadInProgress = false
+        }
+        if case .loaded = phase, !isPaused, keyboardRequest == nil, let game = currentGame {
+            framePauseClock.resume(at: FrameClock.now())
+            if returnedFromBackground, pendingBackgroundSnapshot != nil {
+                // The load finished while the app was in the background; the
+                // recovery snapshot restore has not run yet.
+                startLoadedSession(romKey: game.titleID)
+            } else {
+                rearmFrameLoop()
+                startAudio()
+            }
+            AppLog.log("[3ds2apple] scene active: frame loop resumed")
+        } else if loadInProgress {
+            // Close the recorded scene pause; the load completion starts the
+            // loop with a reset clock once the runtime is ready.
+            framePauseClock.resume(at: FrameClock.now())
+            AppLog.log("[3ds2apple] scene active: load still in progress, the loop starts when it completes")
+        }
+        // A game paused by its in-game menu or the software keyboard keeps its
+        // pause: that control resumes it (and nothing runs while backgrounded).
+    }
+
+    // MARK: - Background recovery snapshot (main queue)
+
+    /// True between the move to the background and the return to the active
+    /// scene (diagnostics).
+    var isBackgroundSuspended: Bool { backgroundSuspended }
+
+    /// One-line state of the recovery snapshot for the diagnostics report.
+    var backgroundSnapshotDiagnostics: String {
+        if let snapshot = backgroundSnapshot {
+            return "pending \(snapshot.titleID) \(StorageFormat.size(snapshot.bytes)) captured \(StorageFormat.date(snapshot.capturedAt))"
+        }
+        if backgroundSnapshotInFlight != nil {
+            return "capturing"
+        }
+        if pendingBackgroundSnapshot != nil {
+            return "restoring"
+        }
+        return "none"
+    }
+
+    /// Restores the interrupted session offered on the home page: starts the
+    /// game and applies the recovery snapshot once the runtime is loaded.
+    func resumeBackgroundSnapshot() {
+        guard let snapshot = backgroundSnapshot ?? SaveStateSupport.pendingBackgroundSnapshot() else { return }
+        backgroundSnapshot = nil
+        guard let entry = GameLibrary.shared.entry(titleID: snapshot.titleID) else {
+            SaveStateSupport.discardBackgroundSnapshot()
+            presentNotice(
+                title: L10n.tr("Could not resume the game"),
+                message: L10n.tr("Its game data is no longer in this app."),
+                severity: .warning
+            )
+            return
+        }
+        pendingBackgroundSnapshot = snapshot
+        AppLog.log("[3ds2apple] background snapshot: resuming %@", snapshot.titleID)
+        start(entry)
+    }
+
+    /// Drops the recovery snapshot offered on the home page: the interrupted
+    /// session is abandoned and the card disappears.
+    func discardBackgroundSnapshot() {
+        pendingBackgroundSnapshot = nil
+        discardBackgroundSnapshot(foregroundReturn: false)
+    }
+
+    /// Re-reads the recovery snapshot after the library changed (a game was
+    /// deleted): the home page calls it so the resume card cannot point at a
+    /// game that no longer exists.
+    func refreshBackgroundSnapshot() {
+        guard !isRuntimeActive, pendingBackgroundSnapshot == nil else { return }
+        backgroundSnapshot = SaveStateSupport.pendingBackgroundSnapshot()
+    }
+
+    /// Starts the loaded session after a load completes (or after returning to
+    /// the foreground while a load finished in the background): restores a
+    /// pending recovery snapshot first, then starts the frame loop and audio.
+    private func startLoadedSession(romKey: String) {
+        if let snapshot = pendingBackgroundSnapshot {
+            pendingBackgroundSnapshot = nil
+            guard snapshot.titleID == romKey.uppercased() else {
+                startLoadedSessionWithoutSnapshot(romKey: romKey)
+                return
+            }
+            AppLog.log(
+                "[3ds2apple] background snapshot: restoring %@ (%@)",
+                snapshot.titleID,
+                StorageFormat.size(snapshot.bytes)
+            )
+            saveStates.restoreBackgroundSnapshot(snapshot: snapshot) { [weak self] failure in
+                guard let self else { return }
+                if let failure {
+                    AppLog.log("[3ds2apple] background snapshot: %@", failure)
+                    self.presentNotice(
+                        title: L10n.tr("Could not resume the game"),
+                        message: L10n.tr("The recovery snapshot could not be restored, so the game starts from the beginning."),
+                        severity: .warning
+                    )
+                } else {
+                    self.discardBufferedAudio()
+                }
+                self.startLoadedSessionWithoutSnapshot(romKey: romKey)
+            }
+            return
+        }
+        startLoadedSessionWithoutSnapshot(romKey: romKey)
+    }
+
+    /// Starts the loop and the audio engine of a loaded session, unless the app
+    /// is in the background again by now.
+    private func startLoadedSessionWithoutSnapshot(romKey: String) {
+        guard case .loaded = phase, !backgroundSuspended else { return }
+        startFrameLoop(warmUp: nil, romKey: romKey)
         startAudio()
-        AppLog.log("[3ds2apple] scene active: frame loop resumed")
+    }
+
+    /// Serializes the console while the app is in the background, so a process
+    /// the system jettisons can be resumed after the next cold launch. The
+    /// frame loop and the audio engine are already stopped by
+    /// `suspendForBackground()`.
+    private func requestBackgroundSnapshot() {
+        guard case .loaded = phase, let game = currentGame else { return }
+        guard backgroundSnapshotInFlight == nil, saveStates.isRuntimeLoaded else { return }
+        backgroundSnapshotGeneration &+= 1
+        let generation = backgroundSnapshotGeneration
+        backgroundSnapshotInFlight = generation
+        beginBackgroundSnapshotTask()
+        AppLog.log("[3ds2apple] background snapshot: capturing %@", game.titleID)
+        saveStates.captureBackgroundSnapshot(titleID: game.titleID, title: game.title) { [weak self] snapshot in
+            guard let self else { return }
+            self.endBackgroundSnapshotTask()
+            guard self.backgroundSnapshotInFlight == generation else {
+                // The app came back before the write finished: the running
+                // session is newer, so the just-written snapshot is stale.
+                SaveStateSupport.discardBackgroundSnapshot()
+                return
+            }
+            self.backgroundSnapshotInFlight = nil
+            if snapshot == nil {
+                AppLog.log("[3ds2apple] background snapshot: not written")
+            }
+        }
+    }
+
+    /// Drops the recovery snapshot state and its files. `foregroundReturn`
+    /// distinguishes the normal return to the active scene (the session
+    /// continues and the snapshot is stale) from an explicit unload/reset.
+    private func discardBackgroundSnapshot(foregroundReturn: Bool) {
+        backgroundSnapshotGeneration &+= 1
+        backgroundSnapshotInFlight = nil
+        endBackgroundSnapshotTask()
+        backgroundSnapshot = nil
+        if foregroundReturn {
+            AppLog.log("[3ds2apple] background snapshot: discarded (the session continued)")
+        }
+        SaveStateSupport.discardBackgroundSnapshot()
+    }
+
+    /// Gives the snapshot write time to finish after the scene backgrounded;
+    /// ended as soon as the write completes or the system takes the time back.
+    private func beginBackgroundSnapshotTask() {
+        endBackgroundSnapshotTask()
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "3ds2apple.background-snapshot") { [weak self] in
+            guard let self else { return }
+            AppLog.log("[3ds2apple] background snapshot: the system ended the background time before the snapshot finished")
+            self.endBackgroundSnapshotTask()
+        }
+    }
+
+    private func endBackgroundSnapshotTask() {
+        guard backgroundTaskID != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTaskID)
+        backgroundTaskID = .invalid
     }
 
     /// Drops audio buffered before a state load: the DSP state went back to the
@@ -1571,8 +1849,19 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             self.pipelineCacheAtLoad = cacheAtLoad
             self.warmUp = GraphicsWarmUpStatus()
             self.setPhase(.loaded(name: launch.entry.title))
-            self.startFrameLoop(warmUp: nil, romKey: launch.entry.titleID)
-            self.startAudio()
+            if self.backgroundSuspended {
+                // The app moved to the background while this load was running:
+                // keep the runtime and leave the loop stopped. The return to
+                // the active scene starts it (a pending recovery snapshot is
+                // restored first).
+                AppLog.log("[3ds2apple] scene background: runtime loaded; the frame loop stays stopped until the app returns")
+                return
+            }
+            if self.scenePauseActive {
+                self.scenePauseActive = false
+                self.framePauseClock.resume(at: FrameClock.now())
+            }
+            self.startLoadedSession(romKey: launch.entry.titleID)
         }
     }
 
@@ -2603,6 +2892,15 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
 
     private func publishFailure(_ message: String) {
         AppLog.log("[3ds2apple] game load failed: %@", message)
+        // A failed load cannot apply a pending recovery snapshot either (this
+        // may run on the runtime queue, so the main-queue state move is hopped).
+        if Thread.isMainThread {
+            pendingBackgroundSnapshot = nil
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.pendingBackgroundSnapshot = nil
+            }
+        }
         setPhase(.failed(message: message))
     }
 }

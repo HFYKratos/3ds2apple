@@ -177,6 +177,44 @@ check "a missing cache directory is a normal cold run" contains ios/app/Sources/
 check "README documents the pause counters" contains ios/app/README.md 'frame_pause_count='
 check "README documents the cache directory state" contains ios/app/README.md 'pipeline_cache_dir_state='
 
+section 'Background lifecycle (0.1.4)'
+check "ContentView backgrounds through the suspend path" \
+  contains ios/app/Sources/ContentView.swift 'model.suspendForBackground()'
+check "the session keeps the runtime when it moves to the background" \
+  contains ios/app/Sources/ROMSession.swift 'func suspendForBackground()'
+check "the background path no longer releases the runtime" \
+  bash -c '! grep -Fq "func stopForBackground" ios/app/Sources/ROMSession.swift'
+check "the session writes a recovery snapshot on the way out" \
+  contains ios/app/Sources/ROMSession.swift 'requestBackgroundSnapshot()'
+check "the snapshot reuses the save-state serialization" \
+  contains ios/app/Sources/SaveStateSupport.swift 'captureBackgroundSnapshot'
+check "the snapshot is restored before the frame loop starts" \
+  contains ios/app/Sources/ROMSession.swift 'startLoadedSession(romKey:'
+check "the running session discards the stale snapshot on return" \
+  contains ios/app/Sources/ROMSession.swift 'discardBackgroundSnapshot(foregroundReturn: true)'
+check "the home page offers the interrupted session" \
+  contains ios/app/Sources/HomeView.swift 'background-resume'
+check "the game view covers the game while the scene is not active" \
+  contains ios/app/Sources/GameView.swift 'background-privacy-cover'
+check "diagnostics export the background state" \
+  contains ios/app/Sources/DiagnosticsReport.swift 'background_suspended='
+check "diagnostics export the snapshot state" \
+  contains ios/app/Sources/DiagnosticsReport.swift 'background_snapshot='
+check "diagnostics count memory warnings" \
+  contains ios/app/Sources/DiagnosticsReport.swift 'memory_warnings='
+check "the app delegate receives memory warnings" \
+  contains ios/app/Sources/ApplicationDelegate.swift 'applicationDidReceiveMemoryWarning'
+check "en Localizable.strings has the resume card title" \
+  grep -Fq -- '"Game paused in the background"' ios/app/Resources/en.lproj/Localizable.strings
+check "zh-Hans Localizable.strings has the resume card title" \
+  grep -Fq -- '"Game paused in the background"' ios/app/Resources/zh-Hans.lproj/Localizable.strings
+check "README documents the background lifecycle" \
+  contains ios/app/README.md '## Background lifecycle (0.1.4)'
+check "README documents the recovery snapshot path" \
+  contains ios/app/README.md 'states/<save namespace>/background.bin'
+check "the obsolete background-release string is gone" \
+  bash -c '! grep -rFq "The runtime was stopped when the app went to the background" ios/app/Resources'
+
 section 'Frame timing pause/resume logic (Swift, macOS only)'
 if command -v swiftc >/dev/null 2>&1; then
   SELFTEST_BIN="${TMPDIR:-/tmp}/3ds2apple-frame-timing-selftest.$$"

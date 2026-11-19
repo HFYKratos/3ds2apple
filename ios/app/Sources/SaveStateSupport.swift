@@ -24,6 +24,7 @@
 
 import Combine
 import Foundation
+import os
 
 /// One instant save-state slot of the loaded game.
 struct SaveStateSlot: Identifiable, Equatable {
@@ -49,6 +50,22 @@ struct SaveStateSlot: Identifiable, Equatable {
 struct SaveStateError: Error, LocalizedError {
     let message: String
     var errorDescription: String? { message }
+}
+
+/// One background recovery snapshot: the console state written when the app
+/// moved to the background, together with the game it belongs to. Stored as
+/// Documents/states/background.json next to the game's save-state folder.
+struct BackgroundSnapshot: Codable, Equatable {
+    /// 16 upper-case hex digits of the 3DS program id.
+    let titleID: String
+    /// Display name for the home page's resume card.
+    let title: String
+    /// Save-state / save-data folder name of the game (title id by default).
+    let namespace: String
+    /// When the snapshot was taken.
+    let capturedAt: Date
+    /// Size of the state file in bytes.
+    let bytes: UInt64
 }
 
 /// What save states need from the running session: whether a game is loaded,
@@ -351,6 +368,270 @@ final class SaveStateSupport: ObservableObject {
         }
     }
 
+    // MARK: - Background recovery snapshot
+    //
+    // 0.1.4 keeps the runtime alive when the app moves to the background, so a
+    // normal switch away and back continues the same session. iOS may still
+    // jettison a backgrounded process under memory pressure; this snapshot is
+    // the recovery path for that case: the console is serialized into the
+    // game's state folder before the process can be suspended, and the home
+    // page offers to restore it after a cold launch. The snapshot is removed
+    // again as soon as the app returns to the foreground, because the running
+    // console is then newer than the snapshot.
+
+    /// Memory headroom the process needs before the snapshot is attempted:
+    /// serializing the console holds the runtime's copy plus the buffer copied
+    /// out of it, so capturing in a memory-constrained process would invite the
+    /// jetsam the snapshot is meant to survive.
+    static let backgroundSnapshotHeadroomBytes = 700 * 1024 * 1024
+
+    /// Free disk space the snapshot needs: the console state is at most 512 MiB
+    /// and the write goes through a temporary file next to the old one.
+    static let backgroundSnapshotDiskBytes: Int64 = 1024 * 1024 * 1024
+
+    /// The recovery snapshot offered on the home page after a cold launch, nil
+    /// when there is none (or its state file is missing: the metadata is then
+    /// removed too).
+    static func pendingBackgroundSnapshot() -> BackgroundSnapshot? {
+        guard let snapshot = decodeBackgroundSnapshot() else { return nil }
+        let stateURL = backgroundSnapshotURL(namespace: snapshot.namespace)
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: stateURL.path),
+              let size = (attributes[.size] as? NSNumber)?.uint64Value,
+              size > 0 else {
+            discardBackgroundSnapshot()
+            return nil
+        }
+        return snapshot
+    }
+
+    /// Serializes the running console into the recovery snapshot. The caller
+    /// (ROMSession.suspendForBackground) has already stopped the frame loop and
+    /// the audio engine. Completion runs on the main queue; nil means nothing
+    /// was written (no loaded game, a save-state operation in flight, not
+    /// enough memory or disk, or the runtime refused).
+    func captureBackgroundSnapshot(
+        titleID: String,
+        title: String,
+        completion: ((BackgroundSnapshot?) -> Void)? = nil
+    ) {
+        guard let runtime, let namespace = runtime.saveStateNamespace, runtime.isRuntimeLoaded else {
+            completionOnMain(nil, completion)
+            return
+        }
+        guard !busy else {
+            AppLog.log("[3ds2apple] background snapshot: skipped (a save-state operation is running)")
+            completionOnMain(nil, completion)
+            return
+        }
+        let headroom = os_proc_available_memory()
+        guard headroom >= Self.backgroundSnapshotHeadroomBytes else {
+            AppLog.log(
+                "[3ds2apple] background snapshot: skipped (%ld MiB of memory headroom, %ld MiB needed)",
+                headroom / (1024 * 1024),
+                Self.backgroundSnapshotHeadroomBytes / (1024 * 1024)
+            )
+            completionOnMain(nil, completion)
+            return
+        }
+        guard Self.hasDiskSpaceForBackgroundSnapshot() else {
+            AppLog.log("[3ds2apple] background snapshot: skipped (not enough free disk space)")
+            completionOnMain(nil, completion)
+            return
+        }
+        let stateURL = SaveStateSupport.backgroundSnapshotURL(namespace: namespace)
+        let metadataURL = SaveStateSupport.backgroundMetadataURL
+        busy = true
+        runtime.runOnRuntimeQueue { [weak self] handle in
+            guard let self else { return }
+            let result: Result<BackgroundSnapshot, SaveStateError>
+            if let handle {
+                result = Self.writeBackgroundSnapshot(
+                    handle: handle,
+                    to: stateURL,
+                    metadataURL: metadataURL,
+                    titleID: titleID,
+                    title: title,
+                    namespace: namespace
+                )
+            } else {
+                result = .failure(
+                    SaveStateError(message: L10n.tr("The game stopped before the recovery snapshot could be saved."))
+                )
+            }
+            DispatchQueue.main.async {
+                self.busy = false
+                switch result {
+                case .success(let snapshot):
+                    AppLog.log(
+                        "[3ds2apple] background snapshot: saved %@ (%@) · %@",
+                        snapshot.titleID,
+                        StorageFormat.size(snapshot.bytes),
+                        snapshot.title
+                    )
+                    completion?(snapshot)
+                case .failure(let error):
+                    AppLog.log("[3ds2apple] background snapshot: %@", error.message)
+                    completion?(nil)
+                }
+            }
+        }
+    }
+
+    /// Restores the recovery snapshot into the loaded console and removes the
+    /// snapshot files afterwards. A state that fails to load is removed too: it
+    /// was written by this app and will not become compatible again. Completion
+    /// runs on the main queue with nil on success, or the failure message.
+    func restoreBackgroundSnapshot(
+        snapshot: BackgroundSnapshot,
+        completion: ((String?) -> Void)? = nil
+    ) {
+        guard let runtime, runtime.isRuntimeLoaded else {
+            SaveStateSupport.discardBackgroundSnapshot()
+            completionOnMain(L10n.tr("The game stopped before the recovery snapshot could be restored."), completion)
+            return
+        }
+        guard !busy else {
+            AppLog.log("[3ds2apple] background snapshot: restore skipped (a save-state operation is running)")
+            completionOnMain(L10n.tr("The game was busy with another save-state operation."), completion)
+            return
+        }
+        let stateURL = SaveStateSupport.backgroundSnapshotURL(namespace: snapshot.namespace)
+        busy = true
+        runtime.runOnRuntimeQueue { [weak self] handle in
+            guard let self else { return }
+            var failure: String?
+            if let handle {
+                switch Self.readAndApply(handle: handle, from: stateURL, number: 0, progress: { _ in }) {
+                case .success:
+                    break
+                case .failure(let error):
+                    failure = error.message
+                }
+            } else {
+                failure = L10n.tr("The game stopped before the recovery snapshot could be restored.")
+            }
+            SaveStateSupport.discardBackgroundSnapshot()
+            DispatchQueue.main.async {
+                self.busy = false
+                if let failure {
+                    AppLog.log("[3ds2apple] background snapshot: restore failed: %@", failure)
+                } else {
+                    AppLog.log("[3ds2apple] background snapshot: restored %@", snapshot.titleID)
+                }
+                completion?(failure)
+            }
+        }
+    }
+
+    /// Removes the recovery snapshot and its metadata. Safe to call when there
+    /// is none, and from any thread (the home page and the session call it).
+    static func discardBackgroundSnapshot() {
+        let fileManager = FileManager.default
+        if let snapshot = decodeBackgroundSnapshot() {
+            try? fileManager.removeItem(at: backgroundSnapshotURL(namespace: snapshot.namespace))
+        }
+        try? fileManager.removeItem(at: backgroundMetadataURL)
+        removeStaleSnapshotTemporaries()
+    }
+
+    private static func hasDiskSpaceForBackgroundSnapshot() -> Bool {
+        let values = try? statesRootURL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        guard let capacity = values?.volumeAvailableCapacityForImportantUsage else {
+            return true
+        }
+        return capacity >= backgroundSnapshotDiskBytes
+    }
+
+    /// Serializes the console and writes the state file plus its metadata.
+    /// runtime queue only.
+    private static func writeBackgroundSnapshot(
+        handle: zk_system_t,
+        to url: URL,
+        metadataURL: URL,
+        titleID: String,
+        title: String,
+        namespace: String
+    ) -> Result<BackgroundSnapshot, SaveStateError> {
+        let state: Data
+        switch copyState(handle: handle, progress: { _ in }) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let data):
+            state = data
+        }
+        do {
+            try AtomicFileWriter.write(state, to: url)
+        } catch {
+            return .failure(
+                SaveStateError(
+                    message: L10n.format("Could not write the recovery snapshot: %@", error.localizedDescription)
+                )
+            )
+        }
+        let snapshot = BackgroundSnapshot(
+            titleID: titleID,
+            title: title,
+            namespace: namespace,
+            capturedAt: Date(),
+            bytes: UInt64(state.count)
+        )
+        do {
+            try AtomicFileWriter.write(try backgroundJSONEncoder().encode(snapshot), to: metadataURL)
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            return .failure(
+                SaveStateError(
+                    message: L10n.format("Could not write the recovery snapshot: %@", error.localizedDescription)
+                )
+            )
+        }
+        return .success(snapshot)
+    }
+
+    private static func decodeBackgroundSnapshot() -> BackgroundSnapshot? {
+        guard let data = try? Data(contentsOf: backgroundMetadataURL) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(BackgroundSnapshot.self, from: data)
+    }
+
+    private static func backgroundJSONEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return encoder
+    }
+
+    /// Temporary files left behind by a write that was killed with the process
+    /// (a suspended app cannot finish its file IO): both writes go through
+    /// AtomicFileWriter, whose temporary files are dot-files next to the target.
+    private static func removeStaleSnapshotTemporaries() {
+        let fileManager = FileManager.default
+        func removeTemporaries(in directory: URL) {
+            let files = (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+            for file in files where file.lastPathComponent.hasSuffix(".tmp") {
+                try? fileManager.removeItem(at: file)
+            }
+        }
+        removeTemporaries(in: statesRootURL)
+        let entries = (try? fileManager.contentsOfDirectory(at: statesRootURL, includingPropertiesForKeys: nil)) ?? []
+        for entry in entries {
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: entry.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue else { continue }
+            removeTemporaries(in: entry)
+        }
+    }
+
+    private func completionOnMain<T>(_ value: T, _ completion: ((T) -> Void)?) {
+        guard let completion else { return }
+        if Thread.isMainThread {
+            completion(value)
+        } else {
+            DispatchQueue.main.async { completion(value) }
+        }
+    }
+
     // MARK: - Paths
 
     /// Root of all games' slot folders: Documents/states.
@@ -370,6 +651,23 @@ final class SaveStateSupport: ObservableObject {
     static func slotURL(namespace: String, slot: Int) -> URL {
         statesDirectory(namespace: namespace)
             .appendingPathComponent("slot\(slot).bin", isDirectory: false)
+    }
+
+    /// Fixed file name of the recovery snapshot inside a game's state folder.
+    static let backgroundStateFileName = "background.bin"
+
+    /// Metadata of the recovery snapshot: which game, when, how large. It lives
+    /// at the states root because the home page reads it before a game loads;
+    /// the state file itself is in the game's folder so deleting a game removes
+    /// it with the rest of its save data.
+    static var backgroundMetadataURL: URL {
+        statesRootURL.appendingPathComponent("background.json", isDirectory: false)
+    }
+
+    /// The recovery state file in a game's state folder.
+    static func backgroundSnapshotURL(namespace: String) -> URL {
+        statesDirectory(namespace: namespace)
+            .appendingPathComponent(backgroundStateFileName, isDirectory: false)
     }
 
     // MARK: - Validation and publishing
@@ -446,12 +744,14 @@ final class SaveStateSupport: ObservableObject {
 
     /// Serializes the console and writes it to `url`. Runs on the runtime queue
     /// with the frame loop stopped, so the snapshot is a real frame boundary.
-    private static func writeState(
+    /// Serializes the console into memory. Runs on the runtime queue with the
+    /// frame loop stopped, so the snapshot is a real frame boundary. The error
+    /// texts are generic: both the instant save slots and the background
+    /// recovery snapshot copy the state through this function.
+    private static func copyState(
         handle: zk_system_t,
-        to url: URL,
-        number: Int,
         progress: (String) -> Void
-    ) -> Result<SaveStateSlot, SaveStateError> {
+    ) -> Result<Data, SaveStateError> {
         progress(L10n.tr("Serializing the console…"))
         let measured = zk_save_state_size(handle)
         guard measured > 0 else {
@@ -547,9 +847,27 @@ final class SaveStateSupport: ObservableObject {
             count: copied,
             deallocator: .custom { pointer, _ in pointer.deallocate() }
         )
+        return .success(data)
+    }
+
+    /// Serializes the console and writes it to one instant save-state slot.
+    /// Runs on the runtime queue with the frame loop stopped.
+    private static func writeState(
+        handle: zk_system_t,
+        to url: URL,
+        number: Int,
+        progress: (String) -> Void
+    ) -> Result<SaveStateSlot, SaveStateError> {
+        let state: Data
+        switch copyState(handle: handle, progress: progress) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let data):
+            state = data
+        }
         progress(L10n.format("Writing slot %ld…", number))
         do {
-            try AtomicFileWriter.write(data, to: url)
+            try AtomicFileWriter.write(state, to: url)
         } catch {
             return .failure(
                 SaveStateError(
@@ -562,7 +880,7 @@ final class SaveStateSupport: ObservableObject {
             SaveStateSlot(
                 number: number,
                 exists: true,
-                bytes: UInt64(copied),
+                bytes: UInt64(state.count),
                 modified: attributes?[.modificationDate] as? Date
             )
         )
