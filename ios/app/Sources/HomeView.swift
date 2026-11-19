@@ -388,43 +388,41 @@ struct HomeView: View {
     /// placeholder with a controller glyph. The art area is square for the same
     /// reason: the only artwork a game exports is its 1:1 SMDH icon, so a 16:9
     /// banner would letterbox it. The gradient is still the placeholder and the
-    /// thin frame around the icon. No game art ships in the app.
+    /// No frame around the icon: the cover art fills the square card area, and
+    /// the gradient is only the placeholder when a game has no readable cover.
+    /// No game art ships in the app.
     private func cover(for entry: GameEntry, state: (label: String, tint: Color)?) -> some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: coverColors(for: entry),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+        ZStack {
+            LinearGradient(
+                colors: coverColors(for: entry),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
-            .aspectRatio(1, contentMode: .fit)
-            .overlay { coverArt(for: entry) }
-            .overlay(alignment: .topTrailing) {
-                if let state = state {
-                    badge(label: state.label, tint: state.tint)
-                        .padding(6)
-                }
+            coverArt(for: entry)
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(alignment: .topTrailing) {
+            if let state = state {
+                badge(label: state.label, tint: state.tint)
+                    .padding(6)
             }
-            .accessibilityHidden(true)
+        }
+        .accessibilityHidden(true)
     }
 
-    /// The icon at its native 1:1 aspect: `scaledToFit` inside the square art
-    /// area (never `scaledToFill`, which would crop a non-square file), enlarged
-    /// to fill the area with a tiny inset so the gradient frame stays visible.
-    /// The corner radius and shadow make the enlarged 48×48 PNG read as a cover;
-    /// a missing or unreadable cover keeps the placeholder, so a push without
-    /// `cover.png` still renders a usable card.
+    /// The icon fills the square art area edge to edge (`scaledToFill` + clip):
+    /// an SMDH cover is 1:1 so nothing is cropped, and there is no inset border
+    /// around it. A missing or unreadable cover keeps the gradient placeholder,
+    /// so a push without `cover.png` still renders a usable card.
     @ViewBuilder
     private func coverArt(for entry: GameEntry) -> some View {
         if let url = entry.coverURL, let image = UIImage(contentsOfFile: url.path) {
             Image(uiImage: image)
                 .resizable()
                 .interpolation(.high)
-                .scaledToFit()
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .shadow(color: .black.opacity(0.20), radius: 2, y: 1)
-                .padding(5)
+                .scaledToFill()
         } else {
             Image(systemName: "gamecontroller.fill")
                 .font(.system(size: 32, weight: .semibold))
