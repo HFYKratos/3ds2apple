@@ -660,3 +660,8 @@
 "D-pad" = "十字方向键";
 "Virtual control visibility, size and layout are edited in the in-game pause menu under Virtual controls." = "在游戏内暂停菜单的“虚拟按键选项”里编辑虚拟按键的显示、大小与布局。";
 
+/* --- Round-8 自定义屏幕布局实时预览 --- */
+"Top" = "上屏";
+"Bottom" = "下屏";
+"Preview" = "预览";
+

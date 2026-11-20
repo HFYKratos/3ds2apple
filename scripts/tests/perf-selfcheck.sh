@@ -285,6 +285,12 @@ check "control editing lives in the in-game pause menu, not Settings" \
 check "control layout page exposes only Default / Custom" contains ios/app/Sources/AppSettings.swift 'enum ControlLayoutMode'
 check "in-game control editor drags controls and has a Done pill" \
   bash -c 'grep -q "DragGesture" ios/app/Sources/InGameControlEditOverlay.swift && grep -q "control-edit-done" ios/app/Sources/InGameControlEditOverlay.swift'
+check "control edit gestures are attached before .position (no full-screen hit area)" \
+  bash -c 'awk "/private struct EditableControlBox/,/^}/ {if (/\\.contentShape\\(/) c=NR; if (/\\.gesture\\(/) g=NR; if (/\\.position\\(/) p=NR} END {exit !(c && g && p && c < g && g < p)}" ios/app/Sources/InGameControlEditOverlay.swift && awk "/private struct EditableDpadCrossBox/,/^}/ {if (/\\.contentShape\\(/) c=NR; if (/\\.gesture\\(/) g=NR; if (/\\.position\\(/) p=NR} END {exit !(c && g && p && c < g && g < p)}" ios/app/Sources/InGameControlEditOverlay.swift'
+check "both layout editors center the Done pill and keep empty space inert" \
+  bash -c '! grep -q "padding(.bottom, 26)" ios/app/Sources/InGameControlEditOverlay.swift && ! grep -q "padding(.bottom, 26)" ios/app/Sources/ScreenLayoutEditorView.swift && grep -q "alignment: .center" ios/app/Sources/ScreenLayoutEditorView.swift'
+check "custom screen numeric page shows a live screen preview" \
+  bash -c 'grep -q "CustomScreenLayoutPreview" ios/app/Sources/CustomScreenLayoutValuesView.swift && grep -q "custom-layout-preview" ios/app/Sources/CustomScreenLayoutValuesView.swift && grep -q "custom-layout-preview-top" ios/app/Sources/CustomScreenLayoutValuesView.swift'
 check "control editor is full screen and edits the current direction" contains ios/app/Sources/ControlLayoutEditorView.swift 'currentLayoutOrientation'
 check "control editor overlays the current screen layout" contains ios/app/Sources/ControlLayoutEditorView.swift 'screenViewports'
 check "GameView floats the editable control overlay and draws the hybrid small top screen" \

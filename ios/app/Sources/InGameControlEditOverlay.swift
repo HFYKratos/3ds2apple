@@ -54,9 +54,11 @@ struct InGameControlEditOverlay: View {
         .accessibilityIdentifier("control-edit-overlay")
     }
 
+    /// The Done surface is centered on the screen (round-8 user request): the
+    /// hint sits above the pill, and the VStack keeps its intrinsic size so only
+    /// the text and the pill are hit-testable — the empty area stays inert.
     private var doneOverlay: some View {
-        VStack(spacing: 8) {
-            Spacer()
+        VStack(spacing: 10) {
             Text(L10n.tr("Drag the controls to move them. Done saves this orientation's layout and resumes the game."))
                 .font(.caption2)
                 .foregroundColor(.white.opacity(0.72))
@@ -79,7 +81,7 @@ struct InGameControlEditOverlay: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("control-edit-done")
         }
-        .padding(.bottom, 26)
+        .padding(.horizontal, 18)
     }
 
     /// The single D-pad cross in edit mode. Dragging it moves the whole group
@@ -151,9 +153,11 @@ private struct EditableControlBox: View {
                 .minimumScaleFactor(0.5)
                 .padding(.horizontal, 2)
         }
+        // Round-8 fix: contentShape/gesture attach BEFORE .position. SwiftUI's
+        // .position fills the parent container, so a gesture attached after it
+        // would make this whole overlay a drag target for the control.
         .frame(width: frame.width, height: frame.height)
         .opacity(opacity)
-        .position(frame.center)
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 0)
@@ -177,6 +181,7 @@ private struct EditableControlBox: View {
                 }
         )
         .accessibilityIdentifier("control-edit-\(element.rawValue)")
+        .position(frame.center)
     }
 }
 /// The single D-pad cross in edit mode: one draggable plus. It moves all four
@@ -209,9 +214,10 @@ private struct EditableDpadCrossBox: View {
                     .position(arrowPosition(for: element, localCenter: localCenter))
             }
         }
+        // Round-8 fix: same ordering as EditableControlBox (gesture before
+        // .position, so only the cross itself is a drag target).
         .frame(width: span, height: span)
         .opacity(opacity)
-        .position(center)
         .contentShape(DpadCrossShape())
         .gesture(
             DragGesture(minimumDistance: 0)
@@ -240,6 +246,7 @@ private struct EditableDpadCrossBox: View {
                 }
         )
         .accessibilityIdentifier("control-edit-dpad")
+        .position(center)
     }
 
     private func arrowPosition(for element: ControlElement, localCenter: CGPoint) -> CGPoint {

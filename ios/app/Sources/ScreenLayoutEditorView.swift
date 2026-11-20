@@ -291,11 +291,12 @@ struct ScreenLayoutEditorView: View {
         .background(.ultraThinMaterial, in: Capsule())
     }
 
-    /// The round-4 Done surface: one obvious pill over the canvas (the edits are
-    /// already committed live), with the interaction hint above it.
+    /// The Done surface, centered on the screen (round-8 user request, matching
+    /// the in-game control editor): one obvious pill with the interaction hint
+    /// above it. The VStack keeps its intrinsic size, so only the hint and the
+    /// pill are hit-testable and the canvas around them still drags.
     private var doneOverlay: some View {
-        VStack(spacing: 8) {
-            Spacer()
+        VStack(spacing: 10) {
             Text(L10n.tr("Drag a screen to move it. Drag the large corner handle or pinch to resize. Done saves the layout."))
                 .font(.caption2)
                 .foregroundColor(.white.opacity(0.72))
@@ -321,8 +322,8 @@ struct ScreenLayoutEditorView: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("screen-editor-done")
         }
-        .padding(.bottom, 26)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     private var bottomBar: some View {

@@ -658,3 +658,8 @@
 "D-pad" = "D-pad";
 "Virtual control visibility, size and layout are edited in the in-game pause menu under Virtual controls." = "Virtual control visibility, size and layout are edited in the in-game pause menu under Virtual controls.";
 
+/* --- Round-8 live custom-layout preview --- */
+"Top" = "Top";
+"Bottom" = "Bottom";
+"Preview" = "Preview";
+

@@ -410,7 +410,8 @@ round-4 drag editor described below.
   - **Edit layout** closes the menu, keeps the runtime paused, hides the pause/FPS
     HUD and returns to the frozen game picture with the on-screen controls
     draggable (a light haptic tick when a control is picked up). Dragging moves a
-    control live; a centered **Done** pill saves the current direction's profile,
+    control live; a **Done** pill in the exact centre of the screen (round 8; the
+hint sits above it and the empty area stays inert) saves the current direction's profile,
     leaves edit mode and resumes the game directly (no extra pause/resume).
   - **Toggle controls** opens a checkbox sheet for A, B, X, Y, L, R, ZL, ZR,
     Start, Select, the D-pad (all four directions as one group), the Circle Pad
@@ -473,14 +474,19 @@ round-4 drag editor described below.
   view (0-100; the reference layout app shows framebuffer pixels instead). The
   page edits the existing `CustomScreenLayout` archive (percent <-> normalised
   rectangle, archive version 3; older archives are migrated on read) and applies
-  from the next game load. Opening or editing a page also selects that
-  direction's Custom layout; the optional **Edit by dragging** button opens the
-  full-screen drag editor for the same direction. Round 4 reworked that
-  editor's interaction: drag a screen directly to move it, drag its large
-  (≥44 pt) corner handle or pinch to resize, and tap the one clear **Done** pill
-  to save and leave (edits are committed live while dragging; there is no bottom
-  toolbar, no Lock-ratio switch, no nested scroll/zoom). The layout page has no
-  "how it works" section and no reset button.
+  from the next game load. Round 8 adds a **live preview** below the two input
+  sections: a centered game-view-like canvas (about 180x390 pt in portrait,
+  320x150 pt in landscape) draws the current **TOP** screen in blue and the
+  **BOTTOM** screen in purple, with Top/Bottom labels, updating immediately as a
+  percentage is typed. Opening or editing a page also selects that direction's
+  Custom layout; the optional **Edit by dragging** button opens the full-screen
+  drag editor for the same direction. Round 4 reworked that editor's
+  interaction: drag a screen directly to move it, drag its large (≥44 pt) corner
+  handle or pinch to resize, and tap the one clear **Done** pill (centered on
+  the screen since round 8) to save and leave (edits are committed live while
+  dragging; there is no bottom toolbar, no Lock-ratio switch, no nested
+  scroll/zoom). The layout page has no "how it works" section and no reset
+  button.
 - **Shipped default rectangles.** The custom-layout defaults are the placements
   measured from the reference screenshots, in percent of the game view:
   - landscape: upper {0, 0, 35, 47}, lower {4, 46, 27, 45};
@@ -875,11 +881,11 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `VirtualControlsView.swift` | Runtime overlay: draws one button / analog stick per control with its own gesture (multi-touch), plus the single cross-shaped D-pad (`DpadCrossShape`) whose touch position selects the direction; reports ZK_BUTTON_* bits, Circle Pad and C-stick vectors; skips the rows hidden in the pause menu and applies the per-row size scale. |
 | `ControlLayoutEditorView.swift` | Legacy full-screen control layout editor kept for the `-openLayoutEditor control` screenshot hook; the app no longer links it (round-4 editing happens in-game). It draws/moves the D-pad as one cross and edits its group size/opacity/reset. |
 | `ControlLayoutSettingsView.swift` | Legacy control layout page (not linked from Settings since round 4); kept for compatibility of the old screenshot hook. |
-| `InGameControlEditOverlay.swift` | Round-4 in-game control editing: draggable controls over the frozen paused picture, the D-pad as one draggable cross, per-row visibility/size, a centered Done pill that saves the current direction and resumes the game. |
+| `InGameControlEditOverlay.swift` | Round-4 in-game control editing: draggable controls over the frozen paused picture (gestures attach before `.position`, so each control's hit area is its own shape), the D-pad as one draggable cross, per-row visibility/size, a Done pill centered on the screen that saves the current direction and resumes the game. |
 | `ControlOptionsViews.swift` | The pause menu's virtual-control option sheets: Toggle controls (per-row checkboxes), Adjust size (10%-200% slider per row) and Adjust opacity (the global overlay opacity). |
 | `CustomScreenLayout.swift` | Custom screen layout model (archive v3 with the ratio-lock flag; older archives migrate to the round-2 measured defaults) plus `CustomScreenGeometry`: per-orientation screen rectangles, rotation, integer scaling. |
-| `ScreenLayoutEditorView.swift` | Full-screen custom screen layout drag editor (one direction per editor, opened from the numeric custom page's "Edit by dragging"): full-screen game-view canvas with the current control layout overlaid for reference, direct screen drag, a ≥44 pt corner handle or pinch to resize, edge snapping and one clear Done pill (round-4 interaction; no bottom toolbar). |
-| `CustomScreenLayoutValuesView.swift` | The numeric custom screen layout page of one direction: Upper screen / Lower screen sections with X position, Y position, Width and Height as integer percentages of the game view, editing the CustomScreenLayout archive; also the "Edit by dragging" entry. |
+| `ScreenLayoutEditorView.swift` | Full-screen custom screen layout drag editor (one direction per editor, opened from the numeric custom page's "Edit by dragging"): full-screen game-view canvas with the current control layout overlaid for reference, direct screen drag, a ≥44 pt corner handle or pinch to resize, edge snapping and one clear Done pill centered on the screen (round-8; hint above it, no bottom toolbar). |
+| `CustomScreenLayoutValuesView.swift` | The numeric custom screen layout page of one direction: Upper screen / Lower screen sections with X position, Y position, Width and Height as integer percentages of the game view, a live centered preview canvas (blue TOP / purple BOTTOM) under them, editing the CustomScreenLayout archive; also the "Edit by dragging" entry. |
 | `ScreenLayoutSettingsView.swift` | The screen layout page under Settings → Display: the landscape six-choice row, the portrait three-choice row (each opening a radio picker sheet), the two custom layout rows and no reset / "how it works" section. |
 | `GameControllerInput.swift` | GameController-to-3DS button mapping. |
 | `AudioOutput.swift` | Ring buffer and AVAudioEngine output (volume, mute, buffer duration). |

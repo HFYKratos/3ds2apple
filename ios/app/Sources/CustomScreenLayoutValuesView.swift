@@ -52,6 +52,15 @@ struct CustomScreenLayoutValuesView: View {
             } header: {
                 Text(L10n.tr("Lower screen"))
             }
+            // Round-8 live preview: draw the current percentages as the two
+            // screens so a numeric edit has immediate visual feedback.
+            Section {
+                CustomScreenLayoutPreview(layout: settings.customScreenLayout,
+                                          orientation: orientation)
+                    .frame(maxWidth: .infinity)
+            } header: {
+                Text(L10n.tr("Preview"))
+            }
             Section {
                 Button {
                     focusedField = nil
@@ -175,5 +184,78 @@ struct CustomScreenLayoutValuesView: View {
         layout.setPlacement(placement, for: orientation)
         settings.customScreenLayout = layout
         settings.persist()
+    }
+}
+// MARK: - Live preview
+
+/// A small game-view canvas that draws the two screens from the current custom
+/// percentages, live while the numeric fields are edited. The canvas keeps a
+/// game-view-like aspect (portrait about 180x390, landscape about 320x150) and
+/// is centered; the TOP rectangle is blue, the BOTTOM one purple.
+private struct CustomScreenLayoutPreview: View {
+    let layout: CustomScreenLayout
+    let orientation: ControlLayoutOrientation
+
+    private var targetSize: CGSize {
+        orientation == .portrait
+            ? CGSize(width: 180, height: 390)
+            : CGSize(width: 320, height: 150)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let target = targetSize
+            let fit = min(proxy.size.width / max(target.width, 1), 1)
+            let size = CGSize(width: target.width * fit, height: target.height * fit)
+            canvas(size: size)
+                .frame(width: size.width, height: size.height)
+                .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+        }
+        .frame(height: targetSize.height)
+        .accessibilityIdentifier("custom-layout-preview")
+    }
+
+    private func canvas(size: CGSize) -> some View {
+        let placement = layout.placement(for: orientation)
+        return ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.black.opacity(0.65))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
+            screenRect(placement.top, size: size,
+                       color: .blue, label: L10n.tr("Top"),
+                       identifier: "custom-layout-preview-top")
+            screenRect(placement.bottom, size: size,
+                       color: .purple, label: L10n.tr("Bottom"),
+                       identifier: "custom-layout-preview-bottom")
+        }
+        .frame(width: size.width, height: size.height)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func screenRect(_ rect: ScreenRect,
+                            size: CGSize,
+                            color: Color,
+                            label: String,
+                            identifier: String) -> some View {
+        let frame = CGRect(x: CGFloat(rect.x) * size.width,
+                           y: CGFloat(rect.y) * size.height,
+                           width: CGFloat(rect.width) * size.width,
+                           height: CGFloat(rect.height) * size.height)
+        return ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(color.opacity(0.35))
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .strokeBorder(color.opacity(0.9), lineWidth: 1)
+            Text(label)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .padding(3)
+        }
+        .frame(width: max(frame.width, 1), height: max(frame.height, 1))
+        .position(x: frame.midX, y: frame.midY)
+        .accessibilityIdentifier(identifier)
     }
 }
