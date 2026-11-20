@@ -336,12 +336,19 @@ struct GameView: View {
     /// One control was dragged: update the draft placement (normalised to the
     /// overlay container).
     private func moveControl(_ element: ControlElement, to point: CGPoint) {
-        guard var draft = controlDraft else { return }
-        var placement = draft.placement(for: element)
+        guard let draft = controlDraft else { return }
+        if element.isDpadDirection {
+            // The D-pad is one cross: drag any of its arms and the four
+            // directional placements translate together.
+            controlDraft = draft.movingDpadGroupNormalized(to: point)
+            return
+        }
+        var next = draft
+        var placement = next.placement(for: element)
         placement.x = Double(min(max(point.x, 0), 1))
         placement.y = Double(min(max(point.y, 0), 1))
-        draft.setPlacement(placement, for: element)
-        controlDraft = draft
+        next.setPlacement(placement, for: element)
+        controlDraft = next
     }
 
     /// Done: save the edited profile as the Custom layout for the direction,

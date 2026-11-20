@@ -94,7 +94,9 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
         self == .circlePad || self == .cStick
     }
 
-    /// True for the four D-pad directions (round 6 draws them as a tight cross).
+    /// True for the four D-pad directions. The runtime and the editors draw and
+    /// drag them as one cross-shaped control since round 7; they stay separate
+    /// elements for input bits, visibility and size semantics.
     var isDpadDirection: Bool {
         switch self {
         case .dpadUp, .dpadDown, .dpadLeft, .dpadRight: return true
@@ -102,11 +104,10 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    /// Corner-radius factor of the button shape: the D-pad directions use 0.16 so
-    /// the four rounded squares touch into a plus; other buttons keep 0.42.
-    var shapeCornerFactor: Double {
-        isDpadDirection ? 0.16 : 0.42
-    }
+    /// Corner-radius factor of an individual button shape. Every individually
+    /// drawn button keeps the round 0.42 style; the D-pad is not drawn as four
+    /// buttons any more (DpadCrossShape draws it as one plus).
+    var shapeCornerFactor: Double { 0.42 }
 
     /// A shoulder button is a wide capsule; the rest are round or small capsules.
     var isWide: Bool {
@@ -367,17 +368,17 @@ struct ControlLayoutProfile: Codable, Equatable {
     // MARK: - Shipped defaults (ModernCenteredX2 reference skin, round 6)
 
     /// Round 6: the shipped default layout follows the ModernCenteredX2 Delta
-    /// skin numbers (round 5) with two device-feedback changes:
-    /// - portrait controls are moved down by +0.31 so the set sits in the free
-    ///   black band below the portrait game picture; the C-stick moves to the
-    ///   bottom-right free corner (0.92, 0.90) at size 0.10;
-    /// - the D-pad is a tight four-button cross: each direction keeps its own
-    ///   element, but the buttons are sized so the cross span equals the skin's
-    ///   D-pad frame (portrait 103 pt -> size 0.12440, landscape 105 pt ->
-    ///   0.12681) and their centres are offset by half a button side in
-    ///   container points (dx = diameter/2/containerW, dy = diameter/2/containerH),
-    ///   so adjacent edges touch. The renderer draws D-pad buttons with corner
-    ///   radius 0.16 of the side instead of 0.42 (other buttons unchanged).
+    /// skin numbers (round 5) with device-feedback changes:
+    /// - portrait controls are moved into the free black band below the portrait
+    ///   game picture. The final screenshot revision puts the shoulder row
+    ///   (ZL/L/Select/Start/R/ZR) on one line at y=0.755 just under the picture
+    ///   (bottom ~0.73), the main set at y=0.87 and the C-stick at
+    ///   (0.92, 0.935) with size 0.08;
+    /// - the D-pad keeps four directional placements whose centres form the
+    ///   cross arms (portrait 103 pt -> size 0.12440, landscape 105 pt ->
+    ///   0.12681), but round 7 renders and drags them as ONE cross-shaped
+    ///   control (DpadCrossShape). The four placements remain the input,
+    ///   visibility and size semantics, and old profiles need no migration.
     ///
     /// Opacity is 0.85 everywhere. The skin is a read-only reference: only its
     /// numeric frames are converted (centre / mapping size, diameter / 414);
@@ -410,30 +411,32 @@ struct ControlLayoutProfile: Codable, Equatable {
                 (.cStick, ControlPlacement(x: 0.84821, y: 0.48309, size: 0.10, opacity: 0.85))
             ]
         case .portrait:
-            // mappingSize 414 x 896 pt. The whole set is moved down by +0.38
-            // from its round-5 skin position (round-6 device/screenshot feedback:
-            // +0.31 first, then +0.07 more so the shoulder row clears the picture). D-pad centre (0.44565, 0.82283),
-            // diameter 0.12440 (51.5 pt), offsets dx 0.06220 / dy 0.02874.
+            // mappingSize 414 x 896 pt. Round-6 screenshot revision: the shoulder
+            // row (ZL/L/Select/Start/R/ZR) becomes one row at y=0.755 just below
+            // the picture (bottom ~0.73 on a modern phone), and the main set sits
+            // at y=0.87 in the empty band; the D-pad cross centre is
+            // (0.44565, 0.87), diameter 0.12440 (51.5 pt), offsets
+            // dx 0.06220 / dy 0.02874.
             return [
-                (.circlePad, ControlPlacement(x: 0.16546, y: 0.85266, size: 0.24396, opacity: 0.85)),
-                (.dpadUp, ControlPlacement(x: 0.44565, y: 0.86409, size: 0.12440, opacity: 0.85)),
-                (.dpadDown, ControlPlacement(x: 0.44565, y: 0.92157, size: 0.12440, opacity: 0.85)),
-                (.dpadLeft, ControlPlacement(x: 0.38345, y: 0.89283, size: 0.12440, opacity: 0.85)),
-                (.dpadRight, ControlPlacement(x: 0.50785, y: 0.89283, size: 0.12440, opacity: 0.85)),
-                (.buttonA, ControlPlacement(x: 0.91425, y: 0.86158, size: 0.13285, opacity: 0.85)),
-                (.buttonB, ControlPlacement(x: 0.78865, y: 0.91850, size: 0.13285, opacity: 0.85)),
-                (.buttonX, ControlPlacement(x: 0.78865, y: 0.80467, size: 0.13285, opacity: 0.85)),
-                (.buttonY, ControlPlacement(x: 0.66304, y: 0.86158, size: 0.13285, opacity: 0.85)),
-                (.buttonL, ControlPlacement(x: 0.16787, y: 0.75277, size: 0.07729, opacity: 0.85)),
-                (.buttonR, ControlPlacement(x: 0.83213, y: 0.75277, size: 0.07729, opacity: 0.85)),
+                (.circlePad, ControlPlacement(x: 0.16546, y: 0.87, size: 0.24396, opacity: 0.85)),
+                (.dpadUp, ControlPlacement(x: 0.44565, y: 0.84126, size: 0.12440, opacity: 0.85)),
+                (.dpadDown, ControlPlacement(x: 0.44565, y: 0.89874, size: 0.12440, opacity: 0.85)),
+                (.dpadLeft, ControlPlacement(x: 0.38345, y: 0.87, size: 0.12440, opacity: 0.85)),
+                (.dpadRight, ControlPlacement(x: 0.50785, y: 0.87, size: 0.12440, opacity: 0.85)),
+                (.buttonA, ControlPlacement(x: 0.91425, y: 0.87, size: 0.13285, opacity: 0.85)),
+                (.buttonB, ControlPlacement(x: 0.78865, y: 0.9269, size: 0.13285, opacity: 0.85)),
+                (.buttonX, ControlPlacement(x: 0.78865, y: 0.8131, size: 0.13285, opacity: 0.85)),
+                (.buttonY, ControlPlacement(x: 0.66304, y: 0.87, size: 0.13285, opacity: 0.85)),
+                (.buttonL, ControlPlacement(x: 0.24, y: 0.755, size: 0.07729, opacity: 0.85)),
+                (.buttonR, ControlPlacement(x: 0.76, y: 0.755, size: 0.07729, opacity: 0.85)),
                 // Not in the skin: one step above L/R.
-                (.buttonZL, ControlPlacement(x: 0.16787, y: 0.71036, size: 0.065, opacity: 0.85)),
-                (.buttonZR, ControlPlacement(x: 0.83213, y: 0.71036, size: 0.065, opacity: 0.85)),
-                (.buttonStart, ControlPlacement(x: 0.60990, y: 0.75221, size: 0.07971, opacity: 0.85)),
-                (.buttonSelect, ControlPlacement(x: 0.39251, y: 0.75221, size: 0.07971, opacity: 0.85)),
+                (.buttonZL, ControlPlacement(x: 0.10, y: 0.755, size: 0.065, opacity: 0.85)),
+                (.buttonZR, ControlPlacement(x: 0.90, y: 0.755, size: 0.065, opacity: 0.85)),
+                (.buttonStart, ControlPlacement(x: 0.60, y: 0.755, size: 0.07971, opacity: 0.85)),
+                (.buttonSelect, ControlPlacement(x: 0.40, y: 0.755, size: 0.07971, opacity: 0.85)),
                 // Moved to the free bottom-right corner (round-6 screenshot
                 // revision: further clear of A/B and smaller).
-                (.cStick, ControlPlacement(x: 0.92, y: 0.94, size: 0.08, opacity: 0.85))
+                (.cStick, ControlPlacement(x: 0.92, y: 0.935, size: 0.08, opacity: 0.85))
             ]
         }
     }

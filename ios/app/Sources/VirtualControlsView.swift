@@ -48,15 +48,38 @@ struct VirtualControlsView: View {
             let container = geometry.size
             ZStack(alignment: .topLeading) {
                 Color.clear
+                // The four D-pad directions are one cross-shaped control on
+                // screen (round 7): they stay four elements in the profile for
+                // input/visibility/size, but only the cross is drawn.
                 ForEach(ControlElement.allCases) { element in
-                    if isVisible(element) {
+                    if !element.isDpadDirection && isVisible(element) {
                         control(element, in: container)
                     }
+                }
+                if profile.isDpadVisible(isVisible) {
+                    dpadCross(in: container)
                 }
             }
             .frame(width: container.width, height: container.height)
         }
         .accessibilityIdentifier("virtual-controls")
+    }
+
+    /// The single cross-shaped D-pad. Its group centre is the average of the four
+    /// directional placements and one arm's thickness is their average size; the
+    /// gesture maps the touch position to one direction (supporting a press-and-
+    /// slide to change direction) and reports the matching ZK bit.
+    private func dpadCross(in container: CGSize) -> some View {
+        let group = profile.dpadGroup(in: container, sizeScale: sizeScale(.dpadUp))
+        let opacity = min(max(group.opacity * opacityScale, 0.05), 1.0)
+        return DpadCrossControl(center: group.center,
+                                diameter: group.diameter,
+                                opacity: opacity,
+                                haptics: haptics) { element, pressed in
+            if let bit = element.buttonBit {
+                onButton(bit, pressed)
+            }
+        }
     }
 
     @ViewBuilder
@@ -264,5 +287,176 @@ private struct AnalogStickControl: View {
         )
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(identifier)
+    }
+}
+// MARK: - D-pad cross
+
+/// One rounded plus: a vertical bar and a horizontal bar of the same thickness
+/// (`diameter`), so the whole cross spans 2 x diameter. The eight outer corners
+/// are rounded; the four inner corners stay sharp like a real D-pad.
+struct DpadCrossShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let side = min(rect.width, rect.height)
+        guard side > 1 else { return Path() }
+        let thickness = side / 2
+        let radius = thickness * 0.16
+        let ox = rect.midX - side / 2
+        let oy = rect.midY - side / 2
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: ox + x, y: oy + y)
+        }
+        let t = thickness
+        let vertices: [CGPoint] = [
+            point(t / 2, 0), point(3 * t / 2, 0),
+            point(3 * t / 2, t / 2), point(2 * t, t / 2),
+            point(2 * t, 3 * t / 2), point(3 * t / 2, 3 * t / 2),
+            point(3 * t / 2, 2 * t), point(t / 2, 2 * t),
+            point(t / 2, 3 * t / 2), point(0, 3 * t / 2),
+            point(0, t / 2), point(t / 2, t / 2)
+        ]
+        let convex = [true, true, false, true, true, false,
+                      true, true, false, true, true, false]
+        func unit(_ from: CGPoint, _ to: CGPoint) -> CGVector {
+            let dx = to.x - from.x
+            let dy = to.y - from.y
+            let length = max(sqrt(dx * dx + dy * dy), 0.0001)
+            return CGVector(dx: dx / length, dy: dy / length)
+        }
+        var path = Path()
+        let count = vertices.count
+        var started = false
+        for index in 0..<count {
+            let previous = vertices[(index + count - 1) % count]
+            let vertex = vertices[index]
+            let next = vertices[(index + 1) % count]
+            if convex[index] {
+                let incoming = unit(previous, vertex)
+                let outgoing = unit(vertex, next)
+                let start = CGPoint(x: vertex.x - incoming.dx * radius,
+                                    y: vertex.y - incoming.dy * radius)
+                let end = CGPoint(x: vertex.x + outgoing.dx * radius,
+                                  y: vertex.y + outgoing.dy * radius)
+                if started {
+                    path.addLine(to: start)
+                } else {
+                    path.move(to: start)
+                    started = true
+                }
+                path.addQuadCurve(to: end, control: vertex)
+            } else if started {
+                path.addLine(to: vertex)
+            } else {
+                path.move(to: vertex)
+                started = true
+            }
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// The single runtime D-pad: a dark translucent plus with four arrows. A drag
+/// over the arms reports one direction at a time; sliding from one arm to
+/// another releases the old bit and presses the new one, and releasing the
+/// gesture releases everything.
+private struct DpadCrossControl: View {
+    let center: CGPoint
+    let diameter: CGFloat
+    let opacity: Double
+    let haptics: Bool
+    let onPress: (ControlElement, Bool) -> Void
+
+    @State private var direction: ControlElement?
+
+    private static let directions: [ControlElement] = ControlLayoutProfile.dpadDirections
+
+    private var span: CGFloat { diameter * 2 }
+
+    var body: some View {
+        let localCenter = CGPoint(x: span / 2, y: span / 2)
+        ZStack {
+            DpadCrossShape()
+                .fill(
+                    LinearGradient(
+                        colors: [Color.black.opacity(0.46), Color.black.opacity(0.30)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            DpadCrossShape()
+                .stroke(Color.white.opacity(direction == nil ? 0.28 : 0.46), lineWidth: 1)
+            if let direction {
+                Circle()
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: diameter * 0.62, height: diameter * 0.62)
+                    .position(arrowPosition(for: direction, localCenter: localCenter))
+            }
+            ForEach(Self.directions, id: \.self) { element in
+                Text(element.symbol)
+                    .font(.system(size: max(min(diameter * 0.24, 18), 9),
+                                  weight: .semibold, design: .rounded))
+                    .foregroundColor(direction == nil || direction == element
+                                     ? .white.opacity(0.92)
+                                     : .white.opacity(0.38))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .position(arrowPosition(for: element, localCenter: localCenter))
+            }
+        }
+        .frame(width: span, height: span)
+        .opacity(opacity)
+        .contentShape(DpadCrossShape())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    let newDirection = direction(at: value.location, localCenter: localCenter)
+                    guard newDirection != direction else { return }
+                    if let old = direction, let bit = old.buttonBit {
+                        onPress(old, false)
+                    }
+                    if let newDirection, let bit = newDirection.buttonBit {
+                        direction = newDirection
+                        if haptics {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        }
+                        onPress(newDirection, true)
+                    } else {
+                        direction = nil
+                    }
+                }
+                .onEnded { _ in
+                    if let old = direction, let bit = old.buttonBit {
+                        onPress(old, false)
+                    }
+                    direction = nil
+                }
+        )
+        .position(center)
+        .accessibilityLabel(L10n.tr("D-pad"))
+        .accessibilityIdentifier("dpad-cross")
+    }
+
+    private func direction(at location: CGPoint, localCenter: CGPoint) -> ControlElement? {
+        let dx = location.x - localCenter.x
+        let dy = location.y - localCenter.y
+        // The middle of the cross is neutral; the arms report their direction.
+        if abs(dx) < diameter * 0.18 && abs(dy) < diameter * 0.18 {
+            return nil
+        }
+        if abs(dx) >= abs(dy) {
+            return dx >= 0 ? .dpadRight : .dpadLeft
+        }
+        return dy >= 0 ? .dpadDown : .dpadUp
+    }
+
+    private func arrowPosition(for element: ControlElement, localCenter: CGPoint) -> CGPoint {
+        let offset = diameter * 0.52
+        switch element {
+        case .dpadUp: return CGPoint(x: localCenter.x, y: localCenter.y - offset)
+        case .dpadDown: return CGPoint(x: localCenter.x, y: localCenter.y + offset)
+        case .dpadLeft: return CGPoint(x: localCenter.x - offset, y: localCenter.y)
+        case .dpadRight: return CGPoint(x: localCenter.x + offset, y: localCenter.y)
+        default: return localCenter
+        }
     }
 }

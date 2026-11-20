@@ -36,10 +36,15 @@ struct InGameControlEditOverlay: View {
                 // paused, so a stray drag must not reach the picture.
                 Color.clear
                     .contentShape(Rectangle())
+                // The D-pad is edited as one cross, not four buttons; its four
+                // elements still move/scale together.
                 ForEach(ControlElement.allCases) { element in
-                    if isVisible(element) {
+                    if !element.isDpadDirection && isVisible(element) {
                         editableControl(element, in: container)
                     }
+                }
+                if profile.isDpadVisible(isVisible) {
+                    editableDpad(in: container)
                 }
                 doneOverlay
             }
@@ -75,6 +80,23 @@ struct InGameControlEditOverlay: View {
             .accessibilityIdentifier("control-edit-done")
         }
         .padding(.bottom, 26)
+    }
+
+    /// The single D-pad cross in edit mode. Dragging it moves the whole group
+    /// (all four placements); the runtime keeps them in sync.
+    private func editableDpad(in container: CGSize) -> some View {
+        let group = profile.dpadGroup(in: container, sizeScale: sizeScale(.dpadUp))
+        let opacity = min(max(group.opacity * opacityScale, 0.30), 1.0)
+        return EditableDpadCrossBox(center: group.center,
+                                    diameter: group.diameter,
+                                    container: container,
+                                    opacity: opacity,
+                                    haptics: haptics,
+                                    onMove: { point in
+                                        onMove(.dpadUp,
+                                               CGPoint(x: point.x / max(container.width, 1),
+                                                       y: point.y / max(container.height, 1)))
+                                    })
     }
 
     @ViewBuilder
@@ -155,5 +177,79 @@ private struct EditableControlBox: View {
                 }
         )
         .accessibilityIdentifier("control-edit-\(element.rawValue)")
+    }
+}
+/// The single D-pad cross in edit mode: one draggable plus. It moves all four
+/// directional placements together; size changes come from the pause menu's
+/// Adjust size sheet (the D-pad row).
+private struct EditableDpadCrossBox: View {
+    let center: CGPoint
+    let diameter: CGFloat
+    let container: CGSize
+    let opacity: Double
+    let haptics: Bool
+    let onMove: (CGPoint) -> Void
+
+    @State private var dragStart: CGPoint?
+
+    private var span: CGFloat { diameter * 2 }
+
+    var body: some View {
+        let localCenter = CGPoint(x: span / 2, y: span / 2)
+        ZStack {
+            DpadCrossShape()
+                .fill(Color.accentColor.opacity(0.28))
+            DpadCrossShape()
+                .stroke(Color.white.opacity(0.85), lineWidth: 1.5)
+            ForEach(ControlLayoutProfile.dpadDirections, id: \.self) { element in
+                Text(element.symbol)
+                    .font(.system(size: max(min(diameter * 0.22, 14), 8),
+                                  weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.9))
+                    .position(arrowPosition(for: element, localCenter: localCenter))
+            }
+        }
+        .frame(width: span, height: span)
+        .opacity(opacity)
+        .position(center)
+        .contentShape(DpadCrossShape())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    let start: CGPoint
+                    if let dragStart {
+                        start = dragStart
+                    } else {
+                        start = center
+                        dragStart = start
+                        if haptics {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        }
+                    }
+                    let half = span / 2
+                    let proposed = CGPoint(x: start.x + value.translation.width,
+                                           y: start.y + value.translation.height)
+                    let clamped = CGPoint(
+                        x: min(max(proposed.x, half), max(container.width - half, half)),
+                        y: min(max(proposed.y, half), max(container.height - half, half))
+                    )
+                    onMove(clamped)
+                }
+                .onEnded { _ in
+                    dragStart = nil
+                }
+        )
+        .accessibilityIdentifier("control-edit-dpad")
+    }
+
+    private func arrowPosition(for element: ControlElement, localCenter: CGPoint) -> CGPoint {
+        let offset = diameter * 0.52
+        switch element {
+        case .dpadUp: return CGPoint(x: localCenter.x, y: localCenter.y - offset)
+        case .dpadDown: return CGPoint(x: localCenter.x, y: localCenter.y + offset)
+        case .dpadLeft: return CGPoint(x: localCenter.x - offset, y: localCenter.y)
+        case .dpadRight: return CGPoint(x: localCenter.x + offset, y: localCenter.y)
+        default: return localCenter
+        }
     }
 }

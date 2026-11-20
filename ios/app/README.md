@@ -380,17 +380,18 @@ round-4 drag editor described below.
   landscape mapping 896x414 pt and portrait 414x896 pt, centres and sizes
   normalised to our full-screen overlay (skin frames divided by the mapping
   size, five decimals; the delta-emulator reference itself scales the same way).
-  Round 6 moves the whole **portrait** set down by +0.38 so every row (including
-  the ZL/L/Select/Start/R/ZR shoulder row) sits in the free band below the
-  portrait picture — the picture bottom is around y=0.69 on a modern phone and
-  the set occupies roughly 0.69–0.96 — and puts the C-stick in the bottom-right
-  corner at (0.92, 0.94) with a smaller 0.08 size. The **D-pad** is a tight
-  four-button
-  cross: the four directions keep independent elements, the size is 0.12681 in
-  landscape / 0.12440 in portrait (so the cross span equals the skin D-pad
-  frame), centres are offset by half a button side in container points, and the
-  renderer rounds those buttons with a 0.16 corner factor instead of 0.42 so the
-  edges touch (other buttons unchanged). L/R and Start/Select match their skin
+  Round 6 (final screenshot revision) puts the whole **portrait** set in the free
+  band below the picture: the shoulder row ZL/L/Select/Start/R/ZR is one line at
+  y=0.755 just below the picture (bottom ~0.73), the main set sits at y=0.87 and
+  the C-stick goes to the bottom-right corner at (0.92, 0.935) with size 0.08;
+  the set occupies roughly 0.73–0.96. The **D-pad** is ONE cross-shaped control
+  (round 7): the four directions keep independent placements/elements as input,
+  visibility and size semantics (arm thickness 0.12681 in landscape / 0.12440
+  in portrait so it matches the skin D-pad frame; the placement centres are the
+  four arm positions), but the runtime and both editors draw and drag a single
+  rounded plus. A touch reports the arm under the finger and a press-and-slide
+  changes direction; old profiles need no migration. L/R and Start/Select match
+  their skin
   frame heights; the capsule widthRatio is unchanged. The skin's ZL/ZR and
   C-stick are absent, so ZL/ZR sit just above L/R and the landscape C-stick sits
   above the A-B-X-Y cluster; all controls use opacity 0.85. An untouched beta3
@@ -422,6 +423,9 @@ round-4 drag editor described below.
     (15%-100%).
   - **Reset virtual controls** asks for confirmation and restores the shipped
     positions for both orientations, every row to 100% and all controls visible.
+  - The D-pad is drawn and edited as **one cross**: dragging it moves all four
+    directional placements together, snapping uses the cross centre, and the
+    Toggle controls / Adjust size sheets keep their single D-pad row.
   The old Settings → Controls full-screen editor and its Default/Custom mode are
   no longer exposed: every change is stored immediately from the in-game editor
   (the profile archive and the per-row visibility/size scales are global). The
@@ -867,11 +871,11 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `InputState.swift` | Thread-safe merge of touch, overlay and controller input. |
 | `KeyboardRequest.swift` | One 3DS software-keyboard request: the schema-1 JSON decode, the applet's confirmation rules (`Request::accepts`), UTF-16 limit handling and the localized rejection lines. |
 | `KeyboardOverlayView.swift` | The full-screen overlay that answers a software-keyboard request: hint, pre-filled text field, character counter, applet buttons and validation; portrait and landscape, above the system keyboard. |
-| `ControlLayout.swift` | Editable control layout model: the full New 3DS control set, normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. The shipped defaults are converted from the ModernCenteredX2 reference skin (numeric frames only; round 6 moves the portrait set down and makes the D-pad a four-button cross) and an untouched beta3/older shipped default is migrated on load. |
-| `VirtualControlsView.swift` | Runtime overlay: draws one button / analog stick per control with its own gesture (multi-touch), reports ZK_BUTTON_* bits, Circle Pad and C-stick vectors; skips the rows hidden in the pause menu and applies the per-row size scale. |
-| `ControlLayoutEditorView.swift` | Legacy full-screen control layout editor kept for the `-openLayoutEditor control` screenshot hook; the app no longer links it (round-4 editing happens in-game). |
+| `ControlLayout.swift` | Editable control layout model: the full New 3DS control set, normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. The shipped defaults are converted from the ModernCenteredX2 reference skin (numeric frames only; round 6 puts the portrait shoulder row and main set in the band below the picture, round 7 renders the D-pad as one cross) and an untouched beta3/older shipped default is migrated on load. |
+| `VirtualControlsView.swift` | Runtime overlay: draws one button / analog stick per control with its own gesture (multi-touch), plus the single cross-shaped D-pad (`DpadCrossShape`) whose touch position selects the direction; reports ZK_BUTTON_* bits, Circle Pad and C-stick vectors; skips the rows hidden in the pause menu and applies the per-row size scale. |
+| `ControlLayoutEditorView.swift` | Legacy full-screen control layout editor kept for the `-openLayoutEditor control` screenshot hook; the app no longer links it (round-4 editing happens in-game). It draws/moves the D-pad as one cross and edits its group size/opacity/reset. |
 | `ControlLayoutSettingsView.swift` | Legacy control layout page (not linked from Settings since round 4); kept for compatibility of the old screenshot hook. |
-| `InGameControlEditOverlay.swift` | Round-4 in-game control editing: draggable controls over the frozen paused picture, per-row visibility/size, a centered Done pill that saves the current direction and resumes the game. |
+| `InGameControlEditOverlay.swift` | Round-4 in-game control editing: draggable controls over the frozen paused picture, the D-pad as one draggable cross, per-row visibility/size, a centered Done pill that saves the current direction and resumes the game. |
 | `ControlOptionsViews.swift` | The pause menu's virtual-control option sheets: Toggle controls (per-row checkboxes), Adjust size (10%-200% slider per row) and Adjust opacity (the global overlay opacity). |
 | `CustomScreenLayout.swift` | Custom screen layout model (archive v3 with the ratio-lock flag; older archives migrate to the round-2 measured defaults) plus `CustomScreenGeometry`: per-orientation screen rectangles, rotation, integer scaling. |
 | `ScreenLayoutEditorView.swift` | Full-screen custom screen layout drag editor (one direction per editor, opened from the numeric custom page's "Edit by dragging"): full-screen game-view canvas with the current control layout overlaid for reference, direct screen drag, a ≥44 pt corner handle or pinch to resize, edge snapping and one clear Done pill (round-4 interaction; no bottom toolbar). |
@@ -1175,9 +1179,10 @@ Instant save states:
   Arbitrary per-screen placement inside the Metal presenter is still the
   follow-up for a future presenter arrangement.
 - The shipped default controls come from the ModernCenteredX2 reference skin,
-  with the round-6 device-feedback adjustments: the portrait set sits in the free
-  band below the picture (moved down +0.38 so the shoulder row clears the
-  picture) and the D-pad is a tight four-button cross. The skin is read only for numbers; its artwork is not used. The
+  with the round-6 device-feedback adjustments: the portrait shoulder row sits
+  on one line at y=0.755 just below the picture and the main set at y=0.87, so
+  every control is in the free band; the D-pad is one cross-shaped control (the
+  four directions stay separate elements for input, visibility and size). The skin is read only for numbers; its artwork is not used. The
   reference layout app's behaviour rows (slide buttons, relative stick centre,
   D-pad slide, Combo Button) are future work; the available options are
   visibility, size scale, opacity and reset.

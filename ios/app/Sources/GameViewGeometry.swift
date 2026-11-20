@@ -381,6 +381,147 @@ extension ControlElement {
     }
 }
 
+// MARK: - D-pad group geometry (round 7)
+
+/// The D-pad is one cross-shaped control on screen. The four directional
+/// placements in the profile stay independent (input bits, visibility and size
+/// semantics, old saves), but the runtime and the editors derive one group
+/// frame from them: the centre is the average of the four direction centres and
+/// one arm's thickness is the average of their sizes. The cross span is
+/// 2 x diameter.
+struct DpadGroupFrame: Equatable {
+    var center: CGPoint
+    /// Thickness of one arm / width of the plus.
+    var diameter: CGFloat
+    /// Average of the four placements' opacities.
+    var opacity: Double
+
+    var span: CGFloat { diameter * 2 }
+
+    var bounds: CGRect {
+        CGRect(x: center.x - span / 2, y: center.y - span / 2,
+               width: span, height: span)
+    }
+
+    /// A frame the existing snapping code can use for the whole cross.
+    var snapFrame: ControlFrame {
+        ControlFrame(center: center, diameter: span, width: span)
+    }
+
+    /// Keeps the whole cross inside the container.
+    func clampedCenter(_ proposed: CGPoint, in container: CGSize) -> CGPoint {
+        let half = span / 2
+        return CGPoint(
+            x: min(max(proposed.x, half), max(container.width - half, half)),
+            y: min(max(proposed.y, half), max(container.height - half, half))
+        )
+    }
+}
+
+extension ControlLayoutProfile {
+    /// The four D-pad directions; they stay separate elements but are drawn,
+    /// moved and scaled as one cross.
+    static let dpadDirections: [ControlElement] = [.dpadUp, .dpadDown, .dpadLeft, .dpadRight]
+
+    /// Whether the cross is drawn at all (all four hidden => no cross).
+    func isDpadVisible(_ isVisible: (ControlElement) -> Bool) -> Bool {
+        Self.dpadDirections.contains(where: isVisible)
+    }
+
+    /// Group centre (average of the four directional centres, container points),
+    /// arm thickness (average size with the per-row size scale applied) and
+    /// average opacity.
+    func dpadGroup(in container: CGSize, sizeScale: Double = 1.0) -> DpadGroupFrame {
+        let shortSide = min(container.width, container.height)
+        let scale = max(CGFloat(sizeScale), 0.1)
+        var center = CGPoint.zero
+        var diameter: CGFloat = 0
+        var opacity = 0.0
+        for element in Self.dpadDirections {
+            let placement = placement(for: element)
+            center.x += container.width * CGFloat(placement.x)
+            center.y += container.height * CGFloat(placement.y)
+            diameter += max(shortSide * CGFloat(placement.size) * scale,
+                            ControlElement.minimumDiameter)
+            opacity += placement.opacity
+        }
+        let count = CGFloat(Self.dpadDirections.count)
+        return DpadGroupFrame(center: CGPoint(x: center.x / count, y: center.y / count),
+                              diameter: diameter / count,
+                              opacity: opacity / Double(Self.dpadDirections.count))
+    }
+
+    /// Translates all four directional placements so the cross centre becomes
+    /// `center` (container points), clamped so the whole cross stays inside.
+    func movingDpadGroup(to center: CGPoint,
+                         in container: CGSize,
+                         sizeScale: Double = 1.0) -> ControlLayoutProfile {
+        let group = dpadGroup(in: container, sizeScale: sizeScale)
+        let target = group.clampedCenter(center, in: container)
+        let dx = Double(target.x - group.center.x) / max(Double(container.width), 1)
+        let dy = Double(target.y - group.center.y) / max(Double(container.height), 1)
+        var result = self
+        for element in Self.dpadDirections {
+            var placement = result.placement(for: element)
+            placement.x = min(max(placement.x + dx, 0), 1)
+            placement.y = min(max(placement.y + dy, 0), 1)
+            result.setPlacement(placement, for: element)
+        }
+        return result
+    }
+
+    /// Normalised group centre, used by the in-game editor (the overlay clamps
+    /// in points before normalising).
+    var dpadGroupCenterNormalized: CGPoint {
+        var center = CGPoint.zero
+        for element in Self.dpadDirections {
+            let placement = placement(for: element)
+            center.x += CGFloat(placement.x)
+            center.y += CGFloat(placement.y)
+        }
+        let count = CGFloat(Self.dpadDirections.count)
+        return CGPoint(x: center.x / count, y: center.y / count)
+    }
+
+    /// Translates the four directions by the delta to a normalised group centre.
+    func movingDpadGroupNormalized(to center: CGPoint) -> ControlLayoutProfile {
+        let current = dpadGroupCenterNormalized
+        let dx = Double(center.x - current.x)
+        let dy = Double(center.y - current.y)
+        var result = self
+        for element in Self.dpadDirections {
+            var placement = result.placement(for: element)
+            placement.x = min(max(placement.x + dx, 0), 1)
+            placement.y = min(max(placement.y + dy, 0), 1)
+            result.setPlacement(placement, for: element)
+        }
+        return result
+    }
+
+    /// Applies one size (short-side fraction) to all four directions so the
+    /// cross stays a single shape.
+    func settingDpadSize(_ size: Double) -> ControlLayoutProfile {
+        var result = self
+        for element in Self.dpadDirections {
+            var placement = result.placement(for: element)
+            placement.size = min(max(size, 0.05), 0.60)
+            result.setPlacement(placement, for: element)
+        }
+        return result
+    }
+
+    /// Applies one opacity to all four directions.
+    func settingDpadOpacity(_ opacity: Double) -> ControlLayoutProfile {
+        var result = self
+        for element in Self.dpadDirections {
+            var placement = result.placement(for: element)
+            placement.opacity = min(max(opacity, 0.20), 1.0)
+            result.setPlacement(placement, for: element)
+        }
+        return result
+    }
+}
+
 // MARK: - Control snapping
 
 /// Snapping for the controls editor: the dragged control jumps to the

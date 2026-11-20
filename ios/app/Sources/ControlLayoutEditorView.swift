@@ -43,6 +43,9 @@ struct ControlLayoutEditorView: View {
     // Gesture bookkeeping: a gesture always applies its total translation to the
     // placement captured when it started, never to the already-moved one.
     @State private var dragBase: ControlPlacement?
+    /// Group centre captured when a D-pad cross drag starts (the four directions
+    /// move together).
+    @State private var dragBaseDpadCenter: CGPoint?
     @State private var pinchBaseSize: Double?
     @State private var resizeBaseSize: Double?
 
@@ -209,29 +212,54 @@ struct ControlLayoutEditorView: View {
     private func controls(_ scaler: GameViewPreviewScaler) -> some View {
         let container = geometry.controlContainerRect
         ForEach(ControlElement.allCases) { element in
-            let placement = draft.placement(for: element)
-            let frame = element.frame(for: placement, in: containerSize)
-            let center = scaler.point(CGPoint(x: container.minX + frame.center.x,
-                                              y: container.minY + frame.center.y))
-            let diameter = scaler.length(frame.diameter)
-            let width = scaler.length(frame.width)
-            EditableOverlayControl(
-                element: element,
-                center: center,
-                diameter: max(diameter, 10),
-                width: max(width, 10),
-                opacity: placement.opacity,
-                isSelected: selected == element,
-                onBeginDrag: { beginDrag(element) },
-                onDrag: { translation in drag(element, translation: translation, scale: scaler.scale) },
-                onEndDrag: { endDrag() },
-                onBeginResize: { beginResize(element) },
-                onResize: { translation in resize(element, translation: translation) },
-                onEndResize: { endResize() }
-            )
-            .position(center)
-            .zIndex(selected == element ? 2 : 1)
+            if !element.isDpadDirection {
+                editableOverlayControl(element, container: container, scaler: scaler)
+            }
         }
+        // The D-pad is one cross-shaped control; dragging it moves all four
+        // directions together.
+        let group = draft.dpadGroup(in: containerSize)
+        let groupCenter = scaler.point(CGPoint(x: container.minX + group.center.x,
+                                               y: container.minY + group.center.y))
+        EditableDpadCrossControl(
+            center: groupCenter,
+            diameter: max(scaler.length(group.diameter), 10),
+            opacity: group.opacity,
+            isSelected: selected?.isDpadDirection == true,
+            onBeginDrag: { beginDrag(.dpadUp) },
+            onDrag: { translation in drag(.dpadUp, translation: translation, scale: scaler.scale) },
+            onEndDrag: { endDrag() }
+        )
+        .position(groupCenter)
+        .zIndex(selected?.isDpadDirection == true ? 2 : 1)
+    }
+
+    @ViewBuilder
+    private func editableOverlayControl(_ element: ControlElement,
+                                        container: CGRect,
+                                        scaler: GameViewPreviewScaler) -> some View {
+        let placement = draft.placement(for: element)
+        let frame = element.frame(for: placement, in: containerSize)
+        let center = scaler.point(CGPoint(x: container.minX + frame.center.x,
+                                          y: container.minY + frame.center.y))
+        let diameter = scaler.length(frame.diameter)
+        let width = scaler.length(frame.width)
+        EditableOverlayControl(
+            element: element,
+            center: center,
+            diameter: max(diameter, 10),
+            width: max(width, 10),
+            opacity: placement.opacity,
+            isSelected: selected == element,
+            onBeginDrag: { beginDrag(element) },
+            onDrag: { translation in drag(element, translation: translation, scale: scaler.scale) },
+            onEndDrag: { endDrag() },
+            onBeginResize: { beginResize(element) },
+            onResize: { translation in resize(element, translation: translation) },
+            onEndResize: { endResize() }
+        )
+        .position(center)
+        .zIndex(selected == element ? 2 : 1)
     }
 
     @ViewBuilder
@@ -324,7 +352,7 @@ struct ControlLayoutEditorView: View {
             HStack(spacing: 8) {
                 Text(element.symbol)
                     .font(.system(.footnote, design: .rounded).weight(.semibold))
-                Text(element.accessibilityTitle)
+                Text(element.isDpadDirection ? L10n.tr("D-pad") : element.accessibilityTitle)
                     .font(.footnote)
                     .foregroundColor(.secondary)
                 Spacer(minLength: 4)
@@ -377,22 +405,30 @@ struct ControlLayoutEditorView: View {
 
     private func sizeBinding(for element: ControlElement) -> Binding<Double> {
         Binding(
-            get: { draft.placement(for: element).size },
+            get: { draft.placement(for: element.isDpadDirection ? .dpadUp : element).size },
             set: { newValue in
-                var placement = draft.placement(for: element)
-                placement.size = newValue
-                draft.setPlacement(placement, for: element)
+                if element.isDpadDirection {
+                    draft = draft.settingDpadSize(newValue)
+                } else {
+                    var placement = draft.placement(for: element)
+                    placement.size = newValue
+                    draft.setPlacement(placement, for: element)
+                }
             }
         )
     }
 
     private func opacityBinding(for element: ControlElement) -> Binding<Double> {
         Binding(
-            get: { draft.placement(for: element).opacity },
+            get: { draft.placement(for: element.isDpadDirection ? .dpadUp : element).opacity },
             set: { newValue in
-                var placement = draft.placement(for: element)
-                placement.opacity = newValue
-                draft.setPlacement(placement, for: element)
+                if element.isDpadDirection {
+                    draft = draft.settingDpadOpacity(newValue)
+                } else {
+                    var placement = draft.placement(for: element)
+                    placement.opacity = newValue
+                    draft.setPlacement(placement, for: element)
+                }
             }
         )
     }
@@ -427,10 +463,19 @@ struct ControlLayoutEditorView: View {
 
     private func resetSelected(_ element: ControlElement) {
         pushUndo()
-        draft.setPlacement(
-            ControlLayoutProfile.defaultPlacement(for: element, orientation: orientation),
-            for: element
-        )
+        if element.isDpadDirection {
+            for direction in ControlLayoutProfile.dpadDirections {
+                draft.setPlacement(
+                    ControlLayoutProfile.defaultPlacement(for: direction, orientation: orientation),
+                    for: direction
+                )
+            }
+        } else {
+            draft.setPlacement(
+                ControlLayoutProfile.defaultPlacement(for: element, orientation: orientation),
+                for: element
+            )
+        }
         commit()
     }
 
@@ -456,14 +501,39 @@ struct ControlLayoutEditorView: View {
 
     private func beginDrag(_ element: ControlElement) {
         selected = element
+        if element.isDpadDirection {
+            guard dragBaseDpadCenter == nil else { return }
+            pushUndo()
+            dragBaseDpadCenter = draft.dpadGroup(in: containerSize).center
+            return
+        }
         guard dragBase == nil else { return }
         pushUndo()
         dragBase = draft.placement(for: element)
     }
 
     private func drag(_ element: ControlElement, translation: CGSize, scale: CGFloat) {
-        guard let base = dragBase else { return }
         let factor = max(scale, 0.0001)
+        if element.isDpadDirection {
+            guard let baseCenter = dragBaseDpadCenter else { return }
+            let group = draft.dpadGroup(in: containerSize)
+            let proposed = CGPoint(x: baseCenter.x + translation.width / factor,
+                                   y: baseCenter.y + translation.height / factor)
+            let bounded = group.clampedCenter(proposed, in: containerSize)
+            let others = ControlElement.allCases
+                .filter { !$0.isDpadDirection }
+                .map { (element: $0,
+                        frame: $0.frame(for: draft.placement(for: $0), in: containerSize)) }
+            let snapped = ControlLayoutSnapping.snap(center: bounded,
+                                                     frame: group.snapFrame,
+                                                     container: containerSize,
+                                                     others: others)
+            guideX = snapped.guideX
+            guideY = snapped.guideY
+            draft = draft.movingDpadGroup(to: snapped.center, in: containerSize)
+            return
+        }
+        guard let base = dragBase else { return }
         let baseFrame = element.frame(for: base, in: containerSize)
         let proposed = CGPoint(x: baseFrame.center.x + translation.width / factor,
                                y: baseFrame.center.y + translation.height / factor)
@@ -488,6 +558,7 @@ struct ControlLayoutEditorView: View {
 
     private func endDrag() {
         dragBase = nil
+        dragBaseDpadCenter = nil
         guideX = nil
         guideY = nil
         commit()
@@ -497,7 +568,7 @@ struct ControlLayoutEditorView: View {
         selected = element
         guard resizeBaseSize == nil else { return }
         pushUndo()
-        resizeBaseSize = draft.placement(for: element).size
+        resizeBaseSize = draft.placement(for: element.isDpadDirection ? .dpadUp : element).size
     }
 
     private func resize(_ element: ControlElement, translation: CGSize) {
@@ -506,9 +577,14 @@ struct ControlLayoutEditorView: View {
         // the average keeps a diagonal drag natural.
         let points = (translation.width + translation.height) / 2
         let shortSide = max(min(containerSize.width, containerSize.height), 1)
-        var placement = draft.placement(for: element)
-        placement.size = min(max(base + Double(points / shortSide), 0.05), 0.60)
-        draft.setPlacement(placement, for: element)
+        let newSize = min(max(base + Double(points / shortSide), 0.05), 0.60)
+        if element.isDpadDirection {
+            draft = draft.settingDpadSize(newSize)
+        } else {
+            var placement = draft.placement(for: element)
+            placement.size = newSize
+            draft.setPlacement(placement, for: element)
+        }
     }
 
     private func endResize() {
@@ -522,12 +598,17 @@ struct ControlLayoutEditorView: View {
                 guard let element = selected else { return }
                 if pinchBaseSize == nil {
                     pushUndo()
-                    pinchBaseSize = draft.placement(for: element).size
+                    pinchBaseSize = draft.placement(for: element.isDpadDirection ? .dpadUp : element).size
                 }
                 guard let base = pinchBaseSize else { return }
-                var placement = draft.placement(for: element)
-                placement.size = min(max(base * Double(factor), 0.05), 0.60)
-                draft.setPlacement(placement, for: element)
+                let newSize = min(max(base * Double(factor), 0.05), 0.60)
+                if element.isDpadDirection {
+                    draft = draft.settingDpadSize(newSize)
+                } else {
+                    var placement = draft.placement(for: element)
+                    placement.size = newSize
+                    draft.setPlacement(placement, for: element)
+                }
             }
             .onEnded { _ in
                 guard pinchBaseSize != nil else { return }
@@ -635,5 +716,71 @@ private struct EditableOverlayControl: View {
                 .padding(.horizontal, 1)
         }
         .shadow(color: isSelected ? Color.accentColor.opacity(0.35) : .clear, radius: 4)
+    }
+}
+// MARK: - D-pad cross in the preview
+
+/// The one editable D-pad cross of the legacy full-screen editor. It is drawn
+/// from the four directional placements and drags them together; size/opacity
+/// are edited through the inspector's group bindings.
+private struct EditableDpadCrossControl: View {
+    let center: CGPoint
+    let diameter: CGFloat
+    let opacity: Double
+    let isSelected: Bool
+    let onBeginDrag: () -> Void
+    let onDrag: (CGSize) -> Void
+    let onEndDrag: () -> Void
+
+    @State private var isDragging = false
+
+    private var span: CGFloat { diameter * 2 }
+
+    var body: some View {
+        let localCenter = CGPoint(x: span / 2, y: span / 2)
+        ZStack {
+            DpadCrossShape()
+                .fill(Color.white.opacity(isSelected ? 0.30 : 0.16))
+            DpadCrossShape()
+                .stroke(isSelected ? Color.accentColor : Color.white.opacity(0.5),
+                        lineWidth: isSelected ? 2 : 1)
+            ForEach(ControlLayoutProfile.dpadDirections, id: \.self) { element in
+                Text(element.symbol)
+                    .font(.system(size: max(min(diameter * 0.22, 12), 6),
+                                  weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.92))
+                    .position(arrowPosition(for: element, localCenter: localCenter))
+            }
+        }
+        .frame(width: span, height: span)
+        .opacity(opacity)
+        .contentShape(DpadCrossShape())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    if !isDragging {
+                        isDragging = true
+                        onBeginDrag()
+                    }
+                    onDrag(value.translation)
+                }
+                .onEnded { _ in
+                    isDragging = false
+                    onEndDrag()
+                }
+        )
+        .accessibilityLabel(L10n.tr("D-pad"))
+        .accessibilityIdentifier("editor-dpad-cross")
+    }
+
+    private func arrowPosition(for element: ControlElement, localCenter: CGPoint) -> CGPoint {
+        let offset = diameter * 0.52
+        switch element {
+        case .dpadUp: return CGPoint(x: localCenter.x, y: localCenter.y - offset)
+        case .dpadDown: return CGPoint(x: localCenter.x, y: localCenter.y + offset)
+        case .dpadLeft: return CGPoint(x: localCenter.x - offset, y: localCenter.y)
+        case .dpadRight: return CGPoint(x: localCenter.x + offset, y: localCenter.y)
+        default: return localCenter
+        }
     }
 }
