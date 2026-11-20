@@ -378,9 +378,14 @@ round-4 drag editor described below.
   from the **ModernCenteredX2** reference skin (a Delta `.deltaskin` zip read
   only for its numeric `items[].frame` rectangles; no artwork or text copied):
   landscape mapping 896x414 pt and portrait 414x896 pt, centres and sizes
-  normalised to our full-screen overlay. The skin's ZL/ZR and C-stick are absent,
-  so ZL/ZR sit just above L/R and the C-stick sits above the A-B-X-Y cluster; all
-  ten controls use opacity 0.85. A stored profile that is still the previous
+  normalised to our full-screen overlay (skin frames divided by the mapping
+  size, five decimals; the delta-emulator reference itself scales the same way).
+  The D-pad keeps four independent buttons built from the skin's single D-pad
+  frame: diameter 0.36x the frame's short side and arm offset 0.29x it. L/R and
+  Start/Select match their skin frame heights; our capsule widthRatio is
+  unchanged. The skin's ZL/ZR and C-stick are absent, so ZL/ZR sit just above
+  L/R and the C-stick sits above the A-B-X-Y cluster; all ten controls use
+  opacity 0.85. An untouched previous default is migrated to this table. A stored profile that is still the previous
   shipped default (compared within tolerance) is migrated to the new default on
   load; a profile the user moved is kept. **Reset virtual controls** restores the
   new default.

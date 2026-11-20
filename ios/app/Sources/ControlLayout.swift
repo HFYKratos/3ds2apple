@@ -365,48 +365,57 @@ struct ControlLayoutProfile: Codable, Equatable {
     private static func rawDefaultPlacements(
         for orientation: ControlLayoutOrientation
     ) -> [(ControlElement, ControlPlacement)] {
+        // Exact normalised values from the corrected skin conversion (5 decimal
+        // places, opacity 0.85 everywhere). The D-pad is one skin frame: the four
+        // directions keep independent buttons with diameter 0.36 * S and an arm
+        // offset of 0.29 * S, where S is the skin D-pad frame's shorter side
+        // (landscape 105 pt -> 0.09130 / 30.45 pt, portrait 103 pt -> 0.08957 /
+        // 29.9 pt). L/R and Start/Select use their skin frame heights (the
+        // widthRatio capsule drawing is unchanged; see the design note).
         switch orientation {
         case .landscape:
-            // Mapping 896x414 pt.
+            // mappingSize 896 x 414 pt.
             return [
-                (.circlePad, ControlPlacement(x: 166.5 / 896.0, y: 334.5 / 414.0, size: 0.27778, opacity: 0.85)),
-                (.dpadUp, ControlPlacement(x: 313.5 / 896.0, y: (340.5 - 30.45) / 414.0, size: 0.09130, opacity: 0.85)),
-                (.dpadDown, ControlPlacement(x: 313.5 / 896.0, y: (340.5 + 30.45) / 414.0, size: 0.09130, opacity: 0.85)),
-                (.dpadLeft, ControlPlacement(x: (313.5 - 30.45) / 896.0, y: 340.5 / 414.0, size: 0.09130, opacity: 0.85)),
-                (.dpadRight, ControlPlacement(x: (313.5 + 30.45) / 896.0, y: 340.5 / 414.0, size: 0.09130, opacity: 0.85)),
-                (.buttonA, ControlPlacement(x: 803.5 / 896.0, y: 317.5 / 414.0, size: 0.15217, opacity: 0.85)),
-                (.buttonB, ControlPlacement(x: 748.5 / 896.0, y: 372.5 / 414.0, size: 0.15217, opacity: 0.85)),
-                (.buttonX, ControlPlacement(x: 748.5 / 896.0, y: 261.5 / 414.0, size: 0.15217, opacity: 0.85)),
-                (.buttonY, ControlPlacement(x: 693.0 / 896.0, y: 318.0 / 414.0, size: 0.15217, opacity: 0.85)),
-                (.buttonL, ControlPlacement(x: 676.5 / 896.0, y: 246.5 / 414.0, size: 0.07488, opacity: 0.85)),
-                (.buttonR, ControlPlacement(x: 820.5 / 896.0, y: 245.5 / 414.0, size: 0.07488, opacity: 0.85)),
-                // Not in the skin: just above L/R.
-                (.buttonZL, ControlPlacement(x: 676.5 / 896.0, y: 202.0 / 414.0, size: 0.065, opacity: 0.85)),
-                (.buttonZR, ControlPlacement(x: 820.5 / 896.0, y: 202.0 / 414.0, size: 0.065, opacity: 0.85)),
-                (.buttonStart, ControlPlacement(x: 490.0 / 896.0, y: 373.0 / 414.0, size: 0.08213, opacity: 0.85)),
-                (.buttonSelect, ControlPlacement(x: 405.0 / 896.0, y: 373.0 / 414.0, size: 0.08213, opacity: 0.85)),
+                (.circlePad, ControlPlacement(x: 0.18583, y: 0.80797, size: 0.27778, opacity: 0.85)),
+                (.dpadUp, ControlPlacement(x: 0.34989, y: 0.74891, size: 0.09130, opacity: 0.85)),
+                (.dpadDown, ControlPlacement(x: 0.34989, y: 0.89601, size: 0.09130, opacity: 0.85)),
+                (.dpadLeft, ControlPlacement(x: 0.31590, y: 0.82246, size: 0.09130, opacity: 0.85)),
+                (.dpadRight, ControlPlacement(x: 0.38387, y: 0.82246, size: 0.09130, opacity: 0.85)),
+                (.buttonA, ControlPlacement(x: 0.89676, y: 0.76691, size: 0.15217, opacity: 0.85)),
+                (.buttonB, ControlPlacement(x: 0.83538, y: 0.89976, size: 0.15217, opacity: 0.85)),
+                (.buttonX, ControlPlacement(x: 0.83538, y: 0.63164, size: 0.15217, opacity: 0.85)),
+                (.buttonY, ControlPlacement(x: 0.77344, y: 0.76812, size: 0.15217, opacity: 0.85)),
+                (.buttonL, ControlPlacement(x: 0.75502, y: 0.59541, size: 0.07488, opacity: 0.85)),
+                (.buttonR, ControlPlacement(x: 0.91574, y: 0.59299, size: 0.07488, opacity: 0.85)),
+                // Not in the skin: one step above L/R.
+                (.buttonZL, ControlPlacement(x: 0.75502, y: 0.48792, size: 0.065, opacity: 0.85)),
+                (.buttonZR, ControlPlacement(x: 0.91574, y: 0.48792, size: 0.065, opacity: 0.85)),
+                (.buttonStart, ControlPlacement(x: 0.54688, y: 0.90097, size: 0.08213, opacity: 0.85)),
+                (.buttonSelect, ControlPlacement(x: 0.45201, y: 0.90097, size: 0.08213, opacity: 0.85)),
                 // Not in the skin: above/right of the A-B-X-Y cluster.
-                (.cStick, ControlPlacement(x: 760.0 / 896.0, y: 200.0 / 414.0, size: 0.10, opacity: 0.85))
+                (.cStick, ControlPlacement(x: 0.84821, y: 0.48309, size: 0.10, opacity: 0.85))
             ]
         case .portrait:
-            // Mapping 414x896 pt.
+            // mappingSize 414 x 896 pt.
             return [
-                (.circlePad, ControlPlacement(x: 68.5 / 414.0, y: 423.5 / 896.0, size: 0.24396, opacity: 0.85)),
-                (.dpadUp, ControlPlacement(x: 184.5 / 414.0, y: (459.5 - 29.9) / 896.0, size: 0.08961, opacity: 0.85)),
-                (.dpadDown, ControlPlacement(x: 184.5 / 414.0, y: (459.5 + 29.9) / 896.0, size: 0.08961, opacity: 0.85)),
-                (.dpadLeft, ControlPlacement(x: (184.5 - 29.9) / 414.0, y: 459.5 / 896.0, size: 0.08961, opacity: 0.85)),
-                (.dpadRight, ControlPlacement(x: (184.5 + 29.9) / 414.0, y: 459.5 / 896.0, size: 0.08961, opacity: 0.85)),
-                (.buttonA, ControlPlacement(x: 378.5 / 414.0, y: 431.5 / 896.0, size: 0.13285, opacity: 0.85)),
-                (.buttonB, ControlPlacement(x: 326.5 / 414.0, y: 482.5 / 896.0, size: 0.13285, opacity: 0.85)),
-                (.buttonX, ControlPlacement(x: 326.5 / 414.0, y: 380.5 / 896.0, size: 0.13285, opacity: 0.85)),
-                (.buttonY, ControlPlacement(x: 274.5 / 414.0, y: 431.5 / 896.0, size: 0.13285, opacity: 0.85)),
-                (.buttonL, ControlPlacement(x: 69.5 / 414.0, y: 334.0 / 896.0, size: 0.07729, opacity: 0.85)),
-                (.buttonR, ControlPlacement(x: 344.5 / 414.0, y: 334.0 / 896.0, size: 0.07729, opacity: 0.85)),
-                (.buttonZL, ControlPlacement(x: 69.5 / 414.0, y: 296.0 / 896.0, size: 0.065, opacity: 0.85)),
-                (.buttonZR, ControlPlacement(x: 344.5 / 414.0, y: 296.0 / 896.0, size: 0.065, opacity: 0.85)),
-                (.buttonStart, ControlPlacement(x: 252.5 / 414.0, y: 333.5 / 896.0, size: 0.07971, opacity: 0.85)),
-                (.buttonSelect, ControlPlacement(x: 162.5 / 414.0, y: 333.5 / 896.0, size: 0.07971, opacity: 0.85)),
-                (.cStick, ControlPlacement(x: 386.0 / 414.0, y: 378.0 / 896.0, size: 0.13285, opacity: 0.85))
+                (.circlePad, ControlPlacement(x: 0.16546, y: 0.47266, size: 0.24396, opacity: 0.85)),
+                (.dpadUp, ControlPlacement(x: 0.44565, y: 0.47949, size: 0.08957, opacity: 0.85)),
+                (.dpadDown, ControlPlacement(x: 0.44565, y: 0.54617, size: 0.08957, opacity: 0.85)),
+                (.dpadLeft, ControlPlacement(x: 0.37350, y: 0.51283, size: 0.08957, opacity: 0.85)),
+                (.dpadRight, ControlPlacement(x: 0.51780, y: 0.51283, size: 0.08957, opacity: 0.85)),
+                (.buttonA, ControlPlacement(x: 0.91425, y: 0.48158, size: 0.13285, opacity: 0.85)),
+                (.buttonB, ControlPlacement(x: 0.78865, y: 0.53850, size: 0.13285, opacity: 0.85)),
+                (.buttonX, ControlPlacement(x: 0.78865, y: 0.42467, size: 0.13285, opacity: 0.85)),
+                (.buttonY, ControlPlacement(x: 0.66304, y: 0.48158, size: 0.13285, opacity: 0.85)),
+                (.buttonL, ControlPlacement(x: 0.16787, y: 0.37277, size: 0.07729, opacity: 0.85)),
+                (.buttonR, ControlPlacement(x: 0.83213, y: 0.37277, size: 0.07729, opacity: 0.85)),
+                // Not in the skin: one step above L/R.
+                (.buttonZL, ControlPlacement(x: 0.16787, y: 0.33036, size: 0.065, opacity: 0.85)),
+                (.buttonZR, ControlPlacement(x: 0.83213, y: 0.33036, size: 0.065, opacity: 0.85)),
+                (.buttonStart, ControlPlacement(x: 0.60990, y: 0.37221, size: 0.07971, opacity: 0.85)),
+                (.buttonSelect, ControlPlacement(x: 0.39251, y: 0.37221, size: 0.07971, opacity: 0.85)),
+                // Not in the skin: between R and A.
+                (.cStick, ControlPlacement(x: 0.93237, y: 0.42188, size: 0.13285, opacity: 0.85))
             ]
         }
     }

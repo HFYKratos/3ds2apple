@@ -271,7 +271,7 @@ check "control layout has the C-stick" contains ios/app/Sources/ControlLayout.sw
 check "control layout carries ZL/ZR" contains ios/app/Sources/ControlLayout.swift 'case buttonZL'
 check "layout persistence is versioned" contains ios/app/Sources/ControlLayout.swift 'currentVersion'
 check "default control layout comes from the ModernCenteredX2 skin geometry" \
-  bash -c 'grep -q "166.5 / 896.0" ios/app/Sources/ControlLayout.swift && grep -q "0.27778" ios/app/Sources/ControlLayout.swift && grep -q "68.5 / 414.0" ios/app/Sources/ControlLayout.swift && grep -q "0.24396" ios/app/Sources/ControlLayout.swift'
+  bash -c 'grep -q "x: 0.18583, y: 0.80797, size: 0.27778" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.16546, y: 0.47266, size: 0.24396" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.89676, y: 0.76691, size: 0.15217" ios/app/Sources/ControlLayout.swift'
 check "pause menu rows use the unified icon-free style" \
   bash -c '! grep -q "systemImage:" ios/app/Sources/InGameMenuView.swift && grep -q "rowVerticalPadding" ios/app/Sources/InGameMenuView.swift && grep -q "toggleRow" ios/app/Sources/InGameMenuView.swift'
 check "per-orientation control profiles exist" contains ios/app/Sources/AppSettings.swift 'controlLayoutLandscape'
