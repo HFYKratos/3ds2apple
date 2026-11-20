@@ -285,7 +285,9 @@ extension GameViewPreviewGeometry {
             displayScale: displayScale,
             integerScale: settings.integerScale
         ) {
-            return viewports
+            // The editors only draw the two main pictures; the hybrid extra
+            // upper-screen picture is a runtime/preview detail.
+            return (top: viewports.top, bottom: viewports.bottom)
         }
         let layout = settings.effectiveScreenLayout(isLandscape: orientation == .landscape)
         let stretch = settings.screenAspect == .stretch
