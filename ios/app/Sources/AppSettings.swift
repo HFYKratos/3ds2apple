@@ -603,9 +603,9 @@ final class AppSettings: ObservableObject {
         let decodedControlLandscape = Self.decodeControlLayout(
             defaults, Keys.controlLayoutLandscape, orientation: .landscape
         )
-        // Round 5: a stored profile that is still the pre-round-5 shipped default
-        // moves to the new ModernCenteredX2-derived default; a profile the user
-        // moved is kept unchanged.
+        // Round 6: a stored profile that is still an untouched beta3 (round-5)
+        // or older shipped default moves to the new cross-shaped default; a
+        // profile the user moved is kept unchanged.
         let storedControlPortrait = ControlLayoutProfile.migratingPreviousShippedDefault(
             decodedControlPortrait, for: .portrait
         )

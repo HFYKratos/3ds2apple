@@ -374,18 +374,25 @@ choice (six options) and an independent portrait choice (three options), each
 selected from its own radio picker, with the numeric custom pages and the
 round-4 drag editor described below.
 
-- **Default control layout (round 5).** The shipped positions are converted
+- **Default control layout (round 5 skin, round 6 device adjustments).** The shipped positions are converted
   from the **ModernCenteredX2** reference skin (a Delta `.deltaskin` zip read
   only for its numeric `items[].frame` rectangles; no artwork or text copied):
   landscape mapping 896x414 pt and portrait 414x896 pt, centres and sizes
   normalised to our full-screen overlay (skin frames divided by the mapping
   size, five decimals; the delta-emulator reference itself scales the same way).
-  The D-pad keeps four independent buttons built from the skin's single D-pad
-  frame: diameter 0.36x the frame's short side and arm offset 0.29x it. L/R and
-  Start/Select match their skin frame heights; our capsule widthRatio is
-  unchanged. The skin's ZL/ZR and C-stick are absent, so ZL/ZR sit just above
-  L/R and the C-stick sits above the A-B-X-Y cluster; all ten controls use
-  opacity 0.85. An untouched previous default is migrated to this table. A stored profile that is still the previous
+  Round 6 moves the whole **portrait** set down by +0.31 so it sits in the free
+  band below the portrait picture (C-stick to the bottom-right corner,
+  (0.92, 0.90) at size 0.10), and turns the **D-pad** into a tight four-button
+  cross: the four directions keep independent elements, the size is 0.12681 in
+  landscape / 0.12440 in portrait (so the cross span equals the skin D-pad
+  frame), centres are offset by half a button side in container points, and the
+  renderer rounds those buttons with a 0.16 corner factor instead of 0.42 so the
+  edges touch (other buttons unchanged). L/R and Start/Select match their skin
+  frame heights; the capsule widthRatio is unchanged. The skin's ZL/ZR and
+  C-stick are absent, so ZL/ZR sit just above L/R and the landscape C-stick sits
+  above the A-B-X-Y cluster; all controls use opacity 0.85. An untouched beta3
+  (round-5) or older shipped profile migrates to this table; a customised
+  profile is kept. A stored profile that is still the previous
   shipped default (compared within tolerance) is migrated to the new default on
   load; a profile the user moved is kept. **Reset virtual controls** restores the
   new default.
@@ -857,7 +864,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `InputState.swift` | Thread-safe merge of touch, overlay and controller input. |
 | `KeyboardRequest.swift` | One 3DS software-keyboard request: the schema-1 JSON decode, the applet's confirmation rules (`Request::accepts`), UTF-16 limit handling and the localized rejection lines. |
 | `KeyboardOverlayView.swift` | The full-screen overlay that answers a software-keyboard request: hint, pre-filled text field, character counter, applet buttons and validation; portrait and landscape, above the system keyboard. |
-| `ControlLayout.swift` | Editable control layout model: the full New 3DS control set, normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. The shipped defaults are converted from the ModernCenteredX2 reference skin (numeric frames only) and a stored untouched old default is migrated on load. |
+| `ControlLayout.swift` | Editable control layout model: the full New 3DS control set, normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. The shipped defaults are converted from the ModernCenteredX2 reference skin (numeric frames only; round 6 moves the portrait set down and makes the D-pad a four-button cross) and an untouched beta3/older shipped default is migrated on load. |
 | `VirtualControlsView.swift` | Runtime overlay: draws one button / analog stick per control with its own gesture (multi-touch), reports ZK_BUTTON_* bits, Circle Pad and C-stick vectors; skips the rows hidden in the pause menu and applies the per-row size scale. |
 | `ControlLayoutEditorView.swift` | Legacy full-screen control layout editor kept for the `-openLayoutEditor control` screenshot hook; the app no longer links it (round-4 editing happens in-game). |
 | `ControlLayoutSettingsView.swift` | Legacy control layout page (not linked from Settings since round 4); kept for compatibility of the old screenshot hook. |
@@ -1164,9 +1171,10 @@ Instant save states:
   the emergency readback mirror for those choices (no GPU zero-copy path).
   Arbitrary per-screen placement inside the Metal presenter is still the
   follow-up for a future presenter arrangement.
-- The round-5 shipped default controls come from the ModernCenteredX2 reference
-  skin and are placed over the whole screen (the old reserved-pad positions are
-  gone). The skin is read only for numbers; its artwork is not used. The
+- The shipped default controls come from the ModernCenteredX2 reference skin,
+  with the round-6 device-feedback adjustments: the portrait set sits in the free
+  band below the picture (moved down +0.31) and the D-pad is a tight four-button
+  cross. The skin is read only for numbers; its artwork is not used. The
   reference layout app's behaviour rows (slide buttons, relative stick centre,
   D-pad slide, Combo Button) are future work; the available options are
   visibility, size scale, opacity and reset.

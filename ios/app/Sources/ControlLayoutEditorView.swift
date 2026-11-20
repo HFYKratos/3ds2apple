@@ -563,6 +563,12 @@ private struct EditableOverlayControl: View {
 
     private var handleSize: CGFloat { max(min(diameter * 0.34, 20), 12) }
 
+    /// Same shape factor as the runtime: the D-pad directions are tighter so the
+    /// four buttons read as one cross.
+    private var cornerFactor: CGFloat {
+        CGFloat(element.shapeCornerFactor)
+    }
+
     var body: some View {
         ZStack(alignment: .topLeading) {
             controlShape

@@ -109,6 +109,10 @@ private struct EditableControlBox: View {
 
     @State private var dragStart: CGPoint?
 
+    private var cornerFactor: CGFloat {
+        CGFloat(element.shapeCornerFactor)
+    }
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: min(frame.width, frame.height) * 0.42,

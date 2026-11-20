@@ -94,6 +94,20 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
         self == .circlePad || self == .cStick
     }
 
+    /// True for the four D-pad directions (round 6 draws them as a tight cross).
+    var isDpadDirection: Bool {
+        switch self {
+        case .dpadUp, .dpadDown, .dpadLeft, .dpadRight: return true
+        default: return false
+        }
+    }
+
+    /// Corner-radius factor of the button shape: the D-pad directions use 0.16 so
+    /// the four rounded squares touch into a plus; other buttons keep 0.42.
+    var shapeCornerFactor: Double {
+        isDpadDirection ? 0.16 : 0.42
+    }
+
     /// A shoulder button is a wide capsule; the rest are round or small capsules.
     var isWide: Bool {
         switch self {
@@ -350,37 +364,37 @@ struct ControlLayoutProfile: Codable, Equatable {
         return result
     }
 
-    // MARK: - Shipped defaults (ModernCenteredX2 reference skin)
+    // MARK: - Shipped defaults (ModernCenteredX2 reference skin, round 6)
 
-    /// Round 5: the shipped default layout is converted from the
-    /// ModernCenteredX2 Delta skin (read-only reference: only its numeric
-    /// `items[].frame` rectangles are used, never its artwork or text). The
-    /// skin's coordinate space is 896x414 pt in landscape and 414x896 pt in
-    /// portrait; every entry below is the absolute skin centre divided by that
-    /// mapping size, and the size is the skin diameter divided by the mapping's
-    /// shorter side (414). Opacity is 0.85 for every control.
+    /// Round 6: the shipped default layout follows the ModernCenteredX2 Delta
+    /// skin numbers (round 5) with two device-feedback changes:
+    /// - portrait controls are moved down by +0.31 so the set sits in the free
+    ///   black band below the portrait game picture; the C-stick moves to the
+    ///   bottom-right free corner (0.92, 0.90) at size 0.10;
+    /// - the D-pad is a tight four-button cross: each direction keeps its own
+    ///   element, but the buttons are sized so the cross span equals the skin's
+    ///   D-pad frame (portrait 103 pt -> size 0.12440, landscape 105 pt ->
+    ///   0.12681) and their centres are offset by half a button side in
+    ///   container points (dx = diameter/2/containerW, dy = diameter/2/containerH),
+    ///   so adjacent edges touch. The renderer draws D-pad buttons with corner
+    ///   radius 0.16 of the side instead of 0.42 (other buttons unchanged).
     ///
-    /// The skin has no ZL/ZR and no C-stick: both are placed just above the
-    /// shoulder buttons / above the A-B-X-Y cluster, as the design note asks.
+    /// Opacity is 0.85 everywhere. The skin is a read-only reference: only its
+    /// numeric frames are converted (centre / mapping size, diameter / 414);
+    /// ZL/ZR and the C-stick are not in the skin and follow the design note.
     private static func rawDefaultPlacements(
         for orientation: ControlLayoutOrientation
     ) -> [(ControlElement, ControlPlacement)] {
-        // Exact normalised values from the corrected skin conversion (5 decimal
-        // places, opacity 0.85 everywhere). The D-pad is one skin frame: the four
-        // directions keep independent buttons with diameter 0.36 * S and an arm
-        // offset of 0.29 * S, where S is the skin D-pad frame's shorter side
-        // (landscape 105 pt -> 0.09130 / 30.45 pt, portrait 103 pt -> 0.08957 /
-        // 29.9 pt). L/R and Start/Select use their skin frame heights (the
-        // widthRatio capsule drawing is unchanged; see the design note).
         switch orientation {
         case .landscape:
-            // mappingSize 896 x 414 pt.
+            // mappingSize 896 x 414 pt; D-pad centre (0.34989, 0.82246),
+            // diameter 0.12681 (52.5 pt), offsets dx 0.02930 / dy 0.06341.
             return [
                 (.circlePad, ControlPlacement(x: 0.18583, y: 0.80797, size: 0.27778, opacity: 0.85)),
-                (.dpadUp, ControlPlacement(x: 0.34989, y: 0.74891, size: 0.09130, opacity: 0.85)),
-                (.dpadDown, ControlPlacement(x: 0.34989, y: 0.89601, size: 0.09130, opacity: 0.85)),
-                (.dpadLeft, ControlPlacement(x: 0.31590, y: 0.82246, size: 0.09130, opacity: 0.85)),
-                (.dpadRight, ControlPlacement(x: 0.38387, y: 0.82246, size: 0.09130, opacity: 0.85)),
+                (.dpadUp, ControlPlacement(x: 0.34989, y: 0.75905, size: 0.12681, opacity: 0.85)),
+                (.dpadDown, ControlPlacement(x: 0.34989, y: 0.88587, size: 0.12681, opacity: 0.85)),
+                (.dpadLeft, ControlPlacement(x: 0.32059, y: 0.82246, size: 0.12681, opacity: 0.85)),
+                (.dpadRight, ControlPlacement(x: 0.37919, y: 0.82246, size: 0.12681, opacity: 0.85)),
                 (.buttonA, ControlPlacement(x: 0.89676, y: 0.76691, size: 0.15217, opacity: 0.85)),
                 (.buttonB, ControlPlacement(x: 0.83538, y: 0.89976, size: 0.15217, opacity: 0.85)),
                 (.buttonX, ControlPlacement(x: 0.83538, y: 0.63164, size: 0.15217, opacity: 0.85)),
@@ -396,8 +410,62 @@ struct ControlLayoutProfile: Codable, Equatable {
                 (.cStick, ControlPlacement(x: 0.84821, y: 0.48309, size: 0.10, opacity: 0.85))
             ]
         case .portrait:
-            // mappingSize 414 x 896 pt.
+            // mappingSize 414 x 896 pt. The whole set is moved down by +0.31
+            // (round-6 device feedback). D-pad centre (0.44565, 0.82283),
+            // diameter 0.12440 (51.5 pt), offsets dx 0.06220 / dy 0.02874.
             return [
+                (.circlePad, ControlPlacement(x: 0.16546, y: 0.78266, size: 0.24396, opacity: 0.85)),
+                (.dpadUp, ControlPlacement(x: 0.44565, y: 0.79409, size: 0.12440, opacity: 0.85)),
+                (.dpadDown, ControlPlacement(x: 0.44565, y: 0.85157, size: 0.12440, opacity: 0.85)),
+                (.dpadLeft, ControlPlacement(x: 0.38345, y: 0.82283, size: 0.12440, opacity: 0.85)),
+                (.dpadRight, ControlPlacement(x: 0.50785, y: 0.82283, size: 0.12440, opacity: 0.85)),
+                (.buttonA, ControlPlacement(x: 0.91425, y: 0.79158, size: 0.13285, opacity: 0.85)),
+                (.buttonB, ControlPlacement(x: 0.78865, y: 0.84850, size: 0.13285, opacity: 0.85)),
+                (.buttonX, ControlPlacement(x: 0.78865, y: 0.73467, size: 0.13285, opacity: 0.85)),
+                (.buttonY, ControlPlacement(x: 0.66304, y: 0.79158, size: 0.13285, opacity: 0.85)),
+                (.buttonL, ControlPlacement(x: 0.16787, y: 0.68277, size: 0.07729, opacity: 0.85)),
+                (.buttonR, ControlPlacement(x: 0.83213, y: 0.68277, size: 0.07729, opacity: 0.85)),
+                // Not in the skin: one step above L/R.
+                (.buttonZL, ControlPlacement(x: 0.16787, y: 0.64036, size: 0.065, opacity: 0.85)),
+                (.buttonZR, ControlPlacement(x: 0.83213, y: 0.64036, size: 0.065, opacity: 0.85)),
+                (.buttonStart, ControlPlacement(x: 0.60990, y: 0.68221, size: 0.07971, opacity: 0.85)),
+                (.buttonSelect, ControlPlacement(x: 0.39251, y: 0.68221, size: 0.07971, opacity: 0.85)),
+                // Moved to the free bottom-right corner (round-6 feedback).
+                (.cStick, ControlPlacement(x: 0.92, y: 0.90, size: 0.10, opacity: 0.85))
+            ]
+        }
+    }
+
+    // MARK: - Legacy shipped defaults (migration sources)
+
+    /// The beta3 (round-5) shipped defaults, kept only to recognise an untouched
+    /// stored profile during the round-6 migration.
+    private static func beta3ShippedPlacements(
+        for orientation: ControlLayoutOrientation
+    ) -> [String: ControlPlacement] {
+        let entries: [(ControlElement, ControlPlacement)]
+        switch orientation {
+        case .landscape:
+            entries = [
+                (.circlePad, ControlPlacement(x: 0.18583, y: 0.80797, size: 0.27778, opacity: 0.85)),
+                (.dpadUp, ControlPlacement(x: 0.34989, y: 0.74891, size: 0.09130, opacity: 0.85)),
+                (.dpadDown, ControlPlacement(x: 0.34989, y: 0.89601, size: 0.09130, opacity: 0.85)),
+                (.dpadLeft, ControlPlacement(x: 0.31590, y: 0.82246, size: 0.09130, opacity: 0.85)),
+                (.dpadRight, ControlPlacement(x: 0.38387, y: 0.82246, size: 0.09130, opacity: 0.85)),
+                (.buttonA, ControlPlacement(x: 0.89676, y: 0.76691, size: 0.15217, opacity: 0.85)),
+                (.buttonB, ControlPlacement(x: 0.83538, y: 0.89976, size: 0.15217, opacity: 0.85)),
+                (.buttonX, ControlPlacement(x: 0.83538, y: 0.63164, size: 0.15217, opacity: 0.85)),
+                (.buttonY, ControlPlacement(x: 0.77344, y: 0.76812, size: 0.15217, opacity: 0.85)),
+                (.buttonL, ControlPlacement(x: 0.75502, y: 0.59541, size: 0.07488, opacity: 0.85)),
+                (.buttonR, ControlPlacement(x: 0.91574, y: 0.59299, size: 0.07488, opacity: 0.85)),
+                (.buttonZL, ControlPlacement(x: 0.75502, y: 0.48792, size: 0.065, opacity: 0.85)),
+                (.buttonZR, ControlPlacement(x: 0.91574, y: 0.48792, size: 0.065, opacity: 0.85)),
+                (.buttonStart, ControlPlacement(x: 0.54688, y: 0.90097, size: 0.08213, opacity: 0.85)),
+                (.buttonSelect, ControlPlacement(x: 0.45201, y: 0.90097, size: 0.08213, opacity: 0.85)),
+                (.cStick, ControlPlacement(x: 0.84821, y: 0.48309, size: 0.10, opacity: 0.85))
+            ]
+        case .portrait:
+            entries = [
                 (.circlePad, ControlPlacement(x: 0.16546, y: 0.47266, size: 0.24396, opacity: 0.85)),
                 (.dpadUp, ControlPlacement(x: 0.44565, y: 0.47949, size: 0.08957, opacity: 0.85)),
                 (.dpadDown, ControlPlacement(x: 0.44565, y: 0.54617, size: 0.08957, opacity: 0.85)),
@@ -409,23 +477,23 @@ struct ControlLayoutProfile: Codable, Equatable {
                 (.buttonY, ControlPlacement(x: 0.66304, y: 0.48158, size: 0.13285, opacity: 0.85)),
                 (.buttonL, ControlPlacement(x: 0.16787, y: 0.37277, size: 0.07729, opacity: 0.85)),
                 (.buttonR, ControlPlacement(x: 0.83213, y: 0.37277, size: 0.07729, opacity: 0.85)),
-                // Not in the skin: one step above L/R.
                 (.buttonZL, ControlPlacement(x: 0.16787, y: 0.33036, size: 0.065, opacity: 0.85)),
                 (.buttonZR, ControlPlacement(x: 0.83213, y: 0.33036, size: 0.065, opacity: 0.85)),
                 (.buttonStart, ControlPlacement(x: 0.60990, y: 0.37221, size: 0.07971, opacity: 0.85)),
                 (.buttonSelect, ControlPlacement(x: 0.39251, y: 0.37221, size: 0.07971, opacity: 0.85)),
-                // Not in the skin: between R and A.
                 (.cStick, ControlPlacement(x: 0.93237, y: 0.42188, size: 0.13285, opacity: 0.85))
             ]
         }
+        var result: [String: ControlPlacement] = [:]
+        for (element, placement) in entries {
+            result[element.rawValue] = placement
+        }
+        return result
     }
 
-    // MARK: - Round-5 migration from the previous shipped default
-
-    /// The placements the app shipped before round 5 (the hand-tuned layout the
-    /// round-4 builds saved), kept only to recognise an untouched profile during
-    /// the migration below.
-    private static func previousShippedPlacements(
+    /// The hand-tuned defaults shipped before round 5 (kept so a beta2 or older
+    /// untouched profile still migrates cleanly).
+    private static func roundFourShippedPlacements(
         for orientation: ControlLayoutOrientation
     ) -> [String: ControlPlacement] {
         let entries: [(ControlElement, ControlPlacement)]
@@ -476,29 +544,42 @@ struct ControlLayoutProfile: Codable, Equatable {
         return result
     }
 
-    /// True when a stored profile is still exactly the pre-round-5 shipped
-    /// default (within a small tolerance). A profile the user moved does not
+    /// All legacy shipped defaults, newest first.
+    private static func legacyShippedPlacements(
+        for orientation: ControlLayoutOrientation
+    ) -> [[String: ControlPlacement]] {
+        [beta3ShippedPlacements(for: orientation),
+         roundFourShippedPlacements(for: orientation)]
+    }
+
+    /// True when a stored profile is still exactly one of the legacy shipped
+    /// defaults (within a small tolerance). A profile the user moved does not
     /// match and is kept.
     static func isPreviousShippedDefault(
         _ profile: ControlLayoutProfile,
         for orientation: ControlLayoutOrientation
     ) -> Bool {
-        let expected = previousShippedPlacements(for: orientation)
-        guard profile.placements.count == expected.count else { return false }
-        for (key, value) in expected {
-            guard let stored = profile.placements[key] else { return false }
-            if abs(stored.x - value.x) > 0.005
-                || abs(stored.y - value.y) > 0.005
-                || abs(stored.size - value.size) > 0.005
-                || abs(stored.opacity - value.opacity) > 0.01 {
-                return false
+        for expected in legacyShippedPlacements(for: orientation) {
+            guard profile.placements.count == expected.count else { continue }
+            var matches = true
+            for (key, value) in expected {
+                guard let stored = profile.placements[key] else { matches = false; break }
+                if abs(stored.x - value.x) > 0.005
+                    || abs(stored.y - value.y) > 0.005
+                    || abs(stored.size - value.size) > 0.005
+                    || abs(stored.opacity - value.opacity) > 0.01 {
+                    matches = false
+                    break
+                }
             }
+            if matches { return true }
         }
-        return true
+        return false
     }
 
-    /// Round-5 migration: an untouched pre-round-5 profile becomes the new
-    /// skin-derived default; a customised profile is returned unchanged.
+    /// Round-6 migration: an untouched legacy shipped profile (beta3 round-5 or
+    /// earlier) becomes the new cross-shaped default; a customised profile is
+    /// returned unchanged.
     static func migratingPreviousShippedDefault(
         _ profile: ControlLayoutProfile,
         for orientation: ControlLayoutOrientation

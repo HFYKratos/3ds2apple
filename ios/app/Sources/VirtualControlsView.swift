@@ -88,6 +88,7 @@ struct VirtualControlsView: View {
                 identifier: "control-\(element.rawValue)",
                 width: frame.width,
                 height: frame.height,
+                cornerFactor: CGFloat(element.shapeCornerFactor),
                 opacity: opacity,
                 haptics: haptics
             ) { pressed in
@@ -110,6 +111,8 @@ private struct OverlayButtonControl: View {
     let identifier: String
     let width: CGFloat
     let height: CGFloat
+    /// Corner-radius factor of the rounded square; 0.16 for the D-pad cross.
+    let cornerFactor: CGFloat
     let opacity: Double
     let haptics: Bool
     let onButton: (Bool) -> Void
