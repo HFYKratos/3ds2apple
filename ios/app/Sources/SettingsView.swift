@@ -392,13 +392,13 @@ struct QuickDisplaySettingsView: View {
                 Section {
                     Picker(
                         "Screen layout",
-                        selection: persistedBinding(settings, \.screenLayoutMode)
+                        selection: persistedBinding(settings, \.screenLayoutPreset)
                     ) {
-                        ForEach(ScreenLayoutMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
+                        ForEach(ScreenLayoutPreset.allCases) { preset in
+                            Text(preset.title).tag(preset)
                         }
                     }
-                    Text(settings.screenLayoutMode.detail)
+                    Text(settings.screenLayoutPreset.detail)
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

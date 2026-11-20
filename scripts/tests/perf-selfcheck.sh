@@ -279,13 +279,14 @@ check "control layout page exposes only Default / Custom" contains ios/app/Sourc
 check "control layout page opens the editor for the current direction" contains ios/app/Sources/ControlLayoutSettingsView.swift 'ControlLayoutEditorView(settings: settings)'
 check "control editor is full screen and edits the current direction" contains ios/app/Sources/ControlLayoutEditorView.swift 'currentLayoutOrientation'
 check "control editor overlays the current screen layout" contains ios/app/Sources/ControlLayoutEditorView.swift 'screenViewports'
-check "GameView uses the editable overlay in both orientations" \
-  bash -c 'n=$(grep -c "VirtualControlsView(" ios/app/Sources/GameView.swift); [ "$n" -ge 2 ]'
+check "GameView floats the editable control overlay over the whole game view" \
+  bash -c 'grep -q "VirtualControlsView(" ios/app/Sources/GameView.swift && grep -q "ignoresSafeArea()" ios/app/Sources/GameView.swift'
 check "custom screen layout model exists" contains ios/app/Sources/CustomScreenLayout.swift 'struct CustomScreenLayout'
 check "custom screen layout archive stays version 2" contains ios/app/Sources/CustomScreenLayout.swift 'static let currentVersion = 2'
 check "custom screen layout geometry handles the 90 degree turn" contains ios/app/Sources/CustomScreenLayout.swift 'case .counterClockwise:'
 check "custom screen layout editor exists" test -f ios/app/Sources/ScreenLayoutEditorView.swift
-check "screen layout page exposes only Default / Custom" contains ios/app/Sources/AppSettings.swift 'enum ScreenLayoutMode'
+check "screen layout presets expose the six round-1 choices" \
+  bash -c 'for preset in original single large side hybrid custom; do grep -q "case \.$preset" ios/app/Sources/AppSettings.swift || exit 1; done'
 check "screen layout page opens the editor for the current direction" contains ios/app/Sources/ScreenLayoutSettingsView.swift 'ScreenLayoutEditorView(settings: settings)'
 check "screen editor is full screen and edits the current direction" contains ios/app/Sources/ScreenLayoutEditorView.swift 'currentLayoutOrientation'
 check "screen editor overlays the current control layout" contains ios/app/Sources/ScreenLayoutEditorView.swift 'settings.controlLayout(for: orientation)'

@@ -126,9 +126,9 @@ struct ControlLayoutEditorView: View {
             .position(x: rect.midX, y: rect.midY)
     }
 
-    /// The running game view around the controls: the picture stage with the two
-    /// screens at the current screen layout (the reference for placing controls),
-    /// the portrait title bar and the editable control container.
+    /// The running game view around the controls: the full-bleed picture stage
+    /// with the two screens at the current screen layout (the reference for
+    /// placing controls) and the editable control container (the whole screen).
     @ViewBuilder
     private func mockGameContent(_ scaler: GameViewPreviewScaler) -> some View {
         let stage = scaler.rect(geometry.screenStageRect)
@@ -157,29 +157,6 @@ struct ControlLayoutEditorView: View {
                    label: L10n.tr("Lower screen"),
                    stage: geometry.screenStageRect,
                    scaler: scaler)
-
-        // The portrait title bar is part of the game view; controls must stay out
-        // of it.
-        if let topBar = geometry.topBarRect {
-            let bar = scaler.rect(topBar)
-            HStack(spacing: 4) {
-                Text(L10n.tr("Game"))
-                    .font(.system(size: max(bar.height * 0.34, 6)))
-                    .foregroundColor(.white.opacity(0.55))
-                    .lineLimit(1)
-                Spacer(minLength: 2)
-                Circle()
-                    .fill(Color.white.opacity(0.16))
-                    .overlay(Circle().strokeBorder(Color.white.opacity(0.24), lineWidth: 0.5))
-                    .frame(width: bar.height * 0.5, height: bar.height * 0.5)
-                Circle()
-                    .strokeBorder(Color.white.opacity(0.5), lineWidth: max(bar.height * 0.05, 0.5))
-                    .frame(width: bar.height * 0.34, height: bar.height * 0.34)
-            }
-            .padding(.horizontal, 2)
-            .frame(width: bar.width, height: bar.height)
-            .position(x: bar.midX, y: bar.midY)
-        }
 
         // The exact box the runtime overlay gets.
         let container = scaler.rect(geometry.controlContainerRect)

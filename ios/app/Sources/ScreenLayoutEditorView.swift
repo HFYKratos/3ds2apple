@@ -4,14 +4,14 @@
 //
 //  The full-screen custom screen layout editor (0.1.3 simplification).
 //
-//  There is one editor and no other choices: the Settings page opens it for the
-//  direction the device is in right now (portrait edits the portrait layout,
-//  landscape the landscape one), and the canvas is the whole screen. The canvas
-//  mirrors the running game view (GameViewGeometry.swift): the real safe area,
-//  the portrait title bar, the picture stage, the portrait control pad and the
-//  landscape overlay. The current on-screen control layout is drawn over the
-//  picture, translucent and non-interactive, so the screens can be placed
-//  between or away from the controls.
+//  The Settings page opens it for the direction the device is in right now
+//  (portrait edits the portrait layout, landscape the landscape one), and the
+//  canvas is the whole screen. The canvas mirrors the running game view
+//  (GameViewGeometry.swift): the real safe area and the full-bleed picture
+//  stage, with the floating controls over the whole screen. The current
+//  on-screen control layout is drawn over the picture, translucent and
+//  non-interactive, so the screens can be placed between or away from the
+//  controls.
 //
 //  Gestures: drag a screen to move it, pinch to shrink/enlarge it, drag the
 //  corner handle to resize it. Movement snaps to the stage edges/centre and to
@@ -123,7 +123,6 @@ struct ScreenLayoutEditorView: View {
         return ZStack(alignment: .topLeading) {
             Color.clear
             deviceFrame(scaler)
-            mockChrome(scaler)
             stageView(scaler)
             controlOverlay(scaler)
         }
@@ -144,43 +143,6 @@ struct ScreenLayoutEditorView: View {
             )
             .frame(width: rect.width, height: rect.height)
             .position(x: rect.midX, y: rect.midY)
-    }
-
-    /// The parts of the game view around the picture stage: the portrait title
-    /// bar and the reserved portrait control pad (the controls themselves are
-    /// drawn by `controlOverlay`).
-    @ViewBuilder
-    private func mockChrome(_ scaler: GameViewPreviewScaler) -> some View {
-        if let topBar = geometry.topBarRect {
-            let bar = scaler.rect(topBar)
-            HStack(spacing: 4) {
-                Text(L10n.tr("Game"))
-                    .font(.system(size: max(bar.height * 0.34, 6)))
-                    .foregroundColor(.white.opacity(0.55))
-                    .lineLimit(1)
-                Spacer(minLength: 2)
-                Circle()
-                    .strokeBorder(Color.white.opacity(0.5), lineWidth: max(bar.height * 0.05, 0.5))
-                    .frame(width: bar.height * 0.34, height: bar.height * 0.34)
-            }
-            .frame(width: bar.width, height: bar.height)
-            .position(x: bar.midX, y: bar.midY)
-        }
-        if orientation == .portrait {
-            let pad = scaler.rect(geometry.controlContainerRect)
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.04))
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.10),
-                                  style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                Text(L10n.tr("Control area"))
-                    .font(.system(size: max(min(pad.height * 0.14, 8), 5), weight: .medium))
-                    .foregroundColor(.white.opacity(0.30))
-            }
-            .frame(width: pad.width, height: pad.height)
-            .position(x: pad.midX, y: pad.midY)
-        }
     }
 
     /// The translucent current control layout: the reference the user places the
@@ -543,8 +505,8 @@ struct ScreenLayoutEditorView: View {
     private func commit() {
         // Hand editing a custom screen layout is exactly the Custom choice; the
         // Settings page also switches it before opening the editor.
-        if settings.screenLayoutMode != .custom {
-            settings.screenLayoutMode = .custom
+        if settings.screenLayoutPreset != .custom {
+            settings.screenLayoutPreset = .custom
         }
         settings.customScreenLayout = draft
         settings.persist()

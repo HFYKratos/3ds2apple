@@ -2,19 +2,20 @@
 //  ScreenLayoutSettingsView.swift
 //  3ds2apple
 //
-//  The screen layout page under Settings -> Display (0.1.3 simplification).
+//  The screen layout page under Settings -> Display (round-1 layout redesign).
 //
-//  Exactly two choices are exposed:
-//  - Default: the automatic arrangement (stacked screens in portrait, the large
-//    upper screen in landscape), drawn by the Metal presenter.
-//  - Custom: a hand-placed layout per device orientation. Choosing Custom opens
-//    the full-screen editor for the direction the device is in right now - that
-//    editor is the only screen-layout surface left (no mode, preset or
-//    "only one screen" choices). It runs on the software readback path.
+//  It is a radio list of the six screen layout presets - Original, Single
+//  screen, Large screen (the default), Side by side, Hybrid and Custom - with a
+//  one-line detail under every title and a checkmark on the selected row. The
+//  Custom row also opens the existing full-screen editor for the direction the
+//  device is in right now, and the page keeps the reset action.
 //
-//  The screen layout page stays a normal Settings page; the editing itself
-//  happens in ScreenLayoutEditorView, full screen, on a scaled copy of the real
-//  game view of this device (see GameViewGeometry.swift).
+//  Presets the Metal presenter can draw apply immediately (they just choose the
+//  presented arrangement). Large in portrait, Hybrid in both directions and
+//  Custom are placed on the readback path, so the session picks them up on the
+//  next load; the footer says so. The editing itself happens in
+//  ScreenLayoutEditorView, full screen, on a scaled copy of the real game view of
+//  this device (see GameViewGeometry.swift).
 //
 
 import Foundation
@@ -27,7 +28,7 @@ struct ScreenLayoutSettingsView: View {
 
     var body: some View {
         Form {
-            choiceSection
+            presetSection
             aboutSection
         }
         .navigationTitle(L10n.tr("Screen layout"))
@@ -37,17 +38,14 @@ struct ScreenLayoutSettingsView: View {
         }
     }
 
-    // MARK: - Choice
+    // MARK: - Presets
 
-    private var choiceSection: some View {
+    private var presetSection: some View {
         Section {
-            Picker(L10n.tr("Screen layout"), selection: choiceBinding) {
-                ForEach(ScreenLayoutMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
+            ForEach(ScreenLayoutPreset.allCases) { preset in
+                presetRow(preset)
             }
-            .accessibilityIdentifier("screen-layout-choice")
-            if settings.screenLayoutMode == .custom {
+            if settings.screenLayoutPreset == .custom {
                 Button {
                     isEditorPresented = true
                 } label: {
@@ -55,44 +53,65 @@ struct ScreenLayoutSettingsView: View {
                 }
                 .accessibilityIdentifier("screen-layout-edit")
             }
-            hint(settings.screenLayoutMode.detail)
         } header: {
             Text(L10n.tr("Screens"))
         } footer: {
-            Text(L10n.tr("Rotation, aspect ratio and integer scaling keep their meaning in both choices."))
+            Text(L10n.tr("Large in portrait, Hybrid and Custom are placed by the app on the readback path, so they can be slower and apply from the next game load."))
         }
     }
 
-    /// Choosing Custom opens the editor for the current direction immediately;
-    /// there is no other screen-layout screen in the app any more.
-    private var choiceBinding: Binding<ScreenLayoutMode> {
-        Binding(
-            get: { settings.screenLayoutMode },
-            set: { newValue in
-                guard newValue != settings.screenLayoutMode else { return }
-                settings.screenLayoutMode = newValue
-                settings.persist()
-                if newValue == .custom {
-                    DispatchQueue.main.async { isEditorPresented = true }
+    private func presetRow(_ preset: ScreenLayoutPreset) -> some View {
+        Button {
+            select(preset)
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(preset.title)
+                        .foregroundColor(.primary)
+                    Text(preset.detail)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                if settings.screenLayoutPreset == preset {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundColor(.accentColor)
                 }
             }
-        )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("screen-layout-preset-\(preset.rawValue)")
+        .accessibilityAddTraits(settings.screenLayoutPreset == preset ? .isSelected : [])
+    }
+
+    /// Choosing Custom opens the editor for the current direction right away;
+    /// the editor is the only surface for the hand-placed rectangles.
+    private func select(_ preset: ScreenLayoutPreset) {
+        guard preset != settings.screenLayoutPreset else { return }
+        settings.screenLayoutPreset = preset
+        settings.persist()
+        if preset == .custom {
+            DispatchQueue.main.async { isEditorPresented = true }
+        }
     }
 
     // MARK: - About
 
     private var aboutSection: some View {
         Section {
-            hint(L10n.tr("Custom screen layouts run on the software readback path, so they can be slower; a change applies from the next game load."))
+            hint(L10n.tr("Custom screen layouts and the readback presets run on the software readback path, so they can be slower than the Metal presenter."))
             Button(L10n.tr("Reset screen layout to defaults"), role: .destructive) {
-                settings.screenLayoutMode = .standard
+                settings.screenLayoutPreset = .defaultPreset
                 settings.customScreenLayout = .standard()
                 settings.persist()
             }
         } header: {
             Text(L10n.tr("How it works"))
         } footer: {
-            Text(L10n.tr("Portrait and landscape keep their own custom layouts."))
+            Text(L10n.tr("Portrait and landscape keep their own custom layouts. The running game fills the screen; the FPS counter and the pause button float over the picture."))
         }
     }
 

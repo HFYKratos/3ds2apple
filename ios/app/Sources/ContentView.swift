@@ -72,6 +72,10 @@ struct ContentView: View {
             }
         }
         .onAppear {
+            // Preview-only display values (`-previewGameView`,
+            // `-previewScreenLayout <preset>`, `-previewLandscape`): written to the
+            // in-memory settings, never persisted. Inert in normal launches.
+            DebugLaunch.applyPreviewSettings(to: settings)
             model.startControllerSupport()
             applySettings()
             // Rescan Documents/Games before the home page is measured: the
@@ -143,8 +147,12 @@ struct ContentView: View {
         .onChange(of: settings.screenRotation) { rotation in
             model.setScreenRotation(rotation)
         }
-        .onChange(of: settings.screenLayoutMode) { _ in
-            model.setReadbackPresentationRequired(settings.usesCustomScreenLayout)
+        .onChange(of: settings.screenLayoutPreset) { _ in
+            model.setReadbackPresentationRequired(
+                settings.usesReadbackPresentation(
+                    isLandscape: GameViewDeviceMetrics.currentLayoutOrientation == .landscape
+                )
+            )
         }
         .onChange(of: settings.integerScale) { enabled in
             model.setIntegerScaling(enabled)
@@ -163,6 +171,9 @@ struct ContentView: View {
     // MARK: - State
 
     private var showsGame: Bool {
+        // The debug preview shows the running-game view without a session
+        // (`-previewGameView`); inert in normal launches.
+        if DebugLaunch.previewGameView { return true }
         switch model.phase {
         case .starting, .preparing, .loaded:
             return true
@@ -183,7 +194,11 @@ struct ContentView: View {
         model.applyRenderScale(CGFloat(settings.renderScale))
         model.setPlaybackSpeed(settings.playbackSpeed.rawValue)
         model.setSystemMetalHUD(settings.systemMetalHUD)
-        model.setReadbackPresentationRequired(settings.usesCustomScreenLayout)
+        model.setReadbackPresentationRequired(
+            settings.usesReadbackPresentation(
+                isLandscape: GameViewDeviceMetrics.currentLayoutOrientation == .landscape
+            )
+        )
     }
 
     // MARK: - Diagnostics

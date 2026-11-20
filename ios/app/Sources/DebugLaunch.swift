@@ -5,7 +5,7 @@
 //  Automated launch hooks for the iOS Simulator and for diagnostics.
 //
 //  The shipping shell starts a game from a library card, which tap-driven
-//  automation (simctl) cannot do from the command line. Two launch arguments
+//  automation (simctl) cannot do from the command line. These launch arguments
 //  make the whole path exercisable headlessly:
 //
 //    -openAOTTitleID <TITLEID>
@@ -17,13 +17,31 @@
 //
 //    -openLayoutPage
 //        Open the screen layout page (Settings -> Display -> Screen layout)
-//        right away, for headless screenshots of the simplified Default/Custom
-//        page. Inert in normal launches.
+//        right away, for headless screenshots of the six-preset list. Inert in
+//        normal launches.
 //
 //    -openLayoutEditor screen|control[-landscape]
 //        Open one of the two full-screen layout editors directly, for headless
 //        screenshots. 0.1.3 editors edit the direction the device is in; the
 //        `-landscape` variants force that direction for screenshots.
+//
+//    -previewGameView
+//        Show the running-game view without a ROM or game pack: two synthetic
+//        screen images (gradient, 1 px grid and a clear TOP / BOTTOM label,
+//        400x240 and 320x240) are drawn through the real layout geometry, with
+//        the floating FPS/pause controls and the on-screen control overlay. The
+//        preview path never touches a session, so it needs no game data.
+//
+//    -previewScreenLayout <preset>
+//        Apply one screen layout preset for this launch only (in memory, never
+//        persisted), so every preset can be captured headlessly:
+//        original | single | large | side | hybrid | custom. Combine it with
+//        -previewGameView for the ROM-free screenshots.
+//
+//    -previewLandscape
+//        Force the landscape appearance for headless screenshots (the app asks
+//        its window scene to rotate and the game view uses the landscape
+//        arrangement even before the rotation lands).
 //
 //    -gamesRoot <path>
 //        Scan this folder instead of Documents/Games. A relative path resolves
@@ -58,6 +76,14 @@ enum DebugLaunch {
     /// Launch argument: `-openLayoutEditor screen|control` opens one of the
     /// full-screen layout editors directly, for headless screenshots.
     static let layoutEditorArgument = "-openLayoutEditor"
+    /// Launch argument: `-previewGameView` shows the running-game view without a
+    /// ROM, for headless screenshots of the full-bleed layout.
+    static let previewGameViewArgument = "-previewGameView"
+    /// Launch argument: `-previewScreenLayout <preset>` applies one screen
+    /// layout preset for this launch only (in memory, not persisted).
+    static let previewScreenLayoutArgument = "-previewScreenLayout"
+    /// Launch argument: `-previewLandscape` forces the landscape appearance.
+    static let previewLandscapeArgument = "-previewLandscape"
 
     /// A layout page a headless launch asked to open.
     enum LayoutPage: String {
@@ -88,6 +114,46 @@ enum DebugLaunch {
     /// Whether the launch asked for the Layout page (screenshot automation).
     static var opensLayoutPage: Bool {
         ProcessInfo.processInfo.arguments.contains(layoutPageArgument)
+    }
+
+    /// Whether the launch asks for the ROM-free running-game preview.
+    static var previewGameView: Bool {
+        ProcessInfo.processInfo.arguments.contains(previewGameViewArgument)
+    }
+
+    /// Whether the launch asks for the landscape appearance.
+    static var previewLandscape: Bool {
+        ProcessInfo.processInfo.arguments.contains(previewLandscapeArgument)
+    }
+
+    /// The screen layout preset requested for this launch, nil in normal
+    /// launches. It is applied to the in-memory settings only (see
+    /// `applyPreviewSettings(to:)`).
+    static var previewScreenLayoutPreset: ScreenLayoutPreset? {
+        guard let raw = argumentValue(for: previewScreenLayoutArgument) else { return nil }
+        return ScreenLayoutPreset(rawValue: raw.lowercased())
+    }
+
+    /// Applies the preview-only display settings for this launch. The values are
+    /// written to the shared settings object but never persisted, so the next
+    /// normal launch keeps whatever the user chose. Called once from
+    /// ContentView.onAppear; a normal launch does nothing.
+    static func applyPreviewSettings(to settings: AppSettings) {
+        let preset = previewScreenLayoutPreset
+        guard previewGameView || previewLandscape || preset != nil else { return }
+        if let preset {
+            settings.screenLayoutPreset = preset
+        }
+        if previewLandscape {
+            settings.orientation = .landscape
+            AppOrientation.apply(.landscape)
+        }
+        AppLog.log(
+            "[3ds2apple] preview launch: game_view=%@ landscape=%@ screen_layout=%@",
+            previewGameView ? "on" : "off",
+            previewLandscape ? "on" : "off",
+            preset?.rawValue ?? settings.screenLayoutPreset.rawValue
+        )
     }
 
     /// Set once a launch request was handled, so a re-appearing view cannot

@@ -5,28 +5,31 @@
 //  The running game: the two 3DS screens on the CAMetalLayer (or the CGImage
 //  readback fallback), the on-screen controls and the in-game overlay menu.
 //
-//  The view is responsive:
+//  Round-1 layout redesign: the picture fills the whole game view (safe-area
+//  aware, plain black around it) with no title bar, no rounded card and no
+//  reserved control pad. The on-screen controls float over the picture as a
+//  full-screen overlay from the user's layout profile (the profile model and the
+//  control positions are unchanged this round; a later round tunes them for the
+//  floating layout). The FPS counter and the pause/menu button are translucent
+//  floating controls: FPS in the top-trailing safe-area corner in both
+//  orientations, pause next to it in portrait and bottom-centre in landscape.
 //
-//  - portrait: the screens in a card and the editable on-screen pad below it;
-//  - landscape: the editable overlay drawn over the whole game view (left
-//    Circle Pad + D-pad, right A/B/X/Y + C-stick, L/ZL/Select/Start/R/ZR in the
-//    top bar). Both orientations use the user's layout profile, so no button has
-//    to cover a screen. The screen layout is either the automatic arrangement
-//    (stacked in portrait, large upper screen in landscape) or the custom
-//    per-screen layout; only the custom one asks for the readback path. The
-//    rotation and how the picture fills its area come from the display settings
-//    in both choices; the CAMetalLayer presenter draws the automatic one.
+//  The screen arrangement comes from the Settings screen layout preset
+//  (ScreenLayoutPreset, AppSettings.swift). Most presets use one of the Metal
+//  presenter's arrangements; the ones the presenter cannot draw - large in
+//  portrait, hybrid in both directions and custom - are placed by the readback
+//  path (see ScreenGeometry.swift and CustomScreenLayout.swift), which needs the
+//  session to skip the presenter on the next load.
 //
-//  The only in-game performance readout is the FPS counter (Settings →
-//  Performance): it sits in the portrait top bar or in a slim strip in the
-//  landscape top safe area, never on the 3DS screens and clear of every
-//  on-screen control. Opening the in-game menu pauses emulation; the runtime
-//  and the last frame stay until resume.
+//  Opening the in-game menu pauses emulation; the runtime and the last frame stay
+//  until resume. When a title starts the 3DS software keyboard, the session stops
+//  its frame loop and publishes the request; this view shows the keyboard overlay
+//  on top of everything. Answering it resumes the game.
 //
-//  When a title starts the 3DS software keyboard, the session stops its frame
-//  loop and publishes the request; this view shows the keyboard overlay on top
-//  of everything. Answering it (a text and one of the applet's buttons) resumes
-//  the game, so a title that waits for text no longer freezes the app.
+//  Debug launch hooks (`-previewGameView`, `-previewScreenLayout <preset>`,
+//  `-previewLandscape`, see DebugLaunch.swift) render the same view without a
+//  ROM: two synthetic test images (GameViewPreview.swift) go through the real
+//  layout geometry, and the normal game path is untouched.
 //
 
 import CoreGraphics
@@ -46,8 +49,6 @@ struct GameView: View {
 
     @State private var isMenuPresented = false
     @State private var sheet: GameSheet?
-    /// Current interface orientation, for the per-orientation layout profiles.
-    @State private var currentOrientation: ControlLayoutOrientation = .portrait
     /// Kept copy of the last diagnostics export (relative to Documents).
     @State private var diagnosticsHint: String?
 
@@ -56,6 +57,11 @@ struct GameView: View {
 
     private let topScreen = ZakuroScreen(which: 0)
     private let bottomScreen = ZakuroScreen(which: 1)
+
+    /// ROM-free preview launch (`-previewGameView`); never set in normal use.
+    private let isPreviewingGame = DebugLaunch.previewGameView
+    /// `-previewLandscape` forces the landscape arrangement for screenshots.
+    private let forcedLandscape = DebugLaunch.previewLandscape
 
     private enum ConfirmationKind {
         case reset
@@ -86,15 +92,11 @@ struct GameView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let isLandscape = geometry.size.width > geometry.size.height
+            let isLandscape = forcedLandscape || geometry.size.width > geometry.size.height
             ZStack {
                 gameBackground
 
-                if isLandscape {
-                    landscapeContent
-                } else {
-                    portraitContent(availableHeight: geometry.size.height)
-                }
+                gameContent(isLandscape: isLandscape)
 
                 if isMenuPresented {
                     InGameMenuView(
@@ -133,14 +135,14 @@ struct GameView: View {
                 }
             }
             .onAppear {
-                currentOrientation = isLandscape ? .landscape : .portrait
                 syncPresentedLayout(isLandscape)
             }
             .onChange(of: isLandscape) { newValue in
-                currentOrientation = newValue ? .landscape : .portrait
                 syncPresentedLayout(newValue)
             }
-            .onChange(of: settings.screenLayoutMode) { _ in syncPresentedLayout(isLandscape) }
+            .onChange(of: settings.screenLayoutPreset) { _ in
+                syncPresentedLayout(isLandscape)
+            }
         }
         .preferredColorScheme(.dark)
         .sheet(item: $sheet) { sheet in
@@ -169,180 +171,96 @@ struct GameView: View {
         }
     }
 
-    // MARK: - Portrait layout
+    // MARK: - Full-bleed layout
 
-    private func portraitContent(availableHeight: CGFloat) -> some View {
-        VStack(spacing: GameViewLayout.portraitSpacing) {
-            if isLoaded {
-                portraitTopBar
+    /// The picture and the floating controls over it. Both orientations are the
+    /// same ZStack: the screens fill the game view and everything else floats.
+    private func gameContent(isLandscape: Bool) -> some View {
+        ZStack {
+            screenStage(isLandscape: isLandscape)
+
+            if isLoaded || isRuntimeStarting || isPreviewingGame {
+                controlsOverlay(isLandscape: isLandscape)
             }
 
-            if isShowingScreens {
-                screenStage(layout: settings.effectiveScreenLayout(isLandscape: false))
-                    .frame(maxHeight: .infinity)
-                    .accessibilityIdentifier("screens")
-
-                // Keep the controls in the layout even when hidden, so the
-                // picture keeps its position and size.
-                controlPad(availableHeight: availableHeight)
-            }
+            floatingHUD(isLandscape: isLandscape)
         }
-        .padding(.horizontal, GameViewLayout.portraitHorizontalPadding)
-        .padding(.top, GameViewLayout.portraitTopPadding)
-        .padding(.bottom, GameViewLayout.portraitBottomPadding)
+        .accessibilityIdentifier("screens")
     }
 
-    /// The portrait on-screen controls: the reserved pad area under the screens,
-    /// drawn from the user's portrait layout profile (no control covers the
-    /// picture in the default layout).
-    private func controlPad(availableHeight: CGFloat) -> some View {
-        // Same formula the controls editor previews (GameViewLayout lives in
-        // GameViewGeometry.swift, shared by the runtime and both editors).
-        let height = GameViewLayout.portraitControlPadHeight(gameViewHeight: availableHeight)
-        return VirtualControlsView(
-            profile: settings.controlLayout(for: .portrait),
+    /// The picture area: the whole game view, plain black, with no card styling.
+    private func screenStage(isLandscape: Bool) -> some View {
+        GeometryReader { geometry in
+            screenContent(available: geometry.size, isLandscape: isLandscape)
+        }
+        .background(Color.black)
+        .accessibilityIdentifier("screens-area")
+    }
+
+    /// The full-screen floating on-screen controls. They take no layout space, so
+    /// hiding them never moves the picture.
+    private func controlsOverlay(isLandscape: Bool) -> some View {
+        VirtualControlsView(
+            profile: settings.controlLayout(for: isLandscape ? .landscape : .portrait),
             opacityScale: settings.controlsBackgroundOpacity,
             haptics: settings.haptics,
             onButton: { bit, pressed in model.setOverlayButton(bit, pressed: pressed) },
             onCirclePad: { x, y in model.setOverlayStick(x: x, y: y) },
             onCStick: { x, y in model.setOverlayCStick(x: x, y: y) }
         )
-        .frame(height: height)
-        .padding(.horizontal, GameViewLayout.controlPadHorizontalPadding)
+        .ignoresSafeArea()
         .opacity(showsTouchControls ? 1 : 0)
         .allowsHitTesting(showsTouchControls)
+        .accessibilityIdentifier("touch-controls-overlay")
     }
 
-    /// Title, FPS counter and pause button above the screens in portrait. Kept
-    /// on the black background instead of over the picture, so nothing covers
-    /// the 3DS image.
-    private var portraitTopBar: some View {
-        HStack(spacing: 10) {
-            Text(romName)
-                .font(.footnote.weight(.semibold))
-                .foregroundColor(.white.opacity(0.62))
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            if settings.showFPS {
-                fpsHUD
+    /// The floating FPS counter and pause button. Portrait keeps both in the
+    /// top-trailing safe-area corner; landscape keeps the pause button at the
+    /// bottom centre (the top corners belong to L/R).
+    @ViewBuilder
+    private func floatingHUD(isLandscape: Bool) -> some View {
+        if isLoaded || isPreviewingGame {
+            if isLandscape {
+                if settings.showFPS {
+                    fpsPill
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .padding(.horizontal, GameViewLayout.floatingHUDHorizontalPadding)
+                        .padding(.top, GameViewLayout.floatingHUDTopPadding)
+                }
+                if !isMenuPresented {
+                    pauseButton(size: GameViewLayout.floatingPauseSize)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .padding(.bottom, GameViewLayout.landscapePauseBottomPadding)
+                }
+            } else {
+                HStack(spacing: GameViewLayout.floatingHUDSpacing) {
+                    if settings.showFPS {
+                        fpsPill
+                    }
+                    pauseButton(size: GameViewLayout.floatingPauseSize)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(.horizontal, GameViewLayout.floatingHUDHorizontalPadding)
+                .padding(.top, GameViewLayout.floatingHUDTopPadding)
             }
-            pauseButton(size: 36)
         }
-        .frame(height: GameViewLayout.portraitTopBarHeight)
     }
 
-    /// The picture area: rounded, subtly bordered black stage that centres the
-    /// scaled 3DS screens.
-    private func screenStage(layout: ScreenLayout) -> some View {
-        GeometryReader { geometry in
-            screenContent(available: geometry.size, layout: layout)
-        }
-        .background(Color.black)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.55), radius: 18, x: 0, y: 8)
-        .accessibilityIdentifier("screens-area")
+    private var gameBackground: some View {
+        Color.black.ignoresSafeArea()
     }
 
-    /// The automatic arrangement: the console's stacked screens in portrait and
-    /// the large upper screen in landscape. The custom layout is drawn by the
-    /// readback path instead of the presenter (see CustomScreenLayout.swift).
+    /// Records the arrangement of this device direction in the session: the
+    /// presenter arrangement, or the requirement to skip the presenter and draw
+    /// the picture through the readback path.
     private func syncPresentedLayout(_ isLandscape: Bool) {
         let layout = settings.effectiveScreenLayout(isLandscape: isLandscape)
         if model.screenLayout != layout {
             model.setScreenLayout(layout)
         }
-    }
-
-    private var gameBackground: some View {
-        ZStack {
-            Color.black
-            RadialGradient(
-                colors: [Color(red: 0.06, green: 0.10, blue: 0.13), .black],
-                center: .top,
-                startRadius: 20,
-                endRadius: 520
-            )
-            .opacity(0.85)
-        }
-        .ignoresSafeArea()
-    }
-
-    // MARK: - Landscape layout
-
-    private var landscapeContent: some View {
-        ZStack {
-            screenStage(layout: settings.effectiveScreenLayout(isLandscape: true))
-                .padding(.horizontal, GameViewLayout.landscapeStagePadding)
-                .padding(.vertical, GameViewLayout.landscapeStagePadding)
-                .accessibilityIdentifier("screens-area")
-
-            // Edge-to-edge controls float over the picture (handheld-skin style)
-            // and take no layout space: hiding them never moves the image.
-            if isLoaded {
-                landscapeControls
-                    .opacity(showsTouchControls ? 1 : 0)
-                    .allowsHitTesting(showsTouchControls)
-            }
-
-            if isLoaded && !isMenuPresented {
-                // Bottom centre: the top corners belong to L/R and the top middle
-                // to Select/Start, so the pause button stays clear of all of them.
-                // The bottom corners are reserved for the analog sticks, so the
-                // FPS counter lives in the top strip instead.
-                pauseButton(size: 36)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, 16)
-            }
-        }
-        .ignoresSafeArea(edges: [.horizontal])
-        // Landscape FPS: a slim strip in the top safe area above the picture, so
-        // the counter never covers the screens, the pause button or the controls.
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if isLoaded && settings.showFPS {
-                fpsHUD
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 3)
-            }
-        }
-        .accessibilityIdentifier("screens")
-    }
-    /// The landscape on-screen controls: the whole game view is the container,
-    /// drawn from the user's landscape layout profile.
-    private var landscapeControls: some View {
-        VirtualControlsView(
-            profile: settings.controlLayout(for: .landscape),
-            opacityScale: settings.controlsBackgroundOpacity,
-            haptics: settings.haptics,
-            onButton: { bit, pressed in model.setOverlayButton(bit, pressed: pressed) },
-            onCirclePad: { x, y in model.setOverlayStick(x: x, y: y) },
-            onCStick: { x, y in model.setOverlayCStick(x: x, y: y) }
+        model.setReadbackPresentationRequired(
+            settings.usesReadbackPresentation(isLandscape: isLandscape)
         )
-        .ignoresSafeArea()
-        .accessibilityIdentifier("touch-controls-overlay")
-    }
-
-    // MARK: - Multi-tasking privacy
-
-    /// Opaque cover shown while the scene is not active: the app switcher's
-    /// snapshot and the lock screen show this instead of the game.
-    private var privacyCover: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            VStack(spacing: 10) {
-                Image(systemName: "pause.circle.fill")
-                    .font(.system(size: 46, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.75))
-                Text(L10n.tr("Paused"))
-                    .font(.headline)
-                    .foregroundStyle(.white.opacity(0.75))
-            }
-        }
-        .accessibilityIdentifier("background-privacy-cover")
     }
 
     // MARK: - Menu
@@ -351,17 +269,21 @@ struct GameView: View {
     private func pauseButton(size: CGFloat) -> some View {
         Button {
             isMenuPresented = true
-            model.pauseForMenu()
+            // The preview has no runtime to pause.
+            if !isPreviewingGame {
+                model.pauseForMenu()
+            }
         } label: {
             Image(systemName: "pause.fill")
                 .font(.system(size: size * 0.36, weight: .bold))
                 .foregroundColor(.white)
                 .frame(width: size, height: size)
-                .background(Circle().fill(Color.white.opacity(0.14)))
-                .overlay(Circle().strokeBorder(Color.white.opacity(0.24), lineWidth: 1))
+                .background(Circle().fill(Color.black.opacity(0.38)))
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.22), lineWidth: 1))
         }
         .accessibilityIdentifier("in-game-menu")
     }
+
     private func resumeGame() {
         // A save or load is mid-serialization on the runtime queue; let it
         // finish (the menu disables Resume meanwhile, this is the guard).
@@ -419,6 +341,25 @@ struct GameView: View {
         }
     }
 
+    // MARK: - Multi-tasking privacy
+
+    /// Opaque cover shown while the scene is not active: the app switcher's
+    /// snapshot and the lock screen show this instead of the game.
+    private var privacyCover: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 10) {
+                Image(systemName: "pause.circle.fill")
+                    .font(.system(size: 46, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.75))
+                Text(L10n.tr("Paused"))
+                    .font(.headline)
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+        }
+        .accessibilityIdentifier("background-privacy-cover")
+    }
+
     // MARK: - Screens
 
     /// True while the screens should come from the CAMetalLayer: a presented
@@ -428,63 +369,58 @@ struct GameView: View {
             || (isRuntimeStarting && model.metalScreenView != nil)
     }
 
-    /// The screens inside `available`: the picture's box comes from the display
-    /// settings (layout, rotation, aspect, integer scaling), centred in the
-    /// available space. The CAMetalLayer draws every layout; the two screen
-    /// images are the fallback when no presenter could be made.
+    /// The screens inside `available`: the presented layer for the presets the
+    /// presenter can draw, the app's own placement for the readback presets
+    /// (custom, hybrid, large in portrait) and for the preview/fallback path.
     @ViewBuilder
-    private func screenContent(available: CGSize, layout: ScreenLayout) -> some View {
+    private func screenContent(available: CGSize, isLandscape: Bool) -> some View {
         if available.width >= 1, available.height >= 1 {
-            let box = contentSize(in: available, layout: layout)
-            ZStack {
-                if usesPresentedSurface, let metalView = model.metalScreenView {
+            if usesPresentedSurface, let metalView = model.metalScreenView {
+                // A1: the presenter draws the chosen arrangement into the app's
+                // CAMetalLayer; SwiftUI centres the layer and CoreAnimation
+                // scales it into the box.
+                let box = contentSize(in: available,
+                                      layout: settings.effectiveScreenLayout(isLandscape: isLandscape))
+                ZStack {
                     presentedSurface(view: metalView, size: box)
-                } else {
-                    readbackArrangement(in: available, layout: layout)
                 }
+                .frame(width: available.width, height: available.height)
+            } else {
+                readbackArrangement(in: available, isLandscape: isLandscape)
             }
-            .frame(width: available.width, height: available.height)
         } else {
             Color.black
         }
     }
 
-    /// A1: Zakuro's presenter draws the chosen arrangement into the app's
-    /// CAMetalLayer; SwiftUI centres the layer and CoreAnimation scales it into
-    /// the box. Touch is mapped to 3DS touchscreen pixels by the runtime with the
-    /// same layout the presenter uses.
     private func presentedSurface(view: MetalScreenView, size: CGSize) -> some View {
         MetalScreenRepresentable(view: view)
             .frame(width: size.width, height: size.height)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay { metalFirstFramePlaceholder }
             .overlay { presentedTouchOverlay }
             .accessibilityIdentifier("metal-screen")
     }
 
-    /// Readback path: the two screens as separate images, placed like the
-    /// presenter places them (same layout, rotation, fit and centring). Only
-    /// used when no presenter can be made. Stretch scales the placed
-    /// arrangement to fill the area, which is what CoreAnimation does to the
-    /// presented layer.
-    private func readbackArrangement(in area: CGSize, layout: ScreenLayout) -> some View {
-        let stretch = settings.screenAspect == .stretch
-        let layoutBox: CGSize
-        let viewports: (top: CGRect?, bottom: CGRect?)
-        if settings.usesCustomScreenLayout {
-            // Custom layout: one rectangle per screen, placed by the same
-            // geometry the Settings editor previews. This choice is the readback
-            // path's reason to exist (see CustomScreenLayout.swift); the Default
-            // choice keeps the Metal presenter.
-            layoutBox = area
-            viewports = CustomScreenGeometry.viewports(
-                available: area,
-                placement: settings.customScreenLayout.placement(for: currentOrientation),
-                rotation: settings.screenRotation,
-                displayScale: displayScale,
-                integerScale: settings.integerScale
-            )
+    /// Readback path: the two screens as separate images, placed by the same
+    /// geometry the layout editors preview. For the readback presets the whole
+    /// game view is the placement stage; for the presenter presets the images
+    /// mirror the presenter's arrangement (fit/stretch, rotation, centring).
+    @ViewBuilder
+    private func readbackArrangement(in area: CGSize, isLandscape: Bool) -> some View {
+        let orientation: ControlLayoutOrientation = isLandscape ? .landscape : .portrait
+        if let viewports = PresetScreenGeometry.readbackViewports(
+            preset: settings.screenLayoutPreset,
+            customLayout: settings.customScreenLayout,
+            orientation: orientation,
+            stage: area,
+            rotation: settings.screenRotation,
+            displayScale: displayScale,
+            integerScale: settings.integerScale
+        ) {
+            readbackScreens(viewports, layoutBox: area, area: area, stretches: false)
         } else {
+            let layout = settings.effectiveScreenLayout(isLandscape: isLandscape)
+            let stretch = settings.screenAspect == .stretch
             let arrangementAspect = ScreenGeometry.contentAspect(
                 layout: layout,
                 rotation: settings.screenRotation
@@ -492,23 +428,35 @@ struct GameView: View {
             // Fit/4:3 and integer scaling: the content box from the settings,
             // which keeps the arrangement's aspect and may be snapped to whole
             // pixels. Stretch places the arrangement first and scales it to the
-            // area after.
-            layoutBox = stretch
+            // area after (CoreAnimation does the same to the presented layer).
+            let layoutBox: CGSize = stretch
                 ? ScreenGeometry.fittedSize(aspect: arrangementAspect, in: area)
                 : contentSize(in: area, layout: layout)
-            viewports = ScreenGeometry.layoutViewports(
+            let viewports = ScreenGeometry.layoutViewports(
                 available: layoutBox,
                 layout: layout,
                 rotation: settings.screenRotation
             )
+            readbackScreens(viewports, layoutBox: layoutBox, area: area, stretches: stretch)
         }
-        let stretchX = layoutBox.width > 0 ? area.width / layoutBox.width : 1
-        let stretchY = layoutBox.height > 0 ? area.height / layoutBox.height : 1
+    }
+
+    /// Draws the two screen images at their viewports. The presenter-mirror path
+    /// passes `stretches: true` only for the Stretch aspect setting (the
+    /// arrangement is fitted first and then fills the area, like CoreAnimation
+    /// scaling the presented layer); every other mode shows the fitted box
+    /// centred in the area with black around it.
+    private func readbackScreens(_ viewports: (top: CGRect?, bottom: CGRect?),
+                                 layoutBox: CGSize,
+                                 area: CGSize,
+                                 stretches: Bool) -> some View {
+        let stretchX = stretches && layoutBox.width > 0 ? area.width / layoutBox.width : 1
+        let stretchY = stretches && layoutBox.height > 0 ? area.height / layoutBox.height : 1
         return ZStack(alignment: .topLeading) {
             Color.clear
             if let top = viewports.top {
                 readbackScreen(
-                    image: model.topScreenImage,
+                    image: screenImage(isUpper: true),
                     screen: topScreen,
                     identifier: "top-screen",
                     isTouchscreen: false
@@ -518,7 +466,7 @@ struct GameView: View {
             }
             if let bottom = viewports.bottom {
                 readbackScreen(
-                    image: model.bottomScreenImage,
+                    image: screenImage(isUpper: false),
                     screen: bottomScreen,
                     identifier: "bottom-screen",
                     isTouchscreen: true
@@ -530,6 +478,14 @@ struct GameView: View {
         .frame(width: layoutBox.width, height: layoutBox.height, alignment: .topLeading)
         .scaleEffect(x: stretchX, y: stretchY)
         .frame(width: area.width, height: area.height)
+    }
+
+    /// The frame the readback path (and the preview) shows for one screen.
+    private func screenImage(isUpper: Bool) -> CGImage? {
+        if isPreviewingGame {
+            return isUpper ? DebugPreviewScreens.upper : DebugPreviewScreens.lower
+        }
+        return isUpper ? model.topScreenImage : model.bottomScreenImage
     }
 
     /// One screen's image in its viewport, turned with the screen rotation
@@ -555,7 +511,6 @@ struct GameView: View {
                 bottomTouchOverlay(rotation: rotation)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .accessibilityIdentifier(identifier)
     }
 
@@ -596,21 +551,9 @@ struct GameView: View {
 
     // MARK: - Screen geometry
 
-    /// Aspect of the area the screens occupy in portrait. Fit keeps the
-    /// arrangement's own shape; 4:3 and Stretch use a 4:3 box (Stretch fills it).
-    private var screenFrameAspect: CGFloat {
-        switch settings.screenAspect {
-        case .fit:
-            return ScreenGeometry.contentAspect(
-                layout: settings.effectiveScreenLayout(isLandscape: false),
-                rotation: settings.screenRotation
-            )
-        case .fourThree, .stretch:
-            return 4.0 / 3.0
-        }
-    }
-
-    /// The picture's box inside `available`, from the display settings.
+    /// The picture's box inside `available`, from the display settings (used for
+    /// the presenter arrangements; the readback presets place their screens
+    /// explicitly in the whole game view).
     private func contentSize(in available: CGSize, layout: ScreenLayout) -> CGSize {
         ScreenGeometry.contentSize(
             available: available,
@@ -719,16 +662,6 @@ struct GameView: View {
         settings.showTouchControls && !model.isPaused
     }
 
-    /// Show the screens from the moment the runtime is loaded (placeholder
-    /// until the first frame) and keep the last frame visible afterwards.
-    private var isShowingScreens: Bool {
-        if model.topScreenImage != nil { return true }
-        if isLoaded { return true }
-        if isRuntimeStarting { return true }
-        if model.displayPath.usesMetalLayer, model.metalScreenView != nil { return true }
-        return false
-    }
-
     /// True while a ROM is being loaded: zk_create runs, or the first frames
     /// arrive. The legacy `.preparing` phase is accepted too (unreachable since
     /// the warm-up option was removed in 0.1.1).
@@ -741,23 +674,28 @@ struct GameView: View {
     // MARK: - FPS (the only in-game HUD)
 
     /// Presented frames per second, e.g. `59 fps`. The only performance readout
-    /// the game view draws: the portrait title bar or the landscape top strip,
-    /// always outside the 3DS picture. The AOT state, renderer path and the
-    /// CPU/present/read timing breakdown stay in the log and the diagnostics
-    /// export.
-    private var fpsHUD: some View {
-        Text(model.fpsText)
+    /// the game view draws: a translucent floating pill in the top-trailing
+    /// safe-area corner. The AOT state, renderer path and the CPU/present/read
+    /// timing breakdown stay in the log and the diagnostics export.
+    private var fpsPill: some View {
+        Text(fpsText)
             .font(.caption2.weight(.semibold))
             .monospacedDigit()
-            .foregroundColor(.white.opacity(0.9))
-            .padding(.horizontal, 8)
+            .foregroundColor(.white.opacity(0.92))
+            .padding(.horizontal, 9)
             .padding(.vertical, 4)
-            .background(Capsule().fill(Color.black.opacity(0.5)))
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+            .background(Capsule().fill(Color.black.opacity(0.42)))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
             .allowsHitTesting(false)
             .accessibilityElement(children: .ignore)
             .accessibilityIdentifier("fps-hud")
-            .accessibilityLabel(L10n.format("Frames per second: %@", model.fpsText))
+            .accessibilityLabel(L10n.format("Frames per second: %@", fpsText))
+    }
+
+    private var fpsText: String {
+        // The preview has no runtime; a representative value keeps the pill
+        // looking like the real thing in a screenshot.
+        isPreviewingGame ? "60 fps" : model.fpsText
     }
 
     // MARK: - Diagnostics

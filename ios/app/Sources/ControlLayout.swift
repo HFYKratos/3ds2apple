@@ -10,8 +10,8 @@
 //  size is a fraction of the container's shorter side for the same reason.
 //
 //  Two profiles are kept: portrait and landscape have different container shapes
-//  (the portrait profile is the reserved pad area under the screens, the
-//  landscape one is the whole game view), so they need different arrangements.
+//  (both are the whole screen; the controls float over the full-bleed picture),
+//  so they need different arrangements.
 //  A profile is Codable with an explicit version so a future change can migrate
 //  old saved layouts instead of dropping them; `withDefaultsFilled(for:)` also
 //  heals a profile that a newer build wrote with elements this build does not
@@ -38,10 +38,9 @@ enum ControlLayoutOrientation: String, CaseIterable, Identifiable {
     }
 
     /// Where the profile is applied. The container itself is not a fixed
-    /// aspect: the portrait pad is the box under the screens (as wide as the
-    /// game view minus its paddings, as high as 27% of its height clamped to
-    /// 220...300 pt) and the landscape layout covers the whole game view. Both
-    /// editors get the real container from `GameViewPreviewGeometry`
+    /// aspect: both orientations use the whole physical screen, because the
+    /// controls float over the full-bleed picture (round-1 layout redesign).
+    /// Both editors get the real container from `GameViewPreviewGeometry`
     /// (GameViewGeometry.swift), which derives it from the live window scene
     /// with the same rules GameView uses.
 }

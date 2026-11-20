@@ -601,3 +601,22 @@
 "The game was busy with another save-state operation." = "游戏正在执行另一项即时存档操作。";
 "The recovery snapshot could not be restored, so the game starts from the beginning." = "无法恢复后台快照，游戏将从头开始。";
 
+/* --- 0.1.5 屏幕布局预设（round-1 界面重构） ------------------------------
+   作用域：设置→显示的六项屏幕布局列表、全屏游戏画面与回读预设。每个预设
+   一行：名称 + 一句说明。 */
+"Original" = "原始";
+"Single screen" = "单个屏幕";
+"Large screen" = "大屏幕";
+"Side by side" = "并排屏幕";
+"Hybrid" = "混合式屏幕";
+"Both screens at their native size, stacked as on the console and scaled together." = "两块屏幕按原生尺寸上下叠放，像掌机一样，并一起缩放。";
+"The upper screen only, as large as the game view allows." = "只显示上屏，尽可能放大。";
+"A large upper screen; in portrait the lower screen sits small in the bottom-right corner." = "大上屏；竖屏时下屏以小窗放在右下角。";
+"The upper and lower screens side by side at their native size." = "上下两屏并排，保持原生尺寸。";
+"A large upper screen with the lower screen below it, about 60% of its width." = "大上屏，下屏放在其下方，宽度约为上屏的 60%。";
+"Place each screen by hand, one layout for each device direction." = "手动摆放两块屏幕，竖屏与横屏各保存一套。";
+"Large in portrait, Hybrid and Custom are placed by the app on the readback path, so they can be slower and apply from the next game load." = "竖屏“大屏幕”、混合式屏幕和自定义布局由应用通过软件回读路径摆放，可能更慢，并在下次载入游戏时生效。";
+"Custom screen layouts and the readback presets run on the software readback path, so they can be slower than the Metal presenter." = "自定义屏幕布局与回读预设走软件回读路径，可能比 Metal presenter 更慢。";
+"Portrait and landscape keep their own custom layouts. The running game fills the screen; the FPS counter and the pause button float over the picture." = "竖屏与横屏各自保存自定义布局。游戏画面铺满屏幕；FPS 与暂停按钮悬浮在画面上方。";
+"Custom layout" = "自定义布局";
+

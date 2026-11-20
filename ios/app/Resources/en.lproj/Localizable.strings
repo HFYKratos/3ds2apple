@@ -598,3 +598,23 @@
 "The game was busy with another save-state operation." = "The game was busy with another save-state operation.";
 "The recovery snapshot could not be restored, so the game starts from the beginning." = "The recovery snapshot could not be restored, so the game starts from the beginning.";
 
+/* --- 0.1.5 screen layout presets (round-1 layout redesign) ----------------
+   Scope: six-preset screen layout list under Settings -> Display, the
+   full-bleed game view and the readback presets. One row per preset: name and
+   one-line detail. */
+"Original" = "Original";
+"Single screen" = "Single screen";
+"Large screen" = "Large screen";
+"Side by side" = "Side by side";
+"Hybrid" = "Hybrid";
+"Both screens at their native size, stacked as on the console and scaled together." = "Both screens at their native size, stacked as on the console and scaled together.";
+"The upper screen only, as large as the game view allows." = "The upper screen only, as large as the game view allows.";
+"A large upper screen; in portrait the lower screen sits small in the bottom-right corner." = "A large upper screen; in portrait the lower screen sits small in the bottom-right corner.";
+"The upper and lower screens side by side at their native size." = "The upper and lower screens side by side at their native size.";
+"A large upper screen with the lower screen below it, about 60% of its width." = "A large upper screen with the lower screen below it, about 60% of its width.";
+"Place each screen by hand, one layout for each device direction." = "Place each screen by hand, one layout for each device direction.";
+"Large in portrait, Hybrid and Custom are placed by the app on the readback path, so they can be slower and apply from the next game load." = "Large in portrait, Hybrid and Custom are placed by the app on the readback path, so they can be slower and apply from the next game load.";
+"Custom screen layouts and the readback presets run on the software readback path, so they can be slower than the Metal presenter." = "Custom screen layouts and the readback presets run on the software readback path, so they can be slower than the Metal presenter.";
+"Portrait and landscape keep their own custom layouts. The running game fills the screen; the FPS counter and the pause button float over the picture." = "Portrait and landscape keep their own custom layouts. The running game fills the screen; the FPS counter and the pause button float over the picture.";
+"Custom layout" = "Custom";
+

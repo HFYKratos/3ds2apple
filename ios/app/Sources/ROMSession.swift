@@ -1437,21 +1437,21 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// the app's Frameworks, a GPU that cannot make a Vulkan device, ...).
     private static let preferMetalPresentation = true
 
-    /// True while the free screen layout is selected. That mode places the two
-    /// screens independently, which the upstream Zakuro presenter cannot draw,
-    /// so a load skips the presenter and uses zk_create + zk_read_screen. It is
-    /// opt-in in Settings, and the picture keeps the Metal path in every other
-    /// mode. Main queue only; applies from the next load.
+    /// True while this device direction's screen layout preset is drawn by the
+    /// app's own readback placement instead of the presenter: custom, hybrid and
+    /// large in portrait. The upstream Zakuro presenter has no such arrangements,
+    /// so a load skips the presenter and uses zk_create + zk_read_screen. Main
+    /// queue only; applies from the next load.
     private(set) var readbackPresentationRequired = false
 
-    /// Called from ContentView when the screen layout mode changes. A game that
-    /// is already presenting keeps the Metal layer until the next load (the
-    /// free-layout hint in Settings says so).
+    /// Called from ContentView and GameView when the screen layout preset or the
+    /// device orientation changes. A game that is already presenting keeps the
+    /// Metal layer until the next load (the Settings footer says so).
     func setReadbackPresentationRequired(_ required: Bool) {
         guard required != readbackPresentationRequired else { return }
         readbackPresentationRequired = required
         AppLog.log(
-            "[3ds2apple] free screen layout: %@ (a load now uses the readback path)",
+            "[3ds2apple] readback presentation: %@ (a load now uses the readback path)",
             required ? "on" : "off"
         )
     }
@@ -1493,10 +1493,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private func presenterForLoadOnMain() -> UnsafeMutableRawPointer? {
         guard Self.preferMetalPresentation else { return nil }
         guard !readbackPresentationRequired else {
-            // Free screen layout: the presenter only knows its own arrangements,
+            // A readback preset: the presenter only knows its own arrangements,
             // so the two screens must come from zk_read_screen for exact
             // per-screen placement.
-            AppLog.log("[3ds2apple] free screen layout: loading on the readback path")
+            AppLog.log("[3ds2apple] readback presentation: loading on the readback path")
             return nil
         }
 

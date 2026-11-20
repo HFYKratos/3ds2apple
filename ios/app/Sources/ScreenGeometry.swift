@@ -231,3 +231,155 @@ enum ScreenGeometry {
         )
     }
 }
+
+// MARK: - Preset readback placement
+
+/// The screen placements the presets need when the Metal presenter cannot draw
+/// them, plus `custom`:
+/// - `large` in portrait: a large upper screen at the top, the lower screen
+///   small in the bottom-right corner;
+/// - `hybrid` in both directions: a large upper screen with the lower screen
+///   below it;
+/// - `custom`: the user's hand-placed rectangles.
+///
+/// The placements are normalised `CustomScreenPlacement` rectangles, so the
+/// readback path, the lower-screen touch surface and the layout editors all use
+/// one geometry - including the screen rotation and integer scaling handling in
+/// `CustomScreenGeometry`.
+enum PresetScreenGeometry {
+    /// The placement of one preset in a picture stage of `stage` points, or nil
+    /// when the preset uses one of the presenter's fixed arrangements.
+    static func placement(
+        preset: ScreenLayoutPreset,
+        customLayout: CustomScreenLayout,
+        orientation: ControlLayoutOrientation,
+        stage: CGSize
+    ) -> CustomScreenPlacement? {
+        switch preset {
+        case .custom:
+            return customLayout.placement(for: orientation)
+        case .large:
+            guard orientation == .portrait else { return nil }
+            return largePlacement(stage: stage)
+        case .hybrid:
+            return hybridPlacement(stage: stage)
+        case .original, .single, .side:
+            return nil
+        }
+    }
+
+    /// The readback viewports of a preset direction, or nil when that direction
+    /// uses the presenter's fixed arrangement.
+    static func readbackViewports(
+        preset: ScreenLayoutPreset,
+        customLayout: CustomScreenLayout,
+        orientation: ControlLayoutOrientation,
+        stage: CGSize,
+        rotation: ScreenRotation,
+        displayScale: CGFloat,
+        integerScale: Bool
+    ) -> (top: CGRect?, bottom: CGRect?)? {
+        guard let placement = placement(preset: preset,
+                                        customLayout: customLayout,
+                                        orientation: orientation,
+                                        stage: stage) else {
+            return nil
+        }
+        return CustomScreenGeometry.viewports(
+            available: stage,
+            placement: placement,
+            rotation: rotation,
+            displayScale: displayScale,
+            integerScale: integerScale
+        )
+    }
+
+    /// `large` in portrait: the upper screen large and centred at the top, the
+    /// lower screen at about 40% of the stage width in the bottom-right corner.
+    /// Both keep the console's native screen shapes.
+    private static func largePlacement(stage: CGSize) -> CustomScreenPlacement {
+        let containerAspect = stage.width / max(stage.height, 1)
+        let margin = 0.03
+        var topWidth = 0.94
+        var bottomWidth = 0.40
+        var topHeight = heightFraction(width: topWidth,
+                                       containerAspect: containerAspect,
+                                       screen: .upper)
+        var bottomHeight = heightFraction(width: bottomWidth,
+                                          containerAspect: containerAspect,
+                                          screen: .lower)
+        // Never let a screen leave the stage on a very tall box.
+        let maximumHeight = max(1 - margin * 2, 0.2)
+        if topHeight > maximumHeight {
+            let scale = maximumHeight / topHeight
+            topWidth *= scale
+            topHeight *= scale
+        }
+        if bottomHeight > maximumHeight {
+            let scale = maximumHeight / bottomHeight
+            bottomWidth *= scale
+            bottomHeight *= scale
+        }
+        let top = ScreenRect(x: (1 - topWidth) / 2,
+                             y: margin,
+                             width: topWidth,
+                             height: topHeight)
+        let bottom = ScreenRect(x: 1 - margin - bottomWidth,
+                                y: 1 - margin - bottomHeight,
+                                width: bottomWidth,
+                                height: bottomHeight)
+        return CustomScreenPlacement(top: top, bottom: bottom,
+                                     showsTop: true, showsBottom: true,
+                                     keepsNativeAspect: true)
+    }
+
+    /// `hybrid`: the upper screen large and centred, the lower screen below it
+    /// at about 58% of the upper screen's width. The pair is scaled down to fit
+    /// and centred vertically, so it also works in a wide, short landscape box.
+    private static func hybridPlacement(stage: CGSize) -> CustomScreenPlacement {
+        let containerAspect = stage.width / max(stage.height, 1)
+        let gap = 0.02
+        // The lower screen is about 55-60% of the large screen's width.
+        let bottomRatio = 0.58
+        var topWidth = 0.94
+        var bottomWidth = topWidth * bottomRatio
+        var topHeight = heightFraction(width: topWidth,
+                                       containerAspect: containerAspect,
+                                       screen: .upper)
+        var bottomHeight = heightFraction(width: bottomWidth,
+                                          containerAspect: containerAspect,
+                                          screen: .lower)
+        let available = max(1 - gap, 0.2)
+        let total = topHeight + bottomHeight
+        if total > available {
+            let scale = available / total
+            topWidth *= scale
+            bottomWidth *= scale
+            topHeight *= scale
+            bottomHeight *= scale
+        }
+        let groupHeight = topHeight + bottomHeight + gap
+        let topY = max((1 - groupHeight) / 2, 0)
+        let top = ScreenRect(x: (1 - topWidth) / 2,
+                             y: topY,
+                             width: topWidth,
+                             height: topHeight)
+        let bottom = ScreenRect(x: (1 - bottomWidth) / 2,
+                                y: topY + topHeight + gap,
+                                width: bottomWidth,
+                                height: bottomHeight)
+        return CustomScreenPlacement(top: top, bottom: bottom,
+                                     showsTop: true, showsBottom: true,
+                                     keepsNativeAspect: true)
+    }
+
+    /// Height fraction of a native-aspect screen with a given width fraction,
+    /// from the stage's own aspect (width / height).
+    private static func heightFraction(width: Double,
+                                       containerAspect: CGFloat,
+                                       screen: ScreenKind) -> Double {
+        let screenAspect = CustomScreenGeometry.nativeAspect(for: screen)
+        guard containerAspect > 0, screenAspect > 0 else { return width }
+        return width * Double(containerAspect) / Double(screenAspect)
+    }
+}
