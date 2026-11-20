@@ -279,14 +279,14 @@ check "control layout page exposes only Default / Custom" contains ios/app/Sourc
 check "control layout page opens the editor for the current direction" contains ios/app/Sources/ControlLayoutSettingsView.swift 'ControlLayoutEditorView(settings: settings)'
 check "control editor is full screen and edits the current direction" contains ios/app/Sources/ControlLayoutEditorView.swift 'currentLayoutOrientation'
 check "control editor overlays the current screen layout" contains ios/app/Sources/ControlLayoutEditorView.swift 'screenViewports'
-check "GameView floats the editable control overlay over the whole game view" \
-  bash -c 'grep -q "VirtualControlsView(" ios/app/Sources/GameView.swift && grep -q "ignoresSafeArea()" ios/app/Sources/GameView.swift'
+check "GameView floats the editable control overlay and draws the hybrid small top screen" \
+  bash -c 'grep -q "VirtualControlsView(" ios/app/Sources/GameView.swift && grep -q "ignoresSafeArea()" ios/app/Sources/GameView.swift && grep -q "topSmall" ios/app/Sources/GameView.swift'
 check "custom screen layout model exists" contains ios/app/Sources/CustomScreenLayout.swift 'struct CustomScreenLayout'
 check "custom screen layout archive is version 3" contains ios/app/Sources/CustomScreenLayout.swift 'static let currentVersion = 3'
 check "custom screen layout geometry handles the 90 degree turn" contains ios/app/Sources/CustomScreenLayout.swift 'case .counterClockwise:'
 check "custom screen layout editor exists" test -f ios/app/Sources/ScreenLayoutEditorView.swift
-check "screen layout settings split landscape (six) and portrait (three) choices" \
-  bash -c 'grep -q "enum LandscapeScreenLayout" ios/app/Sources/AppSettings.swift && grep -q "enum PortraitScreenLayout" ios/app/Sources/AppSettings.swift && for preset in large single side hybrid original custom; do grep -q "case \.$preset" ios/app/Sources/AppSettings.swift || exit 1; done && grep -q "case topFullWidth" ios/app/Sources/AppSettings.swift'
+check "screen layout settings split landscape (six) / portrait (three) and use presenter ABI 5-7" \
+  bash -c 'grep -q "enum LandscapeScreenLayout" ios/app/Sources/AppSettings.swift && grep -q "enum PortraitScreenLayout" ios/app/Sources/AppSettings.swift && for preset in large single side hybrid original custom; do grep -q "case \.$preset" ios/app/Sources/AppSettings.swift || exit 1; done && grep -q "case topFullWidth" ios/app/Sources/AppSettings.swift && grep -q "case \.largeTopRight: return 5" ios/app/Sources/AppSettings.swift && grep -q "case \.hybrid: return 6" ios/app/Sources/AppSettings.swift && grep -q "case \.topFullWidth: return 7" ios/app/Sources/AppSettings.swift'
 check "numeric custom layout page opens the drag editor for its direction" contains ios/app/Sources/CustomScreenLayoutValuesView.swift 'ScreenLayoutEditorView(settings: settings, orientation: orientation)'
 check "screen editor is full screen and edits the current direction" contains ios/app/Sources/ScreenLayoutEditorView.swift 'currentLayoutOrientation'
 check "screen editor overlays the current control layout" contains ios/app/Sources/ScreenLayoutEditorView.swift 'settings.controlLayout(for: orientation)'
@@ -298,9 +298,9 @@ check "C-stick is pushed before every console frame" \
 check "C-stick keeps its value out of the old zk_set_input signature" \
   contains ios/zakuro-ios/src/lib.rs 'static C_STICK: Cell<(f32, f32)>'
 check "en strings cover the split layout pages" \
-  bash -c 'grep -q "^\"Screen layout\"" ios/app/Resources/en.lproj/Localizable.strings && grep -q "^\"Control layout\"" ios/app/Resources/en.lproj/Localizable.strings'
+  bash -c 'grep -q "^\"Landscape screen layout\"" ios/app/Resources/en.lproj/Localizable.strings && grep -q "^\"Control layout\"" ios/app/Resources/en.lproj/Localizable.strings'
 check "zh-Hans strings cover the split layout pages" \
-  bash -c 'grep -q "^\"Screen layout\" = \"屏幕布局\"" ios/app/Resources/zh-Hans.lproj/Localizable.strings && grep -q "^\"Control layout\" = \"控件布局\"" ios/app/Resources/zh-Hans.lproj/Localizable.strings'
+  bash -c 'grep -q "^\"Landscape screen layout\" = \"横向屏幕布局\"" ios/app/Resources/zh-Hans.lproj/Localizable.strings && grep -q "^\"Control layout\" = \"控件布局\"" ios/app/Resources/zh-Hans.lproj/Localizable.strings'
 check "no GPL project text copied into the new layout code" \
   bash -c '! grep -riE "azahar|citra" ios/app/Sources/ControlLayout.swift ios/app/Sources/VirtualControlsView.swift ios/app/Sources/CustomScreenLayout.swift ios/app/Sources/ControlLayoutEditorView.swift ios/app/Sources/ScreenLayoutEditorView.swift ios/app/Sources/ScreenLayoutSettingsView.swift ios/app/Sources/ControlLayoutSettingsView.swift'
 

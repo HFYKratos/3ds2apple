@@ -117,11 +117,17 @@ impl BackendMode {
 /// | 2 | upper screen only |
 /// | 3 | lower screen only |
 /// | 4 | large upper screen with the lower one small at its lower right |
+/// | 5 | large upper screen with the lower one small at its upper right |
+/// | 6 | large upper screen on the left, the two screens small and stacked on the right, upper above lower |
+/// | 7 | upper screen across the top, lower screen below it at the same width |
 pub const ZK_LAYOUT_STACKED: u32 = 0;
 pub const ZK_LAYOUT_SIDE_BY_SIDE: u32 = 1;
 pub const ZK_LAYOUT_TOP_ONLY: u32 = 2;
 pub const ZK_LAYOUT_BOTTOM_ONLY: u32 = 3;
 pub const ZK_LAYOUT_LARGE_TOP: u32 = 4;
+pub const ZK_LAYOUT_LARGE_TOP_RIGHT: u32 = 5;
+pub const ZK_LAYOUT_HYBRID: u32 = 6;
+pub const ZK_LAYOUT_TOP_FULL_WIDTH: u32 = 7;
 
 /// Which way the screens are turned inside the layer: north is the console's
 /// own upright orientation, the other numbers rotate the picture clockwise.
@@ -138,6 +144,9 @@ fn screen_layout(value: u32) -> Option<ScreenLayout> {
         ZK_LAYOUT_TOP_ONLY => Some(ScreenLayout::TopOnly),
         ZK_LAYOUT_BOTTOM_ONLY => Some(ScreenLayout::BottomOnly),
         ZK_LAYOUT_LARGE_TOP => Some(ScreenLayout::LargeTop),
+        ZK_LAYOUT_LARGE_TOP_RIGHT => Some(ScreenLayout::LargeTopRight),
+        ZK_LAYOUT_HYBRID => Some(ScreenLayout::Hybrid),
+        ZK_LAYOUT_TOP_FULL_WIDTH => Some(ScreenLayout::TopFullWidth),
         _ => None,
     }
 }
@@ -356,8 +365,9 @@ pub extern "C" fn zk_presenter_resize(presenter: *mut c_void, width: u32, height
 /// [`zk_present`] on.
 ///
 /// The layout is one of [`ZK_LAYOUT_STACKED`], [`ZK_LAYOUT_SIDE_BY_SIDE`],
-/// [`ZK_LAYOUT_TOP_ONLY`], [`ZK_LAYOUT_BOTTOM_ONLY`] or
-/// [`ZK_LAYOUT_LARGE_TOP`]. The app normally picks the layer's drawable size with
+/// [`ZK_LAYOUT_TOP_ONLY`], [`ZK_LAYOUT_BOTTOM_ONLY`], [`ZK_LAYOUT_LARGE_TOP`],
+/// [`ZK_LAYOUT_LARGE_TOP_RIGHT`], [`ZK_LAYOUT_HYBRID`] or
+/// [`ZK_LAYOUT_TOP_FULL_WIDTH`]. The app normally picks the layer's drawable size with
 /// [`zk_present_layout_size`] for the same layout, so the screens fill the layer
 /// instead of being letterboxed; a different drawable still presents, scaled to
 /// fit and centred. The layout is a presenter call like [`zk_present`], so
@@ -697,7 +707,8 @@ mod tests {
         zk_create_presented, zk_present, zk_present_layout_size, zk_present_mode,
         zk_present_touch_map, zk_presenter_create, zk_presenter_destroy, zk_presenter_resize,
         zk_presenter_set_layout, zk_presenter_set_orientation, zk_presenter_shared_device,
-        ZK_LAYOUT_BOTTOM_ONLY, ZK_LAYOUT_SIDE_BY_SIDE, ZK_LAYOUT_STACKED, ZK_LAYOUT_TOP_ONLY,
+        ZK_LAYOUT_BOTTOM_ONLY, ZK_LAYOUT_HYBRID, ZK_LAYOUT_LARGE_TOP_RIGHT, ZK_LAYOUT_SIDE_BY_SIDE,
+        ZK_LAYOUT_STACKED, ZK_LAYOUT_TOP_FULL_WIDTH, ZK_LAYOUT_TOP_ONLY,
         ZK_ORIENTATION_EAST, ZK_ORIENTATION_NORTH, ZK_ORIENTATION_SOUTH, ZK_ORIENTATION_WEST,
     };
 
@@ -801,6 +812,15 @@ mod tests {
             (ZK_LAYOUT_TOP_ONLY, ZK_ORIENTATION_EAST, (240, 400)),
             (ZK_LAYOUT_BOTTOM_ONLY, ZK_ORIENTATION_NORTH, (320, 240)),
             (ZK_LAYOUT_BOTTOM_ONLY, ZK_ORIENTATION_EAST, (240, 320)),
+            // round 3: a big top screen with a small lower one at its upper
+            // right, the hybrid's two small screens on the right, and the
+            // portrait top screen across the top of the lower one
+            (ZK_LAYOUT_LARGE_TOP_RIGHT, ZK_ORIENTATION_NORTH, (543, 240)),
+            (ZK_LAYOUT_LARGE_TOP_RIGHT, ZK_ORIENTATION_EAST, (240, 543)),
+            (ZK_LAYOUT_HYBRID, ZK_ORIENTATION_NORTH, (578, 240)),
+            (ZK_LAYOUT_HYBRID, ZK_ORIENTATION_EAST, (240, 578)),
+            (ZK_LAYOUT_TOP_FULL_WIDTH, ZK_ORIENTATION_NORTH, (400, 540)),
+            (ZK_LAYOUT_TOP_FULL_WIDTH, ZK_ORIENTATION_SOUTH, (400, 540)),
         ] {
             assert_eq!(
                 zk_present_layout_size(layout, orientation, &mut width, &mut height),
@@ -1095,6 +1115,91 @@ mod tests {
             1
         );
         assert_eq!((x, y), (320, 240));
+    }
+
+    #[test]
+    fn touch_map_finds_the_round_three_layouts_lower_screens() {
+        let mut x = 0u16;
+        let mut y = 0u16;
+
+        // 578x240 is the hybrid arrangement: the lower screen is the small one
+        // at the bottom of the right column, under the small top screen.
+        assert_eq!(
+            zk_present_touch_map(
+                578,
+                240,
+                ZK_LAYOUT_HYBRID,
+                ZK_ORIENTATION_NORTH,
+                0.845847,
+                0.722222,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
+        assert_eq!((x, y), (160, 120), "the middle of the small lower screen");
+        // The small top screen above it and the big top screen beside it are
+        // not touch surfaces.
+        assert_eq!(
+            zk_present_touch_map(
+                578,
+                240,
+                ZK_LAYOUT_HYBRID,
+                ZK_ORIENTATION_NORTH,
+                0.845847,
+                0.2,
+                &mut x,
+                &mut y
+            ),
+            0
+        );
+        assert_eq!(
+            zk_present_touch_map(
+                578,
+                240,
+                ZK_LAYOUT_HYBRID,
+                ZK_ORIENTATION_NORTH,
+                0.3,
+                0.5,
+                &mut x,
+                &mut y
+            ),
+            0
+        );
+
+        // The large top right arrangement's small lower screen is at the top
+        // right of the drawable.
+        assert_eq!(
+            zk_present_touch_map(
+                543,
+                240,
+                ZK_LAYOUT_LARGE_TOP_RIGHT,
+                ZK_ORIENTATION_NORTH,
+                0.868324,
+                0.222222,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
+        assert_eq!((x, y), (160, 120), "the middle of the small lower screen");
+
+        // The portrait top full width arrangement puts the lower screen across
+        // the bottom of the drawable.
+        assert_eq!(
+            zk_present_touch_map(
+                400,
+                540,
+                ZK_LAYOUT_TOP_FULL_WIDTH,
+                ZK_ORIENTATION_NORTH,
+                0.5,
+                0.722222,
+                &mut x,
+                &mut y
+            ),
+            1
+        );
+        assert_eq!((x, y), (160, 120), "the middle of the full width lower screen");
     }
 
     #[test]

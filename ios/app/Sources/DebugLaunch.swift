@@ -16,9 +16,9 @@
 //        invalid title logs why and leaves the home page untouched.
 //
 //    -openLayoutPage
-//        Open the screen layout page (Settings -> Display -> Screen layout)
-//        right away, for headless screenshots of the six-preset list. Inert in
-//        normal launches.
+//        Open the screen layout page (Settings -> Display -> Landscape screen layout)
+//        right away, for headless screenshots of the landscape/portrait layout
+//        page. Inert in normal launches.
 //
 //    -openLayoutEditor screen|control[-landscape]
 //        Open one of the two full-screen layout editors directly, for headless
@@ -80,7 +80,7 @@ enum DebugLaunch {
     /// absolute path inside the app container).
     static let gamesRootArgument = "-gamesRoot"
     /// Launch argument: `-openLayoutPage` opens the screen layout page
-    /// (Settings -> Display -> Screen layout) straight away, for headless
+    /// (Settings -> Display -> Landscape screen layout) straight away, for headless
     /// screenshots.
     static let layoutPageArgument = "-openLayoutPage"
     /// Launch argument: `-openLayoutEditor screen|control` opens one of the

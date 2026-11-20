@@ -1,0 +1,262 @@
+diff --git a/crates/zakuro-gpu/src/backend/mod.rs b/crates/zakuro-gpu/src/backend/mod.rs
+index b60cb43..de74e72 100644
+--- a/crates/zakuro-gpu/src/backend/mod.rs
++++ b/crates/zakuro-gpu/src/backend/mod.rs
+@@ -98,6 +98,12 @@ pub enum ScreenLayout {
+     BottomOnly,
+     /// the top screen big, the bottom one small at its lower right
+     LargeTop,
++    /// the top screen big, the bottom one small at its upper right
++    LargeTopRight,
++    /// the top screen big on the left, the two screens small and stacked on the right: the small top screen above the small bottom one
++    Hybrid,
++    /// the top screen across the top, the bottom one below it at the same width
++    TopFullWidth,
+ }
+ 
+ /// the orientation of both screens, north is up
+@@ -163,6 +169,9 @@ impl ScreenLayout {
+             ScreenLayout::TopOnly => (top_width, 240.0),
+             ScreenLayout::BottomOnly => (320.0, 240.0),
+             ScreenLayout::LargeTop => (top_width + LARGE_TOP_BOTTOM.0 as f32, 240.0),
++            ScreenLayout::LargeTopRight => (top_width + 320.0 / LARGE_TOP_RIGHT_BOTTOM_SCALE, 240.0),
++            ScreenLayout::Hybrid => (top_width + 320.0 / HYBRID_COLUMN_SCALE, 240.0),
++            ScreenLayout::TopFullWidth => (top_width, 240.0 + 240.0 * top_width / 320.0),
+         }
+     }
+ }
+@@ -174,10 +183,22 @@ pub const TOP_WIDTH: f32 = 400.0;
+ /// the bottom screen's size next to the big top one, half the console's
+ const LARGE_TOP_BOTTOM: (u32, u32) = (160, 120);
+ 
++/// the small bottom screen of the large top right layout, the console's bottom at 1/2.25
++const LARGE_TOP_RIGHT_BOTTOM_SCALE: f32 = 2.25;
++
++/// the hybrid layout's right column, the console's bottom 1/1.8 wide: the two small screens then stack to the big top one's height
++const HYBRID_COLUMN_SCALE: f32 = 1.8;
++
+ /// figures out where the screens go in a window, keeping the 3DS's aspect ratio (or the top screen top_w wide),
+ /// rotating and centering them, scaled by a whole number when integer asks and the window has room
+ /// a screen that doesn't show has no place
+ pub fn layout(window_width: u32, window_height: u32, arrangement: ScreenLayout, orientation: ScreenOrientation, top_w: f32, integer: bool) -> (Option<Viewport>, Option<Viewport>) {
++    let (top, bottom, _) = layout_screens(window_width, window_height, arrangement, orientation, top_w, integer);
++    (top, bottom)
++}
++
++/// [`layout`], and the hybrid layout's small top screen beside the big one as a third place
++fn layout_screens(window_width: u32, window_height: u32, arrangement: ScreenLayout, orientation: ScreenOrientation, top_w: f32, integer: bool) -> (Option<Viewport>, Option<Viewport>, Option<Viewport>) {
+     let (layout_width, layout_height) = arrangement.size_f(top_w);
+     let (total_width, total_height) = if matches!(orientation, ScreenOrientation::East | ScreenOrientation::West) {
+         (layout_height, layout_width)
+@@ -190,6 +211,16 @@ pub fn layout(window_width: u32, window_height: u32, arrangement: ScreenLayout,
+         scale = scale.floor();
+     }
+ 
++    // a small screen beside the big top one, a whole number of the top one's scale when the screens are scaled by whole numbers
++    let small_scale = |divisor: f32| {
++        let scale = scale / divisor;
++        if integer && scale >= 1.0 {
++            scale.floor()
++        } else {
++            scale
++        }
++    };
++
+     let top = (arrangement != ScreenLayout::BottomOnly).then_some(Viewport {
+         x: 0.0,
+         y: 0.0,
+@@ -222,6 +253,33 @@ pub fn layout(window_width: u32, window_height: u32, arrangement: ScreenLayout,
+                 height: 240.0 * small,
+             })
+         }
++        // the small bottom one at the top of the right side
++        ScreenLayout::LargeTopRight => {
++            let small = small_scale(LARGE_TOP_RIGHT_BOTTOM_SCALE);
++            Some(Viewport {
++                x: top_w * scale,
++                y: 0.0,
++                width: 320.0 * small,
++                height: 240.0 * small,
++            })
++        }
++        // the small bottom one under the small top one in the right column
++        ScreenLayout::Hybrid => {
++            let small = small_scale(HYBRID_COLUMN_SCALE);
++            Some(Viewport {
++                x: top_w * scale,
++                y: 240.0 * scale - 240.0 * small,
++                width: 320.0 * small,
++                height: 240.0 * small,
++            })
++        }
++        // the bottom one below the top one, as wide as it
++        ScreenLayout::TopFullWidth => Some(Viewport {
++            x: 0.0,
++            y: 240.0 * scale,
++            width: top_w * scale,
++            height: 240.0 * top_w / 320.0 * scale,
++        }),
+         ScreenLayout::TopOnly => None,
+         ScreenLayout::BottomOnly => Some(Viewport {
+             x: 0.0,
+@@ -230,6 +288,16 @@ pub fn layout(window_width: u32, window_height: u32, arrangement: ScreenLayout,
+             height: 240.0 * scale,
+         }),
+     };
++    // the rest of the hybrid right column is the small top screen
++    let above = (arrangement == ScreenLayout::Hybrid).then(|| {
++        let small = small_scale(HYBRID_COLUMN_SCALE);
++        Viewport {
++            x: top_w * scale,
++            y: 0.0,
++            width: 320.0 * small,
++            height: 240.0 * scale - 240.0 * small,
++        }
++    });
+ 
+     let canvas_width = layout_width * scale;
+     let canvas_height = layout_height * scale;
+@@ -243,7 +311,7 @@ pub fn layout(window_width: u32, window_height: u32, arrangement: ScreenLayout,
+         };
+         Viewport { x, y, width, height }
+     };
+-    let (top, bottom) = (top.map(rotate), bottom.map(rotate));
++    let (top, bottom, above) = (top.map(rotate), bottom.map(rotate), above.map(rotate));
+ 
+     let mut offset_x = (window_width as f32 - total_width * scale) / 2.0;
+     let mut offset_y = (window_height as f32 - total_height * scale) / 2.0;
+@@ -257,7 +325,7 @@ pub fn layout(window_width: u32, window_height: u32, arrangement: ScreenLayout,
+         y: offset_y + viewport.y,
+         ..viewport
+     };
+-    (top.map(offset), bottom.map(offset))
++    (top.map(offset), bottom.map(offset), above.map(offset))
+ }
+ 
+ /// how the top screen's two pictures (one per eye) get shown when the title draws in 3D
+@@ -300,6 +368,7 @@ pub enum Shown {
+ /// the screens a frame draws, where and from which picture
+ /// the 3D shows when the title drew a picture for the right eye,
+ /// side by side shows the left one's twice otherwise so a 3D TV keeps its halves
++/// the hybrid layout's small top screen is a third place, drawn w/ the top screen's picture
+ pub fn place(window_width: u32, window_height: u32, arrangement: ScreenLayout, orientation: ScreenOrientation, top_width: f32, integer: bool, stereo: Stereo, right: bool) -> Vec<(Viewport, Shown)> {
+     let screens = |(top, bottom): (Option<Viewport>, Option<Viewport>), eye: Shown| {
+         top.map(|viewport| (viewport, eye)).into_iter().chain(bottom.map(|viewport| (viewport, Shown::Bottom)))
+@@ -310,7 +379,10 @@ pub fn place(window_width: u32, window_height: u32, arrangement: ScreenLayout, o
+         (true, true) => (Shown::Right, Shown::Top),
+     };
+     match stereo.mode {
+-        StereoMode::Off => screens(layout(window_width, window_height, arrangement, orientation, top_width, integer), Shown::Top).collect(),
++        StereoMode::Off => {
++            let (top, bottom, above) = layout_screens(window_width, window_height, arrangement, orientation, top_width, integer);
++            screens((top, bottom), Shown::Top).chain(above.map(|viewport| (viewport, Shown::Top))).collect()
++        }
+         StereoMode::Anaglyph | StereoMode::Interlaced => {
+             let top = if right { Shown::Both } else { Shown::Top };
+             screens(layout(window_width, window_height, arrangement, orientation, top_width, integer), top).collect()
+@@ -382,6 +454,27 @@ mod tests {
+         (viewport.x, viewport.y, viewport.width, viewport.height)
+     }
+ 
++    /// the same corners within a hundredth of a pixel, for the layouts at fractional sizes
++    fn close(actual: (f32, f32, f32, f32), expected: (f32, f32, f32, f32)) -> bool {
++        let near = |a: f32, b: f32| (a - b).abs() < 0.01;
++        near(actual.0, expected.0) && near(actual.1, expected.1) && near(actual.2, expected.2) && near(actual.3, expected.3)
++    }
++
++    /// the two screens' corners, where they show, within a hundredth of a pixel
++    fn close_layout(
++        actual: (Option<(f32, f32, f32, f32)>, Option<(f32, f32, f32, f32)>),
++        expected: (Option<(f32, f32, f32, f32)>, Option<(f32, f32, f32, f32)>),
++    ) -> bool {
++        let screen = |actual: Option<(f32, f32, f32, f32)>, expected: Option<(f32, f32, f32, f32)>| {
++            match (actual, expected) {
++                (None, None) => true,
++                (Some(actual), Some(expected)) => close(actual, expected),
++                _ => false,
++            }
++        };
++        screen(actual.0, expected.0) && screen(actual.1, expected.1)
++    }
++
+     #[test]
+     fn layout_keeps_the_aspect_ratio_and_centers() {
+         // a window exactly 400x480 needs no scaling or offset
+@@ -433,14 +526,76 @@ mod tests {
+             (ScreenLayout::Stacked, (Some((100.0, 20.0, 800.0, 480.0)), Some((180.0, 500.0, 640.0, 480.0)))),
+             (ScreenLayout::SideBySide, (Some((140.0, 380.0, 400.0, 240.0)), Some((540.0, 380.0, 320.0, 240.0)))),
+             (ScreenLayout::LargeTop, (Some((220.0, 380.0, 400.0, 240.0)), Some((620.0, 500.0, 160.0, 120.0)))),
++            // the new layouts are at fractional sizes, so are their places
++            (ScreenLayout::LargeTopRight, (Some((228.0, 380.0, 400.0, 240.0)), Some((628.0, 380.0, 142.222, 106.667)))),
++            (ScreenLayout::Hybrid, (Some((211.0, 380.0, 400.0, 240.0)), Some((611.0, 486.667, 177.778, 133.333)))),
++            (ScreenLayout::TopFullWidth, (Some((300.0, 230.0, 400.0, 240.0)), Some((300.0, 470.0, 400.0, 300.0)))),
+             (ScreenLayout::TopOnly, (Some((100.0, 260.0, 800.0, 480.0)), None)),
+             (ScreenLayout::BottomOnly, (None, Some((20.0, 140.0, 960.0, 720.0)))),
+         ] {
+             let (top, bottom) = layout(1000, 1000, arrangement, ScreenOrientation::North, TOP_WIDTH, true);
+-            assert_eq!((top.map(bounds), bottom.map(bounds)), expected, "{arrangement:?}");
++            let actual = (top.map(bounds), bottom.map(bounds));
++            assert!(close_layout(actual, expected), "{arrangement:?}: expected {expected:?}, got {actual:?}");
+         }
+     }
+ 
++    /// the large top right layout: the big top screen on the left, the small bottom screen at the top right
++    #[test]
++    fn the_large_top_right_screen_sits_small_at_the_upper_right() {
++        assert_eq!(ScreenLayout::LargeTopRight.size(TOP_WIDTH), (543, 240));
++        let (top, bottom) = layout(543, 240, ScreenLayout::LargeTopRight, ScreenOrientation::North, TOP_WIDTH, false);
++        let actual = (top.map(bounds), bottom.map(bounds));
++        assert!(close_layout(actual, (Some((0.389, 0.0, 400.0, 240.0)), Some((400.389, 0.0, 142.222, 106.667)))), "got {actual:?}");
++    }
++
++    /// the hybrid layout: the big top screen on the left, the small top screen over the small bottom one at the right
++    #[test]
++    fn the_hybrid_layout_stacks_the_small_screens_at_the_right() {
++        assert_eq!(ScreenLayout::Hybrid.size(TOP_WIDTH), (578, 240));
++        let (top, bottom) = layout(578, 240, ScreenLayout::Hybrid, ScreenOrientation::North, TOP_WIDTH, false);
++        let actual = (top.map(bounds), bottom.map(bounds));
++        assert!(close_layout(actual, (Some((0.111, 0.0, 400.0, 240.0)), Some((400.111, 106.667, 177.778, 133.333)))), "got {actual:?}");
++        let bottom = bottom.unwrap();
++
++        // the small top screen is a third place, drawn w/ the top screen's picture
++        let places = place(578, 240, ScreenLayout::Hybrid, ScreenOrientation::North, TOP_WIDTH, false, Stereo { mode: StereoMode::Off, swap: false }, true);
++        assert_eq!(places.len(), 3);
++        let shown: Vec<_> = places.iter().map(|(_, shown)| *shown).collect();
++        assert_eq!(shown, [Shown::Top, Shown::Bottom, Shown::Top]);
++        let small = bounds(places[2].0);
++        assert!(close(small, (400.111, 0.0, 177.778, 106.667)), "got {small:?}");
++        // the small screens share the right column, and it adds up to the big screen's height
++        assert!((small.0 - bottom.x).abs() < 0.01, "got {small:?} and {bottom:?}");
++        assert!((small.3 - bottom.y).abs() < 0.01, "got {small:?} and {bottom:?}");
++        assert!((bottom.y + bottom.height - 240.0).abs() < 0.01, "got {bottom:?}");
++
++        // turned a quarter, the extra place turns w/ the others
++        let places = place(240, 578, ScreenLayout::Hybrid, ScreenOrientation::East, TOP_WIDTH, false, Stereo { mode: StereoMode::Off, swap: false }, false);
++        let small = bounds(places[2].0);
++        assert!(close(small, (133.333, 400.111, 106.667, 177.778)), "got {small:?}");
++
++        // a 3D picture takes the extra place away, like the other layouts
++        let stereo = place(578, 240, ScreenLayout::Hybrid, ScreenOrientation::North, TOP_WIDTH, false, Stereo { mode: StereoMode::Anaglyph, swap: false }, false);
++        assert_eq!(stereo.len(), 2);
++    }
++
++    /// the top full width layout: the top screen across the top, the bottom one under it at the same width
++    #[test]
++    fn the_top_full_width_layout_stacks_equal_width_screens() {
++        assert_eq!(ScreenLayout::TopFullWidth.size(TOP_WIDTH), (400, 540));
++        let (top, bottom) = layout(400, 540, ScreenLayout::TopFullWidth, ScreenOrientation::North, TOP_WIDTH, false);
++        let actual = (top.map(bounds), bottom.map(bounds));
++        assert!(close_layout(actual, (Some((0.0, 0.0, 400.0, 240.0)), Some((0.0, 240.0, 400.0, 300.0)))), "got {actual:?}");
++        // a wider top screen takes the bottom one w/ it
++        assert_eq!(ScreenLayout::TopFullWidth.size(560.0), (560, 660));
++        let (_, bottom) = layout(560, 660, ScreenLayout::TopFullWidth, ScreenOrientation::North, 560.0, false);
++        let bottom = bounds(bottom.unwrap());
++        assert!(close(bottom, (0.0, 240.0, 560.0, 420.0)), "got {bottom:?}");
++        // the two screens present through the same places
++        let places = place(400, 540, ScreenLayout::TopFullWidth, ScreenOrientation::North, TOP_WIDTH, false, Stereo { mode: StereoMode::Off, swap: false }, true);
++        assert_eq!(places.iter().map(|(_, shown)| *shown).collect::<Vec<_>>(), [Shown::Top, Shown::Bottom]);
++    }
++
+     #[test]
+     fn the_large_top_screen_takes_most_of_the_window() {
+         // the bottom screen at half size sits at the top one's lower right

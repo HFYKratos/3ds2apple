@@ -93,7 +93,7 @@ struct SettingsView: View {
             NavigationLink {
                 ScreenLayoutSettingsView(settings: settings)
             } label: {
-                Text("Screen layout")
+                Text("Landscape screen layout")
             }
             Picker("Screen rotation", selection: persistedBinding(settings, \.screenRotation)) {
                 ForEach(ScreenRotation.allCases) { rotation in
@@ -392,7 +392,7 @@ struct QuickDisplaySettingsView: View {
             Form {
                 Section {
                     Picker(
-                        "Screen layout",
+                        "Landscape screen layout",
                         selection: persistedBinding(settings, \.landscapeScreenLayout)
                     ) {
                         ForEach(LandscapeScreenLayout.allCases) { layout in

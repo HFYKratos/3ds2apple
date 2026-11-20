@@ -33,15 +33,33 @@ enum ScreenLayout: String, CaseIterable, Identifiable {
     case stacked
     /// Upper screen left, lower screen right (wide, for landscape).
     case sideBySide
-    /// Large upper screen with the lower one small at its lower right. The
-    /// landscape default, the arrangement Manic-style skins use.
+    /// Large upper screen with the lower one small at its lower right (the old
+    /// round-0 landscape arrangement, kept for compatibility).
     case largeTop
     case upperOnly
     case lowerOnly
+    /// Landscape "Large screen": the upper screen 400x240 on the left and the
+    /// lower screen scaled by 1/2.25 (142.22x106.67) at the upper right;
+    /// arrangement 542.22x240 (presenter layout size 543x240, ABI 5).
+    case largeTopRight
+    /// Landscape "Hybrid": the upper screen 400x240 on the left and a right
+    /// column (177.78 = 320/1.8 wide) with the small upper screen
+    /// (177.78x106.67) above the small lower screen (177.78x133.33);
+    /// arrangement 577.78x240 (presenter layout size 578x240, ABI 6).
+    case hybrid
+    /// Portrait "Default" (top full width): the upper screen 400x240 on top and
+    /// the lower screen scaled to the same width (400x300) below it;
+    /// arrangement 400x540 (presenter layout size, ABI 7). Portrait only.
+    case topFullWidth
 
     var id: String { rawValue }
 
     /// The layout number the presenter and `zk_present_layout_size` take.
+    ///
+    /// The last three ids are the round-3 additions of the presenter patch
+    /// (0008): ABI 5 LargeTopRight, 6 Hybrid, 7 TopFullWidth. They are passed as
+    /// plain numbers on purpose so the app builds independently of the bridging
+    /// header's constant names.
     var presenterValue: UInt32 {
         switch self {
         case .stacked: return UInt32(ZK_LAYOUT_STACKED)
@@ -49,6 +67,9 @@ enum ScreenLayout: String, CaseIterable, Identifiable {
         case .largeTop: return UInt32(ZK_LAYOUT_LARGE_TOP)
         case .upperOnly: return UInt32(ZK_LAYOUT_TOP_ONLY)
         case .lowerOnly: return UInt32(ZK_LAYOUT_BOTTOM_ONLY)
+        case .largeTopRight: return 5
+        case .hybrid: return 6
+        case .topFullWidth: return 7
         }
     }
 }
@@ -57,10 +78,10 @@ enum ScreenLayout: String, CaseIterable, Identifiable {
 /// are independent settings).
 ///
 /// Display order is the case order: Large screen, Single screen, Side by side,
-/// Hybrid, Original, Custom layout. Most presets use one of the presenter's
-/// fixed arrangements; `large` (the round-2 measured arrangement), `hybrid` and
-/// `custom` are placed by the app's own readback instead (see
-/// ScreenGeometry.swift and CustomScreenLayout.swift).
+/// Hybrid, Original, Custom layout. Every choice except `custom` is a presenter
+/// arrangement (round 3 adds LargeTopRight and Hybrid, presenter ABI 5-6); only
+/// `custom` uses the app's own readback placement (see ScreenGeometry.swift and
+/// CustomScreenLayout.swift).
 ///
 /// The stored raw values are stable. The round-1 single choice is migrated in
 /// `AppSettings.migratedScreenLayouts(fromLegacy:)`.
@@ -87,10 +108,12 @@ enum LandscapeScreenLayout: String, CaseIterable, Identifiable {
     /// readback placement draws this choice.
     var presenterLayout: ScreenLayout? {
         switch self {
-        case .original: return .stacked
+        case .large: return .largeTopRight
         case .single: return .upperOnly
         case .side: return .sideBySide
-        case .large, .hybrid, .custom: return nil
+        case .hybrid: return .hybrid
+        case .original: return .stacked
+        case .custom: return nil
         }
     }
 
@@ -126,8 +149,9 @@ enum PortraitScreenLayout: String, CaseIterable, Identifiable {
     /// readback placement draws this choice.
     var presenterLayout: ScreenLayout? {
         switch self {
+        case .topFullWidth: return .topFullWidth
         case .original: return .stacked
-        case .topFullWidth, .custom: return nil
+        case .custom: return nil
         }
     }
 

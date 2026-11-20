@@ -619,6 +619,8 @@
 "Custom layout" = "Custom";
 
 /* --- Round-2 layout split: landscape / portrait settings and the numeric custom pages --- */
+"Landscape screen layout" = "Landscape screen layout";
+"Custom screen layout" = "Custom screen layout";
 "Portrait screen layout" = "Portrait screen layout";
 "Landscape custom layout" = "Landscape custom layout";
 "Portrait custom layout" = "Portrait custom layout";

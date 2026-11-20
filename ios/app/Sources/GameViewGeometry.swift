@@ -305,7 +305,9 @@ extension GameViewPreviewGeometry {
         let viewports = ScreenGeometry.layoutViewports(available: box,
                                                        layout: layout,
                                                        rotation: settings.screenRotation)
-        guard stretch, box.width >= 1, box.height >= 1 else { return viewports }
+        guard stretch, box.width >= 1, box.height >= 1 else {
+            return (top: viewports.top, bottom: viewports.bottom)
+        }
         let scaleX = stage.width / box.width
         let scaleY = stage.height / box.height
         func stretched(_ rect: CGRect?) -> CGRect? {
@@ -313,7 +315,7 @@ extension GameViewPreviewGeometry {
             return CGRect(x: rect.minX * scaleX, y: rect.minY * scaleY,
                           width: rect.width * scaleX, height: rect.height * scaleY)
         }
-        return (stretched(viewports.top), stretched(viewports.bottom))
+        return (top: stretched(viewports.top), bottom: stretched(viewports.bottom))
     }
 }
 

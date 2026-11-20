@@ -16,11 +16,12 @@
 //
 //  The screen arrangement comes from the split Settings choices: the landscape
 //  preset (large / single / side / hybrid / original / custom) and the separate
-//  portrait preset (default / original / custom). The choices the presenter
-//  cannot draw - landscape large / hybrid / custom and portrait default / custom
-//  - are placed by the readback path (see ScreenGeometry.swift and
-//  CustomScreenLayout.swift), which needs the session to skip the presenter for
-//  the next load.
+//  portrait preset (default / original / custom). Every preset is a presenter
+//  arrangement (round 3 adds LargeTopRight / Hybrid / TopFullWidth, ABI 5-7); only
+//  the custom-layout rectangles are drawn by the app's readback path, which needs
+//  the session to skip the presenter for the next load. The no-presenter
+//  emergency fallback mirrors every arrangement in SwiftUI (hybrid draws the
+//  upper screen twice).
 //
 //  Opening the in-game menu pauses emulation; the runtime and the last frame stay
 //  until resume. When a title starts the 3DS software keyboard, the session stops
@@ -373,10 +374,9 @@ struct GameView: View {
             || (isRuntimeStarting && model.metalScreenView != nil)
     }
 
-    /// The screens inside `available`: the presented layer for the choices the
-    /// presenter can draw, the app's own placement for the readback choices
-    /// (landscape large / hybrid / custom, portrait default / custom) and for
-    /// the preview/fallback path.
+    /// The screens inside `available`: the presented layer for the presenter
+    /// arrangements, and the app's own placement for the custom layouts or the
+    /// preview/emergency-fallback path.
     @ViewBuilder
     private func screenContent(available: CGSize, isLandscape: Bool) -> some View {
         if available.width >= 1, available.height >= 1 {
@@ -411,10 +411,11 @@ struct GameView: View {
             .accessibilityIdentifier("metal-screen")
     }
 
-    /// Readback path: the two screens as separate images, placed by the same
-    /// geometry the layout editors preview. For the readback presets the whole
-    /// game view is the placement stage; for the presenter presets the images
-    /// mirror the presenter's arrangement (fit/stretch, rotation, centring).
+    /// Readback path: the screen images placed by the same geometry the layout
+    /// editors preview. A custom layout uses the whole game view as its
+    /// placement stage; the emergency/preview path mirrors the presenter
+    /// arrangement (fit/stretch, rotation, centring and, for hybrid, the second
+    /// copy of the upper screen).
     @ViewBuilder
     private func readbackArrangement(in area: CGSize, isLandscape: Bool) -> some View {
         let orientation: ControlLayoutOrientation = isLandscape ? .landscape : .portrait
@@ -454,12 +455,14 @@ struct GameView: View {
         }
     }
 
-    /// Draws the two screen images at their viewports. The presenter-mirror path
-    /// passes `stretches: true` only for the Stretch aspect setting (the
-    /// arrangement is fitted first and then fills the area, like CoreAnimation
-    /// scaling the presented layer); every other mode shows the fitted box
-    /// centred in the area with black around it.
-    private func readbackScreens(_ viewports: (top: CGRect?, bottom: CGRect?),
+    /// Draws the screen images at their viewports. The hybrid arrangement draws
+    /// the upper screen twice (the large one and the small one in the right
+    /// column); every other arrangement has one upper and one lower viewport.
+    /// The presenter-mirror path passes `stretches: true` only for the Stretch
+    /// aspect setting (the arrangement is fitted first and then fills the area,
+    /// like CoreAnimation scaling the presented layer); every other mode shows
+    /// the fitted box centred in the area with black around it.
+    private func readbackScreens(_ viewports: (top: CGRect?, bottom: CGRect?, topSmall: CGRect?),
                                  layoutBox: CGSize,
                                  area: CGSize,
                                  stretches: Bool,
@@ -477,6 +480,18 @@ struct GameView: View {
                 )
                 .frame(width: top.width, height: top.height)
                 .offset(x: top.minX, y: top.minY)
+            }
+            // Hybrid draws the upper screen a second time as the small top
+            // screen above the small bottom screen in the right column.
+            if let topSmall = viewports.topSmall {
+                readbackScreen(
+                    image: screenImage(isUpper: true),
+                    screen: topScreen,
+                    identifier: "top-small-screen",
+                    isTouchscreen: false
+                )
+                .frame(width: topSmall.width, height: topSmall.height)
+                .offset(x: topSmall.minX, y: topSmall.minY)
             }
             if let bottom = viewports.bottom {
                 readbackScreen(
@@ -567,7 +582,7 @@ struct GameView: View {
     // MARK: - Screen geometry
 
     /// The picture's box inside `available`, from the display settings (used for
-    /// the presenter arrangements; the readback presets place their screens
+    /// the presenter arrangements; the custom layouts place their screens
     /// explicitly in the whole game view).
     private func contentSize(in available: CGSize, layout: ScreenLayout) -> CGSize {
         ScreenGeometry.contentSize(

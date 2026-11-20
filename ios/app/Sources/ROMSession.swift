@@ -1437,11 +1437,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// the app's Frameworks, a GPU that cannot make a Vulkan device, ...).
     private static let preferMetalPresentation = true
 
-    /// True while this device direction's screen layout preset is drawn by the
-    /// app's own readback placement instead of the presenter: custom, hybrid and
-    /// large in portrait. The upstream Zakuro presenter has no such arrangements,
-    /// so a load skips the presenter and uses zk_create + zk_read_screen. Main
-    /// queue only; applies from the next load.
+    /// True while this device direction's screen layout is a custom layout, which
+    /// the presenter cannot draw: a load skips the presenter and uses zk_create +
+    /// zk_read_screen. Every preset is a presenter arrangement. Main queue only;
+    /// applies from the next load.
     private(set) var readbackPresentationRequired = false
 
     /// Called from ContentView and GameView when the screen layout preset or the
@@ -1493,7 +1492,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private func presenterForLoadOnMain() -> UnsafeMutableRawPointer? {
         guard Self.preferMetalPresentation else { return nil }
         guard !readbackPresentationRequired else {
-            // A readback preset: the presenter only knows its own arrangements,
+            // A custom layout: the presenter cannot place one screen on its own,
             // so the two screens must come from zk_read_screen for exact
             // per-screen placement.
             AppLog.log("[3ds2apple] readback presentation: loading on the readback path")

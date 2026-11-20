@@ -38,6 +38,13 @@
 #                                        measurement build, each an
 #                                        independent environment switch
 #                                        (default off)
+#   0008-presenter-layouts.patch         the round-3 screen arrangements:
+#                                        large top with the small lower
+#                                        screen at its upper right, the
+#                                        hybrid's large upper screen with
+#                                        the two small screens stacked on
+#                                        the right (upper above lower), and
+#                                        the portrait top full width layout
 #
 # Application is idempotent: a patch already in the tree is reported and
 # skipped, so re-running a build script is safe even when the checkout was

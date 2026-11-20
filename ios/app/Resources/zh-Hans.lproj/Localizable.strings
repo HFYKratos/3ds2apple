@@ -621,6 +621,8 @@
 "Custom layout" = "自定义布局";
 
 /* --- Round-2 布局拆分：横屏 / 竖屏独立设置与自定义数值页 --- */
+"Landscape screen layout" = "横向屏幕布局";
+"Custom screen layout" = "自定义屏幕布局";
 "Portrait screen layout" = "纵向屏幕布局";
 "Landscape custom layout" = "横向自定义布局";
 "Portrait custom layout" = "纵向自定义布局";

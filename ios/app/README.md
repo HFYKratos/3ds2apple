@@ -105,9 +105,11 @@ on-screen controls, so no input or audio advances behind it.
 - Display settings: separate landscape and portrait screen layout choices (six
   landscape presets, three portrait presets, plus two numeric custom layout
   pages), screen rotation, aspect (fit / 4:3 / stretch), integer scaling, render
-  resolution (1×–4×) and interface orientation. The choices the Metal presenter
-  draws apply immediately; the readback choices (landscape large / hybrid /
-  custom, portrait default / custom) apply from the next game load. Rotation,
+  resolution (1×–4×) and interface orientation. Every layout preset is drawn by
+  the `CAMetalLayer` presenter (round 3 adds the Large screen / Hybrid / portrait
+  Default arrangements, presenter ABI 5–7) and applies immediately; only the two
+  Custom layouts use the readback path and apply from the next game load.
+  Rotation,
   aspect and integer scaling apply immediately, also while a game runs; the
   render resolution resizes the presented drawable at once, while the internal
   3D render scale is applied when a game loads. See "Display settings" below.
@@ -314,8 +316,8 @@ data: never commit them, and remove the fixture from the container when done.
 
 | Setting | Values | Behaviour |
 |---|---|---|
-| Screen layout | Large screen (default) / Single screen / Side by side / Hybrid / Original / Custom layout | The **landscape** choice, selected from a radio picker the row opens. **Original**, **Single screen** and **Side by side** use the `CAMetalLayer` presenter's fixed arrangements and apply immediately; **Large screen**, **Hybrid** and **Custom layout** are placed by the app on the readback path, so they apply from the next game load. The measured placements are described under "Editable layouts". |
-| Portrait screen layout | Default (default) / Original / Custom layout | The separate **portrait** choice, selected from its own radio picker. **Original** uses the presenter's stacked arrangement and applies immediately; **Default** (top full width) and **Custom layout** are placed on the readback path and apply from the next game load. |
+| Landscape screen layout | Large screen (default) / Single screen / Side by side / Hybrid / Original / Custom layout | The **landscape** choice, selected from a radio picker the row opens. All six choices apply immediately; the first five are `CAMetalLayer` presenter arrangements: **Large screen** = upper screen 400x240 at the left with the lower screen scaled by 1/2.25 at its upper right (ABI 5); **Single screen** = upper screen maximised; **Side by side** = both screens side by side at their native sizes; **Hybrid** = upper screen 400x240 at the left with the small upper screen above the small lower screen in the right column (ABI 6); **Original** = native stack. **Custom layout** uses the numeric custom rectangles on the readback path, so it applies from the next game load. The arrangements are described under "Editable layouts". |
+| Portrait screen layout | Default (default) / Original / Custom layout | The separate **portrait** choice, selected from its own radio picker. **Default** is the top-full-width presenter arrangement (upper 400x240 above the lower screen scaled to 400x300, ABI 7); **Original** uses the presenter's native stack; both apply immediately. **Custom layout** uses the numeric custom rectangles on the readback path and applies from the next game load. |
 | Custom layouts | Landscape custom layout / Portrait custom layout | Each row opens a numeric page for that direction: sections **Upper screen** and **Lower screen**, each with **X position**, **Y position**, **Width** and **Height** as integer percentages of the game view (0–100). The page edits the existing `CustomScreenLayout` archive (archive version 3; older archives migrate on read) and applies from the next game load; **Edit by dragging** opens the full-screen drag editor for the same direction. The shipped defaults are the placements measured from the reference screenshots. |
 | Screen rotation | Upright, 90° clockwise, upside down, 90° counter-clockwise | Immediately. Turns the screens inside their area, e.g. the stacked console becomes two columns (480×400) a quarter turn clockwise. The touchscreen is mapped back into the screen's own pixels. |
 | Aspect ratio | Fit (native), 4:3, Stretch | Immediately. Fit keeps the arrangement's shape; 4:3 fits the picture inside a 4:3 area with black bars; Stretch fills the game view's space and deliberately distorts the picture. |
@@ -327,10 +329,11 @@ The 3DS screens stay upright in the app's interface, which iOS rotates with the
 device; `Screen rotation` turns the pictures inside their area for playing with
 the console held sideways. The running game fills the whole screen - there is no
 title bar, rounded card or reserved control pad any more - and the FPS/pause
-controls float over the picture. The readback choices (landscape large / hybrid
-/ custom, portrait default / custom) place each screen explicitly in the whole
-game view, so they ignore the aspect-ratio / integer-scaling box (screen
-rotation and each screen's native shape still apply).
+controls float over the picture. The layout presets are presenter arrangements,
+so the aspect-ratio / integer-scaling settings apply to them exactly as before;
+only the two Custom layouts place each screen explicitly in the whole game view
+(they ignore that box; screen rotation and each screen's native shape still
+apply).
 
 ## Audio settings
 
@@ -346,7 +349,7 @@ light impact on each button press. The controller row shows the connected
 `GCController` name. Settings → Controls → **Control layout** opens the
 control layout page (Default / Custom; choosing Custom opens the full-screen
 editor for the current direction); the screen side lives under Settings →
-Display → **Screen layout** (the next section).
+Display → **Landscape screen layout** (the next section).
 
 ## Editable layouts (controls and screens)
 
@@ -383,27 +386,30 @@ radio picker, with the numeric custom pages described below.
   the New 3DS nub. A hardware controller's left stick feeds the Circle Pad and
   its right stick feeds the C-stick; on-screen and controller vectors add up and
   clamp to 1.0.
-- **Screens: landscape choice.** Settings → Display → **Screen layout** shows
-  the current landscape choice; tapping the row opens a radio picker with the
-  six landscape layouts in this order:
-  - **Large screen** (default) - the upper screen with the lower screen scaled
-    to 1/2.25 of its height at its right, top-aligned; the arrangement is fitted
-    and centred (readback);
+- **Screens: landscape choice.** Settings → Display → **Landscape screen
+  layout** shows the current landscape choice; tapping the row opens a radio
+  picker with the six landscape layouts in this order:
+  - **Large screen** (default) - the upper screen 400x240 at the left and the
+    lower screen scaled by 1/2.25 at its upper right (presenter
+    `.largeTopRight`, ABI 5);
   - **Single screen** - the upper screen only, maximised and centred
     (presenter `.upperOnly`);
   - **Side by side** - upper screen left, lower screen right at their native
     sizes (presenter `.sideBySide`);
-  - **Hybrid** - upper 5:3 screen left, lower 4:3 screen right, both nearly full
-    height with a small gap (readback);
+  - **Hybrid** - the upper screen 400x240 at the left and a right column with
+    the small upper screen above the small lower screen (presenter `.hybrid`,
+    ABI 6; the presenter emits the upper screen twice);
   - **Original** - both screens stacked at their native sizes (presenter
     `.stacked`);
-  - **Custom layout** - the landscape rectangles from the numeric custom page.
+  - **Custom layout** - the landscape rectangles from the numeric custom page
+    (readback).
 - **Screens: portrait choice.** Settings → Display → **Portrait screen layout**
   shows the current portrait choice; its radio picker offers:
-  - **Default** (default) - top full width: the upper screen full width with the
-    lower screen scaled to the same width below it, top-aligned (readback);
+  - **Default** (default) - top full width: upper screen 400x240 on top, lower
+    screen scaled to 400x300 below it (presenter `.topFullWidth`, ABI 7);
   - **Original** - the native stack, top-aligned (presenter `.stacked`);
-  - **Custom layout** - the portrait rectangles from the numeric custom page.
+  - **Custom layout** - the portrait rectangles from the numeric custom page
+    (readback).
 - **Custom layouts (numeric pages).** Settings → Display → **Landscape custom
   layout** / **Portrait custom layout** open one numeric page per direction:
   sections **Upper screen** and **Lower screen**, each with **X position**,
@@ -422,16 +428,17 @@ radio picker, with the numeric custom pages described below.
   They were measured on a 20:9 reference screen; the screens keep their own
   aspect inside the rectangles, so on a wider or narrower game view the picture
   is letterboxed inside the rectangle instead of being distorted.
-- **Why some choices use the readback path.** The upstream Zakuro presenter only
-  knows its five fixed arrangements (`ScreenLayout` in `zakuro-gpu`), so the
-  landscape large/hybrid placements, the portrait top-full-width placement and
-  arbitrary per-screen placement cannot be drawn by it. Those choices switch the
-  session to the readback presentation path (`zk_create` + `zk_read_screen`)
-  the app already uses when MoltenVK is unavailable: the screen images are placed
-  by `PresetScreenGeometry` / `CustomScreenGeometry` and the lower screen's
-  touch surface uses the same rectangles. The other choices keep the Metal
-  presenter. Extending the Zakuro presenter with these arrangements is the
-  follow-up that would let every choice keep the GPU path.
+- **Why the custom layouts use the readback path.** Every preset is a presenter
+  arrangement; the round-3 presenter patch (0008) adds LargeTopRight, Hybrid and
+  TopFullWidth to the upstream fixed arrangements (presenter ABI 5–7). Only the
+  arbitrary per-screen Custom layouts cannot be drawn by the presenter: they
+  switch the session to the readback presentation path (`zk_create` +
+  `zk_read_screen`) the app already uses when MoltenVK is unavailable, and the
+  two screen images are placed by `CustomScreenGeometry` (the lower screen's
+  touch surface uses the same rectangles). The no-presenter emergency fallback
+  still mirrors every arrangement through `ScreenGeometry.layoutViewports`; for
+  Hybrid that fallback draws the upper screen twice (large and small-top),
+  exactly like the presenter.
 - **Compatibility (round-2 split).** The persisted shapes are unchanged:
   `CustomScreenLayout` stays Codable with the same fields (now archive version
   3; older versions migrate on read) and the control profiles stay the versioned
@@ -785,7 +792,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `SaveArchivePicker.swift` | Files picker for importing a save-data ZIP or individual save files. |
 | `ROMSession.swift` | Runtime handle, AOT-only game launch gate, frame loop, presenter lifecycle, input/audio plumbing, software-keyboard polling/answer and the pause it causes, pause/resume/reset and the settings that change runtime behaviour. |
 | `MetalScreenView.swift` | `UIView` with a `CAMetalLayer` the presenter draws into (A1); drawable size for the chosen layout/rotation and the render scale (1×–4×), plus the integer-scaling magnification filter. |
-| `ScreenGeometry.swift` | The drawable size of each layout/rotation, the box the screens occupy for the aspect/integer-scale settings, and `PresetScreenGeometry`: the measured round-2 readback placements (landscape large and hybrid, portrait top full width). |
+| `ScreenGeometry.swift` | The drawable size of each layout/rotation (including the round-3 presenter layouts 543x240, 578x240 and 400x540), the box the screens occupy for the aspect/integer-scale settings, `layoutViewports` mirroring all eight presenter arrangements in the fallback/preview path (hybrid draws the upper screen twice), and the custom-only readback placement. |
 | `GameViewGeometry.swift` | The game view's full-bleed box model shared by `GameView` and both layout editors: device/safe-area metrics, picture stage (the whole game view) and control container (the whole screen) rectangles, control frames, alignment snapping and the preview screen viewports. |
 | `GameInfo.swift` | The launcher's `Documents/Games/<TITLEID>/GameInfo.json` manifest (schema 1): authoritative display title, localized `displayNames`/`publisher`/`region` (optional SMDH base info), save namespace and pushed game-data size/SHA-256; the pack fields are informational metadata about the pack embedded in the IPA. |
 | `InstalledGame.swift` | Scans `Documents/Games` for pushed game data, validates it (folder/title ID, manifest, ROM presence/size/path containment), resolves the pushed `cover.png` and verifies the recorded SHA-256 in the background. |
@@ -833,11 +840,12 @@ The app has one presentation path and one fallback:
   normalised touch to lower-screen pixels with `zk_present_touch_map`, passing
   the same layout and rotation the presenter uses (a rotated screen is mapped
   back into its own upright pixels).
-- The choices the presenter cannot draw (landscape large / hybrid / custom,
-  portrait default / custom) skip the presenter and use the readback path above,
-  so the app places the two screen images itself (`PresetScreenGeometry` /
-  `CustomScreenGeometry`). The other choices stay on the presented layer;
-  switching between the two paths applies from the next game load.
+- Every preset is a presenter arrangement (ABI 1–7: stacked, side by side,
+  upper only, lower only, large top, large top right, hybrid, top full width).
+  Only the two Custom layouts skip the presenter and use the readback path above
+  (`CustomScreenGeometry`); switching paths applies from the next game load.
+  The no-presenter fallback mirrors all arrangements in
+  `ScreenGeometry.layoutViewports` (hybrid draws the upper screen twice).
 - The fallback triggers automatically when `zk_presenter_create` returns `NULL`
   (for example no MoltenVK in the app, or a device that cannot make a Vulkan
   device), when `zk_create_presented` fails (the load is retried once with
@@ -1093,21 +1101,20 @@ Instant save states:
   editable; which key a control reports is fixed). Save states are not
   interchangeable between games or runtime versions, and only battery saves are
   exported and imported; instant states stay in the app container.
-- The readback choices (landscape large / hybrid / custom, portrait default /
-  custom) run on the readback presentation path, so they are slower than the
-  Metal presenter and apply from the next game load; the other choices keep the
-  Metal presenter. The shipped default landscape choice (Large screen) is a
-  readback choice, so a fresh install plays landscape on the readback path until
-  the user picks Original / Single screen / Side by side; the default portrait
-  choice (Default, top full width) is also a readback choice. Arbitrary
-  per-screen placement inside the Metal presenter needs new arrangements in
-  upstream `zakuro-gpu` (its `ScreenLayout` only has the five fixed ones) and is
-  the follow-up.
+- Only the two Custom layouts run on the readback presentation path (slower,
+  apply from the next game load); every preset, including landscape Large screen
+  / Hybrid and portrait Default, is a GPU presenter arrangement and applies
+  immediately. The three new arrangements need the round-3 presenter patch
+  (ABI 5–7, `ios/zakuro-ios/patches/0008-presenter-layouts.patch`) and a
+  matching `libzakuro_ios.a`; a shell built with an older library falls back to
+  the emergency readback mirror for those choices (no GPU zero-copy path).
+  Arbitrary per-screen placement inside the Metal presenter is still the
+  follow-up for a future presenter arrangement.
 - The floating on-screen controls were not retuned for the full-bleed layout
   this round: the shipped portrait positions were designed for the old reserved
   pad area, so they can overlap the picture until the next controls round or a
   hand-edited Custom control layout moves them.
-- The readback choices ignore the aspect-ratio and integer-scaling box (they
+- The two Custom layouts ignore the aspect-ratio and integer-scaling box (they
   place each screen by a fraction of the whole game view); screen rotation and
   each screen's native shape still apply.
 - The round-2 custom-layout defaults were measured on a 20:9 reference screen:

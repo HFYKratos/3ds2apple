@@ -6,7 +6,7 @@
 //
 //  Landscape and portrait are independent settings, like the reference layout
 //  app:
-//  - "Screen layout" shows the landscape choice and opens a six-preset radio
+//  - "Landscape screen layout" shows the landscape choice and opens a six-preset radio
 //    picker (Large screen, Single screen, Side by side, Hybrid, Original,
 //    Custom layout);
 //  - "Portrait screen layout" shows the portrait choice and opens a three-preset
@@ -34,7 +34,7 @@ struct ScreenLayoutSettingsView: View {
             presetSection
             customSection
         }
-        .navigationTitle(L10n.tr("Screen layout"))
+        .navigationTitle(L10n.tr("Landscape screen layout"))
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $pickerOrientation) { orientation in
             LayoutPresetPickerView(settings: settings, orientation: orientation)
@@ -52,7 +52,7 @@ struct ScreenLayoutSettingsView: View {
 
     private var presetSection: some View {
         Section {
-            presetRow(title: L10n.tr("Screen layout"),
+            presetRow(title: L10n.tr("Landscape screen layout"),
                       value: settings.landscapeScreenLayout.title,
                       orientation: .landscape)
             presetRow(title: L10n.tr("Portrait screen layout"),
@@ -102,8 +102,8 @@ struct ScreenLayoutSettingsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(orientation == .landscape
-                                 ? "layout-picker-landscape"
-                                 : "layout-picker-portrait")
+                                 ? "landscape-layout-picker"
+                                 : "portrait-layout-picker")
     }
 }
 
@@ -153,7 +153,7 @@ struct LayoutPresetPickerView: View {
 
     private var navigationTitle: String {
         orientation == .landscape
-            ? L10n.tr("Screen layout")
+            ? L10n.tr("Landscape screen layout")
             : L10n.tr("Portrait screen layout")
     }
 

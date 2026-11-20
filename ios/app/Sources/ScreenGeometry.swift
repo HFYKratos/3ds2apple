@@ -32,6 +32,9 @@ enum ScreenGeometry {
         case .largeTop: upright = CGSize(width: 560, height: 240)
         case .upperOnly: upright = CGSize(width: 400, height: 240)
         case .lowerOnly: upright = CGSize(width: 320, height: 240)
+        case .largeTopRight: upright = CGSize(width: 543, height: 240)
+        case .hybrid: upright = CGSize(width: 578, height: 240)
+        case .topFullWidth: upright = CGSize(width: 400, height: 540)
         }
         let quarterTurn = rotation == .clockwise || rotation == .counterClockwise
         return quarterTurn
@@ -113,20 +116,31 @@ enum ScreenGeometry {
 
     // MARK: - Readback layout
 
-    /// Where the two screens go inside a readback area of `available` pixels,
-    /// in the same arrangement and rotation the presenter uses. Used only by the
-    /// `CGImage` fallback (no presenter), so it mirrors the Rust `layout()`
-    /// helper: the screens keep their own aspect, the arrangement is scaled
-    /// uniformly to fit and centred, and a quarter turn rotates the whole
-    /// arrangement and every screen's picture. A screen that is not shown has no
-    /// rectangle.
+    /// Where the screens go inside a readback area of `available` points, in the
+    /// same arrangement and rotation the presenter uses. Used by the `CGImage`
+    /// fallback (no presenter can be made) and by the ROM-free preview, so it
+    /// mirrors the presenter's layout helper: the screens keep their own aspect,
+    /// the arrangement is scaled uniformly to fit and centred, and a quarter turn
+    /// rotates the whole arrangement and every screen's picture.
+    ///
+    /// `topSmall` is the hybrid arrangement's second upper-screen image (the
+    /// small top screen above the small bottom screen in the right column); it is
+    /// nil for every other arrangement.
     static func layoutViewports(
         available: CGSize,
         layout: ScreenLayout,
         rotation: ScreenRotation
-    ) -> (top: CGRect?, bottom: CGRect?) {
-        guard available.width > 0, available.height > 0 else { return (nil, nil) }
+    ) -> (top: CGRect?, bottom: CGRect?, topSmall: CGRect?) {
+        guard available.width > 0, available.height > 0 else { return (nil, nil, nil) }
         let topWidth: CGFloat = 400
+        // Hybrid right column: 320/1.8 wide; its small top screen is 240/2.25
+        // tall and the small bottom screen fills the rest of the 240 row.
+        let hybridColumnWidth: CGFloat = 320 / 1.8
+        let hybridSmallTopHeight: CGFloat = 240 / 2.25
+        let hybridSmallBottomHeight: CGFloat = 240 - hybridSmallTopHeight
+        // LargeTopRight: the lower screen scaled by 1/2.25, at the upper right.
+        let largeTopRightSmallWidth: CGFloat = 320 / 2.25
+        let largeTopRightSmallHeight: CGFloat = 240 / 2.25
         let arrangement: CGSize
         switch layout {
         case .stacked: arrangement = CGSize(width: max(topWidth, 320), height: 480)
@@ -134,17 +148,25 @@ enum ScreenGeometry {
         case .largeTop: arrangement = CGSize(width: topWidth + 160, height: 240)
         case .upperOnly: arrangement = CGSize(width: topWidth, height: 240)
         case .lowerOnly: arrangement = CGSize(width: 320, height: 240)
+        case .largeTopRight: arrangement = CGSize(width: 543, height: 240)
+        case .hybrid: arrangement = CGSize(width: 578, height: 240)
+        case .topFullWidth: arrangement = CGSize(width: 400, height: 540)
         }
         let quarterTurn = rotation == .clockwise || rotation == .counterClockwise
         let total = quarterTurn
             ? CGSize(width: arrangement.height, height: arrangement.width)
             : arrangement
         let scale = min(available.width / total.width, available.height / total.height)
-        guard scale > 0 else { return (nil, nil) }
+        guard scale > 0 else { return (nil, nil, nil) }
 
         let top: CGRect? = layout == .lowerOnly
             ? nil
             : CGRect(x: 0, y: 0, width: topWidth * scale, height: 240 * scale)
+        let topSmall: CGRect? = layout == .hybrid
+            ? CGRect(x: topWidth * scale, y: 0,
+                     width: hybridColumnWidth * scale,
+                     height: hybridSmallTopHeight * scale)
+            : nil
         let bottom: CGRect?
         switch layout {
         case .stacked:
@@ -170,6 +192,22 @@ enum ScreenGeometry {
             bottom = nil
         case .lowerOnly:
             bottom = CGRect(x: 0, y: 0, width: 320 * scale, height: 240 * scale)
+        case .largeTopRight:
+            // The small lower screen sits at the arrangement's upper right edge.
+            bottom = CGRect(
+                x: (arrangement.width - largeTopRightSmallWidth) * scale,
+                y: 0,
+                width: largeTopRightSmallWidth * scale,
+                height: largeTopRightSmallHeight * scale
+            )
+        case .hybrid:
+            bottom = CGRect(x: topWidth * scale,
+                            y: hybridSmallTopHeight * scale,
+                            width: hybridColumnWidth * scale,
+                            height: hybridSmallBottomHeight * scale)
+        case .topFullWidth:
+            bottom = CGRect(x: 0, y: 240 * scale,
+                            width: 400 * scale, height: 300 * scale)
         }
 
         let canvasWidth = arrangement.width * scale
@@ -208,7 +246,7 @@ enum ScreenGeometry {
             let turned = rotate(rect)
             return turned.offsetBy(dx: offsetX, dy: offsetY)
         }
-        return (place(top), place(bottom))
+        return (place(top), place(bottom), place(topSmall))
     }
 
     /// Snaps a fitted size down to a whole multiple of the console's pixels,
@@ -232,28 +270,16 @@ enum ScreenGeometry {
     }
 }
 
-// MARK: - Preset readback placement
+// MARK: - Custom readback placement
 
-/// The screen placements of the presets the Metal presenter cannot draw, in the
-/// round-2 proportions measured from the reference screenshots
-/// (docs/azahar-shot, local only):
-/// - landscape `large`: the 400x240 upper screen on the left and the lower
-///   screen at 1/2.25 of its height on the right, top-aligned, with the whole
-///   arrangement fitted and centred;
-/// - landscape `hybrid`: the upper 5:3 screen on the left and the lower 4:3
-///   screen on the right, both nearly full height with a small gap;
-/// - portrait `topFullWidth`: the upper screen full width with the lower screen
-///   below it (the two screens scaled together), fitted by width and top-aligned
-///   under the safe area;
-/// - `custom`: the user's rectangles from the numeric custom pages.
-///
-/// The result is a normalised `CustomScreenPlacement` in the upright canvas, so
-/// the readback drawing, the lower-screen touch surface and the layout editors
-/// all share one geometry - including the screen rotation and the integer
-/// scaling handling in `CustomScreenGeometry`.
+/// The custom screen layouts (one per direction) are the only presets still
+/// drawn by the app's own readback placement: every other choice is a presenter
+/// arrangement (ABI 1-7), including landscape large / hybrid and portrait top
+/// full width as of round 3. The no-presenter emergency fallback still mirrors
+/// every arrangement through `ScreenGeometry.layoutViewports`.
 enum PresetScreenGeometry {
-    /// The readback viewports of the active choice for one direction, or nil
-    /// when that direction uses the presenter's fixed arrangement.
+    /// The readback viewports of a custom layout, or nil when the direction's
+    /// choice is a presenter arrangement.
     static func readbackViewports(
         settings: AppSettings,
         orientation: ControlLayoutOrientation,
@@ -261,177 +287,23 @@ enum PresetScreenGeometry {
         rotation: ScreenRotation,
         displayScale: CGFloat,
         integerScale: Bool
-    ) -> (top: CGRect?, bottom: CGRect?)? {
-        guard let placement = placement(settings: settings,
-                                        orientation: orientation,
-                                        stage: stage,
-                                        rotation: rotation) else {
-            return nil
+    ) -> (top: CGRect?, bottom: CGRect?, topSmall: CGRect?)? {
+        let placement: CustomScreenPlacement
+        switch orientation {
+        case .landscape:
+            guard settings.landscapeScreenLayout == .custom else { return nil }
+            placement = settings.customScreenLayout.placement(for: .landscape)
+        case .portrait:
+            guard settings.portraitScreenLayout == .custom else { return nil }
+            placement = settings.customScreenLayout.placement(for: .portrait)
         }
-        return CustomScreenGeometry.viewports(
+        let viewports = CustomScreenGeometry.viewports(
             available: stage,
             placement: placement,
             rotation: rotation,
             displayScale: displayScale,
             integerScale: integerScale
         )
-    }
-
-    /// The normalised placement of the active choice in `stage` points, or nil
-    /// when the presenter draws it.
-    static func placement(
-        settings: AppSettings,
-        orientation: ControlLayoutOrientation,
-        stage: CGSize,
-        rotation: ScreenRotation
-    ) -> CustomScreenPlacement? {
-        let canvas = uprightCanvas(stage: stage, rotation: rotation)
-        switch orientation {
-        case .landscape:
-            switch settings.landscapeScreenLayout {
-            case .large:
-                return largePlacement(canvas: canvas)
-            case .hybrid:
-                return hybridPlacement(canvas: canvas)
-            case .custom:
-                return settings.customScreenLayout.placement(for: .landscape)
-            case .original, .single, .side:
-                return nil
-            }
-        case .portrait:
-            switch settings.portraitScreenLayout {
-            case .topFullWidth:
-                return topFullWidthPlacement(canvas: canvas)
-            case .custom:
-                return settings.customScreenLayout.placement(for: .portrait)
-            case .original:
-                return nil
-            }
-        }
-    }
-
-    /// The canvas a placement is defined in: a quarter-turn screen rotation
-    /// swaps the stage's sides.
-    private static func uprightCanvas(stage: CGSize, rotation: ScreenRotation) -> CGSize {
-        let quarterTurn = rotation == .clockwise || rotation == .counterClockwise
-        return quarterTurn
-            ? CGSize(width: stage.height, height: stage.width)
-            : stage
-    }
-
-    /// Landscape `large`: the upper 400x240 screen and the lower 320x240 screen
-    /// scaled to 1/2.25 of the upper screen's height, placed immediately to its
-    /// right and top-aligned. The arrangement (400 + 142.2 x 240) is fitted into
-    /// the canvas and centred.
-    private static func largePlacement(canvas: CGSize) -> CustomScreenPlacement {
-        guard canvas.width >= 1, canvas.height >= 1 else {
-            return fullStagePlacement()
-        }
-        let lowerAspect = CustomScreenGeometry.nativeAspect(for: .lower)
-        let proportion: CGFloat = 2.25
-        let largeWidth = CustomScreenGeometry.topNativeSize.width      // 400
-        let largeHeight = CustomScreenGeometry.topNativeSize.height    // 240
-        let smallHeight = largeHeight / proportion                     // 106.7
-        let smallWidth = smallHeight * lowerAspect                     // 142.2
-        let arrangement = CGSize(width: largeWidth + smallWidth, height: largeHeight)
-        let scale = min(canvas.width / arrangement.width,
-                        canvas.height / arrangement.height)
-        let offsetX = (canvas.width - arrangement.width * scale) / 2
-        let offsetY = (canvas.height - arrangement.height * scale) / 2
-        func rect(_ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat) -> ScreenRect {
-            ScreenRect(x: Double((offsetX + x * scale) / canvas.width),
-                       y: Double((offsetY + y * scale) / canvas.height),
-                       width: Double(width * scale / canvas.width),
-                       height: Double(height * scale / canvas.height))
-        }
-        let top = rect(0, 0, largeWidth, largeHeight)
-        let bottom = rect(largeWidth, 0, smallWidth, smallHeight)
-        return CustomScreenPlacement(top: top, bottom: bottom,
-                                     showsTop: true, showsBottom: true,
-                                     keepsNativeAspect: true)
-    }
-
-    /// Landscape `hybrid`: the upper 5:3 screen on the left and the lower 4:3
-    /// screen on the right, both starting near the top and sized by their own
-    /// aspects to fill most of the canvas height.
-    private static func hybridPlacement(canvas: CGSize) -> CustomScreenPlacement {
-        let canvasAspect = canvas.width / max(canvas.height, 1)
-        let topX: Double = 0.0
-        let bottomX: Double = 0.565
-        let topY: Double = 0.124
-        let bottomY: Double = 0.145
-        var topWidth: Double = 0.562
-        var bottomWidth: Double = 0.426
-        var topHeight = nativeHeightFraction(width: topWidth,
-                                             canvasAspect: canvasAspect,
-                                             screen: .upper)
-        var bottomHeight = nativeHeightFraction(width: bottomWidth,
-                                                canvasAspect: canvasAspect,
-                                                screen: .lower)
-        // Both screens start at the same height, so each one has to fit above
-        // the bottom edge on its own.
-        let available = max(1 - topY, 0.2)
-        if topHeight > available {
-            let scale = available / topHeight
-            topWidth *= scale
-            topHeight *= scale
-        }
-        if bottomHeight > available {
-            let scale = available / bottomHeight
-            bottomWidth *= scale
-            bottomHeight *= scale
-        }
-        let top = ScreenRect(x: topX, y: topY, width: topWidth, height: topHeight)
-        let bottom = ScreenRect(x: bottomX, y: bottomY,
-                                width: bottomWidth, height: bottomHeight)
-        return CustomScreenPlacement(top: top, bottom: bottom,
-                                     showsTop: true, showsBottom: true,
-                                     keepsNativeAspect: true)
-    }
-
-    /// Portrait `topFullWidth`: the upper 400x240 screen above the lower screen
-    /// scaled to the same width (400x300), fitted by width and top-aligned.
-    private static func topFullWidthPlacement(canvas: CGSize) -> CustomScreenPlacement {
-        guard canvas.width >= 1, canvas.height >= 1 else {
-            return fullStagePlacement()
-        }
-        let arrangementWidth = CustomScreenGeometry.topNativeSize.width       // 400
-        let upperHeight = CustomScreenGeometry.topNativeSize.height            // 240
-        let bottomNative = CustomScreenGeometry.bottomNativeSize
-        let lowerHeight = arrangementWidth * bottomNative.height / bottomNative.width // 300
-        let arrangementHeight = upperHeight + lowerHeight                      // 540
-        let scale = min(canvas.width / arrangementWidth,
-                        canvas.height / arrangementHeight)
-        let offsetX = (canvas.width - arrangementWidth * scale) / 2
-        func rect(_ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat) -> ScreenRect {
-            ScreenRect(x: Double((offsetX + x * scale) / canvas.width),
-                       y: Double((y * scale) / canvas.height),
-                       width: Double(width * scale / canvas.width),
-                       height: Double(height * scale / canvas.height))
-        }
-        let top = rect(0, 0, arrangementWidth, upperHeight)
-        let bottom = rect(0, upperHeight, arrangementWidth, lowerHeight)
-        return CustomScreenPlacement(top: top, bottom: bottom,
-                                     showsTop: true, showsBottom: true,
-                                     keepsNativeAspect: true)
-    }
-
-    /// A full-stage placement used only for a degenerate (zero-size) stage.
-    private static func fullStagePlacement() -> CustomScreenPlacement {
-        CustomScreenPlacement(top: ScreenRect(x: 0, y: 0, width: 1, height: 1),
-                              bottom: ScreenRect(x: 0, y: 0, width: 1, height: 1),
-                              showsTop: true,
-                              showsBottom: true,
-                              keepsNativeAspect: true)
-    }
-
-    /// Height fraction of a native-aspect screen with a given width fraction,
-    /// from the canvas's own aspect (width / height).
-    private static func nativeHeightFraction(width: Double,
-                                             canvasAspect: CGFloat,
-                                             screen: ScreenKind) -> Double {
-        let screenAspect = CustomScreenGeometry.nativeAspect(for: screen)
-        guard canvasAspect > 0, screenAspect > 0 else { return width }
-        return width * Double(canvasAspect) / Double(screenAspect)
+        return (top: viewports.top, bottom: viewports.bottom, topSmall: nil)
     }
 }

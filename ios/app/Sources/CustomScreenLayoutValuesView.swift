@@ -3,7 +3,7 @@
 //  3ds2apple
 //
 //  The numeric custom screen layout pages (round 2): one page per device
-//  direction, reached from Settings -> Display -> Screen layout, the in-game
+//  direction, reached from Settings -> Display -> Landscape screen layout, the in-game
 //  quick display settings or the -openCustomLayoutPage launch hook.
 //
 //  Unlike the reference layout app (which shows framebuffer pixels), the fields

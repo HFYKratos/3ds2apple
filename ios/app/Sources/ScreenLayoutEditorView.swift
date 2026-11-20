@@ -277,7 +277,7 @@ struct ScreenLayoutEditorView: View {
     private var topBar: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(L10n.tr("Screen layout"))
+                Text(L10n.tr("Custom screen layout"))
                     .font(.footnote.weight(.semibold))
                 Text(L10n.format("Editing the %@ layout", orientation.title))
                     .font(.caption2)
