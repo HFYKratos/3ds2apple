@@ -162,6 +162,30 @@ it from a source tree).
 
 ## Evidence / QA
 
+### launcher 0.1.5-beta1 build 1 (local 0.1.5-beta1 pre-release, 2026-11-20)
+
+The 0.1.5-beta1 package on the macOS VM (macOS 26.7.3, Xcode 26.6, headless):
+
+- xcodebuild: BUILD SUCCEEDED (Release), 0 errors; universal binary
+  (x86_64 + arm64, 7,155,312-byte executable), bundle
+  com.kratos.3ds2apple.launcher, version 0.1.5 build 1.
+- self-check: **212/212 checks passed** (exit 0), including the shell-runtime
+  identity check: the pinned ROM-free shell template is exactly 6,141,225 bytes,
+  sha256 21ee0de8…, carries the pinned 4,822,128-byte MoltenVK 1.4.2 framework
+  (sha256 6cd58884…), keeps the Metal HUD + Documents file-sharing keys and
+  reports CFBundleShortVersionString 0.1.5 / CFBundleVersion 1. The packaged
+  app, freshly extracted from the ZIP, also passed 212/212.
+- screenshots: 18 non-game PNGs regenerated; the Settings version label changed
+  to "Version 0.1.5 (1)", so the four Settings screenshots changed and the other
+  fourteen stayed byte-identical.
+- artifact: out/launchers/3ds2apple-launcher-0.1.5-beta1-macos-app.zip
+  (5,532,861 bytes, sha256
+  1176c7e74602ca99b50ee5f7aa6e214e44d221604b96915c7bd62b679f7030bc), one .app
+  plus LICENSE/NOTICE/THIRD_PARTY.md at the ZIP root (THIRD_PARTY.md is the new
+  397,553-byte file with the Rust transitive licence list). Only packaging,
+  compliance and tooling changed since 0.1.4, so game behaviour is expected to
+  be identical. Real iPhone acceptance is still NOT done (issue #1).
+
 ### launcher 0.1.4 build 1 (0.1.4 release, 2026-11-19)
 
 The 0.1.4 package on the macOS VM (macOS 26.7.3, Xcode 26.6, headless):

@@ -10,6 +10,15 @@
 #   FAIL  a licence text with a different digest (tampered copy)
 #   FAIL  an extra file in the archive (both platforms)
 #   FAIL  a ROM payload (.cci) in the archive (both platforms)
+#   PASS  a Windows zip whose exe embeds the expected release version (the
+#         synthetic exe carries the single-file deps.json key
+#         "3ds2apple-launcher/<ver>")
+#   FAIL  a Windows zip whose exe embeds a different version
+#   PASS  a clean win-selftest.sh log: exit code 0, SELF-TEST OK, 32 PASS,
+#         0 FAIL, 0 WARN and the expected version line (--win-selftest-log)
+#   FAIL  a win-selftest.sh log with a failure, or a missing log file
+#   PASS  a release directory named v<ver> with assets matching that version
+#   FAIL  a release directory named v<ver> whose exe embeds another version
 #   PASS  a release directory with exactly the two canonical assets
 #   FAIL  a release directory with a licence text attached as a third asset, or
 #         with one platform asset missing
@@ -109,7 +118,9 @@ make_windows_zip() {
   local args=("$WINDOWS_EXE") text
   rm -rf "$stage"
   mkdir -p "$stage"
-  printf 'synthetic Windows launcher payload for release-selfcheck\n' > "$stage/$WINDOWS_EXE"
+  # Mirror the real single-file exe: the uncompressed deps.json carries the build
+  # version as the entry project key "3ds2apple-launcher/<ver>".
+  printf 'synthetic Windows launcher payload for release-selfcheck\n"3ds2apple-launcher/0.1.0"\n' > "$stage/$WINDOWS_EXE"
   for text in "${LICENSE_TEXTS[@]}"; do
     [ "$text" = "$missing" ] && continue
     cp "$ROOT/$text" "$stage/$text"
@@ -142,7 +153,29 @@ make_macos_zip() {
   ( cd "$stage" && zip -q -r "$zip" "${args[@]}" )
 }
 
-echo "[1/4] windows zip: complete archive passes"
+# make_win_selftest_log FILE VERSION [PASS_COUNT] [FAIL_COUNT] [WARN_COUNT] [EXIT_CODE]
+# Minimal stand-in for the log scripts/release/win-selftest.sh writes: the
+# version header line, [PASS]/[FAIL]/[WARN] status lines, the final verdict line
+# and the appended "win-selftest: exit code N" evidence line.
+make_win_selftest_log() {
+  local log="$1" version="$2"
+  local pass_count="${3:-32}" fail_count="${4:-0}" warn_count="${5:-0}" exit_code="${6:-0}" i
+  {
+    printf '3ds2apple launcher self-test \xc2\xb7 3ds2apple-launcher-windows/%s\n' "$version"
+    for ((i = 0; i < pass_count; i++)); do printf '[PASS] synthetic check %d\n' "$i"; done
+    for ((i = 0; i < fail_count; i++)); do printf '[FAIL] synthetic failure %d\n' "$i"; done
+    for ((i = 0; i < warn_count; i++)); do printf '[WARN] synthetic warning %d\n' "$i"; done
+    printf '\n'
+    if [ "$fail_count" -eq 0 ] && [ "$warn_count" -eq 0 ]; then
+      printf 'SELF-TEST OK\n'
+    else
+      printf 'SELF-TEST FAILED (%s failure(s), %s warning(s))\n' "$fail_count" "$warn_count"
+    fi
+    printf 'win-selftest: exit code %s\n' "$exit_code"
+  } > "$log"
+}
+
+echo "[1/5] windows zip: complete archive passes"
 W_COMPLETE="$CASE_DIR/windows-complete.zip"
 make_windows_zip "$W_COMPLETE"
 run_verify_case "windows complete -> PASS" pass "windows zip: entries are exactly" --windows-zip "$W_COMPLETE"
@@ -164,7 +197,27 @@ make_windows_zip "$W_ROM" "" "" "" game.cci
 run_verify_case "windows .cci payload -> FAIL" fail "forbidden payload" --windows-zip "$W_ROM"
 
 echo
-echo "[2/4] macOS zip: complete archive passes"
+echo "[2/5] windows zip: embedded launcher version + native self-test log"
+run_verify_case "windows exe embeds the expected version -> PASS" pass "embeds launcher version 0.1.0" \
+  --windows-zip "$W_COMPLETE" --expect-package-version 0.1.0
+run_verify_case "windows exe version mismatch -> FAIL" fail "does not embed launcher version 0.1.4" \
+  --windows-zip "$W_COMPLETE" --expect-package-version 0.1.4
+
+GOOD_LOG="$CASE_DIR/win-selftest-ok.log"
+make_win_selftest_log "$GOOD_LOG" 0.1.0
+run_verify_case "clean win-selftest log -> PASS" pass "32 PASS / 0 FAIL / 0 WARN" \
+  --windows-zip "$W_COMPLETE" --expect-package-version 0.1.0 --win-selftest-log "$GOOD_LOG"
+
+BAD_LOG="$CASE_DIR/win-selftest-fail.log"
+make_win_selftest_log "$BAD_LOG" 0.1.0 31 1 0 1
+run_verify_case "win-selftest log with a FAIL -> FAIL" fail "does not prove a clean native self-test" \
+  --windows-zip "$W_COMPLETE" --expect-package-version 0.1.0 --win-selftest-log "$BAD_LOG"
+
+run_verify_case "missing win-selftest log -> FAIL" fail "win-selftest-log file not found" \
+  --windows-zip "$W_COMPLETE" --expect-package-version 0.1.0 --win-selftest-log "$CASE_DIR/does-not-exist.log"
+
+echo
+echo "[3/5] macOS zip: complete archive passes"
 M_COMPLETE="$CASE_DIR/macos-complete.zip"
 make_macos_zip "$M_COMPLETE"
 run_verify_case "macOS complete -> PASS" pass "macOS zip: top level is exactly" --macos-zip "$M_COMPLETE"
@@ -186,11 +239,11 @@ make_macos_zip "$M_ROM" "" "" "" rom.cci
 run_verify_case "macOS .cci payload -> FAIL" fail "forbidden payload" --macos-zip "$M_ROM"
 
 echo
-echo "[3/4] both platform zips together"
+echo "[4/5] both platform zips together"
 run_verify_case "windows + macOS complete -> PASS" pass "" --windows-zip "$W_COMPLETE" --macos-zip "$M_COMPLETE"
 
 echo
-echo "[4/4] release directory: exactly the two assets"
+echo "[5/5] release directory: exactly the two assets"
 RD_TWO="$CASE_DIR/release-dir-two-assets"
 mkdir -p "$RD_TWO"
 cp "$W_COMPLETE" "$RD_TWO/3ds2apple-0.1.0-windows-x64.zip"
@@ -208,6 +261,18 @@ RD_ONE="$CASE_DIR/release-dir-one-asset"
 mkdir -p "$RD_ONE"
 cp "$W_COMPLETE" "$RD_ONE/3ds2apple-0.1.0-windows-x64.zip"
 run_verify_case "release dir with one asset -> FAIL" fail "expected exactly 2 asset files" --release-dir "$RD_ONE"
+
+RD_VERSIONED="$CASE_DIR/v0.1.0"
+mkdir -p "$RD_VERSIONED"
+cp "$W_COMPLETE" "$RD_VERSIONED/3ds2apple-0.1.0-windows-x64.zip"
+cp "$M_COMPLETE" "$RD_VERSIONED/3ds2apple-0.1.0-macos-universal.zip"
+run_verify_case "release dir named v0.1.0 with matching exe -> PASS" pass "embeds launcher version 0.1.0" --release-dir "$RD_VERSIONED"
+
+RD_WRONGVER="$CASE_DIR/v0.9.9"
+mkdir -p "$RD_WRONGVER"
+cp "$W_COMPLETE" "$RD_WRONGVER/3ds2apple-0.1.0-windows-x64.zip"
+cp "$M_COMPLETE" "$RD_WRONGVER/3ds2apple-0.1.0-macos-universal.zip"
+run_verify_case "release dir name v0.9.9 vs exe 0.1.0 -> FAIL" fail "does not embed launcher version 0.9.9" --release-dir "$RD_WRONGVER"
 
 echo
 echo "release-selfcheck: $CHECKS cases, $PASS_CASES passed, $FAIL_CASES failed"

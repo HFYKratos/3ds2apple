@@ -20,11 +20,11 @@
 //    2. <checkout>/build/third_party/MoltenVK.framework (the task-32 build
 //       input; also the xcframework path from scripts/README.md);
 //    3. <checkout>/out/shell/3ds2apple-shell.ipa - the pinned ROM-free shell
-//       template (0.1.4 build 1); Payload/*.app/Frameworks/MoltenVK.framework is
+//       template (0.1.5-beta1 build 1); Payload/*.app/Frameworks/MoltenVK.framework is
 //       extracted read-only to a system temporary directory.
 //
 //  The binary is pinned to MoltenVK 1.4.2 ios-arm64 (the one shipped in
-//  out/shell/3ds2apple-shell.ipa 0.1.4 build 1): 4,822,128 bytes, SHA-256
+//  out/shell/3ds2apple-shell.ipa 0.1.5-beta1 build 1): 4,822,128 bytes, SHA-256
 //  6cd58884... and a Mach-O arm64 dynamic library. The shell template itself is
 //  pinned by size+SHA-256 too. Anything else is refused, so a deploy can never
 //  silently end up on the software renderer.
@@ -47,15 +47,15 @@ enum ShellRuntime {
     static let expectedSHA256 = "6cd5888490d08b36356d04c50c05e2eda5b9bcb3d0338ece693a28987de96aff"
 
     /// Pinned ROM-free shell template that carries the verified framework
-    /// (shell 0.1.4 build 1, Metal HUD + Documents file sharing enabled).
+    /// (shell 0.1.5-beta1 build 1, Metal HUD + Documents file sharing enabled).
     static let pinnedTemplateRelativePath = "out/shell/3ds2apple-shell.ipa"
-    /// Rebuilt 0.1.4 build 1 ROM-free shell IPA from current main (0.1.4 release)
-    /// local pre-release; the shell's CFBundleShortVersionString is the numeric 0.1.4).
-    static let pinnedTemplateBytes: Int64 = 6_141_211
-    static let pinnedTemplateSHA256 = "8f3e24a3ba57625d57afe64082a71a23570674c0d3317bc2fc7001f9e32313b9"
+    /// Rebuilt 0.1.5-beta1 build 1 ROM-free shell IPA from current main (0.1.5-beta1
+    /// local pre-release; the shell's CFBundleShortVersionString is the numeric 0.1.5).
+    static let pinnedTemplateBytes: Int64 = 6_141_225
+    static let pinnedTemplateSHA256 = "21ee0de8455b9ef7a302d02170e3c5e5b537715e568d6b0ea7310e1b6b212e43"
     /// The rebuilt shell identity the launcher is built against. The pinned
     /// template must report exactly these values; another shell build is refused.
-    static let expectedShellVersion = "0.1.4"
+    static let expectedShellVersion = "0.1.5"
     static let expectedShellBuild = "1"
 
     /// Info.plist keys the shell must keep: the Metal HUD build flag and the
@@ -202,7 +202,7 @@ enum ShellRuntime {
         return problems
     }
 
-    /// The pinned shell's advertised product version/build (0.1.4 build 1 since
+    /// The pinned shell's advertised product version/build (0.1.5-beta1 build 1 since
     /// the product-version reset). Empty means the shell is the identity this
     /// launcher pins; anything else means a mismatched template/build.
     static func shellIdentityProblems(inShellAppAt appPath: String) -> [String] {
@@ -319,7 +319,7 @@ enum ShellRuntime {
     }
 
     /// Validate the pinned shell template itself (IPA bytes + the embedded
-    /// framework + the shell Info.plist + the 0.1.4 build 1 identity). Used by
+    /// framework + the shell Info.plist + the 0.1.5-beta1 build 1 identity). Used by
     /// the self-check; empty is good.
     static func inspectPinnedTemplate(at ipaPath: String) -> [String] {
         do {

@@ -160,7 +160,8 @@ check "the More rows have no bare Label leftovers" bash -c '! grep -Fq -- "Label
 check "Save Manager row identifier" contains "${SETTINGS}" 'accessibilityIdentifier("settings-save-manager")'
 check "Export logs row identifier" contains "${SETTINGS}" 'accessibilityIdentifier("settings-export-logs")'
 check "About row identifier" contains "${SETTINGS}" 'accessibilityIdentifier("settings-about")'
-check "moreRowLabel pins the accent-coloured icon" contains "${SETTINGS}" 'foregroundStyle(Color.accentColor)'
+check "moreRowLabel pins the accent-coloured icon" contains "${SETTINGS}" 'iconColor: Color = .accentColor'
+check "moreRowLabel applies the icon colour" contains "${SETTINGS}" 'foregroundStyle(iconColor)'
 check "moreRowLabel pins the primary text colour" contains "${SETTINGS}" 'Text(title)'
 check "moreRowLabel shares one explicit composition" contains "${SETTINGS}" 'HStack(spacing: 12) {'
 

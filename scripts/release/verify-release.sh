@@ -11,8 +11,9 @@
 # Release page.
 #
 # This script never publishes or modifies anything: archives are listed with
-# unzip and licence texts are streamed with "unzip -p" (nothing is extracted to
-# disk); the release directory is only read.
+# unzip, licence texts and the Windows exe are streamed with "unzip -p" (nothing
+# is extracted to disk); the release directory and the optional self-test log are
+# only read.
 #
 # Checks (each result is printed as [PASS]/[FAIL]/[SKIP]):
 #   windows zip   exactly 3ds2apple-launcher.exe + LICENSE + NOTICE +
@@ -26,11 +27,24 @@
 #                 no GamePack-*.dylib, no Roms/ entries
 #   release dir   exactly the two canonical asset files, same <ver>, no extras
 #                 (the licence texts are inside the zips, never separate assets)
-#   always        prints byte size and SHA-256 of each verified asset
+#   windows zip   the exe embeds the expected release version: the .NET single-file
+#                 bundle stores deps.json as plain UTF-8 and its entry project key
+#                 is "3ds2apple-launcher/<ver>"; the expected version comes from
+#                 --expect-package-version, the v<ver> release directory name or
+#                 the canonical zip file name (see check_windows_exe_version)
+#   optional      --win-selftest-log FILE: the log written by
+#                 scripts/release/win-selftest.sh must show exit code 0,
+#                 SELF-TEST OK, 32 PASS, 0 FAIL, 0 WARN and the expected
+#                 3ds2apple-launcher-windows/<ver> line (+1 PASS)
+#   always        prints byte size and SHA-256 of each verified asset, and the
+#                 uncompressed byte size of the Windows exe
 #
 # Usage:
 #   scripts/release/verify-release.sh --release-dir out/release/v0.1.0
-#   scripts/release/verify-release.sh --windows-zip A.zip --macos-zip B.zip
+#   scripts/release/verify-release.sh --release-dir out/release/v0.1.0 \
+#     --win-selftest-log out/release/win-selftest-0.1.0.log
+#   scripts/release/verify-release.sh --windows-zip A.zip --macos-zip B.zip \
+#     --expect-package-version 0.1.0
 #
 # Exit codes: 0 = every requested check passed, 1 = at least one check failed,
 #             2 = usage/tooling error (nothing was verified).
@@ -42,7 +56,8 @@ ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Both shipped packages must carry these three repository files at the ZIP root.
 LICENSE_TEXTS=(LICENSE NOTICE THIRD_PARTY.md)
 # Exact entry sets (no directories, nothing else).
-WINDOWS_ENTRIES=(3ds2apple-launcher.exe LICENSE NOTICE THIRD_PARTY.md)
+WINDOWS_EXE="3ds2apple-launcher.exe"
+WINDOWS_ENTRIES=("$WINDOWS_EXE" LICENSE NOTICE THIRD_PARTY.md)
 MACOS_TOP_LEVEL=(3ds2apple-launcher.app LICENSE NOTICE THIRD_PARTY.md)
 
 PASS_COUNT=0
@@ -54,14 +69,26 @@ usage() {
 Read-only verification of the two platform release assets.
 
 Usage:
-  scripts/release/verify-release.sh --release-dir DIR
-  scripts/release/verify-release.sh --windows-zip FILE --macos-zip FILE
+  scripts/release/verify-release.sh --release-dir DIR [--win-selftest-log FILE]
+  scripts/release/verify-release.sh --windows-zip FILE --macos-zip FILE \
+    [--expect-package-version VER] [--win-selftest-log FILE]
 
 Options:
   --release-dir DIR   Verify a directory assembled by assemble-release.sh: it must
-                      contain exactly the two canonical platform zips.
+                      contain exactly the two canonical platform zips. A directory
+                      named v<ver> (out/release/v<ver>) also supplies the expected
+                      release version for the Windows exe cross-check.
   --windows-zip FILE  Windows single-file launcher zip to verify.
   --macos-zip FILE    macOS launcher .app zip to verify.
+  --expect-package-version VER
+                      Expected release version embedded in the Windows exe
+                      (overrides the v<ver> release directory name and the
+                      canonical zip file name).
+  --win-selftest-log FILE
+                      Log produced by scripts/release/win-selftest.sh on the
+                      Windows host; adds one PASS when it proves exit code 0,
+                      SELF-TEST OK, 32 PASS, 0 FAIL, 0 WARN and the expected
+                      launcher version line.
   -h, --help          Show this help and exit.
 
 Both zips must carry LICENSE, NOTICE and THIRD_PARTY.md at their root, identical
@@ -152,8 +179,102 @@ check_license_texts() {
   done
 }
 
+# Uncompressed byte size of one archive entry, read from the zip central directory.
+zip_entry_bytes() {
+  local zip="$1" entry="$2"
+  unzip -l "$zip" "$entry" 2>/dev/null | awk -v name="$entry" '$4 == name { print $1; exit }' || true
+}
+
+# The Windows exe embeds the release version. Feasibility experiment on the
+# shipped 0.1.4 exe (163,875,695 B, 2026-11-20):
+#   - the exe is a .NET self-contained single-file bundle (PublishSingleFile +
+#     EnableCompressionInSingleFile), so its assemblies are compressed and the
+#     runtime product string "3ds2apple-launcher-windows/<ver>"
+#     (LauncherInfo.VersionLine) is NOT present as contiguous bytes: strings -a
+#     and strings -el find no "3ds2apple-launcher-windows/" at all, and the
+#     version line is interpolated at run time from assembly metadata;
+#   - the bundle keeps deps.json as PLAIN UTF-8 (the single-file host reads it
+#     without extraction): the exe contains the JSON project key
+#     "3ds2apple-launcher/<ver>" (in the targets and libraries sections, at
+#     ~163.8 MB of the 157,292,331 B zip / 163,875,695 B exe);
+#   - a UTF-16LE search therefore matches nothing useful while a streaming UTF-8
+#     grep does. This is the reliable, encoding-safe check: the literal deps.json
+#     project key is the build's Version property, i.e. exactly the release
+#     version. Everything is streamed from the zip; nothing is extracted.
+check_windows_exe_version() {
+  local zip="$1" expected="$2" exe_bytes found
+  exe_bytes="$(zip_entry_bytes "$zip" "$WINDOWS_EXE")"
+  if [ -z "$exe_bytes" ]; then
+    exe_bytes="unknown"
+  fi
+  if [ -z "$expected" ]; then
+    skip "windows zip: launcher exe version not cross-checked (no expected release version; pass --expect-package-version or use a v<ver> release dir)"
+    info "windows zip: 3ds2apple-launcher.exe is $exe_bytes bytes uncompressed"
+    return
+  fi
+  found="$(unzip -p "$zip" "$WINDOWS_EXE" 2>/dev/null | LC_ALL=C grep -a -o '"3ds2apple-launcher/[^"]*"' | LC_ALL=C sort -u || true)"
+  if printf '%s\n' "$found" | LC_ALL=C grep -Fxq -e "\"3ds2apple-launcher/$expected\""; then
+    pass "windows zip: launcher exe embeds launcher version $expected (deps.json, $exe_bytes bytes uncompressed)"
+  else
+    fail "windows zip: launcher exe does not embed launcher version $expected (found: ${found:-nothing})"
+  fi
+}
+
+# The optional --win-selftest-log folds the native Windows acceptance run into
+# the release gate as exactly one PASS. The file is produced by
+# scripts/release/win-selftest.sh: it holds the exe's stdout+stderr (decoded from
+# the Windows console code page to UTF-8, CR stripped) followed by
+# "win-selftest: exit code <n>". A missing file or any failed content check is a
+# FAIL, never a skip: a release must not claim the Windows self-test passed.
+check_win_selftest_log() {
+  local log="$1" expected="$2" problems="" pass_lines fail_lines warn_lines version_line
+  if [ ! -f "$log" ]; then
+    fail "windows zip: --win-selftest-log file not found: $log"
+    return
+  fi
+  pass_lines="$(tr -d '\r' < "$log" 2>/dev/null | LC_ALL=C grep -a -c '^\[PASS\]' || true)"
+  fail_lines="$(tr -d '\r' < "$log" 2>/dev/null | LC_ALL=C grep -a -c '^\[FAIL\]' || true)"
+  warn_lines="$(tr -d '\r' < "$log" 2>/dev/null | LC_ALL=C grep -a -c '^\[WARN\]' || true)"
+  if [ "$pass_lines" -ne 32 ]; then
+    problems="$problems 32 PASS lines expected, found $pass_lines;"
+  fi
+  if [ "$fail_lines" -ne 0 ]; then
+    problems="$problems $fail_lines FAIL lines;"
+  fi
+  if [ "$warn_lines" -ne 0 ]; then
+    problems="$problems $warn_lines WARN lines;"
+  fi
+  if ! tr -d '\r' < "$log" 2>/dev/null | LC_ALL=C grep -a -Fxq 'SELF-TEST OK'; then
+    problems="$problems no exact SELF-TEST OK final line;"
+  fi
+  if ! tr -d '\r' < "$log" 2>/dev/null | LC_ALL=C grep -a -Fxq 'win-selftest: exit code 0'; then
+    problems="$problems no 'win-selftest: exit code 0' evidence line;"
+  fi
+  version_line="$(tr -d '\r' < "$log" 2>/dev/null | LC_ALL=C grep -a -E '^3ds2apple launcher self-test ' | head -n 1 || true)"
+  if [ -n "$expected" ]; then
+    case "$version_line" in
+      *"3ds2apple-launcher-windows/$expected") ;;
+      *) problems="$problems version line does not end with 3ds2apple-launcher-windows/$expected;" ;;
+    esac
+  else
+    case "$version_line" in
+      *"3ds2apple-launcher-windows/"?*) ;;
+      *) problems="$problems no 3ds2apple-launcher-windows/<ver> version line;" ;;
+    esac
+  fi
+  if [ -z "$problems" ]; then
+    if [ -n "$expected" ]; then
+      pass "windows zip: --win-selftest-log: 32 PASS / 0 FAIL / 0 WARN, SELF-TEST OK, exit code 0, 3ds2apple-launcher-windows/$expected ($log)"
+    else
+      pass "windows zip: --win-selftest-log: 32 PASS / 0 FAIL / 0 WARN, SELF-TEST OK, exit code 0 ($log)"
+    fi
+  else
+    fail "windows zip: --win-selftest-log does not prove a clean native self-test:$problems ($log)"
+  fi
+}
+
 check_windows_zip() {
-  local zip="$1" entries expected actual
+  local zip="$1" expected_version="$2" entries expected actual
   if [ ! -f "$zip" ]; then
     fail "windows zip: not a file: $zip"
     return
@@ -173,6 +294,7 @@ check_windows_zip() {
   fi
   check_license_texts "$zip" "windows zip" "$entries"
   pass "windows zip: $(file_bytes "$zip") bytes, sha256 $(hash_file "$zip")"
+  check_windows_exe_version "$zip" "$expected_version"
 }
 
 check_macos_zip() {
@@ -269,6 +391,8 @@ find_asset() {
 
 main() {
   local release_dir="" windows_zip="" macos_zip="" text
+  local expect_package_version="" win_selftest_log=""
+  local expected_version="" expected_version_source="" base candidate
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --release-dir)
@@ -286,6 +410,16 @@ main() {
         macos_zip="$2"
         shift 2
         ;;
+      --expect-package-version)
+        [ "$#" -ge 2 ] || die "--expect-package-version requires a value"
+        expect_package_version="$2"
+        shift 2
+        ;;
+      --win-selftest-log)
+        [ "$#" -ge 2 ] || die "--win-selftest-log requires a value"
+        win_selftest_log="$2"
+        shift 2
+        ;;
       -h|--help)
         usage
         exit 0
@@ -298,6 +432,11 @@ main() {
         ;;
     esac
   done
+
+  case "$expect_package_version" in
+    "") ;;
+    *[!A-Za-z0-9.+-]*) die "invalid --expect-package-version: $expect_package_version" ;;
+  esac
 
   if [ -n "$release_dir" ]; then
     if [ -n "$windows_zip$macos_zip" ]; then
@@ -315,6 +454,45 @@ main() {
     fi
   fi
 
+  # Expected release version for the Windows exe / --win-selftest-log checks.
+  # Precedence: --expect-package-version, the v<ver> release directory name (e.g.
+  # out/release/v0.1.4 -> 0.1.4), the canonical Windows zip file name. When none
+  # applies the exe version check is reported as [SKIP] instead of guessing.
+  if [ -n "$expect_package_version" ]; then
+    expected_version="$expect_package_version"
+    expected_version_source="--expect-package-version"
+  elif [ -n "$release_dir" ]; then
+    base="$(basename "$release_dir")"
+    if [[ "$base" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.]+)?$ ]]; then
+      expected_version="${base#v}"
+      expected_version_source="release dir name $base"
+    fi
+  fi
+  if [ -z "$expected_version" ] && [ -n "$windows_zip" ]; then
+    base="$(basename "$windows_zip")"
+    case "$base" in
+      3ds2apple-*-windows-x64.zip)
+        candidate="${base#3ds2apple-}"
+        candidate="${candidate%-windows-x64.zip}"
+        if [ -n "$candidate" ]; then
+          expected_version="$candidate"
+          expected_version_source="canonical Windows zip file name"
+        fi
+        ;;
+    esac
+  fi
+  if [ -z "$release_dir" ]; then
+    if [ -n "$win_selftest_log" ] && [ -z "$windows_zip" ]; then
+      die "--win-selftest-log requires the Windows zip (use --windows-zip or --release-dir)"
+    fi
+    if [ -n "$expect_package_version" ] && [ -z "$windows_zip" ]; then
+      die "--expect-package-version requires the Windows zip (use --windows-zip or --release-dir)"
+    fi
+  fi
+  if [ -n "$win_selftest_log" ]; then
+    win_selftest_log="$(resolve_path "$win_selftest_log")"
+  fi
+
   require_unzip
   for text in "${LICENSE_TEXTS[@]}"; do
     [ -f "$ROOT/$text" ] || die "repository licence text missing: $ROOT/$text (run from the repository checkout)"
@@ -323,12 +501,18 @@ main() {
   if [ -n "$release_dir" ]; then
     info "release dir: $release_dir"
   fi
+  if [ -n "$expected_version" ]; then
+    info "expected release version: $expected_version (from $expected_version_source)"
+  fi
 
   if [ -n "$windows_zip" ]; then
     windows_zip="$(resolve_path "$windows_zip")"
-    check_windows_zip "$windows_zip"
+    check_windows_zip "$windows_zip" "$expected_version"
   else
     skip "windows zip: not requested"
+  fi
+  if [ -n "$win_selftest_log" ]; then
+    check_win_selftest_log "$win_selftest_log" "$expected_version"
   fi
   if [ -n "$macos_zip" ]; then
     macos_zip="$(resolve_path "$macos_zip")"

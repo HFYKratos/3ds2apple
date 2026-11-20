@@ -1,0 +1,24 @@
+# cargo-about configuration for the 3ds2apple Rust workspaces.
+#
+# Used to regenerate the "Rust transitive dependencies" section at the end of
+# THIRD_PARTY.md. See licenses/rust/README.md for the exact commands.
+# cargo-about 0.9.3.
+accepted = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "CC0-1.0",
+    "Unlicense",
+    "0BSD",
+    "BSL-1.0",
+    "MPL-2.0",
+    "OpenSSL",
+    "CDLA-Permissive-2.0",
+]

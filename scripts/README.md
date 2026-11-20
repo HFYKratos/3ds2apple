@@ -249,7 +249,8 @@ Large generated files can exhaust memory on an 8 GB build VM:
 | Script | Purpose |
 |---|---|
 | `release/assemble-release.sh` | Collect the two platform launcher zips (Windows + macOS), rename them to the canonical `3ds2apple-<ver>-{windows-x64,macos-universal}.zip` names and run the verifier; the licence texts travel inside the zips, so no `SHA256SUMS`/separate license/shell assets are collected |
-| `release/verify-release.sh` | Read-only release gate: exactly the two platform zips; each archive is exactly launcher (`.exe` / `.app`) + `LICENSE`/`NOTICE`/`THIRD_PARTY.md` with digests equal to the repository files; no ROM/pack/IPA data |
+| `release/verify-release.sh` | Read-only release gate: exactly the two platform zips; each archive is exactly launcher (`.exe` / `.app`) + `LICENSE`/`NOTICE`/`THIRD_PARTY.md` with digests equal to the repository files; no ROM/pack/IPA data; optional Windows exe version-string check and `--win-selftest-log` evidence check |
+| `release/win-selftest.sh` | Runs a release Windows zip's exe `--self-test` natively on a Windows host through WSL interop and validates the exit code, `SELF-TEST OK`, 32 PASS / 0 FAIL / 0 WARN and the launcher version line (`--keep` keeps the log) |
 
 The full release policy (two assets only, bilingual release notes,
 immutable tags) is in [CONTRIBUTING.md](../CONTRIBUTING.md#release-policy).

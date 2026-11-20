@@ -132,7 +132,9 @@ shape:
 1. Build the two packages and run the project test gates (`cargo test`,
    `dotnet test`, `scripts/tests/*-selfcheck.sh`, including
    `bash scripts/tests/release-selfcheck.sh`); the Windows package must pass
-   its clean-folder `--self-test`.
+   its clean-folder `--self-test` and, on a Windows host, the native
+   `bash scripts/release/win-selftest.sh --zip <windows zip> --expect-version <version>`
+   (32 PASS / 0 FAIL / 0 WARN, version line, exit 0).
 2. Assemble the release directory (this also renames the build artifacts to the
    canonical asset names and runs the verifier):
 
@@ -140,7 +142,8 @@ shape:
    bash scripts/release/assemble-release.sh --version v<version> \
      --windows-zip out/launchers/3ds2apple-windows-single-<version>.zip \
      --macos-zip out/launchers/3ds2apple-launcher-<version>-macos-app.zip
-   bash scripts/release/verify-release.sh --release-dir out/release/v<version>
+   bash scripts/release/verify-release.sh --release-dir out/release/v<version> \
+     [--win-selftest-log <log from win-selftest.sh>]
    ```
 
    The verifier requires both zips to carry `LICENSE`, `NOTICE` and
