@@ -162,6 +162,22 @@ it from a source tree).
 
 ## Evidence / QA
 
+### launcher 0.1.5 build 1 (0.1.5 release, 2026-11-20)
+
+The 0.1.5 package on the macOS VM (macOS 26.7.3, Xcode 26.6, headless):
+
+- xcodebuild: BUILD SUCCEEDED (Release), 0 errors; universal binary
+  (x86_64 + arm64), bundle com.kratos.3ds2apple.launcher, version 0.1.5 build 1.
+- self-check: **212/212 checks passed** (exit 0), including the shell-runtime
+  identity check: the pinned ROM-free shell template is exactly 6,259,066 bytes,
+  sha256 72b08c96…, package version 0.1.5; the packaged app, freshly extracted
+  from the ZIP, also passed 212/212.
+- screenshots: 18 non-game PNGs regenerated; the Settings version label shows
+  "Version 0.1.5 (1)".
+- artifact: out/launchers/3ds2apple-launcher-0.1.5-macos-app.zip
+  (5,532,777 bytes, sha256
+  bba678ce0862794b2de73a2901bf25410db355900a31c3a50254725cb9e6407c); GitHub
+  Release v0.1.5. Real iPhone acceptance is still NOT done (issue #1).
 ### launcher 0.1.5-beta1 build 1 (local 0.1.5-beta1 pre-release, 2026-11-20)
 
 The 0.1.5-beta1 package on the macOS VM (macOS 26.7.3, Xcode 26.6, headless):
