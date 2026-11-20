@@ -380,9 +380,12 @@ round-4 drag editor described below.
   landscape mapping 896x414 pt and portrait 414x896 pt, centres and sizes
   normalised to our full-screen overlay (skin frames divided by the mapping
   size, five decimals; the delta-emulator reference itself scales the same way).
-  Round 6 moves the whole **portrait** set down by +0.31 so it sits in the free
-  band below the portrait picture (C-stick to the bottom-right corner,
-  (0.92, 0.90) at size 0.10), and turns the **D-pad** into a tight four-button
+  Round 6 moves the whole **portrait** set down by +0.38 so every row (including
+  the ZL/L/Select/Start/R/ZR shoulder row) sits in the free band below the
+  portrait picture — the picture bottom is around y=0.69 on a modern phone and
+  the set occupies roughly 0.69–0.96 — and puts the C-stick in the bottom-right
+  corner at (0.92, 0.94) with a smaller 0.08 size. The **D-pad** is a tight
+  four-button
   cross: the four directions keep independent elements, the size is 0.12681 in
   landscape / 0.12440 in portrait (so the cross span equals the skin D-pad
   frame), centres are offset by half a button side in container points, and the
@@ -1173,8 +1176,8 @@ Instant save states:
   follow-up for a future presenter arrangement.
 - The shipped default controls come from the ModernCenteredX2 reference skin,
   with the round-6 device-feedback adjustments: the portrait set sits in the free
-  band below the picture (moved down +0.31) and the D-pad is a tight four-button
-  cross. The skin is read only for numbers; its artwork is not used. The
+  band below the picture (moved down +0.38 so the shoulder row clears the
+  picture) and the D-pad is a tight four-button cross. The skin is read only for numbers; its artwork is not used. The
   reference layout app's behaviour rows (slide buttons, relative stick centre,
   D-pad slide, Combo Button) are future work; the available options are
   visibility, size scale, opacity and reset.

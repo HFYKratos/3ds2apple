@@ -270,8 +270,8 @@ check "control layout has the Circle Pad" contains ios/app/Sources/ControlLayout
 check "control layout has the C-stick" contains ios/app/Sources/ControlLayout.swift 'case cStick'
 check "control layout carries ZL/ZR" contains ios/app/Sources/ControlLayout.swift 'case buttonZL'
 check "layout persistence is versioned" contains ios/app/Sources/ControlLayout.swift 'currentVersion'
-check "default control layout uses the round-6 skin values (portrait moved down, dpad cross)" \
-  bash -c 'grep -q "x: 0.18583, y: 0.80797, size: 0.27778" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.16546, y: 0.78266, size: 0.24396" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.34989, y: 0.75905, size: 0.12681" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.44565, y: 0.79409, size: 0.12440" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.92, y: 0.90, size: 0.10" ios/app/Sources/ControlLayout.swift'
+check "default control layout uses the round-6 final values (portrait shoulder row clear, dpad cross, small corner C-stick)" \
+  bash -c 'grep -q "x: 0.18583, y: 0.80797, size: 0.27778" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.16546, y: 0.85266, size: 0.24396" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.34989, y: 0.75905, size: 0.12681" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.44565, y: 0.86409, size: 0.12440" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.92, y: 0.94, size: 0.08" ios/app/Sources/ControlLayout.swift'
 check "D-pad buttons use the 0.16 cross corner radius" \
   bash -c 'grep -q "isDpadDirection ? 0.16 : 0.42" ios/app/Sources/ControlLayout.swift && grep -q "shapeCornerFactor" ios/app/Sources/VirtualControlsView.swift'
 check "pause menu rows use the unified icon-free style" \
