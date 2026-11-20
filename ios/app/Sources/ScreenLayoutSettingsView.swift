@@ -34,7 +34,7 @@ struct ScreenLayoutSettingsView: View {
             presetSection
             customSection
         }
-        .navigationTitle(L10n.tr("Landscape screen layout"))
+        .navigationTitle(L10n.tr("Screen layout"))
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $pickerOrientation) { orientation in
             LayoutPresetPickerView(settings: settings, orientation: orientation)

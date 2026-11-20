@@ -149,6 +149,84 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
     static var editorOrder: [ControlElement] { allCases }
 }
 
+/// One row of the in-game virtual-control options (round 4). A row is usually
+/// one control, but the D-pad's four directions are toggled and scaled as one
+/// group so the pause menu stays short (reference-layout-app style).
+enum ControlOptionItem: String, CaseIterable, Identifiable {
+    case buttonA
+    case buttonB
+    case buttonX
+    case buttonY
+    case buttonL
+    case buttonR
+    case buttonZL
+    case buttonZR
+    case buttonStart
+    case buttonSelect
+    case dpad
+    case circlePad
+    case cStick
+
+    var id: String { rawValue }
+
+    /// The runtime controls this row covers (the D-pad row covers all four
+    /// directions).
+    var elements: [ControlElement] {
+        switch self {
+        case .buttonA: return [.buttonA]
+        case .buttonB: return [.buttonB]
+        case .buttonX: return [.buttonX]
+        case .buttonY: return [.buttonY]
+        case .buttonL: return [.buttonL]
+        case .buttonR: return [.buttonR]
+        case .buttonZL: return [.buttonZL]
+        case .buttonZR: return [.buttonZR]
+        case .buttonStart: return [.buttonStart]
+        case .buttonSelect: return [.buttonSelect]
+        case .dpad: return [.dpadUp, .dpadDown, .dpadLeft, .dpadRight]
+        case .circlePad: return [.circlePad]
+        case .cStick: return [.cStick]
+        }
+    }
+
+    /// The option row a control belongs to.
+    static func item(containing element: ControlElement) -> ControlOptionItem {
+        switch element {
+        case .dpadUp, .dpadDown, .dpadLeft, .dpadRight: return .dpad
+        case .buttonA: return .buttonA
+        case .buttonB: return .buttonB
+        case .buttonX: return .buttonX
+        case .buttonY: return .buttonY
+        case .buttonL: return .buttonL
+        case .buttonR: return .buttonR
+        case .buttonZL: return .buttonZL
+        case .buttonZR: return .buttonZR
+        case .buttonStart: return .buttonStart
+        case .buttonSelect: return .buttonSelect
+        case .circlePad: return .circlePad
+        case .cStick: return .cStick
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .buttonA: return L10n.tr("Button A")
+        case .buttonB: return L10n.tr("Button B")
+        case .buttonX: return L10n.tr("Button X")
+        case .buttonY: return L10n.tr("Button Y")
+        case .buttonL: return L10n.tr("Button L")
+        case .buttonR: return L10n.tr("Button R")
+        case .buttonZL: return L10n.tr("Button ZL")
+        case .buttonZR: return L10n.tr("Button ZR")
+        case .buttonStart: return L10n.tr("Start")
+        case .buttonSelect: return L10n.tr("Select")
+        case .dpad: return L10n.tr("D-pad")
+        case .circlePad: return L10n.tr("Circle Pad")
+        case .cStick: return L10n.tr("C-stick")
+        }
+    }
+}
+
 /// Where one control sits and how big it is.
 struct ControlPlacement: Codable, Equatable {
     /// Centre X in the container, 0...1.

@@ -53,6 +53,17 @@
 //        Open the numeric custom layout page for that direction, for headless
 //        screenshots.
 //
+//    -previewPauseMenu
+//        Open the in-game pause menu over the preview game view (combine with
+//        -previewGameView), for headless screenshots of the control options.
+//
+//    -previewControlEdit
+//        Enter the in-game control edit mode (combine with -previewGameView),
+//        for headless screenshots of the draggable controls and Done pill.
+//
+//    -openControlOptions visibility|size|opacity
+//        Open one virtual-control options sheet in that pause menu.
+//
 //    -gamesRoot <path>
 //        Scan this folder instead of Documents/Games. A relative path resolves
 //        against Documents (a "Documents/" prefix is accepted); an absolute path
@@ -100,6 +111,15 @@ enum DebugLaunch {
     /// Launch argument: `-openCustomLayoutPage landscape|portrait` opens the
     /// numeric custom layout page for that direction, for headless screenshots.
     static let customLayoutPageArgument = "-openCustomLayoutPage"
+    /// Launch argument: `-previewPauseMenu` opens the in-game pause menu (with
+    /// -previewGameView) for headless screenshots of the round-4 control options.
+    static let previewPauseMenuArgument = "-previewPauseMenu"
+    /// Launch argument: `-previewControlEdit` enters the in-game control edit
+    /// mode (with -previewGameView), for headless screenshots of the Done overlay.
+    static let previewControlEditArgument = "-previewControlEdit"
+    /// Launch argument: `-openControlOptions visibility|size|opacity` opens one
+    /// virtual-control options sheet in the pause menu, for screenshots.
+    static let controlOptionsArgument = "-openControlOptions"
 
     /// A layout page a headless launch asked to open.
     enum LayoutPage: String {
@@ -151,6 +171,33 @@ enum DebugLaunch {
     /// open.
     static var requestedCustomLayoutPage: ControlLayoutOrientation? {
         orientationArgument(for: customLayoutPageArgument)
+    }
+
+    /// Whether the launch asked for the in-game pause menu (screenshots).
+    static var previewPauseMenu: Bool {
+        ProcessInfo.processInfo.arguments.contains(previewPauseMenuArgument)
+    }
+
+    /// Whether the launch asked for the in-game control edit mode (screenshots).
+    static var previewControlEdit: Bool {
+        ProcessInfo.processInfo.arguments.contains(previewControlEditArgument)
+    }
+
+    /// The virtual-control options sheet a headless launch asked to open.
+    static var requestedControlOptions: ControlOptionsPage? {
+        guard let raw = argumentValue(for: controlOptionsArgument) else { return nil }
+        switch raw.lowercased() {
+        case "visibility", "toggle", "toggle-controls":
+            return .visibility
+        case "size", "adjust-size":
+            return .size
+        case "opacity", "adjust-opacity":
+            return .opacity
+        default:
+            AppLog.log("[3ds2apple] %@: '%@' is not visibility, size or opacity; ignored",
+                       controlOptionsArgument, raw)
+            return nil
+        }
     }
 
     /// Applies the preview-only display values for this launch. The values are

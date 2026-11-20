@@ -634,3 +634,29 @@
 "Values are percentages of the game view (0-100). The custom layout applies from the next game load." = "数值为游戏画面的百分比（0–100）；自定义布局在下次载入游戏时生效。";
 "The custom layouts place each screen with percentages of the game view; they apply from the next game load." = "自定义布局用游戏画面的百分比摆放两块屏幕；在下次载入游戏时生效。";
 
+/* --- Round-4 游戏内虚拟按键与按键布局编辑 --- */
+"Virtual controls" = "虚拟按键选项";
+"Show virtual controls" = "显示虚拟控制器";
+"Show performance stats" = "显示性能参数";
+"Haptic feedback" = "触摸反馈";
+"Edit layout" = "编辑布局";
+"Toggle controls" = "切换控制";
+"Adjust size" = "调整大小";
+"Adjust opacity" = "调整透明度";
+"Reset virtual controls" = "重置虚拟按键";
+"Reset virtual controls?" = "重置虚拟按键？";
+"Restores the default control positions for both orientations, every size to 100% and all controls visible." = "恢复两个方向的默认按键位置、所有尺寸为 100% 并显示全部按键。";
+"Hidden controls are not drawn and do not respond to touches. The D-pad is toggled as one group." = "隐藏的按键不绘制也不响应触摸。十字方向键作为一组切换。";
+"The size scale multiplies each control (or the D-pad group) in the running overlay. 100% is the layout's own size." = "尺寸倍率会乘到运行时的每个按键（或十字方向键组）上；100% 为布局原始大小。";
+"The opacity applies to every on-screen control, including the sticks." = "透明度作用于所有屏幕按键，包括摇杆。";
+"Drag the controls to move them. Done saves this orientation's layout and resumes the game." = "拖动按键调整位置；点“完成”保存当前方向的布局并直接继续游戏。";
+"Drag a screen to move it. Drag the large corner handle or pinch to resize. Done saves the layout." = "拖动屏幕移动；拖大角手柄或双指捏合缩放；点“完成”保存布局。";
+"Button L" = "按键 L";
+"Button R" = "按键 R";
+"Button ZL" = "按键 ZL";
+"Button ZR" = "按键 ZR";
+"Start" = "Start";
+"Select" = "Select";
+"D-pad" = "十字方向键";
+"Virtual control visibility, size and layout are edited in the in-game pause menu under Virtual controls." = "在游戏内暂停菜单的“虚拟按键选项”里编辑虚拟按键的显示、大小与布局。";
+

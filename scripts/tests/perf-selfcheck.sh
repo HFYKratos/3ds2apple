@@ -274,9 +274,11 @@ check "per-orientation control profiles exist" contains ios/app/Sources/AppSetti
 check "runtime overlay draws the editable layout" contains ios/app/Sources/VirtualControlsView.swift 'struct VirtualControlsView'
 check "analog stick reports a vector (not D-pad bits)" contains ios/app/Sources/VirtualControlsView.swift 'onCirclePad'
 check "layout editor can move, resize and reset" contains ios/app/Sources/ControlLayoutEditorView.swift 'Reset this control'
-check "control layout page is linked from Settings" contains ios/app/Sources/SettingsView.swift 'ControlLayoutSettingsView'
+check "control editing lives in the in-game pause menu, not Settings" \
+  bash -c '! grep -q "ControlLayoutSettingsView" ios/app/Sources/SettingsView.swift && grep -q "onEditControls" ios/app/Sources/InGameMenuView.swift && grep -q "InGameControlEditOverlay" ios/app/Sources/GameView.swift'
 check "control layout page exposes only Default / Custom" contains ios/app/Sources/AppSettings.swift 'enum ControlLayoutMode'
-check "control layout page opens the editor for the current direction" contains ios/app/Sources/ControlLayoutSettingsView.swift 'ControlLayoutEditorView(settings: settings)'
+check "in-game control editor drags controls and has a Done pill" \
+  bash -c 'grep -q "DragGesture" ios/app/Sources/InGameControlEditOverlay.swift && grep -q "control-edit-done" ios/app/Sources/InGameControlEditOverlay.swift'
 check "control editor is full screen and edits the current direction" contains ios/app/Sources/ControlLayoutEditorView.swift 'currentLayoutOrientation'
 check "control editor overlays the current screen layout" contains ios/app/Sources/ControlLayoutEditorView.swift 'screenViewports'
 check "GameView floats the editable control overlay and draws the hybrid small top screen" \
@@ -298,11 +300,11 @@ check "C-stick is pushed before every console frame" \
 check "C-stick keeps its value out of the old zk_set_input signature" \
   contains ios/zakuro-ios/src/lib.rs 'static C_STICK: Cell<(f32, f32)>'
 check "en strings cover the split layout pages" \
-  bash -c 'grep -q "^\"Landscape screen layout\"" ios/app/Resources/en.lproj/Localizable.strings && grep -q "^\"Control layout\"" ios/app/Resources/en.lproj/Localizable.strings'
+  bash -c 'grep -q "^\"Landscape screen layout\"" ios/app/Resources/en.lproj/Localizable.strings && grep -q "^\"Virtual controls\"" ios/app/Resources/en.lproj/Localizable.strings'
 check "zh-Hans strings cover the split layout pages" \
-  bash -c 'grep -q "^\"Landscape screen layout\" = \"横向屏幕布局\"" ios/app/Resources/zh-Hans.lproj/Localizable.strings && grep -q "^\"Control layout\" = \"控件布局\"" ios/app/Resources/zh-Hans.lproj/Localizable.strings'
+  bash -c 'grep -q "^\"Landscape screen layout\" = \"横向屏幕布局\"" ios/app/Resources/zh-Hans.lproj/Localizable.strings && grep -q "^\"Virtual controls\" = \"虚拟按键选项\"" ios/app/Resources/zh-Hans.lproj/Localizable.strings'
 check "no GPL project text copied into the new layout code" \
-  bash -c '! grep -riE "azahar|citra" ios/app/Sources/ControlLayout.swift ios/app/Sources/VirtualControlsView.swift ios/app/Sources/CustomScreenLayout.swift ios/app/Sources/ControlLayoutEditorView.swift ios/app/Sources/ScreenLayoutEditorView.swift ios/app/Sources/ScreenLayoutSettingsView.swift ios/app/Sources/ControlLayoutSettingsView.swift'
+  bash -c '! grep -riE "azahar|citra" ios/app/Sources/ControlLayout.swift ios/app/Sources/VirtualControlsView.swift ios/app/Sources/CustomScreenLayout.swift ios/app/Sources/ControlLayoutEditorView.swift ios/app/Sources/ScreenLayoutEditorView.swift ios/app/Sources/ScreenLayoutSettingsView.swift ios/app/Sources/ControlLayoutSettingsView.swift ios/app/Sources/ControlOptionsViews.swift ios/app/Sources/InGameControlEditOverlay.swift'
 
 section 'GPU execution timing and renderer A/B switches (0.1.3)'
 check "perf exposes the GPU execution time" contains ios/zakuro-ios/src/perf.rs 'pub fn last_gpu_exec_micros_per_frame()'

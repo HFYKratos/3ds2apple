@@ -8,11 +8,14 @@
 //  Round-1 layout redesign: the picture fills the whole game view (safe-area
 //  aware, plain black around it) with no title bar, no rounded card and no
 //  reserved control pad. The on-screen controls float over the picture as a
-//  full-screen overlay from the user's layout profile (the profile model and the
-//  control positions are unchanged this round; a later round tunes them for the
-//  floating layout). The FPS counter and the pause/menu button are translucent
-//  floating controls: FPS in the top-trailing safe-area corner in both
-//  orientations, pause next to it in portrait and bottom-centre in landscape.
+//  full-screen overlay from the user's layout profile. Round 4 adds the pause
+//  menu's virtual-control options (per-row visibility and size) and the in-game
+//  edit mode: the menu closes, the game stays paused, the HUD is hidden and the
+//  controls are dragged directly over the frozen picture until the centered Done
+//  pill saves the current direction and resumes the game. The FPS counter and the
+//  pause/menu button are translucent floating controls: FPS in the top-trailing
+//  safe-area corner in both orientations, pause next to it in portrait and
+//  bottom-centre in landscape.
 //
 //  The screen arrangement comes from the split Settings choices: the landscape
 //  preset (large / single / side / hybrid / original / custom) and the separate
@@ -50,6 +53,12 @@ struct GameView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var isMenuPresented = false
+    /// Round-4 in-game control editing: the pause menu closes, the runtime stays
+    /// paused and the on-screen controls are dragged over the frozen picture.
+    @State private var isEditingControls = false
+    @State private var controlDraft: ControlLayoutProfile?
+    /// The direction whose profile is being edited (fixed when edit mode opens).
+    @State private var editingOrientation: ControlLayoutOrientation = .portrait
     @State private var sheet: GameSheet?
     /// Kept copy of the last diagnostics export (relative to Documents).
     @State private var diagnosticsHint: String?
@@ -106,6 +115,7 @@ struct GameView: View {
                         settings: settings,
                         saveStates: model.saveStates,
                         onResume: resumeGame,
+                        onEditControls: { beginControlEditing(isLandscape: isLandscape) },
                         onReset: { requestConfirmation(.reset) },
                         onDisplaySettings: { sheet = .quickDisplaySettings },
                         onSaveManager: { sheet = .saveManager },
@@ -138,6 +148,13 @@ struct GameView: View {
             }
             .onAppear {
                 syncPresentedLayout(isLandscape)
+                // Headless screenshot hooks; inert in normal launches.
+                if DebugLaunch.previewPauseMenu {
+                    isMenuPresented = true
+                }
+                if DebugLaunch.previewControlEdit {
+                    beginControlEditing(isLandscape: isLandscape)
+                }
             }
             .onChange(of: isLandscape) { newValue in
                 syncPresentedLayout(newValue)
@@ -184,11 +201,24 @@ struct GameView: View {
         ZStack {
             screenStage(isLandscape: isLandscape)
 
-            if isLoaded || isRuntimeStarting || isPreviewingGame {
+            if isEditingControls, let controlDraft {
+                InGameControlEditOverlay(
+                    profile: controlDraft,
+                    isVisible: { settings.isControlVisible($0) },
+                    sizeScale: { settings.controlSizeScale(for: $0) },
+                    opacityScale: settings.controlsBackgroundOpacity,
+                    haptics: settings.haptics,
+                    onMove: { element, point in moveControl(element, to: point) },
+                    onDone: { finishControlEditing() }
+                )
+            } else if isLoaded || isRuntimeStarting || isPreviewingGame {
                 controlsOverlay(isLandscape: isLandscape)
             }
 
-            floatingHUD(isLandscape: isLandscape)
+            // The pause/FPS HUD is hidden while the controls are edited.
+            if !isEditingControls {
+                floatingHUD(isLandscape: isLandscape)
+            }
         }
         .accessibilityIdentifier("screens")
     }
@@ -211,7 +241,9 @@ struct GameView: View {
             haptics: settings.haptics,
             onButton: { bit, pressed in model.setOverlayButton(bit, pressed: pressed) },
             onCirclePad: { x, y in model.setOverlayStick(x: x, y: y) },
-            onCStick: { x, y in model.setOverlayCStick(x: x, y: y) }
+            onCStick: { x, y in model.setOverlayCStick(x: x, y: y) },
+            isVisible: { settings.isControlVisible($0) },
+            sizeScale: { settings.controlSizeScale(for: $0) }
         )
         .ignoresSafeArea()
         .opacity(showsTouchControls ? 1 : 0)
@@ -287,6 +319,46 @@ struct GameView: View {
                 .overlay(Circle().strokeBorder(Color.white.opacity(0.22), lineWidth: 1))
         }
         .accessibilityIdentifier("in-game-menu")
+    }
+
+    // MARK: - In-game control editing (round 4)
+
+    /// Opens the in-game control edit mode. The pause menu already paused the
+    /// runtime, so this only closes the menu and keeps that pause in place.
+    private func beginControlEditing(isLandscape: Bool) {
+        let orientation: ControlLayoutOrientation = isLandscape ? .landscape : .portrait
+        editingOrientation = orientation
+        controlDraft = settings.controlLayout(for: orientation)
+        isMenuPresented = false
+        isEditingControls = true
+    }
+
+    /// One control was dragged: update the draft placement (normalised to the
+    /// overlay container).
+    private func moveControl(_ element: ControlElement, to point: CGPoint) {
+        guard var draft = controlDraft else { return }
+        var placement = draft.placement(for: element)
+        placement.x = Double(min(max(point.x, 0), 1))
+        placement.y = Double(min(max(point.y, 0), 1))
+        draft.setPlacement(placement, for: element)
+        controlDraft = draft
+    }
+
+    /// Done: save the edited profile as the Custom layout for the direction,
+    /// leave edit mode and resume the game directly (it stayed paused since the
+    /// menu opened it, so there is no extra pause/resume).
+    private func finishControlEditing() {
+        guard isEditingControls else { return }
+        if let draft = controlDraft {
+            settings.setControlLayout(draft, for: editingOrientation)
+            settings.controlLayoutMode = .custom
+            settings.persist()
+        }
+        controlDraft = nil
+        isEditingControls = false
+        if !isPreviewingGame {
+            model.resumeFromMenu()
+        }
     }
 
     private func resumeGame() {

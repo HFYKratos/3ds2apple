@@ -132,6 +132,9 @@ struct ContentView: View {
                 layoutSheet = .customPage(orientation)
             }
         }
+        .onChange(of: settings.renderScale) { scale in
+            model.applyRenderScale(CGFloat(scale))
+        }
         .onChange(of: scenePhase) { newPhase in
             switch newPhase {
             case .background:
@@ -170,9 +173,6 @@ struct ContentView: View {
         }
         .onChange(of: settings.frameCap) { cap in
             model.setFrameRateCap(cap.rawValue)
-        }
-        .onChange(of: settings.renderScale) { scale in
-            model.applyRenderScale(CGFloat(scale))
         }
         .onChange(of: settings.screenRotation) { rotation in
             model.setScreenRotation(rotation)

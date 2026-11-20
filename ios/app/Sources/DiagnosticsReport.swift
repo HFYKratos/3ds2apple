@@ -208,6 +208,16 @@ enum DiagnosticsExporter {
         let screenLayoutText = layoutUsesReadback
             ? "readback-\(activeLayoutValue)"
             : model.screenLayout.rawValue
+        // Round-4 in-game virtual-control options (global, not per direction).
+        let hiddenControlsText = settings.hiddenControlItems.isEmpty
+            ? "none"
+            : settings.hiddenControlItems.map(\.rawValue).sorted().joined(separator: ",")
+        let controlSizeScalesText = settings.controlSizeScales.isEmpty
+            ? "-"
+            : settings.controlSizeScales
+                .sorted { $0.key < $1.key }
+                .map { "\($0.key):\(String(format: "%.2f", $0.value))" }
+                .joined(separator: ",")
         // Frame budget of a 60 Hz presentation, and each measured phase as a
         // share of the whole render work item. A single glance at the report
         // then says whether the frame is CPU-bound (run), presentation-bound
@@ -275,6 +285,8 @@ enum DiagnosticsExporter {
         haptics=\(settings.haptics ? 1 : 0)
         screen_layout_readback=\(layoutUsesReadback ? 1 : 0)
         custom_screen_layout=\(settings.usesCustomLayout(for: .landscape) || settings.usesCustomLayout(for: .portrait) ? 1 : 0)
+        virtual_controls_hidden=\(hiddenControlsText)
+        control_size_scales=\(controlSizeScalesText)
         control_layout_mode=\(settings.controlLayoutMode.rawValue)
         control_layout_portrait_version=\(settings.storedControlLayout(for: .portrait).version)
         control_layout_landscape_version=\(settings.storedControlLayout(for: .landscape).version)

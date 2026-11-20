@@ -20,6 +20,9 @@ struct InGameMenuView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var saveStates: SaveStateSupport
     let onResume: () -> Void
+    /// Closes the menu and enters the in-game control edit mode (the runtime
+    /// stays paused; Done in the editor resumes it).
+    let onEditControls: () -> Void
     let onReset: () -> Void
     let onDisplaySettings: () -> Void
     let onSaveManager: () -> Void
@@ -32,6 +35,11 @@ struct InGameMenuView: View {
     /// kept, so it can also be pulled from the Files app after sharing.
     var diagnosticsHint: String? = nil
 
+    /// The virtual-control options sheet (round 4) currently open, if any.
+    @State private var controlOptionsSheet: ControlOptionsPage?
+    @State private var isResetControlsConfirmationPresented = false
+    @State private var didHandleDebugOptions = false
+
     var body: some View {
         ZStack {
             Color.black.opacity(0.74)
@@ -41,6 +49,7 @@ struct InGameMenuView: View {
                     header
                     resumeButton
                     saveStateCard
+                    virtualControlsCard
                     quickSettingsCard
                     gameActionsCard
                 }
@@ -49,9 +58,35 @@ struct InGameMenuView: View {
                 .frame(maxWidth: .infinity)
             }
         }
+        .sheet(item: $controlOptionsSheet) { page in
+            switch page {
+            case .visibility:
+                ControlVisibilitySheet(settings: settings)
+            case .size:
+                ControlSizeSheet(settings: settings)
+            case .opacity:
+                ControlOpacitySheet(settings: settings)
+            }
+        }
+        .alert(L10n.tr("Reset virtual controls?"), isPresented: $isResetControlsConfirmationPresented) {
+            Button(L10n.tr("Reset"), role: .destructive) {
+                settings.resetVirtualControls()
+            }
+            Button(L10n.tr("Cancel"), role: .cancel) {}
+        } message: {
+            Text(L10n.tr("Restores the default control positions for both orientations, every size to 100% and all controls visible."))
+        }
         .onAppear {
             saveStates.refresh()
             saveStates.clearMessages()
+            // Headless screenshot hook: open one of the option sheets straight
+            // away; inert in normal launches.
+            if !didHandleDebugOptions {
+                didHandleDebugOptions = true
+                if let page = DebugLaunch.requestedControlOptions {
+                    controlOptionsSheet = page
+                }
+            }
         }
         .accessibilityIdentifier("in-game-menu-overlay")
     }
@@ -191,10 +226,57 @@ struct InGameMenuView: View {
 
     // MARK: - Quick settings
 
+    private var virtualControlsCard: some View {
+        card {
+            Text(L10n.tr("Virtual controls"))
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.white.opacity(0.55))
+            Toggle("Show virtual controls", isOn: persistedBinding(settings, \.showTouchControls))
+                .tint(.accentColor)
+                .accessibilityIdentifier("menu-show-controls")
+            Toggle("Show performance stats", isOn: persistedBinding(settings, \.showFPS))
+                .tint(.accentColor)
+                .accessibilityIdentifier("menu-show-fps")
+            Toggle("Haptic feedback", isOn: persistedBinding(settings, \.haptics))
+                .tint(.accentColor)
+                .accessibilityIdentifier("menu-haptics")
+            rowDivider
+            actionRow("Edit layout",
+                      systemImage: "hand.draw",
+                      identifier: "menu-edit-controls",
+                      action: onEditControls)
+            rowDivider
+            actionRow("Toggle controls",
+                      systemImage: "checkmark.circle",
+                      identifier: "menu-toggle-controls") {
+                controlOptionsSheet = .visibility
+            }
+            rowDivider
+            actionRow("Adjust size",
+                      systemImage: "arrow.up.left.and.arrow.down.right",
+                      identifier: "menu-adjust-size") {
+                controlOptionsSheet = .size
+            }
+            rowDivider
+            actionRow("Adjust opacity",
+                      systemImage: "circle.lefthalf.filled",
+                      identifier: "menu-adjust-opacity") {
+                controlOptionsSheet = .opacity
+            }
+            rowDivider
+            actionRow("Reset virtual controls",
+                      systemImage: "arrow.counterclockwise",
+                      destructive: true,
+                      identifier: "menu-reset-controls") {
+                isResetControlsConfirmationPresented = true
+            }
+        }
+        .font(.subheadline)
+        .foregroundColor(.white)
+    }
+
     private var quickSettingsCard: some View {
         card {
-            Toggle("On-screen controls", isOn: persistedBinding(settings, \.showTouchControls))
-                .tint(.accentColor)
             Toggle("Mute audio", isOn: persistedBinding(settings, \.audioMuted))
                 .tint(.accentColor)
             VStack(alignment: .leading, spacing: 6) {

@@ -37,6 +37,11 @@ struct VirtualControlsView: View {
     var onCirclePad: (Float, Float) -> Void
     /// C-stick vector, same convention.
     var onCStick: (Float, Float) -> Void
+    /// Per-control visibility (pause menu "Toggle controls"); a hidden control
+    /// is neither drawn nor hit-testable.
+    var isVisible: (ControlElement) -> Bool = { _ in true }
+    /// Per-control size multiplier (pause menu "Adjust size", 1.0 = 100%).
+    var sizeScale: (ControlElement) -> Double = { _ in 1.0 }
 
     var body: some View {
         GeometryReader { geometry in
@@ -44,7 +49,9 @@ struct VirtualControlsView: View {
             ZStack(alignment: .topLeading) {
                 Color.clear
                 ForEach(ControlElement.allCases) { element in
-                    control(element, in: container)
+                    if isVisible(element) {
+                        control(element, in: container)
+                    }
                 }
             }
             .frame(width: container.width, height: container.height)
@@ -57,8 +64,11 @@ struct VirtualControlsView: View {
                          in container: CGSize) -> some View {
         let placement = profile.placement(for: element)
         // Same point frame the controls editor manipulates; see
-        // ControlElement.frame(for:in:) in GameViewGeometry.swift.
-        let frame = element.frame(for: placement, in: container)
+        // ControlElement.frame(for:in:) in GameViewGeometry.swift. The
+        // round-4 size scale multiplies the profile size.
+        let frame = element.frame(for: placement,
+                                  in: container,
+                                  sizeScale: sizeScale(element))
         let opacity = min(max(placement.opacity * opacityScale, 0.05), 1.0)
         if element.isAnalog {
             AnalogStickControl(

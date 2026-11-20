@@ -27,7 +27,7 @@ views do not carry duplicated strings.
 | **Settings** | Display, Audio, Controls, Performance (fast-forward, system Metal HUD, FPS counter), Storage and About sections. |
 | **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. The page re-reads the selected game's files when it opens, when the library changes and after every action; there is no refresh button. |
 | **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the FPS appears only while a game is loaded; everything else stays in the log and the diagnostics. |
-| **In-game menu** | Opened from the pause button over the game: pause/resume, quick toggles (on-screen controls, mute, 1×/2×/4× fast-forward), Save State / Load State (slot 1), Reset, Display settings, Save Manager, Diagnostics, Exit. |
+| **In-game menu** | Opened from the pause button over the game: pause/resume, save-state shortcuts, a **Virtual controls** card (Show virtual controls / Show performance stats / Haptic feedback, then Edit layout / Toggle controls / Adjust size / Adjust opacity / Reset virtual controls), quick toggles (mute, 1×/2×/4× fast-forward), Display settings, Save Manager, Diagnostics, Reset and Exit. |
 
 Opening the in-game menu pauses emulation: the frame loop and the audio engine
 are stopped, the runtime handle and the last frame stay, and Resume continues the
@@ -104,15 +104,13 @@ on-screen controls, so no input or audio advances behind it.
   diagnostics export. See "In-game FPS counter" below.
 - Display settings: separate landscape and portrait screen layout choices (six
   landscape presets, three portrait presets, plus two numeric custom layout
-  pages), screen rotation, aspect (fit / 4:3 / stretch), integer scaling, render
-  resolution (1×–4×) and interface orientation. Every layout preset is drawn by
-  the `CAMetalLayer` presenter (round 3 adds the Large screen / Hybrid / portrait
-  Default arrangements, presenter ABI 5–7) and applies immediately; only the two
-  Custom layouts use the readback path and apply from the next game load.
-  Rotation,
-  aspect and integer scaling apply immediately, also while a game runs; the
-  render resolution resizes the presented drawable at once, while the internal
-  3D render scale is applied when a game loads. See "Display settings" below.
+  pages), screen rotation and interface orientation. Every layout preset is drawn
+  by the `CAMetalLayer` presenter (round 3 adds the Large screen / Hybrid /
+  portrait Default arrangements, presenter ABI 5–7) and applies immediately; only
+  the two Custom layouts use the readback path and apply from the next game load.
+  Round 4 removed the aspect-ratio and integer-scaling rows only; the render
+  resolution (1×–4×) stays (a change applies from the next game load — the
+  runtime builds its renderer then). See "Display settings" below.
 - AOT status (`AOT not loaded` / `AOT · linked` / `AOT · package`), the
   `zk_recompiled()` / `zk_recompiled_status()` proof recorded for every load,
   emulation speed relative to the 3DS 60 Hz timeline, and a hard AOT-only launch
@@ -277,6 +275,12 @@ The shell can be driven headlessly without tapping:
 - `-previewLandscape` forces the landscape appearance for headless screenshots
   (the app asks its window scene to rotate and the game view uses the landscape
   arrangement even before the rotation lands).
+- `-previewPauseMenu` opens the in-game pause menu over the preview picture, for
+  headless screenshots of the round-4 Virtual controls card.
+- `-previewControlEdit` enters the in-game control edit mode over the preview
+  picture (draggable controls + Done pill), for headless screenshots.
+- `-openControlOptions visibility|size|opacity` opens one virtual-control options
+  sheet in that pause menu, for headless screenshots.
 
 A full screen-layout tour needs no game data at all:
 
@@ -297,6 +301,11 @@ for layout in default original custom; do
   sleep 2
   xcrun simctl io <UDID> screenshot "portrait-$layout.png"
 done
+# Round-4 control options (ROM-free preview)
+xcrun simctl launch <UDID> com.kratos.3ds2apple -previewGameView -previewPauseMenu
+xcrun simctl launch <UDID> com.kratos.3ds2apple -previewGameView -previewPauseMenu -openControlOptions visibility
+xcrun simctl launch <UDID> com.kratos.3ds2apple -previewGameView -previewPauseMenu -openControlOptions size
+xcrun simctl launch <UDID> com.kratos.3ds2apple -previewGameView -previewControlEdit
 ```
 
 The preview arguments are inert in normal launches (a person never passes them).
@@ -320,20 +329,24 @@ data: never commit them, and remove the fixture from the container when done.
 | Portrait screen layout | Default (default) / Original / Custom layout | The separate **portrait** choice, selected from its own radio picker. **Default** is the top-full-width presenter arrangement (upper 400x240 above the lower screen scaled to 400x300, ABI 7); **Original** uses the presenter's native stack; both apply immediately. **Custom layout** uses the numeric custom rectangles on the readback path and applies from the next game load. |
 | Custom layouts | Landscape custom layout / Portrait custom layout | Each row opens a numeric page for that direction: sections **Upper screen** and **Lower screen**, each with **X position**, **Y position**, **Width** and **Height** as integer percentages of the game view (0–100). The page edits the existing `CustomScreenLayout` archive (archive version 3; older archives migrate on read) and applies from the next game load; **Edit by dragging** opens the full-screen drag editor for the same direction. The shipped defaults are the placements measured from the reference screenshots. |
 | Screen rotation | Upright, 90° clockwise, upside down, 90° counter-clockwise | Immediately. Turns the screens inside their area, e.g. the stacked console becomes two columns (480×400) a quarter turn clockwise. The touchscreen is mapped back into the screen's own pixels. |
-| Aspect ratio | Fit (native), 4:3, Stretch | Immediately. Fit keeps the arrangement's shape; 4:3 fits the picture inside a 4:3 area with black bars; Stretch fills the game view's space and deliberately distorts the picture. |
-| Integer scaling | On / off | Immediately, with Fit and 4:3 (Stretch ignores it): each 3DS pixel maps to a whole number of screen pixels and the layer magnifies with nearest-pixel filtering. |
-| Render resolution | 1× / 2× / 3× / 4× | The presenter's drawable is the arrangement's own pixels times the factor and CoreAnimation scales it to the screen; the swapchain is resized through `zk_presenter_resize` and the following frame presents at the new size. The internal resolution the host-GPU 3D renderer draws at is set with `zk_set_render_scale` and read when a system loads, so a running game keeps its old internal scale until it is reloaded or restarted. The software renderer always draws at 1×; higher factors cost GPU time and memory. The caption under the picker follows the selection and states its pixel size (1× = 400×240, 2× = 800×480, 3× = 1200×720, 4× = 1600×960). |
+| Resolution | 1× / 2× / 3× / 4× | The presenter's drawable is the arrangement's own pixels times the factor and CoreAnimation scales it to the screen; the swapchain is resized through `zk_presenter_resize` at once. The internal resolution the host-GPU 3D renderer draws at is set with `zk_set_render_scale` and read when a system loads, so a running game keeps its old internal scale until it is reloaded or restarted. The software renderer always draws at 1×; higher factors cost GPU time and memory. The caption under the picker follows the selection and states its pixel size. |
 | Orientation | Automatic / portrait / landscape | Immediately: the app restricts the supported orientations and asks the window scene to rotate. The in-game layout reflows for portrait/landscape. iOS still decides in some situations (for example during a phone call). |
+
+**Round-4 display cleanup.** The **Aspect ratio** (画面比例) and **Integer
+scaling** rows are gone: the layout presets are GPU presenter arrangements that
+do not use those readback knobs, and only the Custom layouts still place each
+screen natively inside its rectangle. The **Resolution** setting remains and,
+like before, the runtime's internal 3D scale applies from the next game load.
+The old stored aspect/integer keys are kept but ignored.
 
 The 3DS screens stay upright in the app's interface, which iOS rotates with the
 device; `Screen rotation` turns the pictures inside their area for playing with
 the console held sideways. The running game fills the whole screen - there is no
 title bar, rounded card or reserved control pad any more - and the FPS/pause
-controls float over the picture. The layout presets are presenter arrangements,
-so the aspect-ratio / integer-scaling settings apply to them exactly as before;
-only the two Custom layouts place each screen explicitly in the whole game view
-(they ignore that box; screen rotation and each screen's native shape still
-apply).
+controls float over the picture. The layout presets are presenter arrangements;
+aspect ratio and integer scaling no longer have UI (round 4) and the custom
+layouts place each screen explicitly in the whole game view (screen rotation and
+each screen's native shape still apply).
 
 ## Audio settings
 
@@ -344,40 +357,50 @@ once. Fast-forward is silent: see "Fast-forward" below.
 
 ## Controls settings
 
-The opacity slider scales the on-screen controls' transparency; haptics adds a
-light impact on each button press. The controller row shows the connected
-`GCController` name. Settings → Controls → **Control layout** opens the
-control layout page (Default / Custom; choosing Custom opens the full-screen
-editor for the current direction); the screen side lives under Settings →
-Display → **Landscape screen layout** (the next section).
+Settings → Controls keeps the on-screen-controls switch, the global overlay
+opacity, haptics and the connected `GCController` name. There is **no
+full-screen editor link** any more: all control layout editing happens in the
+game through the pause menu's **Virtual controls** card (round 4) — Edit layout,
+Toggle controls, Adjust size, Adjust opacity and Reset virtual controls. See
+"Editable layouts" below.
 
 ## Editable layouts (controls and screens)
 
 Requirement 7 (complete virtual controls) and requirement 8 (screen layout) are
-two areas. The controls still offer **Default** and **Custom**; the screen
-layout was split in round 2 into an independent landscape choice (six options)
-and an independent portrait choice (three options), each selected from its own
-radio picker, with the numeric custom pages described below.
+two areas. Controls are edited in-game from the pause menu's **Virtual controls**
+card; the screen layout was split in round 2 into an independent landscape
+choice (six options) and an independent portrait choice (three options), each
+selected from its own radio picker, with the numeric custom pages and the
+round-4 drag editor described below.
 
-- **Controls.** The overlay draws the full New 3DS set: D-pad, A/B/X/Y, L/R,
-  ZL/ZR, Start/Select, the Circle Pad and the C-stick. It is a full-screen
-  floating layer over the picture in both orientations and takes no layout space,
-  so hiding it never moves the image. Settings → Controls → **Control layout**
-  offers **Default** (the shipped positions) and **Custom**. Choosing Custom
-  opens the **full-screen editor for the direction the device is in right now** -
-  portrait edits the portrait profile, landscape the landscape one - with no
-  orientation picker or other mode. The editor draws the real game view of this
-  device (same safe area, full-bleed picture stage and full-screen control
-  container as the runtime; `GameViewGeometry.swift`, shared with `GameView`)
-  and draws the current screen layout behind the controls for reference, so a
-  control can be moved away from the picture. Drag a control to move it (guides
-  snap it to the container edges/centre and to the other controls), pinch it or
-  drag its corner handle to resize it, and use the sliders for size and the
-  control's own opacity. Undo and reset (one control, this direction or both) are
-  available; every change is stored immediately (no Save step). **The shipped
-  positions were tuned for the old reserved pad area and are not retuned for the
-  floating layout this round**: the portrait set can therefore overlap the
-  picture, and the controller editor is the way to move it.
+- **Controls (in-game pause menu).** The overlay draws the full New 3DS set:
+  D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, the Circle Pad and the C-stick. It is
+  a full-screen floating layer over the picture in both orientations and takes no
+  layout space, so hiding it never moves the image. The pause menu's **Virtual
+  controls** card (round 4) has: **Show virtual controls**, **Show performance
+  stats** (the FPS pill), **Haptic feedback**, **Edit layout**, **Toggle
+  controls**, **Adjust size**, **Adjust opacity** and **Reset virtual controls**.
+  - **Edit layout** closes the menu, keeps the runtime paused, hides the pause/FPS
+    HUD and returns to the frozen game picture with the on-screen controls
+    draggable (a light haptic tick when a control is picked up). Dragging moves a
+    control live; a centered **Done** pill saves the current direction's profile,
+    leaves edit mode and resumes the game directly (no extra pause/resume).
+  - **Toggle controls** opens a checkbox sheet for A, B, X, Y, L, R, ZL, ZR,
+    Start, Select, the D-pad (all four directions as one group), the Circle Pad
+    and the C-stick. Visibility is global (not per orientation), persists, and a
+    hidden control is neither drawn nor hit-testable.
+  - **Adjust size** opens one slider per row above, 10%-200% in 5% steps, default
+    100%. The scale is global per row, applies to the running overlay (analog
+    sticks included) and persists; the D-pad group scales all four directions.
+  - **Adjust opacity** opens the existing global overlay-opacity slider
+    (15%-100%).
+  - **Reset virtual controls** asks for confirmation and restores the shipped
+    positions for both orientations, every row to 100% and all controls visible.
+  The old Settings → Controls full-screen editor and its Default/Custom mode are
+  no longer exposed: every change is stored immediately from the in-game editor
+  (the profile archive and the per-row visibility/size scales are global). The
+  Azahar-only behaviour rows (slide buttons, relative stick centre, D-pad slide,
+  Combo Button) are not implemented this round; they are noted as future work.
 - **Analog sticks.** The Circle Pad is a real analog stick: dragging inside it
   reports -1…1 on both axes (a 14% dead zone is removed, so a resting finger is
   exactly 0) into `InputState.circleX/circleY` and `zk_set_input`. It is not a
@@ -419,7 +442,11 @@ radio picker, with the numeric custom pages described below.
   rectangle, archive version 3; older archives are migrated on read) and applies
   from the next game load. Opening or editing a page also selects that
   direction's Custom layout; the optional **Edit by dragging** button opens the
-  full-screen drag editor for the same direction. The layout page has no
+  full-screen drag editor for the same direction. Round 4 reworked that
+  editor's interaction: drag a screen directly to move it, drag its large
+  (≥44 pt) corner handle or pinch to resize, and tap the one clear **Done** pill
+  to save and leave (edits are committed live while dragging; there is no bottom
+  toolbar, no Lock-ratio switch, no nested scroll/zoom). The layout page has no
   "how it works" section and no reset button.
 - **Shipped default rectangles.** The custom-layout defaults are the placements
   measured from the reference screenshots, in percent of the game view:
@@ -455,8 +482,14 @@ radio picker, with the numeric custom pages described below.
   - the control choice (new `UI.controlLayoutMode`): an install that has 0.1.2
     layout data is treated as Custom so its saved positions keep applying; a
     fresh install starts on Default;
-  - the render scale, integer scaling, rotation, aspect and presenter resize
-    paths are unchanged.
+  - round 4 removes the display's aspect-ratio and integer-scaling settings
+    (their stored keys stay but are ignored); the render resolution (1×–4×),
+    rotation and presenter resize paths are unchanged — the resolution's internal
+    3D scale still applies from the next game load;
+  - round 4 adds the global in-game control options: `UI.hiddenControlItems`
+    (hidden rows) and `UI.controlSizeScales` (per-row 10%-200% scale). Both are
+    global, persist and default to all visible / 100%; the control profile
+    archives are unchanged.
 
 ## Performance settings
 
@@ -465,7 +498,7 @@ radio picker, with the numeric custom pages described below.
 | Frame cap | 60 / 30 fps | Immediately; the free-run loop never starts presented frames closer than 1/60 s (or 1/30 s). It is a cap, not a target. |
 | Fast-forward | 1× / 2× / 4× | Immediately (also from the in-game menu); the next presented frame uses the new value. |
 | System Metal HUD | On / off, **default on** | Immediately on the presented `CAMetalLayer`; remembered across launches and also written as `MTL_HUD_ENABLED` / `MetalHUDForceEnabled` for the next Metal device. The 0.1.0 build migrates a pre-0.1.0 install to on once. |
-| Show FPS counter | On / off, **default on** | The in-game FPS readout: a translucent floating pill in the top-trailing safe-area corner in both orientations. No other performance text is drawn over the game; the rest stays in the log and diagnostics. |
+| Show FPS counter | On / off, **default on** | The in-game FPS readout: a translucent floating pill in the top-trailing safe-area corner in both orientations; also toggled from the pause menu's Virtual controls card (Show performance stats). No other performance text is drawn over the game; the rest stays in the log and diagnostics. |
 
 ## Fast-forward
 
@@ -777,13 +810,13 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `ApplicationDelegate.swift` | UIKit delegate used for the orientation preference. |
 | `ContentView.swift` | Root router: home page or game for the current session phase; applies settings to the session. |
 | `HomeView.swift` | Home page: the Documents/Games library grid (two columns on iPhone, three on iPad; square 1:1 SMDH cover art that fills the card edge to edge with no icon frame, an attention-state badge in the corner (no AOT badge on a ready game); compact title/publisher/size/last-played text; no explanatory paragraph under the grid), last-played dates, the exact per-game validation error on tap, the launcher empty state, a long-press context menu with the Delete Game action, its second confirmation and result banner, pull-to-refresh, settings entry. |
-| `GameView.swift` | Running game: full-bleed picture from the split landscape / portrait screen layout choices, the floating full-screen on-screen controls, the optional floating FPS pill and pause button, in-game menu and the 3DS software-keyboard overlay; also the ROM-free `-previewGameView` path. |
+| `GameView.swift` | Running game: full-bleed picture from the split landscape / portrait screen layout choices, the floating full-screen on-screen controls (per-row visibility and size scale), the optional floating FPS pill and pause button, in-game menu, round-4 in-game control edit mode and the 3DS software-keyboard overlay; also the ROM-free `-previewGameView` path. |
 | `GameViewPreview.swift` | Synthetic TOP / BOTTOM test images (gradient, 1 px grid, 400×240 and 320×240) for the ROM-free `-previewGameView` screenshots. |
-| `InGameMenuView.swift` | Paused overlay menu (resume, save states, reset, display settings, save manager, diagnostics, exit) and quick toggles. |
-| `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. |
+| `InGameMenuView.swift` | Paused overlay menu (resume, save states, the round-4 Virtual controls card with Edit layout / Toggle controls / Adjust size / Adjust opacity / Reset, mute and fast-forward quick toggles, display settings, save manager, diagnostics, reset, exit) and its option sheets. |
+| `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. The Display page keeps the screen layout row, screen rotation and orientation (no aspect/integer/resolution rows); the Controls page no longer links a control-layout editor (editing is in-game). |
 | `SaveManagerView.swift` | Game picker over the library, the selected game's battery save list (export as ZIP, import, delete) and its instant save-state slots (delete offline; save/load while that game runs), with progress and errors; re-reads the selected game's files on open, on library changes and after actions (no refresh button). |
 | `AboutView.swift` | Product page: app icon, name, version/build, project links, acknowledgements and legal notice; a compact runtime status card only while a game is loaded. |
-| `AppSettings.swift` | Persisted settings model (separate landscape and portrait screen layout enums, screen rotation, aspect, interface orientation, buffer size, frame cap, playback speed, Metal HUD and FPS-counter switches) and the UserDefaults keys, including the round-1 single-choice migration (`migratedScreenLayouts`). |
+| `AppSettings.swift` | Persisted settings model (separate landscape and portrait screen layout enums, screen rotation, interface orientation, buffer size, frame cap, playback speed, Metal HUD and FPS-counter switches, the round-4 hidden-control rows and per-row size scales) the round-4 hidden-control rows and per-row size scales) and the UserDefaults keys, including the round-1 single-choice migration (`migratedScreenLayouts`) and the render scale (1×–4×). |
 | `DiagnosticsReport.swift` | Diagnostics report text, the shared diagnostics file type and screen geometry helpers. |
 | `StorageInspector.swift` | Container folder sizes, save-data file list, pipeline-cache clearing, and `AtomicFileWriter` for temporary-file-then-rename writes. |
 | `SaveStateSupport.swift` | Instant save states: three slots per game, the runtime's size → copy → load protocol on the serial runtime queue, the pause/audio-drop around save and load, and the slot list. |
@@ -791,26 +824,28 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `ZipArchive.swift` | Small ZIP writer (stored entries) and reader (stored and deflated entries) used for save-data backups. |
 | `SaveArchivePicker.swift` | Files picker for importing a save-data ZIP or individual save files. |
 | `ROMSession.swift` | Runtime handle, AOT-only game launch gate, frame loop, presenter lifecycle, input/audio plumbing, software-keyboard polling/answer and the pause it causes, pause/resume/reset and the settings that change runtime behaviour. |
-| `MetalScreenView.swift` | `UIView` with a `CAMetalLayer` the presenter draws into (A1); drawable size for the chosen layout/rotation and the render scale (1×–4×), plus the integer-scaling magnification filter. |
-| `ScreenGeometry.swift` | The drawable size of each layout/rotation (including the round-3 presenter layouts 543x240, 578x240 and 400x540), the box the screens occupy for the aspect/integer-scale settings, `layoutViewports` mirroring all eight presenter arrangements in the fallback/preview path (hybrid draws the upper screen twice), and the custom-only readback placement. |
-| `GameViewGeometry.swift` | The game view's full-bleed box model shared by `GameView` and both layout editors: device/safe-area metrics, picture stage (the whole game view) and control container (the whole screen) rectangles, control frames, alignment snapping and the preview screen viewports. |
+| `MetalScreenView.swift` | `UIView` with a `CAMetalLayer` the presenter draws into (A1); drawable size for the chosen layout/rotation and the render scale (1×–4×), plus the nearest-pixel magnification filter. |
+| `ScreenGeometry.swift` | The drawable size of each layout/rotation (including the round-3 presenter layouts 543x240, 578x240 and 400x540), the box the screens occupy, `layoutViewports` mirroring all eight presenter arrangements in the fallback/preview path (hybrid draws the upper screen twice), and the custom-only readback placement. |
+| `GameViewGeometry.swift` | The game view's full-bleed box model shared by `GameView` and the layout editors: device/safe-area metrics, picture stage (the whole game view) and control container (the whole screen) rectangles, control frames (with the round-4 per-row size scale), alignment snapping and the preview screen viewports. |
 | `GameInfo.swift` | The launcher's `Documents/Games/<TITLEID>/GameInfo.json` manifest (schema 1): authoritative display title, localized `displayNames`/`publisher`/`region` (optional SMDH base info), save namespace and pushed game-data size/SHA-256; the pack fields are informational metadata about the pack embedded in the IPA. |
 | `InstalledGame.swift` | Scans `Documents/Games` for pushed game data, validates it (folder/title ID, manifest, ROM presence/size/path containment), resolves the pushed `cover.png` and verifies the recorded SHA-256 in the background. |
 | `GameCatalog.swift` | The bundle `GameCatalog.json` schema (v2, v1 compatible): the build's game list plus per-game `packFile`/ABI/`registrationSymbol`. A base shell may ship an empty catalog. |
 | `GameLibrary.swift` | The library: bundle catalog joined with the pushed `Documents/Games` data, per-card title/publisher/size/cover (catalog fallback + placeholder), per-card states (Checking / Data missing / Error) and AOT availability, background SHA-256 checks, `Documents/Library/playHistory.json` and `Documents/Library/removedGames.json` (games deleted on this device, hidden until the launcher pushes the data again); `deleteGame` removes a game's data, saves, save states and per-game state. No ROM importing. |
 | `AOTPackageLoader.swift` | Resolves/loads the per-game `GamePack.dylib` from the signed app bundle, validates title/ABI/registration symbols before use, hands the launch the pushed (or legacy bundled) ROM, documents the C ABI, and falls back to the statically linked single-game build. |
-| `DebugLaunch.swift` | Headless launch hooks: `-openAOTTitleID` (start a library game), `-gamesRoot` (scan a Simulator fixture folder instead of Documents/Games), `-openLayoutPage` / `-openLayoutPicker landscape\|portrait` / `-openCustomLayoutPage landscape\|portrait` / `-openLayoutEditor screen\|control` (layout screenshots; the `-landscape` variants force that direction), and `-previewGameView` / `-previewScreenLayout <layout>` / `-previewLandscape` (ROM-free game-view screenshots, the layout choice picked by direction). |
+| `DebugLaunch.swift` | Headless launch hooks: `-openAOTTitleID` (start a library game), `-gamesRoot` (scan a Simulator fixture folder instead of Documents/Games), `-openLayoutPage` / `-openLayoutPicker landscape\|portrait` / `-openCustomLayoutPage landscape\|portrait` / `-openLayoutEditor screen\|control` (layout screenshots; the `-landscape` variants force that direction), `-previewGameView` / `-previewScreenLayout <layout>` / `-previewLandscape` (ROM-free game-view screenshots, the layout choice picked by direction), and `-previewPauseMenu` / `-previewControlEdit` / `-openControlOptions visibility\|size\|opacity` (round-4 control option screenshots). |
 | `LegacyGameData.swift` | One-time migration for apps updated from 0.1.x: cartridge lookup for the statically linked title, play times, and renaming ROM-named save folders to the title-id namespace. |
 | `ScreenImage.swift` | Reusable RGBA buffers and `CGImage` conversion. |
 | `InputState.swift` | Thread-safe merge of touch, overlay and controller input. |
 | `KeyboardRequest.swift` | One 3DS software-keyboard request: the schema-1 JSON decode, the applet's confirmation rules (`Request::accepts`), UTF-16 limit handling and the localized rejection lines. |
 | `KeyboardOverlayView.swift` | The full-screen overlay that answers a software-keyboard request: hint, pre-filled text field, character counter, applet buttons and validation; portrait and landscape, above the system keyboard. |
 | `ControlLayout.swift` | Editable control layout model: the full New 3DS control set, normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. |
-| `VirtualControlsView.swift` | Runtime overlay: draws one button / analog stick per control with its own gesture (multi-touch), reports ZK_BUTTON_* bits, Circle Pad and C-stick vectors. |
-| `ControlLayoutEditorView.swift` | Full-screen control layout editor (one direction per editor, opened from Settings → Controls → Control layout): the real game view with the current screen layout behind the controls, drag with alignment guides, pinch/corner-handle resize, per-control size/opacity, undo and resets, immediate persistence. |
-| `ControlLayoutSettingsView.swift` | The control layout page under Settings → Controls: the Default / Custom choice, the full-screen editor entry and the reset. |
+| `VirtualControlsView.swift` | Runtime overlay: draws one button / analog stick per control with its own gesture (multi-touch), reports ZK_BUTTON_* bits, Circle Pad and C-stick vectors; skips the rows hidden in the pause menu and applies the per-row size scale. |
+| `ControlLayoutEditorView.swift` | Legacy full-screen control layout editor kept for the `-openLayoutEditor control` screenshot hook; the app no longer links it (round-4 editing happens in-game). |
+| `ControlLayoutSettingsView.swift` | Legacy control layout page (not linked from Settings since round 4); kept for compatibility of the old screenshot hook. |
+| `InGameControlEditOverlay.swift` | Round-4 in-game control editing: draggable controls over the frozen paused picture, per-row visibility/size, a centered Done pill that saves the current direction and resumes the game. |
+| `ControlOptionsViews.swift` | The pause menu's virtual-control option sheets: Toggle controls (per-row checkboxes), Adjust size (10%-200% slider per row) and Adjust opacity (the global overlay opacity). |
 | `CustomScreenLayout.swift` | Custom screen layout model (archive v3 with the ratio-lock flag; older archives migrate to the round-2 measured defaults) plus `CustomScreenGeometry`: per-orientation screen rectangles, rotation, integer scaling. |
-| `ScreenLayoutEditorView.swift` | Full-screen custom screen layout drag editor (one direction per editor, opened from the numeric custom page's "Edit by dragging"): full-screen game-view canvas with the current control layout overlaid for reference, drag/pinch/corner-handle resize, edge snapping, Lock ratio, undo and resets. |
+| `ScreenLayoutEditorView.swift` | Full-screen custom screen layout drag editor (one direction per editor, opened from the numeric custom page's "Edit by dragging"): full-screen game-view canvas with the current control layout overlaid for reference, direct screen drag, a ≥44 pt corner handle or pinch to resize, edge snapping and one clear Done pill (round-4 interaction; no bottom toolbar). |
 | `CustomScreenLayoutValuesView.swift` | The numeric custom screen layout page of one direction: Upper screen / Lower screen sections with X position, Y position, Width and Height as integer percentages of the game view, editing the CustomScreenLayout archive; also the "Edit by dragging" entry. |
 | `ScreenLayoutSettingsView.swift` | The screen layout page under Settings → Display: the landscape six-choice row, the portrait three-choice row (each opening a radio picker sheet), the two custom layout rows and no reset / "how it works" section. |
 | `GameControllerInput.swift` | GameController-to-3DS button mapping. |
@@ -1110,13 +1145,18 @@ Instant save states:
   the emergency readback mirror for those choices (no GPU zero-copy path).
   Arbitrary per-screen placement inside the Metal presenter is still the
   follow-up for a future presenter arrangement.
-- The floating on-screen controls were not retuned for the full-bleed layout
-  this round: the shipped portrait positions were designed for the old reserved
-  pad area, so they can overlap the picture until the next controls round or a
-  hand-edited Custom control layout moves them.
-- The two Custom layouts ignore the aspect-ratio and integer-scaling box (they
-  place each screen by a fraction of the whole game view); screen rotation and
-  each screen's native shape still apply.
+- The floating on-screen controls were not retuned for the full-bleed layout:
+  the shipped portrait positions were designed for the old reserved pad area, so
+  they can overlap the picture until the in-game **Edit layout** mode moves them
+  (round 4). The Azahar-only behaviour rows (slide buttons, relative stick
+  centre, D-pad slide, Combo Button) are future work; the round-4 options are
+  visibility, size scale, opacity and reset.
+- Hidden controls are not drawn in the in-game editor either: re-enable a row in
+  **Toggle controls** before moving it. The per-row size scale is global (one
+  value for both orientations), matching the visibility choice.
+- The two Custom layouts ignore the display-format box (they place each screen by
+  a fraction of the whole game view); screen rotation and each screen's native
+  shape still apply.
 - The round-2 custom-layout defaults were measured on a 20:9 reference screen:
   the rectangles are normalised to the game view and the screens keep their own
   aspect inside them, so a different screen shape can show letterboxing inside a
@@ -1171,8 +1211,9 @@ The exported diagnostics header adds the build, device, session phase
 (`paused=`), the runtime state, the active settings (`frame_cap=`,
 `screen_layout=` (the current direction's presenter arrangement, or
 `readback-<choice>`), `landscape_layout=`, `portrait_layout=`,
-`screen_layout_readback=`, `screen_aspect=`,
-`integer_scale=`, `render_scale=`,
+`screen_layout_readback=`, `virtual_controls_hidden=`,
+`control_size_scales=`, `screen_aspect=` (stored/ignored),
+`integer_scale=` (stored/ignored), `render_scale=`,
 `render_scale_applies=`, `orientation=`, `audio_volume=`, `audio_muted=`,
 `audio_buffer_ms=`, `touch_controls=`, `controls_opacity=`, `haptics=`,
 `playback_speed=`, `playback_speed_effective=`,

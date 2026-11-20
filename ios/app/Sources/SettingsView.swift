@@ -37,15 +37,6 @@ func persistedBinding<T>(
     )
 }
 
-/// The caption under the resolution picker: the exact pixels the selected
-/// render factor produces, so it changes the moment the factor changes. 1x
-/// keeps the short "native 400×240" wording (item 5).
-private func resolutionCaption(for renderScale: Int) -> String {
-    guard renderScale > 1 else {
-        return L10n.tr("1x is the 3DS's native 400×240.")
-    }
-    return L10n.format("%ldx is %ld×%ld.", renderScale, 400 * renderScale, 240 * renderScale)
-}
 
 // MARK: - Settings page
 
@@ -93,20 +84,13 @@ struct SettingsView: View {
             NavigationLink {
                 ScreenLayoutSettingsView(settings: settings)
             } label: {
-                Text("Landscape screen layout")
+                Text("Screen layout")
             }
             Picker("Screen rotation", selection: persistedBinding(settings, \.screenRotation)) {
                 ForEach(ScreenRotation.allCases) { rotation in
                     Text(rotation.title).tag(rotation)
                 }
             }
-            Picker("Aspect ratio", selection: persistedBinding(settings, \.screenAspect)) {
-                ForEach(ScreenAspect.allCases) { aspect in
-                    Text(aspect.title).tag(aspect)
-                }
-            }
-            Toggle("Integer scaling", isOn: persistedBinding(settings, \.integerScale))
-                .disabled(settings.screenAspect == .stretch)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Resolution")
                 Picker("Resolution", selection: persistedBinding(settings, \.renderScale)) {
@@ -117,7 +101,6 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                // The one caption this page keeps: it follows the picker.
                 hintText(resolutionCaption(for: settings.renderScale))
             }
             Picker("Orientation", selection: persistedBinding(settings, \.orientation)) {
@@ -171,11 +154,7 @@ struct SettingsView: View {
                     .monospacedDigit()
             }
             Toggle("Haptic feedback on button press", isOn: persistedBinding(settings, \.haptics))
-            NavigationLink {
-                ControlLayoutSettingsView(settings: settings)
-            } label: {
-                Text("Control layout")
-            }
+            hintText(L10n.tr("Virtual control visibility, size and layout are edited in the in-game pause menu under Virtual controls."))
             infoRow("Controller", model.controllerName ?? L10n.tr("Not connected"))
         } header: {
             Text("Controls")
@@ -415,19 +394,6 @@ struct QuickDisplaySettingsView: View {
                             Text(rotation.title).tag(rotation)
                         }
                     }
-                    Picker(
-                        "Aspect ratio",
-                        selection: persistedBinding(settings, \.screenAspect)
-                    ) {
-                        ForEach(ScreenAspect.allCases) { aspect in
-                            Text(aspect.title).tag(aspect)
-                        }
-                    }
-                    Toggle(
-                        "Integer scaling",
-                        isOn: persistedBinding(settings, \.integerScale)
-                    )
-                    .disabled(settings.screenAspect == .stretch)
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Resolution")
                         Picker(
@@ -469,6 +435,17 @@ struct QuickDisplaySettingsView: View {
             }
         }
     }
+}
+
+/// The caption under the resolution picker: the exact pixels the selected
+/// render factor produces. A resolution change takes effect from the next game
+/// load (the runtime builds its renderer then); the presented drawable resizes
+/// at once.
+private func resolutionCaption(for renderScale: Int) -> String {
+    guard renderScale > 1 else {
+        return L10n.tr("1x is the 3DS's native 400×240.")
+    }
+    return L10n.format("%ldx is %ld×%ld.", renderScale, 400 * renderScale, 240 * renderScale)
 }
 
 /// Share sheet payload for the diagnostics export from Settings.

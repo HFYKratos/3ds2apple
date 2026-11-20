@@ -364,8 +364,17 @@ extension ControlElement {
     /// this exact frame and the controls editor manipulates it, so a drag in the
     /// editor lands where the runtime draws the control.
     func frame(for placement: ControlPlacement, in container: CGSize) -> ControlFrame {
+        frame(for: placement, in: container, sizeScale: 1.0)
+    }
+
+    /// The control's point frame with the round-4 per-row size scale applied
+    /// (1.0 = the profile size; the pause menu's Adjust size sheet stores it).
+    func frame(for placement: ControlPlacement, in container: CGSize,
+               sizeScale: Double) -> ControlFrame {
         let shortSide = min(container.width, container.height)
-        let diameter = max(shortSide * CGFloat(placement.size), ControlElement.minimumDiameter)
+        let scale = max(CGFloat(sizeScale), 0.1)
+        let diameter = max(shortSide * CGFloat(placement.size) * scale,
+                          ControlElement.minimumDiameter)
         let center = CGPoint(x: container.width * CGFloat(placement.x),
                              y: container.height * CGFloat(placement.y))
         return ControlFrame(center: center, diameter: diameter, width: diameter * widthRatio)

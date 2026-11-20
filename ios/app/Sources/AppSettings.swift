@@ -469,6 +469,9 @@ final class AppSettings: ObservableObject {
     @Published var screenAspect: ScreenAspect
     /// Turn the screens inside their area (see `ScreenRotation`).
     @Published var screenRotation: ScreenRotation
+    /// Kept for compatibility with older archives/diagnostics: the display
+    /// settings no longer expose aspect or integer scaling (the presets are
+    /// presenter arrangements), so the values stay at their defaults.
     @Published var integerScale: Bool
     /// 1 = the layout's own drawable (400x480 for the stacked console) through
     /// 4 = four times that (1600x1920). The presenter's drawable is resized at
@@ -484,6 +487,16 @@ final class AppSettings: ObservableObject {
     @Published var showTouchControls: Bool
     @Published var controlsOpacity: Double
     @Published var haptics: Bool
+
+    // MARK: In-game virtual control options (round 4)
+
+    /// Rows the user hid from the pause menu's "Toggle controls" sheet. Global,
+    /// not per orientation; an empty set means every control is visible.
+    @Published var hiddenControlItems: Set<ControlOptionItem>
+    /// Per-row size scale (1.0 = 100%, supported range 0.10...2.0). Global; a
+    /// row missing from the dictionary means 100%. Keys are
+    /// ControlOptionItem raw values.
+    @Published var controlSizeScales: [String: Double]
 
     // MARK: Editable layouts (requirements 7 + 8)
 
@@ -607,6 +620,17 @@ final class AppSettings: ObservableObject {
         } else {
             controlLayoutMode = .standard
         }
+        // In-game virtual-control options (round 4): hidden rows and per-row
+        // size scales. Both are global (not per orientation); an unreadable
+        // value falls back to "all visible / 100%".
+        let storedHidden = defaults.stringArray(forKey: Keys.hiddenControlItems) ?? []
+        hiddenControlItems = Set(storedHidden.compactMap(ControlOptionItem.init(rawValue:)))
+        if let data = defaults.data(forKey: Keys.controlSizeScales),
+           let decoded = try? JSONDecoder().decode([String: Double].self, from: data) {
+            controlSizeScales = decoded
+        } else {
+            controlSizeScales = [:]
+        }
 
         // The performance page no longer offers a frame cap: the console
         // timeline runs at its native 60 Hz and Fast-forward is the only
@@ -668,6 +692,12 @@ final class AppSettings: ObservableObject {
         }
         if let data = customScreenLayout.encoded() {
             defaults.set(data, forKey: Keys.customScreenLayout)
+        }
+        // Round-4 in-game virtual-control options.
+        defaults.set(hiddenControlItems.map(\.rawValue).sorted(),
+                     forKey: Keys.hiddenControlItems)
+        if let data = try? JSONEncoder().encode(controlSizeScales) {
+            defaults.set(data, forKey: Keys.controlSizeScales)
         }
     }
 
@@ -753,6 +783,58 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    // MARK: - In-game virtual control options (round 4)
+
+    /// Supported per-row size scale range (10%-200%).
+    static let controlSizeScaleRange: ClosedRange<Double> = 0.10...2.0
+
+    static func clampControlSizeScale(_ value: Double) -> Double {
+        min(max(value, controlSizeScaleRange.lowerBound), controlSizeScaleRange.upperBound)
+    }
+
+    /// Whether one control element is drawn and hit-testable right now.
+    func isControlVisible(_ element: ControlElement) -> Bool {
+        !hiddenControlItems.contains(ControlOptionItem.item(containing: element))
+    }
+
+    /// Whether one option row (control or D-pad group) is visible.
+    func isControlItemVisible(_ item: ControlOptionItem) -> Bool {
+        !hiddenControlItems.contains(item)
+    }
+
+    func setControlItem(_ item: ControlOptionItem, visible: Bool) {
+        if visible {
+            hiddenControlItems.remove(item)
+        } else {
+            hiddenControlItems.insert(item)
+        }
+    }
+
+    /// The size multiplier of one control element (1.0 = the profile size).
+    func controlSizeScale(for element: ControlElement) -> Double {
+        controlSizeScale(for: ControlOptionItem.item(containing: element))
+    }
+
+    /// The size multiplier of one option row (controls and the D-pad group).
+    func controlSizeScale(for item: ControlOptionItem) -> Double {
+        Self.clampControlSizeScale(controlSizeScales[item.rawValue] ?? 1.0)
+    }
+
+    func setControlSizeScale(_ scale: Double, for item: ControlOptionItem) {
+        controlSizeScales[item.rawValue] = Self.clampControlSizeScale(scale)
+    }
+
+    /// Restores the shipped placements for both orientations, every row to
+    /// 100% and all controls visible (the pause menu's Reset action).
+    func resetVirtualControls() {
+        controlLayoutMode = .standard
+        controlLayoutPortrait = .standard(for: .portrait)
+        controlLayoutLandscape = .standard(for: .landscape)
+        hiddenControlItems = []
+        controlSizeScales = [:]
+        persist()
+    }
+
     /// Fast-forward target as a plain number for the session and diagnostics.
     var playbackSpeedValue: Int { playbackSpeed.rawValue }
 
@@ -787,6 +869,9 @@ final class AppSettings: ObservableObject {
         static let legacyScreenLayoutMode = "UI.screenLayoutMode"
         /// 0.1.3 Default/Custom choice for the on-screen controls.
         static let controlLayoutMode = "UI.controlLayoutMode"
+        /// Round-4 in-game virtual-control options (global).
+        static let hiddenControlItems = "UI.hiddenControlItems"
+        static let controlSizeScales = "UI.controlSizeScales"
         static let controlLayoutPortrait = "UI.controlLayoutPortrait"
         static let controlLayoutLandscape = "UI.controlLayoutLandscape"
         static let customScreenLayout = "UI.customScreenLayout"

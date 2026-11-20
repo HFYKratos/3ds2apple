@@ -13,10 +13,11 @@
 //  non-interactive, so the screens can be placed between or away from the
 //  controls.
 //
-//  Gestures: drag a screen to move it, pinch to shrink/enlarge it, drag the
-//  corner handle to resize it. Movement snaps to the stage edges/centre and to
-//  the other screen with dashed guides. Undo, lock ratio and reset (this
-//  direction or both) are on the bottom bar; every change is saved immediately.
+//  Round-4 interaction: drag a screen directly to move it, drag its large
+//  (>=44 pt) corner handle or pinch to resize it, and tap the one clear Done pill
+//  (bottom centre) to save and leave. Movement snaps to the stage edges/centre
+//  and to the other screen with dashed guides; every change is saved immediately
+//  and there is no scrolling/zooming surface in the editor.
 //
 //  The custom layout still runs on the software readback path - the upstream
 //  Zakuro presenter only knows its fixed arrangements - so it applies from the
@@ -90,13 +91,13 @@ struct ScreenLayoutEditorView: View {
             ZStack(alignment: .topLeading) {
                 Color.black
                 canvas(available: proxy.size)
-                VStack(spacing: 8) {
+                VStack(spacing: 0) {
                     topBar
                     Spacer(minLength: 8)
-                    bottomBar
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
+                doneOverlay
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
@@ -284,13 +285,44 @@ struct ScreenLayoutEditorView: View {
                     .foregroundColor(.secondary)
             }
             Spacer(minLength: 8)
-            Button(L10n.tr("Done")) { dismiss() }
-                .font(.footnote.weight(.semibold))
-                .accessibilityIdentifier("screen-editor-done")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.ultraThinMaterial, in: Capsule())
+    }
+
+    /// The round-4 Done surface: one obvious pill over the canvas (the edits are
+    /// already committed live), with the interaction hint above it.
+    private var doneOverlay: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Text(L10n.tr("Drag a screen to move it. Drag the large corner handle or pinch to resize. Done saves the layout."))
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.72))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 18)
+            Button {
+                commit()
+                dismiss()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark")
+                    Text(L10n.tr("Done"))
+                }
+                .font(.body.weight(.semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 26)
+                .padding(.vertical, 13)
+                .background(Capsule().fill(Color.accentColor))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+                .shadow(color: .black.opacity(0.45), radius: 10, y: 4)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("screen-editor-done")
+        }
+        .padding(.bottom, 26)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var bottomBar: some View {
@@ -556,7 +588,9 @@ private struct EditableScreenBox: View {
         CGSize(width: max(rect.width, 24), height: max(rect.height, 24))
     }
 
-    private var handleSize: CGFloat { 16 }
+    /// Round-4 interaction: the corner handle is a >=44 pt touch target with a
+    /// visible knob, so a finger can grab it without zooming.
+    private var handleSize: CGFloat { 44 }
 
     var body: some View {
         ZStack {
@@ -598,8 +632,8 @@ private struct EditableScreenBox: View {
                 Circle()
                     .fill(Color.accentColor)
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.9), lineWidth: 1))
-                    .frame(width: handleSize, height: handleSize)
-                    .padding(3)
+                    .frame(width: 22, height: 22)
+                    .padding(11)
                     .contentShape(Circle())
                     .gesture(
                         DragGesture(minimumDistance: 0)

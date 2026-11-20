@@ -632,3 +632,29 @@
 "Values are percentages of the game view (0-100). The custom layout applies from the next game load." = "Values are percentages of the game view (0-100). The custom layout applies from the next game load.";
 "The custom layouts place each screen with percentages of the game view; they apply from the next game load." = "The custom layouts place each screen with percentages of the game view; they apply from the next game load.";
 
+/* --- Round-4 in-game virtual controls and control layout editing --- */
+"Virtual controls" = "Virtual controls";
+"Show virtual controls" = "Show virtual controls";
+"Show performance stats" = "Show performance stats";
+"Haptic feedback" = "Haptic feedback";
+"Edit layout" = "Edit layout";
+"Toggle controls" = "Toggle controls";
+"Adjust size" = "Adjust size";
+"Adjust opacity" = "Adjust opacity";
+"Reset virtual controls" = "Reset virtual controls";
+"Reset virtual controls?" = "Reset virtual controls?";
+"Restores the default control positions for both orientations, every size to 100% and all controls visible." = "Restores the default control positions for both orientations, every size to 100% and all controls visible.";
+"Hidden controls are not drawn and do not respond to touches. The D-pad is toggled as one group." = "Hidden controls are not drawn and do not respond to touches. The D-pad is toggled as one group.";
+"The size scale multiplies each control (or the D-pad group) in the running overlay. 100% is the layout's own size." = "The size scale multiplies each control (or the D-pad group) in the running overlay. 100% is the layout's own size.";
+"The opacity applies to every on-screen control, including the sticks." = "The opacity applies to every on-screen control, including the sticks.";
+"Drag the controls to move them. Done saves this orientation's layout and resumes the game." = "Drag the controls to move them. Done saves this orientation's layout and resumes the game.";
+"Drag a screen to move it. Drag the large corner handle or pinch to resize. Done saves the layout." = "Drag a screen to move it. Drag the large corner handle or pinch to resize. Done saves the layout.";
+"Button L" = "Button L";
+"Button R" = "Button R";
+"Button ZL" = "Button ZL";
+"Button ZR" = "Button ZR";
+"Start" = "Start";
+"Select" = "Select";
+"D-pad" = "D-pad";
+"Virtual control visibility, size and layout are edited in the in-game pause menu under Virtual controls." = "Virtual control visibility, size and layout are edited in the in-game pause menu under Virtual controls.";
+
