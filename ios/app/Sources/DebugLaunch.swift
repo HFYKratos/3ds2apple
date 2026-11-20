@@ -32,16 +32,26 @@
 //        the floating FPS/pause controls and the on-screen control overlay. The
 //        preview path never touches a session, so it needs no game data.
 //
-//    -previewScreenLayout <preset>
-//        Apply one screen layout preset for this launch only (in memory, never
-//        persisted), so every preset can be captured headlessly:
-//        original | single | large | side | hybrid | custom. Combine it with
-//        -previewGameView for the ROM-free screenshots.
+//    -previewScreenLayout <layout>
+//        Apply one screen layout choice for this launch only (in memory, never
+//        persisted). With -previewLandscape it sets the landscape choice:
+//        large | single | side | hybrid | original | custom. Without it, it sets
+//        the portrait choice: default | original | custom. A value of the other
+//        direction is logged and ignored. Combine it with -previewGameView for
+//        the ROM-free screenshots.
 //
 //    -previewLandscape
 //        Force the landscape appearance for headless screenshots (the app asks
 //        its window scene to rotate and the game view uses the landscape
 //        arrangement even before the rotation lands).
+//
+//    -openLayoutPicker landscape|portrait
+//        Open that direction's screen layout radio picker straight away, for
+//        headless screenshots.
+//
+//    -openCustomLayoutPage landscape|portrait
+//        Open the numeric custom layout page for that direction, for headless
+//        screenshots.
 //
 //    -gamesRoot <path>
 //        Scan this folder instead of Documents/Games. A relative path resolves
@@ -84,6 +94,12 @@ enum DebugLaunch {
     static let previewScreenLayoutArgument = "-previewScreenLayout"
     /// Launch argument: `-previewLandscape` forces the landscape appearance.
     static let previewLandscapeArgument = "-previewLandscape"
+    /// Launch argument: `-openLayoutPicker landscape|portrait` opens that
+    /// direction's screen layout radio picker, for headless screenshots.
+    static let layoutPickerArgument = "-openLayoutPicker"
+    /// Launch argument: `-openCustomLayoutPage landscape|portrait` opens the
+    /// numeric custom layout page for that direction, for headless screenshots.
+    static let customLayoutPageArgument = "-openCustomLayoutPage"
 
     /// A layout page a headless launch asked to open.
     enum LayoutPage: String {
@@ -126,34 +142,83 @@ enum DebugLaunch {
         ProcessInfo.processInfo.arguments.contains(previewLandscapeArgument)
     }
 
-    /// The screen layout preset requested for this launch, nil in normal
-    /// launches. It is applied to the in-memory settings only (see
-    /// `applyPreviewSettings(to:)`).
-    static var previewScreenLayoutPreset: ScreenLayoutPreset? {
-        guard let raw = argumentValue(for: previewScreenLayoutArgument) else { return nil }
-        return ScreenLayoutPreset(rawValue: raw.lowercased())
+    /// The direction whose preset picker a headless launch asked to open.
+    static var requestedLayoutPicker: ControlLayoutOrientation? {
+        orientationArgument(for: layoutPickerArgument)
     }
 
-    /// Applies the preview-only display settings for this launch. The values are
+    /// The direction whose numeric custom layout page a headless launch asked to
+    /// open.
+    static var requestedCustomLayoutPage: ControlLayoutOrientation? {
+        orientationArgument(for: customLayoutPageArgument)
+    }
+
+    /// Applies the preview-only display values for this launch. The values are
     /// written to the shared settings object but never persisted, so the next
     /// normal launch keeps whatever the user chose. Called once from
     /// ContentView.onAppear; a normal launch does nothing.
     static func applyPreviewSettings(to settings: AppSettings) {
-        let preset = previewScreenLayoutPreset
-        guard previewGameView || previewLandscape || preset != nil else { return }
-        if let preset {
-            settings.screenLayoutPreset = preset
+        let rawLayout = argumentValue(for: previewScreenLayoutArgument)
+        guard previewGameView || previewLandscape || rawLayout != nil else { return }
+        if let rawLayout {
+            if previewLandscape {
+                if let layout = LandscapeScreenLayout(rawValue: rawLayout.lowercased()) {
+                    settings.landscapeScreenLayout = layout
+                } else {
+                    AppLog.log(
+                        "[3ds2apple] %@: '%@' is not a landscape layout (%@); ignored",
+                        previewScreenLayoutArgument,
+                        rawLayout,
+                        LandscapeScreenLayout.allCases.map(\.rawValue).joined(separator: ", ")
+                    )
+                }
+            } else if let layout = portraitLayoutArgument(rawLayout) {
+                settings.portraitScreenLayout = layout
+            } else {
+                AppLog.log(
+                    "[3ds2apple] %@: '%@' is not a portrait layout (%@); ignored",
+                    previewScreenLayoutArgument,
+                    rawLayout,
+                    PortraitScreenLayout.allCases.map(\.rawValue).joined(separator: ", ")
+                )
+            }
         }
         if previewLandscape {
             settings.orientation = .landscape
             AppOrientation.apply(.landscape)
         }
         AppLog.log(
-            "[3ds2apple] preview launch: game_view=%@ landscape=%@ screen_layout=%@",
+            "[3ds2apple] preview launch: game_view=%@ landscape=%@ landscape_layout=%@ portrait_layout=%@",
             previewGameView ? "on" : "off",
             previewLandscape ? "on" : "off",
-            preset?.rawValue ?? settings.screenLayoutPreset.rawValue
+            settings.landscapeScreenLayout.rawValue,
+            settings.portraitScreenLayout.rawValue
         )
+    }
+
+    /// Maps a portrait layout argument; accepts the user-facing "default" for
+    /// the stored topFullWidth value.
+    private static func portraitLayoutArgument(_ raw: String) -> PortraitScreenLayout? {
+        switch raw.lowercased() {
+        case "default", "topfullwidth", "top-full-width", "full-width":
+            return .topFullWidth
+        default:
+            return PortraitScreenLayout(rawValue: raw.lowercased())
+        }
+    }
+
+    /// Maps a landscape|portrait launch argument to a device direction.
+    private static func orientationArgument(for flag: String) -> ControlLayoutOrientation? {
+        guard let raw = argumentValue(for: flag) else { return nil }
+        switch raw.lowercased() {
+        case "landscape", "land", "horizontal":
+            return .landscape
+        case "portrait", "port", "vertical":
+            return .portrait
+        default:
+            AppLog.log("[3ds2apple] %@: '%@' is not landscape or portrait; ignored", flag, raw)
+            return nil
+        }
     }
 
     /// Set once a launch request was handled, so a re-appearing view cannot

@@ -618,3 +618,15 @@
 "Portrait and landscape keep their own custom layouts. The running game fills the screen; the FPS counter and the pause button float over the picture." = "Portrait and landscape keep their own custom layouts. The running game fills the screen; the FPS counter and the pause button float over the picture.";
 "Custom layout" = "Custom";
 
+/* --- Round-2 layout split: landscape / portrait settings and the numeric custom pages --- */
+"Portrait screen layout" = "Portrait screen layout";
+"Landscape custom layout" = "Landscape custom layout";
+"Portrait custom layout" = "Portrait custom layout";
+"X position" = "X position";
+"Y position" = "Y position";
+"Width" = "Width";
+"Height" = "Height";
+"Edit by dragging" = "Edit by dragging";
+"Values are percentages of the game view (0-100). The custom layout applies from the next game load." = "Values are percentages of the game view (0-100). The custom layout applies from the next game load.";
+"The custom layouts place each screen with percentages of the game view; they apply from the next game load." = "The custom layouts place each screen with percentages of the game view; they apply from the next game load.";
+

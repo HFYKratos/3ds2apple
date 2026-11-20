@@ -2,20 +2,22 @@
 //  ScreenLayoutSettingsView.swift
 //  3ds2apple
 //
-//  The screen layout page under Settings -> Display (round-1 layout redesign).
+//  The screen layout page under Settings -> Display (round-2 split).
 //
-//  It is a radio list of the six screen layout presets - Original, Single
-//  screen, Large screen (the default), Side by side, Hybrid and Custom - with a
-//  one-line detail under every title and a checkmark on the selected row. The
-//  Custom row also opens the existing full-screen editor for the direction the
-//  device is in right now, and the page keeps the reset action.
+//  Landscape and portrait are independent settings, like the reference layout
+//  app:
+//  - "Screen layout" shows the landscape choice and opens a six-preset radio
+//    picker (Large screen, Single screen, Side by side, Hybrid, Original,
+//    Custom layout);
+//  - "Portrait screen layout" shows the portrait choice and opens a three-preset
+//    radio picker (Default, Original, Custom layout);
+//  - "Landscape custom layout" and "Portrait custom layout" open the numeric
+//    percent pages for the two custom layouts.
 //
-//  Presets the Metal presenter can draw apply immediately (they just choose the
-//  presented arrangement). Large in portrait, Hybrid in both directions and
-//  Custom are placed on the readback path, so the session picks them up on the
-//  next load; the footer says so. The editing itself happens in
-//  ScreenLayoutEditorView, full screen, on a scaled copy of the real game view of
-//  this device (see GameViewGeometry.swift).
+//  The page has no "how it works" section and no reset: the radio picker and the
+//  numeric pages are the whole surface. The headless screenshot hook
+//  -openLayoutPicker landscape|portrait asks this page to present one picker
+//  straight away; see DebugLaunch.swift.
 //
 
 import Foundation
@@ -24,57 +26,145 @@ import SwiftUI
 struct ScreenLayoutSettingsView: View {
     @ObservedObject var settings: AppSettings
 
-    @State private var isEditorPresented = false
+    @State private var pickerOrientation: ControlLayoutOrientation?
+    @State private var didHandleDebugLaunch = false
 
     var body: some View {
         Form {
             presetSection
-            aboutSection
+            customSection
         }
         .navigationTitle(L10n.tr("Screen layout"))
         .navigationBarTitleDisplayMode(.inline)
-        .fullScreenCover(isPresented: $isEditorPresented) {
-            ScreenLayoutEditorView(settings: settings)
+        .sheet(item: $pickerOrientation) { orientation in
+            LayoutPresetPickerView(settings: settings, orientation: orientation)
+        }
+        .onAppear {
+            guard !didHandleDebugLaunch else { return }
+            didHandleDebugLaunch = true
+            if let orientation = DebugLaunch.requestedLayoutPicker {
+                pickerOrientation = orientation
+            }
         }
     }
 
-    // MARK: - Presets
+    // MARK: - Rows
 
     private var presetSection: some View {
         Section {
-            ForEach(ScreenLayoutPreset.allCases) { preset in
-                presetRow(preset)
-            }
-            if settings.screenLayoutPreset == .custom {
-                Button {
-                    isEditorPresented = true
-                } label: {
-                    Label(L10n.tr("Edit screen layout"), systemImage: "rectangle.3.group")
-                }
-                .accessibilityIdentifier("screen-layout-edit")
-            }
+            presetRow(title: L10n.tr("Screen layout"),
+                      value: settings.landscapeScreenLayout.title,
+                      orientation: .landscape)
+            presetRow(title: L10n.tr("Portrait screen layout"),
+                      value: settings.portraitScreenLayout.title,
+                      orientation: .portrait)
         } header: {
             Text(L10n.tr("Screens"))
-        } footer: {
-            Text(L10n.tr("Large in portrait, Hybrid and Custom are placed by the app on the readback path, so they can be slower and apply from the next game load."))
         }
     }
 
-    private func presetRow(_ preset: ScreenLayoutPreset) -> some View {
+    private var customSection: some View {
+        Section {
+            NavigationLink {
+                CustomScreenLayoutValuesView(settings: settings, orientation: .landscape)
+            } label: {
+                Text(L10n.tr("Landscape custom layout"))
+            }
+            .accessibilityIdentifier("custom-layout-landscape")
+            NavigationLink {
+                CustomScreenLayoutValuesView(settings: settings, orientation: .portrait)
+            } label: {
+                Text(L10n.tr("Portrait custom layout"))
+            }
+            .accessibilityIdentifier("custom-layout-portrait")
+        } footer: {
+            Text(L10n.tr("The custom layouts place each screen with percentages of the game view; they apply from the next game load."))
+        }
+    }
+
+    private func presetRow(title: String,
+                           value: String,
+                           orientation: ControlLayoutOrientation) -> some View {
         Button {
-            select(preset)
+            pickerOrientation = orientation
         } label: {
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(preset.title)
-                        .foregroundColor(.primary)
-                    Text(preset.detail)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Text(title).foregroundColor(.primary)
+                Spacer(minLength: 12)
+                Text(value)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundColor(.secondary.opacity(0.6))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(orientation == .landscape
+                                 ? "layout-picker-landscape"
+                                 : "layout-picker-portrait")
+    }
+}
+
+// MARK: - Preset picker
+
+/// The radio picker of one direction's layout choices. Presented as a sheet by
+/// the screen layout page (and by the headless screenshot hook).
+struct LayoutPresetPickerView: View {
+    @ObservedObject var settings: AppSettings
+    let orientation: ControlLayoutOrientation
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                switch orientation {
+                case .landscape:
+                    ForEach(LandscapeScreenLayout.allCases) { layout in
+                        row(title: layout.title,
+                            selected: settings.landscapeScreenLayout == layout) {
+                            settings.landscapeScreenLayout = layout
+                            settings.persist()
+                        }
+                    }
+                case .portrait:
+                    ForEach(PortraitScreenLayout.allCases) { layout in
+                        row(title: layout.title,
+                            selected: settings.portraitScreenLayout == layout) {
+                            settings.portraitScreenLayout = layout
+                            settings.persist()
+                        }
+                    }
                 }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle(navigationTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.tr("Done")) { dismiss() }
+                        .accessibilityIdentifier("layout-picker-done")
+                }
+            }
+        }
+    }
+
+    private var navigationTitle: String {
+        orientation == .landscape
+            ? L10n.tr("Screen layout")
+            : L10n.tr("Portrait screen layout")
+    }
+
+    private func row(title: String,
+                     selected: Bool,
+                     action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(title).foregroundColor(.primary)
                 Spacer(minLength: 8)
-                if settings.screenLayoutPreset == preset {
+                if selected {
                     Image(systemName: "checkmark")
                         .font(.body.weight(.semibold))
                         .foregroundColor(.accentColor)
@@ -83,42 +173,6 @@ struct ScreenLayoutSettingsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("screen-layout-preset-\(preset.rawValue)")
-        .accessibilityAddTraits(settings.screenLayoutPreset == preset ? .isSelected : [])
-    }
-
-    /// Choosing Custom opens the editor for the current direction right away;
-    /// the editor is the only surface for the hand-placed rectangles.
-    private func select(_ preset: ScreenLayoutPreset) {
-        guard preset != settings.screenLayoutPreset else { return }
-        settings.screenLayoutPreset = preset
-        settings.persist()
-        if preset == .custom {
-            DispatchQueue.main.async { isEditorPresented = true }
-        }
-    }
-
-    // MARK: - About
-
-    private var aboutSection: some View {
-        Section {
-            hint(L10n.tr("Custom screen layouts and the readback presets run on the software readback path, so they can be slower than the Metal presenter."))
-            Button(L10n.tr("Reset screen layout to defaults"), role: .destructive) {
-                settings.screenLayoutPreset = .defaultPreset
-                settings.customScreenLayout = .standard()
-                settings.persist()
-            }
-        } header: {
-            Text(L10n.tr("How it works"))
-        } footer: {
-            Text(L10n.tr("Portrait and landscape keep their own custom layouts. The running game fills the screen; the FPS counter and the pause button float over the picture."))
-        }
-    }
-
-    private func hint(_ text: String) -> some View {
-        Text(text)
-            .font(.caption)
-            .foregroundColor(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+        .accessibilityIdentifier("layout-row-\(orientation.rawValue)-\(title)")
     }
 }

@@ -3,7 +3,8 @@
 //  3ds2apple
 //
 //  Settings page: display, audio, controls, performance, storage and About.
-//  The Display section opens the screen layout page (Default / Custom) and the
+//  The Display section opens the screen layout page (separate landscape and
+//  portrait preset pickers plus the two numeric custom layout pages) and the
 //  Controls section opens the control layout page (Default / Custom; the
 //  custom choice opens the full-screen editor); the rotation/aspect/resolution
 //  rows also appear in the in-game quick settings sheet.
@@ -392,16 +393,20 @@ struct QuickDisplaySettingsView: View {
                 Section {
                     Picker(
                         "Screen layout",
-                        selection: persistedBinding(settings, \.screenLayoutPreset)
+                        selection: persistedBinding(settings, \.landscapeScreenLayout)
                     ) {
-                        ForEach(ScreenLayoutPreset.allCases) { preset in
-                            Text(preset.title).tag(preset)
+                        ForEach(LandscapeScreenLayout.allCases) { layout in
+                            Text(layout.title).tag(layout)
                         }
                     }
-                    Text(settings.screenLayoutPreset.detail)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Picker(
+                        "Portrait screen layout",
+                        selection: persistedBinding(settings, \.portraitScreenLayout)
+                    ) {
+                        ForEach(PortraitScreenLayout.allCases) { layout in
+                            Text(layout.title).tag(layout)
+                        }
+                    }
                     Picker(
                         "Screen rotation",
                         selection: persistedBinding(settings, \.screenRotation)

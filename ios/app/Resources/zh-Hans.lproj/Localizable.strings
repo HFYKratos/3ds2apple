@@ -620,3 +620,15 @@
 "Portrait and landscape keep their own custom layouts. The running game fills the screen; the FPS counter and the pause button float over the picture." = "竖屏与横屏各自保存自定义布局。游戏画面铺满屏幕；FPS 与暂停按钮悬浮在画面上方。";
 "Custom layout" = "自定义布局";
 
+/* --- Round-2 布局拆分：横屏 / 竖屏独立设置与自定义数值页 --- */
+"Portrait screen layout" = "纵向屏幕布局";
+"Landscape custom layout" = "横向自定义布局";
+"Portrait custom layout" = "纵向自定义布局";
+"X position" = "X-位置";
+"Y position" = "Y-位置";
+"Width" = "宽度";
+"Height" = "高度";
+"Edit by dragging" = "拖动编辑";
+"Values are percentages of the game view (0-100). The custom layout applies from the next game load." = "数值为游戏画面的百分比（0–100）；自定义布局在下次载入游戏时生效。";
+"The custom layouts place each screen with percentages of the game view; they apply from the next game load." = "自定义布局用游戏画面的百分比摆放两块屏幕；在下次载入游戏时生效。";
+

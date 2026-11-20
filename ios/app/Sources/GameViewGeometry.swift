@@ -278,8 +278,7 @@ extension GameViewPreviewGeometry {
                                 displayScale: CGFloat) -> (top: CGRect?, bottom: CGRect?) {
         guard stage.width >= 1, stage.height >= 1 else { return (nil, nil) }
         if let viewports = PresetScreenGeometry.readbackViewports(
-            preset: settings.screenLayoutPreset,
-            customLayout: settings.customScreenLayout,
+            settings: settings,
             orientation: orientation,
             stage: stage,
             rotation: settings.screenRotation,

@@ -2,11 +2,11 @@
 //  ScreenLayoutEditorView.swift
 //  3ds2apple
 //
-//  The full-screen custom screen layout editor (0.1.3 simplification).
+//  The full-screen custom screen layout drag editor.
 //
-//  The Settings page opens it for the direction the device is in right now
-//  (portrait edits the portrait layout, landscape the landscape one), and the
-//  canvas is the whole screen. The canvas mirrors the running game view
+//  The numeric custom layout page ("Edit by dragging") opens it for one fixed
+//  direction (portrait edits the portrait layout, landscape the landscape one),
+//  and the canvas is the whole screen. The canvas mirrors the running game view
 //  (GameViewGeometry.swift): the real safe area and the full-bleed picture
 //  stage, with the floating controls over the whole screen. The current
 //  on-screen control layout is drawn over the picture, translucent and
@@ -20,8 +20,8 @@
 //
 //  The custom layout still runs on the software readback path - the upstream
 //  Zakuro presenter only knows its fixed arrangements - so it applies from the
-//  next game load. Archive: CustomScreenLayout version 2 (v1 is migrated on
-//  read); see CustomScreenLayout.swift and ios/app/README.md.
+//  next game load. Archive: CustomScreenLayout version 3 (older archives are
+//  migrated on read); see CustomScreenLayout.swift and ios/app/README.md.
 //
 
 import Foundation
@@ -503,11 +503,10 @@ struct ScreenLayoutEditorView: View {
     }
 
     private func commit() {
-        // Hand editing a custom screen layout is exactly the Custom choice; the
-        // Settings page also switches it before opening the editor.
-        if settings.screenLayoutPreset != .custom {
-            settings.screenLayoutPreset = .custom
-        }
+        // Hand editing a custom screen layout is exactly that direction's Custom
+        // choice; the numeric custom page also switches it before opening the
+        // editor.
+        settings.selectCustomScreenLayout(for: orientation)
         settings.customScreenLayout = draft
         settings.persist()
     }

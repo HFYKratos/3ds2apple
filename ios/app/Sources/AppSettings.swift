@@ -53,102 +53,89 @@ enum ScreenLayout: String, CaseIterable, Identifiable {
     }
 }
 
-/// The screen layout presets (round-1 layout redesign).
+/// The landscape screen layout presets (round-2 split: landscape and portrait
+/// are independent settings).
 ///
-/// A preset decides how the two 3DS screens are arranged, per device direction.
-/// Most presets use one of the presenter's fixed arrangements; the arrangements
-/// the presenter cannot draw (`large` in portrait and `hybrid` in both
-/// directions) and `custom` use the app's own readback placement instead (see
+/// Display order is the case order: Large screen, Single screen, Side by side,
+/// Hybrid, Original, Custom layout. Most presets use one of the presenter's
+/// fixed arrangements; `large` (the round-2 measured arrangement), `hybrid` and
+/// `custom` are placed by the app's own readback instead (see
 /// ScreenGeometry.swift and CustomScreenLayout.swift).
 ///
-/// The stored raw values are stable. The 0.1.3 choice is migrated on read:
-/// `standard` becomes `large` (the new default) and `custom` stays `custom`;
-/// the removed 0.1.2 values (`automatic`, `preset`, `customMetal`, `freeform`)
-/// are mapped the same way. A missing value means `large`.
-enum ScreenLayoutPreset: String, CaseIterable, Identifiable {
-    /// Both screens at their native size, stacked as on the console.
-    case original
-    /// The upper screen only, as large as it fits.
-    case single
-    /// A large upper screen with a small lower screen. The default.
+/// The stored raw values are stable. The round-1 single choice is migrated in
+/// `AppSettings.migratedScreenLayouts(fromLegacy:)`.
+enum LandscapeScreenLayout: String, CaseIterable, Identifiable {
+    /// Large upper screen left, the lower screen small at the top right.
     case large
+    /// The upper screen only, maximised and centred.
+    case single
     /// Upper screen left, lower screen right, at their native sizes.
     case side
-    /// A large upper screen with the lower screen below it.
+    /// Upper 5:3 screen left, lower 4:3 screen right, both nearly full height.
     case hybrid
-    /// The hand-placed per-orientation rectangles from the custom editor.
+    /// Both screens at their native size, stacked as on the console.
+    case original
+    /// The hand-placed landscape rectangles from the numeric custom page.
     case custom
 
-    /// The preset a fresh install starts on.
-    static let defaultPreset: ScreenLayoutPreset = .large
+    /// The choice a fresh install starts on.
+    static let defaultLayout: LandscapeScreenLayout = .large
 
     var id: String { rawValue }
 
-    /// Decodes the current values and the older choices this feature replaces.
-    init?(rawValue: String) {
-        switch rawValue {
-        case "original":
-            self = .original
-        case "single":
-            self = .single
-        case "large", "standard", "automatic", "preset", "customMetal":
-            self = .large
-        case "side":
-            self = .side
-        case "hybrid":
-            self = .hybrid
-        case "custom", "freeform":
-            self = .custom
-        default:
-            return nil
-        }
-    }
-
-    /// The presenter arrangement for one device direction, or nil when this
-    /// preset needs the readback placement (the presenter has no such
-    /// arrangement yet).
-    func presenterLayout(isLandscape: Bool) -> ScreenLayout? {
+    /// The presenter arrangement for the landscape direction, or nil when the
+    /// readback placement draws this choice.
+    var presenterLayout: ScreenLayout? {
         switch self {
         case .original: return .stacked
         case .single: return .upperOnly
-        case .large: return isLandscape ? .largeTop : nil
         case .side: return .sideBySide
-        case .hybrid, .custom: return nil
+        case .large, .hybrid, .custom: return nil
         }
-    }
-
-    /// Whether a device direction draws the screens with the readback placement;
-    /// the session then has to skip the presenter for the next load.
-    func usesReadbackPresentation(isLandscape: Bool) -> Bool {
-        presenterLayout(isLandscape: isLandscape) == nil
     }
 
     var title: String {
         switch self {
-        case .original: return L10n.tr("Original")
-        case .single: return L10n.tr("Single screen")
         case .large: return L10n.tr("Large screen")
+        case .single: return L10n.tr("Single screen")
         case .side: return L10n.tr("Side by side")
         case .hybrid: return L10n.tr("Hybrid")
+        case .original: return L10n.tr("Original")
         case .custom: return L10n.tr("Custom layout")
         }
     }
+}
 
-    /// One line under the title in the Settings list.
-    var detail: String {
+/// The portrait screen layout presets (round-2 split): the separate portrait
+/// setting, default first.
+enum PortraitScreenLayout: String, CaseIterable, Identifiable {
+    /// Top full width: the upper screen fills the width and the lower screen is
+    /// scaled with it; the arrangement is top-aligned.
+    case topFullWidth
+    /// The native stack, both screens at the console's own pixel sizes.
+    case original
+    /// The hand-placed portrait rectangles from the numeric custom page.
+    case custom
+
+    /// The choice a fresh install starts on.
+    static let defaultLayout: PortraitScreenLayout = .topFullWidth
+
+    var id: String { rawValue }
+
+    /// The presenter arrangement for the portrait direction, or nil when the
+    /// readback placement draws this choice.
+    var presenterLayout: ScreenLayout? {
         switch self {
-        case .original:
-            return L10n.tr("Both screens at their native size, stacked as on the console and scaled together.")
-        case .single:
-            return L10n.tr("The upper screen only, as large as the game view allows.")
-        case .large:
-            return L10n.tr("A large upper screen; in portrait the lower screen sits small in the bottom-right corner.")
-        case .side:
-            return L10n.tr("The upper and lower screens side by side at their native size.")
-        case .hybrid:
-            return L10n.tr("A large upper screen with the lower screen below it, about 60% of its width.")
-        case .custom:
-            return L10n.tr("Place each screen by hand, one layout for each device direction.")
+        case .original: return .stacked
+        case .topFullWidth, .custom: return nil
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .topFullWidth: return L10n.tr("Default")
+        case .original: return L10n.tr("Original")
+        case .custom: return L10n.tr("Custom layout")
         }
     }
 }
@@ -476,8 +463,12 @@ final class AppSettings: ObservableObject {
 
     // MARK: Editable layouts (requirements 7 + 8)
 
-    /// The screen layout preset (see `ScreenLayoutPreset`; default `.large`).
-    @Published var screenLayoutPreset: ScreenLayoutPreset
+    /// The landscape screen layout preset (see `LandscapeScreenLayout`;
+    /// default `.large`). Split from the portrait choice in round 2.
+    @Published var landscapeScreenLayout: LandscapeScreenLayout
+    /// The portrait screen layout preset (see `PortraitScreenLayout`; default
+    /// `.topFullWidth`).
+    @Published var portraitScreenLayout: PortraitScreenLayout
     /// Default / Custom for the on-screen controls (see `ControlLayoutMode`).
     @Published var controlLayoutMode: ControlLayoutMode
     /// The on-screen control layout, one profile per container shape.
@@ -551,12 +542,21 @@ final class AppSettings: ObservableObject {
         // unreadable entry falls back to the shipped default, so an install that
         // predates this feature keeps a usable layout and an older app reading a
         // newer profile does not crash.
-        // Screen layout preset. The 0.1.3 Default / Custom value and the
-        // removed 0.1.2 modes are mapped by ScreenLayoutPreset.init(rawValue:);
-        // a fresh or unreadable install starts on the default preset.
-        screenLayoutPreset = ScreenLayoutPreset(
-            rawValue: defaults.string(forKey: Keys.screenLayoutMode) ?? ""
-        ) ?? .defaultPreset
+        // Screen layouts (round 2): landscape and portrait are independent
+        // settings with their own stored keys. The round-1 single choice is
+        // migrated once (see migratedScreenLayouts(fromLegacy:)); a fresh or
+        // unreadable install starts on the shipped defaults.
+        let storedLandscape = defaults.string(forKey: Keys.landscapeScreenLayout)
+        let storedPortrait = defaults.string(forKey: Keys.portraitScreenLayout)
+        let migrated = Self.migratedScreenLayouts(
+            fromLegacy: defaults.string(forKey: Keys.legacyScreenLayoutMode)
+        )
+        landscapeScreenLayout = LandscapeScreenLayout(
+            rawValue: storedLandscape ?? ""
+        ) ?? migrated.landscape
+        portraitScreenLayout = PortraitScreenLayout(
+            rawValue: storedPortrait ?? ""
+        ) ?? migrated.portrait
         // Decode the control profiles into locals first: comparing them with
         // the shipped defaults must not touch `self` before every stored
         // property is initialised.
@@ -633,7 +633,8 @@ final class AppSettings: ObservableObject {
         defaults.set(showFPS, forKey: Keys.showFPS)
         defaults.set(playbackSpeed.rawValue, forKey: Keys.playbackSpeed)
         // Editable layouts (versioned Codable data; see the init).
-        defaults.set(screenLayoutPreset.rawValue, forKey: Keys.screenLayoutMode)
+        defaults.set(landscapeScreenLayout.rawValue, forKey: Keys.landscapeScreenLayout)
+        defaults.set(portraitScreenLayout.rawValue, forKey: Keys.portraitScreenLayout)
         defaults.set(controlLayoutMode.rawValue, forKey: Keys.controlLayoutMode)
         if let data = controlLayoutPortrait.withDefaultsFilled(for: .portrait).encoded() {
             defaults.set(data, forKey: Keys.controlLayoutPortrait)
@@ -658,18 +659,51 @@ final class AppSettings: ObservableObject {
 
     var controlsBackgroundOpacity: Double { Self.clampOpacity(controlsOpacity) }
 
-    /// The presenter arrangement for an orientation. Presets the presenter
-    /// cannot draw return a sensible fallback; those directions use the readback
-    /// path instead (see `usesReadbackPresentation(isLandscape:)`).
+    /// The presenter arrangement for a direction. Choices the presenter cannot
+    /// draw return a sensible fallback; those directions use the readback path
+    /// instead (see `usesReadbackPresentation(isLandscape:)`).
     func effectiveScreenLayout(isLandscape: Bool) -> ScreenLayout {
-        screenLayoutPreset.presenterLayout(isLandscape: isLandscape)
-            ?? (isLandscape ? .largeTop : .stacked)
+        if isLandscape {
+            return landscapeScreenLayout.presenterLayout ?? .largeTop
+        }
+        return portraitScreenLayout.presenterLayout ?? .stacked
     }
 
-    /// Whether this device direction must draw the picture through the readback
-    /// path: `custom`, `hybrid` and `large` in portrait.
+    /// Whether this direction's picture is drawn by the app's own readback
+    /// placement instead of the presenter.
     func usesReadbackPresentation(isLandscape: Bool) -> Bool {
-        screenLayoutPreset.usesReadbackPresentation(isLandscape: isLandscape)
+        isLandscape
+            ? landscapeScreenLayout.presenterLayout == nil
+            : portraitScreenLayout.presenterLayout == nil
+    }
+
+    /// The title of the active choice for one direction (the Settings rows).
+    func screenLayoutTitle(isLandscape: Bool) -> String {
+        isLandscape ? landscapeScreenLayout.title : portraitScreenLayout.title
+    }
+
+    /// The stored raw value of the active choice for one direction
+    /// (diagnostics).
+    func screenLayoutRawValue(isLandscape: Bool) -> String {
+        isLandscape ? landscapeScreenLayout.rawValue : portraitScreenLayout.rawValue
+    }
+
+    /// Selects the custom-layout choice for one direction. The numeric custom
+    /// page and the drag editor call this so editing a custom layout also makes
+    /// it the active choice.
+    func selectCustomScreenLayout(for orientation: ControlLayoutOrientation) {
+        switch orientation {
+        case .landscape: landscapeScreenLayout = .custom
+        case .portrait: portraitScreenLayout = .custom
+        }
+    }
+
+    /// Whether the active choice for one direction is the custom layout.
+    func usesCustomLayout(for orientation: ControlLayoutOrientation) -> Bool {
+        switch orientation {
+        case .landscape: return landscapeScreenLayout == .custom
+        case .portrait: return portraitScreenLayout == .custom
+        }
     }
 
     /// The control profile the runtime should draw: the shipped default in
@@ -721,9 +755,12 @@ final class AppSettings: ObservableObject {
         /// "UI.graphicsWarmUpEnabled"; old values are ignored on purpose.
         static let showFPS = "UI.showFPS"
         static let playbackSpeed = "UI.playbackSpeed"
-        /// Stored screen layout preset; the 0.1.3 Default/Custom and the removed
-        /// 0.1.2 values are mapped on read by `ScreenLayoutPreset`.
-        static let screenLayoutMode = "UI.screenLayoutMode"
+        /// Round-2 landscape / portrait screen layout choices (independent).
+        static let landscapeScreenLayout = "UI.landscapeScreenLayout"
+        static let portraitScreenLayout = "UI.portraitScreenLayout"
+        /// The round-1 single screen layout choice; read once to migrate it to
+        /// the two round-2 settings.
+        static let legacyScreenLayoutMode = "UI.screenLayoutMode"
         /// 0.1.3 Default/Custom choice for the on-screen controls.
         static let controlLayoutMode = "UI.controlLayoutMode"
         static let controlLayoutPortrait = "UI.controlLayoutPortrait"
@@ -749,6 +786,34 @@ final class AppSettings: ObservableObject {
     }
 
     // MARK: Layout decoding
+
+    /// The round-2 migration of the round-1 single screen layout choice. The
+    /// round-1 `UI.screenLayoutMode` held one of the six round-1 presets (or the
+    /// older Default/Custom values); it becomes one landscape and one portrait
+    /// choice:
+    /// - original -> landscape original + portrait original;
+    /// - single / side / hybrid -> that landscape choice, portrait default;
+    /// - large (and the older automatic / standard modes) -> landscape large,
+    ///   portrait default;
+    /// - custom (and the removed freeform) -> custom in both directions.
+    private static func migratedScreenLayouts(
+        fromLegacy raw: String?
+    ) -> (landscape: LandscapeScreenLayout, portrait: PortraitScreenLayout) {
+        switch raw ?? "" {
+        case "original":
+            return (.original, .original)
+        case "single":
+            return (.single, .topFullWidth)
+        case "side":
+            return (.side, .topFullWidth)
+        case "hybrid":
+            return (.hybrid, .topFullWidth)
+        case "custom", "freeform":
+            return (.custom, .custom)
+        default:
+            return (.large, .topFullWidth)
+        }
+    }
 
     private static func decodeControlLayout(_ defaults: UserDefaults,
                                             _ key: String,

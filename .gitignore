@@ -89,3 +89,5 @@ AGENTS.md
 
 # --- Builder frontends ------------------------------------------------------
 node_modules/
+# Local layout reference screenshots (contain commercial game pictures; local only, never commit)
+/docs/

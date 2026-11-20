@@ -282,12 +282,12 @@ check "control editor overlays the current screen layout" contains ios/app/Sourc
 check "GameView floats the editable control overlay over the whole game view" \
   bash -c 'grep -q "VirtualControlsView(" ios/app/Sources/GameView.swift && grep -q "ignoresSafeArea()" ios/app/Sources/GameView.swift'
 check "custom screen layout model exists" contains ios/app/Sources/CustomScreenLayout.swift 'struct CustomScreenLayout'
-check "custom screen layout archive stays version 2" contains ios/app/Sources/CustomScreenLayout.swift 'static let currentVersion = 2'
+check "custom screen layout archive is version 3" contains ios/app/Sources/CustomScreenLayout.swift 'static let currentVersion = 3'
 check "custom screen layout geometry handles the 90 degree turn" contains ios/app/Sources/CustomScreenLayout.swift 'case .counterClockwise:'
 check "custom screen layout editor exists" test -f ios/app/Sources/ScreenLayoutEditorView.swift
-check "screen layout presets expose the six round-1 choices" \
-  bash -c 'for preset in original single large side hybrid custom; do grep -q "case \.$preset" ios/app/Sources/AppSettings.swift || exit 1; done'
-check "screen layout page opens the editor for the current direction" contains ios/app/Sources/ScreenLayoutSettingsView.swift 'ScreenLayoutEditorView(settings: settings)'
+check "screen layout settings split landscape (six) and portrait (three) choices" \
+  bash -c 'grep -q "enum LandscapeScreenLayout" ios/app/Sources/AppSettings.swift && grep -q "enum PortraitScreenLayout" ios/app/Sources/AppSettings.swift && for preset in large single side hybrid original custom; do grep -q "case \.$preset" ios/app/Sources/AppSettings.swift || exit 1; done && grep -q "case topFullWidth" ios/app/Sources/AppSettings.swift'
+check "numeric custom layout page opens the drag editor for its direction" contains ios/app/Sources/CustomScreenLayoutValuesView.swift 'ScreenLayoutEditorView(settings: settings, orientation: orientation)'
 check "screen editor is full screen and edits the current direction" contains ios/app/Sources/ScreenLayoutEditorView.swift 'currentLayoutOrientation'
 check "screen editor overlays the current control layout" contains ios/app/Sources/ScreenLayoutEditorView.swift 'settings.controlLayout(for: orientation)'
 check "custom layout forces the readback presentation path" contains ios/app/Sources/ROMSession.swift 'readbackPresentationRequired'

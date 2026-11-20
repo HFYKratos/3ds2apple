@@ -14,19 +14,20 @@
 //  floating controls: FPS in the top-trailing safe-area corner in both
 //  orientations, pause next to it in portrait and bottom-centre in landscape.
 //
-//  The screen arrangement comes from the Settings screen layout preset
-//  (ScreenLayoutPreset, AppSettings.swift). Most presets use one of the Metal
-//  presenter's arrangements; the ones the presenter cannot draw - large in
-//  portrait, hybrid in both directions and custom - are placed by the readback
-//  path (see ScreenGeometry.swift and CustomScreenLayout.swift), which needs the
-//  session to skip the presenter on the next load.
+//  The screen arrangement comes from the split Settings choices: the landscape
+//  preset (large / single / side / hybrid / original / custom) and the separate
+//  portrait preset (default / original / custom). The choices the presenter
+//  cannot draw - landscape large / hybrid / custom and portrait default / custom
+//  - are placed by the readback path (see ScreenGeometry.swift and
+//  CustomScreenLayout.swift), which needs the session to skip the presenter for
+//  the next load.
 //
 //  Opening the in-game menu pauses emulation; the runtime and the last frame stay
 //  until resume. When a title starts the 3DS software keyboard, the session stops
 //  its frame loop and publishes the request; this view shows the keyboard overlay
 //  on top of everything. Answering it resumes the game.
 //
-//  Debug launch hooks (`-previewGameView`, `-previewScreenLayout <preset>`,
+//  Debug launch hooks (`-previewGameView`, `-previewScreenLayout <layout>`,
 //  `-previewLandscape`, see DebugLaunch.swift) render the same view without a
 //  ROM: two synthetic test images (GameViewPreview.swift) go through the real
 //  layout geometry, and the normal game path is untouched.
@@ -140,7 +141,10 @@ struct GameView: View {
             .onChange(of: isLandscape) { newValue in
                 syncPresentedLayout(newValue)
             }
-            .onChange(of: settings.screenLayoutPreset) { _ in
+            .onChange(of: settings.landscapeScreenLayout) { _ in
+                syncPresentedLayout(isLandscape)
+            }
+            .onChange(of: settings.portraitScreenLayout) { _ in
                 syncPresentedLayout(isLandscape)
             }
         }
@@ -369,9 +373,10 @@ struct GameView: View {
             || (isRuntimeStarting && model.metalScreenView != nil)
     }
 
-    /// The screens inside `available`: the presented layer for the presets the
-    /// presenter can draw, the app's own placement for the readback presets
-    /// (custom, hybrid, large in portrait) and for the preview/fallback path.
+    /// The screens inside `available`: the presented layer for the choices the
+    /// presenter can draw, the app's own placement for the readback choices
+    /// (landscape large / hybrid / custom, portrait default / custom) and for
+    /// the preview/fallback path.
     @ViewBuilder
     private func screenContent(available: CGSize, isLandscape: Bool) -> some View {
         if available.width >= 1, available.height >= 1 {
@@ -384,7 +389,12 @@ struct GameView: View {
                 ZStack {
                     presentedSurface(view: metalView, size: box)
                 }
-                .frame(width: available.width, height: available.height)
+                // Portrait arrangements are top-aligned under the safe area (the
+                // original portrait layout shows the console stack at the top);
+                // landscape arrangements are centred.
+                .frame(width: available.width,
+                       height: available.height,
+                       alignment: isLandscape ? .center : .top)
             } else {
                 readbackArrangement(in: available, isLandscape: isLandscape)
             }
@@ -409,15 +419,15 @@ struct GameView: View {
     private func readbackArrangement(in area: CGSize, isLandscape: Bool) -> some View {
         let orientation: ControlLayoutOrientation = isLandscape ? .landscape : .portrait
         if let viewports = PresetScreenGeometry.readbackViewports(
-            preset: settings.screenLayoutPreset,
-            customLayout: settings.customScreenLayout,
+            settings: settings,
             orientation: orientation,
             stage: area,
             rotation: settings.screenRotation,
             displayScale: displayScale,
             integerScale: settings.integerScale
         ) {
-            readbackScreens(viewports, layoutBox: area, area: area, stretches: false)
+            readbackScreens(viewports, layoutBox: area, area: area,
+                            stretches: false, alignTop: false)
         } else {
             let layout = settings.effectiveScreenLayout(isLandscape: isLandscape)
             let stretch = settings.screenAspect == .stretch
@@ -437,7 +447,10 @@ struct GameView: View {
                 layout: layout,
                 rotation: settings.screenRotation
             )
-            readbackScreens(viewports, layoutBox: layoutBox, area: area, stretches: stretch)
+            // Portrait arrangements are top-aligned under the safe area, like
+            // the presented layer; a stretched arrangement always fills the area.
+            readbackScreens(viewports, layoutBox: layoutBox, area: area,
+                            stretches: stretch, alignTop: !isLandscape)
         }
     }
 
@@ -449,7 +462,8 @@ struct GameView: View {
     private func readbackScreens(_ viewports: (top: CGRect?, bottom: CGRect?),
                                  layoutBox: CGSize,
                                  area: CGSize,
-                                 stretches: Bool) -> some View {
+                                 stretches: Bool,
+                                 alignTop: Bool) -> some View {
         let stretchX = stretches && layoutBox.width > 0 ? area.width / layoutBox.width : 1
         let stretchY = stretches && layoutBox.height > 0 ? area.height / layoutBox.height : 1
         return ZStack(alignment: .topLeading) {
@@ -477,7 +491,8 @@ struct GameView: View {
         }
         .frame(width: layoutBox.width, height: layoutBox.height, alignment: .topLeading)
         .scaleEffect(x: stretchX, y: stretchY)
-        .frame(width: area.width, height: area.height)
+        .frame(width: area.width, height: area.height,
+               alignment: alignTop ? .top : .center)
     }
 
     /// The frame the readback path (and the preview) shows for one screen.

@@ -199,13 +199,14 @@ enum DiagnosticsExporter {
         let aotPercentText = aot.aotPercent.map { String(format: "%.2f", $0) } ?? "-"
         let interpretedPercentText = aot.interpretedPercent.map { String(format: "%.2f", $0) } ?? "-"
         let fallbacksText = aot.instructionFallbacks.map(String.init) ?? "-"
-        // Round-1 layout redesign: the presenter arrangement for the direction
-        // the device is in now, or the preset whose readback placement draws it.
+        // Round-2 split layouts: each direction has its own choice. The old
+        // screen_layout field keeps reporting the current direction's
+        // arrangement (or the readback choice) for existing readers.
         let layoutIsLandscape = GameViewDeviceMetrics.currentLayoutOrientation == .landscape
-        let layoutPreset = settings.screenLayoutPreset
+        let activeLayoutValue = settings.screenLayoutRawValue(isLandscape: layoutIsLandscape)
         let layoutUsesReadback = settings.usesReadbackPresentation(isLandscape: layoutIsLandscape)
         let screenLayoutText = layoutUsesReadback
-            ? "readback-\(layoutPreset.rawValue)"
+            ? "readback-\(activeLayoutValue)"
             : model.screenLayout.rawValue
         // Frame budget of a 60 Hz presentation, and each measured phase as a
         // share of the whole render work item. A single glance at the report
@@ -251,7 +252,8 @@ enum DiagnosticsExporter {
         loop=\(model.frameLoopLabel)
         frame_cap=\(model.frameRateCapValue)
         screen_layout=\(screenLayoutText)
-        screen_layout_preset=\(layoutPreset.rawValue)
+        landscape_layout=\(settings.landscapeScreenLayout.rawValue)
+        portrait_layout=\(settings.portraitScreenLayout.rawValue)
         screen_rotation=\(model.screenRotation.rawValue)
         screen_aspect=\(settings.screenAspect.rawValue)
         integer_scale=\(settings.integerScale ? 1 : 0)
@@ -271,9 +273,8 @@ enum DiagnosticsExporter {
         touch_controls=\(settings.showTouchControls ? 1 : 0)
         controls_opacity=\(String(format: "%.2f", settings.controlsOpacity))
         haptics=\(settings.haptics ? 1 : 0)
-        screen_layout_mode=\(layoutPreset.rawValue)
         screen_layout_readback=\(layoutUsesReadback ? 1 : 0)
-        custom_screen_layout=\(layoutPreset == .custom ? 1 : 0)
+        custom_screen_layout=\(settings.usesCustomLayout(for: .landscape) || settings.usesCustomLayout(for: .portrait) ? 1 : 0)
         control_layout_mode=\(settings.controlLayoutMode.rawValue)
         control_layout_portrait_version=\(settings.storedControlLayout(for: .portrait).version)
         control_layout_landscape_version=\(settings.storedControlLayout(for: .landscape).version)

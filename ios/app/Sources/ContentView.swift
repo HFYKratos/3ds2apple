@@ -28,8 +28,23 @@ struct ContentView: View {
     @StateObject private var localization = LocalizationStore.shared
     @Environment(\.scenePhase) private var scenePhase
     /// Headless screenshot hooks for the layout pages; never set in normal use.
-    @State private var opensScreenLayoutPage = false
+    @State private var layoutSheet: LayoutSheet?
     @State private var layoutEditorLaunch: LayoutEditorLaunch?
+
+    /// A screen-layout page a headless launch asked to open: the settings page
+    /// (which can present a direction's preset picker itself) or the numeric
+    /// custom layout page of one direction.
+    private enum LayoutSheet: Identifiable {
+        case settings
+        case customPage(ControlLayoutOrientation)
+
+        var id: String {
+            switch self {
+            case .settings: return "layout-settings"
+            case .customPage(let orientation): return "custom-\(orientation.rawValue)"
+            }
+        }
+    }
 
     /// A full-screen layout editor a `-openLayoutEditor` launch opens directly,
     /// for headless screenshots. Every editor opens for one device direction.
@@ -58,9 +73,16 @@ struct ContentView: View {
         }
         // A locale change while the app runs re-reads the localized texts.
         .id(localization.revision)
-        .sheet(isPresented: $opensScreenLayoutPage) {
-            NavigationStack {
-                ScreenLayoutSettingsView(settings: settings)
+        .sheet(item: $layoutSheet) { sheet in
+            switch sheet {
+            case .settings:
+                NavigationStack {
+                    ScreenLayoutSettingsView(settings: settings)
+                }
+            case .customPage(let orientation):
+                NavigationStack {
+                    CustomScreenLayoutValuesView(settings: settings, orientation: orientation)
+                }
             }
         }
         .fullScreenCover(item: $layoutEditorLaunch) { launch in
@@ -89,7 +111,7 @@ struct ContentView: View {
             // Headless screenshot of the layout pages; inert otherwise.
             switch DebugLaunch.requestedLayoutPage {
             case .screenLayout:
-                opensScreenLayoutPage = true
+                layoutSheet = .settings
             case .controlEditorPortrait:
                 layoutEditorLaunch = LayoutEditorLaunch(kind: .control, orientation: .portrait)
             case .controlEditorLandscape:
@@ -100,6 +122,14 @@ struct ContentView: View {
                 layoutEditorLaunch = LayoutEditorLaunch(kind: .screen, orientation: .landscape)
             case nil:
                 break
+            }
+            // The picker hook opens the layout settings page; the page itself
+            // presents the requested direction's picker. Inert otherwise.
+            if DebugLaunch.requestedLayoutPicker != nil, layoutSheet == nil {
+                layoutSheet = .settings
+            }
+            if let orientation = DebugLaunch.requestedCustomLayoutPage {
+                layoutSheet = .customPage(orientation)
             }
         }
         .onChange(of: scenePhase) { newPhase in
@@ -147,7 +177,14 @@ struct ContentView: View {
         .onChange(of: settings.screenRotation) { rotation in
             model.setScreenRotation(rotation)
         }
-        .onChange(of: settings.screenLayoutPreset) { _ in
+        .onChange(of: settings.landscapeScreenLayout) { _ in
+            model.setReadbackPresentationRequired(
+                settings.usesReadbackPresentation(
+                    isLandscape: GameViewDeviceMetrics.currentLayoutOrientation == .landscape
+                )
+            )
+        }
+        .onChange(of: settings.portraitScreenLayout) { _ in
             model.setReadbackPresentationRequired(
                 settings.usesReadbackPresentation(
                     isLandscape: GameViewDeviceMetrics.currentLayoutOrientation == .landscape
