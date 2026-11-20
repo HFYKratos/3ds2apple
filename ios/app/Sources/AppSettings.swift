@@ -597,11 +597,20 @@ final class AppSettings: ObservableObject {
         // Decode the control profiles into locals first: comparing them with
         // the shipped defaults must not touch `self` before every stored
         // property is initialised.
-        let storedControlPortrait = Self.decodeControlLayout(
+        let decodedControlPortrait = Self.decodeControlLayout(
             defaults, Keys.controlLayoutPortrait, orientation: .portrait
         )
-        let storedControlLandscape = Self.decodeControlLayout(
+        let decodedControlLandscape = Self.decodeControlLayout(
             defaults, Keys.controlLayoutLandscape, orientation: .landscape
+        )
+        // Round 5: a stored profile that is still the pre-round-5 shipped default
+        // moves to the new ModernCenteredX2-derived default; a profile the user
+        // moved is kept unchanged.
+        let storedControlPortrait = ControlLayoutProfile.migratingPreviousShippedDefault(
+            decodedControlPortrait, for: .portrait
+        )
+        let storedControlLandscape = ControlLayoutProfile.migratingPreviousShippedDefault(
+            decodedControlLandscape, for: .landscape
         )
         controlLayoutPortrait = storedControlPortrait
         controlLayoutLandscape = storedControlLandscape

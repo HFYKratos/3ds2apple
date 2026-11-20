@@ -27,7 +27,7 @@ views do not carry duplicated strings.
 | **Settings** | Display, Audio, Controls, Performance (fast-forward, system Metal HUD, FPS counter), Storage and About sections. |
 | **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. The page re-reads the selected game's files when it opens, when the library changes and after every action; there is no refresh button. |
 | **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the FPS appears only while a game is loaded; everything else stays in the log and the diagnostics. |
-| **In-game menu** | Opened from the pause button over the game: pause/resume, save-state shortcuts, a **Virtual controls** card (Show virtual controls / Show performance stats / Haptic feedback, then Edit layout / Toggle controls / Adjust size / Adjust opacity / Reset virtual controls), quick toggles (mute, 1×/2×/4× fast-forward), Display settings, Save Manager, Diagnostics, Reset and Exit. |
+| **In-game menu** | Opened from the pause button over the game: pause/resume, save-state shortcuts, a **Virtual controls** card (Show virtual controls / Show performance stats / Haptic feedback, then Edit layout / Toggle controls / Adjust size / Adjust opacity / Reset virtual controls), quick toggles (mute, 1×/2×/4× fast-forward), Display settings, Save Manager, Diagnostics, Reset and Exit. Round 5 gives every option row one unified icon-free style (title plus a trailing toggle/chevron/value) with the same height and padding. |
 
 Opening the in-game menu pauses emulation: the frame loop and the audio engine
 are stopped, the runtime handle and the last frame stay, and Resume continues the
@@ -54,8 +54,9 @@ on-screen controls, so no input or audio advances behind it.
 - On-screen buttons (D-pad, A/B/X/Y, L/R, Start/Select) with configurable
   opacity and optional haptic feedback, plus GameController support (MFi, Xbox,
   DualSense). The game picture fills the whole screen and the controls float over
-  it as a full-screen overlay in both orientations (a hand-edited Custom control
-  layout still decides where each control sits); the layout reflows when the
+  it as a full-screen overlay in both orientations; the shipped default positions
+  are converted from the ModernCenteredX2 reference skin (round 5; geometry only),
+  a hand-edited layout can move them in-game, and the layout reflows when the
   device rotates.
 - Audio through `zk_take_audio` and AVAudioEngine, with volume, mute and an IO
   buffer size preference.
@@ -373,6 +374,16 @@ choice (six options) and an independent portrait choice (three options), each
 selected from its own radio picker, with the numeric custom pages and the
 round-4 drag editor described below.
 
+- **Default control layout (round 5).** The shipped positions are converted
+  from the **ModernCenteredX2** reference skin (a Delta `.deltaskin` zip read
+  only for its numeric `items[].frame` rectangles; no artwork or text copied):
+  landscape mapping 896x414 pt and portrait 414x896 pt, centres and sizes
+  normalised to our full-screen overlay. The skin's ZL/ZR and C-stick are absent,
+  so ZL/ZR sit just above L/R and the C-stick sits above the A-B-X-Y cluster; all
+  ten controls use opacity 0.85. A stored profile that is still the previous
+  shipped default (compared within tolerance) is migrated to the new default on
+  load; a profile the user moved is kept. **Reset virtual controls** restores the
+  new default.
 - **Controls (in-game pause menu).** The overlay draws the full New 3DS set:
   D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, the Circle Pad and the C-stick. It is
   a full-screen floating layer over the picture in both orientations and takes no
@@ -399,8 +410,11 @@ round-4 drag editor described below.
   The old Settings → Controls full-screen editor and its Default/Custom mode are
   no longer exposed: every change is stored immediately from the in-game editor
   (the profile archive and the per-row visibility/size scales are global). The
-  Azahar-only behaviour rows (slide buttons, relative stick centre, D-pad slide,
-  Combo Button) are not implemented this round; they are noted as future work.
+  reference layout app's behaviour rows (slide buttons, relative stick centre,
+  D-pad slide, Combo Button) are not implemented; they are noted as future work.
+  Round 5 also unified the whole pause menu: every option row is the same
+  icon-free style (title + trailing toggle/chevron/value, same height and
+  padding) and uses no SF Symbol icons for now.
 - **Analog sticks.** The Circle Pad is a real analog stick: dragging inside it
   reports -1…1 on both axes (a 14% dead zone is removed, so a resting finger is
   exactly 0) into `InputState.circleX/circleY` and `zk_set_input`. It is not a
@@ -838,7 +852,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `InputState.swift` | Thread-safe merge of touch, overlay and controller input. |
 | `KeyboardRequest.swift` | One 3DS software-keyboard request: the schema-1 JSON decode, the applet's confirmation rules (`Request::accepts`), UTF-16 limit handling and the localized rejection lines. |
 | `KeyboardOverlayView.swift` | The full-screen overlay that answers a software-keyboard request: hint, pre-filled text field, character counter, applet buttons and validation; portrait and landscape, above the system keyboard. |
-| `ControlLayout.swift` | Editable control layout model: the full New 3DS control set, normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. |
+| `ControlLayout.swift` | Editable control layout model: the full New 3DS control set, normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. The shipped defaults are converted from the ModernCenteredX2 reference skin (numeric frames only) and a stored untouched old default is migrated on load. |
 | `VirtualControlsView.swift` | Runtime overlay: draws one button / analog stick per control with its own gesture (multi-touch), reports ZK_BUTTON_* bits, Circle Pad and C-stick vectors; skips the rows hidden in the pause menu and applies the per-row size scale. |
 | `ControlLayoutEditorView.swift` | Legacy full-screen control layout editor kept for the `-openLayoutEditor control` screenshot hook; the app no longer links it (round-4 editing happens in-game). |
 | `ControlLayoutSettingsView.swift` | Legacy control layout page (not linked from Settings since round 4); kept for compatibility of the old screenshot hook. |
@@ -1145,11 +1159,11 @@ Instant save states:
   the emergency readback mirror for those choices (no GPU zero-copy path).
   Arbitrary per-screen placement inside the Metal presenter is still the
   follow-up for a future presenter arrangement.
-- The floating on-screen controls were not retuned for the full-bleed layout:
-  the shipped portrait positions were designed for the old reserved pad area, so
-  they can overlap the picture until the in-game **Edit layout** mode moves them
-  (round 4). The Azahar-only behaviour rows (slide buttons, relative stick
-  centre, D-pad slide, Combo Button) are future work; the round-4 options are
+- The round-5 shipped default controls come from the ModernCenteredX2 reference
+  skin and are placed over the whole screen (the old reserved-pad positions are
+  gone). The skin is read only for numbers; its artwork is not used. The
+  reference layout app's behaviour rows (slide buttons, relative stick centre,
+  D-pad slide, Combo Button) are future work; the available options are
   visibility, size scale, opacity and reset.
 - Hidden controls are not drawn in the in-game editor either: re-enable a row in
   **Toggle controls** before moving it. The per-row size scale is global (one

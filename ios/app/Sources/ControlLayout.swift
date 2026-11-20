@@ -350,12 +350,79 @@ struct ControlLayoutProfile: Codable, Equatable {
         return result
     }
 
+    // MARK: - Shipped defaults (ModernCenteredX2 reference skin)
+
+    /// Round 5: the shipped default layout is converted from the
+    /// ModernCenteredX2 Delta skin (read-only reference: only its numeric
+    /// `items[].frame` rectangles are used, never its artwork or text). The
+    /// skin's coordinate space is 896x414 pt in landscape and 414x896 pt in
+    /// portrait; every entry below is the absolute skin centre divided by that
+    /// mapping size, and the size is the skin diameter divided by the mapping's
+    /// shorter side (414). Opacity is 0.85 for every control.
+    ///
+    /// The skin has no ZL/ZR and no C-stick: both are placed just above the
+    /// shoulder buttons / above the A-B-X-Y cluster, as the design note asks.
     private static func rawDefaultPlacements(
         for orientation: ControlLayoutOrientation
     ) -> [(ControlElement, ControlPlacement)] {
         switch orientation {
         case .landscape:
+            // Mapping 896x414 pt.
             return [
+                (.circlePad, ControlPlacement(x: 166.5 / 896.0, y: 334.5 / 414.0, size: 0.27778, opacity: 0.85)),
+                (.dpadUp, ControlPlacement(x: 313.5 / 896.0, y: (340.5 - 30.45) / 414.0, size: 0.09130, opacity: 0.85)),
+                (.dpadDown, ControlPlacement(x: 313.5 / 896.0, y: (340.5 + 30.45) / 414.0, size: 0.09130, opacity: 0.85)),
+                (.dpadLeft, ControlPlacement(x: (313.5 - 30.45) / 896.0, y: 340.5 / 414.0, size: 0.09130, opacity: 0.85)),
+                (.dpadRight, ControlPlacement(x: (313.5 + 30.45) / 896.0, y: 340.5 / 414.0, size: 0.09130, opacity: 0.85)),
+                (.buttonA, ControlPlacement(x: 803.5 / 896.0, y: 317.5 / 414.0, size: 0.15217, opacity: 0.85)),
+                (.buttonB, ControlPlacement(x: 748.5 / 896.0, y: 372.5 / 414.0, size: 0.15217, opacity: 0.85)),
+                (.buttonX, ControlPlacement(x: 748.5 / 896.0, y: 261.5 / 414.0, size: 0.15217, opacity: 0.85)),
+                (.buttonY, ControlPlacement(x: 693.0 / 896.0, y: 318.0 / 414.0, size: 0.15217, opacity: 0.85)),
+                (.buttonL, ControlPlacement(x: 676.5 / 896.0, y: 246.5 / 414.0, size: 0.07488, opacity: 0.85)),
+                (.buttonR, ControlPlacement(x: 820.5 / 896.0, y: 245.5 / 414.0, size: 0.07488, opacity: 0.85)),
+                // Not in the skin: just above L/R.
+                (.buttonZL, ControlPlacement(x: 676.5 / 896.0, y: 202.0 / 414.0, size: 0.065, opacity: 0.85)),
+                (.buttonZR, ControlPlacement(x: 820.5 / 896.0, y: 202.0 / 414.0, size: 0.065, opacity: 0.85)),
+                (.buttonStart, ControlPlacement(x: 490.0 / 896.0, y: 373.0 / 414.0, size: 0.08213, opacity: 0.85)),
+                (.buttonSelect, ControlPlacement(x: 405.0 / 896.0, y: 373.0 / 414.0, size: 0.08213, opacity: 0.85)),
+                // Not in the skin: above/right of the A-B-X-Y cluster.
+                (.cStick, ControlPlacement(x: 760.0 / 896.0, y: 200.0 / 414.0, size: 0.10, opacity: 0.85))
+            ]
+        case .portrait:
+            // Mapping 414x896 pt.
+            return [
+                (.circlePad, ControlPlacement(x: 68.5 / 414.0, y: 423.5 / 896.0, size: 0.24396, opacity: 0.85)),
+                (.dpadUp, ControlPlacement(x: 184.5 / 414.0, y: (459.5 - 29.9) / 896.0, size: 0.08961, opacity: 0.85)),
+                (.dpadDown, ControlPlacement(x: 184.5 / 414.0, y: (459.5 + 29.9) / 896.0, size: 0.08961, opacity: 0.85)),
+                (.dpadLeft, ControlPlacement(x: (184.5 - 29.9) / 414.0, y: 459.5 / 896.0, size: 0.08961, opacity: 0.85)),
+                (.dpadRight, ControlPlacement(x: (184.5 + 29.9) / 414.0, y: 459.5 / 896.0, size: 0.08961, opacity: 0.85)),
+                (.buttonA, ControlPlacement(x: 378.5 / 414.0, y: 431.5 / 896.0, size: 0.13285, opacity: 0.85)),
+                (.buttonB, ControlPlacement(x: 326.5 / 414.0, y: 482.5 / 896.0, size: 0.13285, opacity: 0.85)),
+                (.buttonX, ControlPlacement(x: 326.5 / 414.0, y: 380.5 / 896.0, size: 0.13285, opacity: 0.85)),
+                (.buttonY, ControlPlacement(x: 274.5 / 414.0, y: 431.5 / 896.0, size: 0.13285, opacity: 0.85)),
+                (.buttonL, ControlPlacement(x: 69.5 / 414.0, y: 334.0 / 896.0, size: 0.07729, opacity: 0.85)),
+                (.buttonR, ControlPlacement(x: 344.5 / 414.0, y: 334.0 / 896.0, size: 0.07729, opacity: 0.85)),
+                (.buttonZL, ControlPlacement(x: 69.5 / 414.0, y: 296.0 / 896.0, size: 0.065, opacity: 0.85)),
+                (.buttonZR, ControlPlacement(x: 344.5 / 414.0, y: 296.0 / 896.0, size: 0.065, opacity: 0.85)),
+                (.buttonStart, ControlPlacement(x: 252.5 / 414.0, y: 333.5 / 896.0, size: 0.07971, opacity: 0.85)),
+                (.buttonSelect, ControlPlacement(x: 162.5 / 414.0, y: 333.5 / 896.0, size: 0.07971, opacity: 0.85)),
+                (.cStick, ControlPlacement(x: 386.0 / 414.0, y: 378.0 / 896.0, size: 0.13285, opacity: 0.85))
+            ]
+        }
+    }
+
+    // MARK: - Round-5 migration from the previous shipped default
+
+    /// The placements the app shipped before round 5 (the hand-tuned layout the
+    /// round-4 builds saved), kept only to recognise an untouched profile during
+    /// the migration below.
+    private static func previousShippedPlacements(
+        for orientation: ControlLayoutOrientation
+    ) -> [String: ControlPlacement] {
+        let entries: [(ControlElement, ControlPlacement)]
+        switch orientation {
+        case .landscape:
+            entries = [
                 (.buttonL, ControlPlacement(x: 0.085, y: 0.105, size: 0.085, opacity: 0.85)),
                 (.buttonZL, ControlPlacement(x: 0.186, y: 0.105, size: 0.075, opacity: 0.85)),
                 (.buttonSelect, ControlPlacement(x: 0.440, y: 0.100, size: 0.060, opacity: 0.85)),
@@ -374,7 +441,7 @@ struct ControlLayoutProfile: Codable, Equatable {
                 (.buttonB, ControlPlacement(x: 0.885, y: 0.780, size: 0.105, opacity: 0.90))
             ]
         case .portrait:
-            return [
+            entries = [
                 (.buttonL, ControlPlacement(x: 0.075, y: 0.100, size: 0.120, opacity: 0.85)),
                 (.buttonZL, ControlPlacement(x: 0.176, y: 0.100, size: 0.100, opacity: 0.85)),
                 (.buttonSelect, ControlPlacement(x: 0.420, y: 0.100, size: 0.090, opacity: 0.85)),
@@ -393,5 +460,40 @@ struct ControlLayoutProfile: Codable, Equatable {
                 (.buttonB, ControlPlacement(x: 0.875, y: 0.740, size: 0.170, opacity: 0.90))
             ]
         }
+        var result: [String: ControlPlacement] = [:]
+        for (element, placement) in entries {
+            result[element.rawValue] = placement
+        }
+        return result
+    }
+
+    /// True when a stored profile is still exactly the pre-round-5 shipped
+    /// default (within a small tolerance). A profile the user moved does not
+    /// match and is kept.
+    static func isPreviousShippedDefault(
+        _ profile: ControlLayoutProfile,
+        for orientation: ControlLayoutOrientation
+    ) -> Bool {
+        let expected = previousShippedPlacements(for: orientation)
+        guard profile.placements.count == expected.count else { return false }
+        for (key, value) in expected {
+            guard let stored = profile.placements[key] else { return false }
+            if abs(stored.x - value.x) > 0.005
+                || abs(stored.y - value.y) > 0.005
+                || abs(stored.size - value.size) > 0.005
+                || abs(stored.opacity - value.opacity) > 0.01 {
+                return false
+            }
+        }
+        return true
+    }
+
+    /// Round-5 migration: an untouched pre-round-5 profile becomes the new
+    /// skin-derived default; a customised profile is returned unchanged.
+    static func migratingPreviousShippedDefault(
+        _ profile: ControlLayoutProfile,
+        for orientation: ControlLayoutOrientation
+    ) -> ControlLayoutProfile {
+        isPreviousShippedDefault(profile, for: orientation) ? .standard(for: orientation) : profile
     }
 }

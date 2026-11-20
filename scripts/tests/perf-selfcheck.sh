@@ -270,6 +270,10 @@ check "control layout has the Circle Pad" contains ios/app/Sources/ControlLayout
 check "control layout has the C-stick" contains ios/app/Sources/ControlLayout.swift 'case cStick'
 check "control layout carries ZL/ZR" contains ios/app/Sources/ControlLayout.swift 'case buttonZL'
 check "layout persistence is versioned" contains ios/app/Sources/ControlLayout.swift 'currentVersion'
+check "default control layout comes from the ModernCenteredX2 skin geometry" \
+  bash -c 'grep -q "166.5 / 896.0" ios/app/Sources/ControlLayout.swift && grep -q "0.27778" ios/app/Sources/ControlLayout.swift && grep -q "68.5 / 414.0" ios/app/Sources/ControlLayout.swift && grep -q "0.24396" ios/app/Sources/ControlLayout.swift'
+check "pause menu rows use the unified icon-free style" \
+  bash -c '! grep -q "systemImage:" ios/app/Sources/InGameMenuView.swift && grep -q "rowVerticalPadding" ios/app/Sources/InGameMenuView.swift && grep -q "toggleRow" ios/app/Sources/InGameMenuView.swift'
 check "per-orientation control profiles exist" contains ios/app/Sources/AppSettings.swift 'controlLayoutLandscape'
 check "runtime overlay draws the editable layout" contains ios/app/Sources/VirtualControlsView.swift 'struct VirtualControlsView'
 check "analog stick reports a vector (not D-pad bits)" contains ios/app/Sources/VirtualControlsView.swift 'onCirclePad'
