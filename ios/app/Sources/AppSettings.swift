@@ -648,19 +648,23 @@ final class AppSettings: ObservableObject {
             .map { Set($0.compactMap(ControlOptionItem.init(rawValue:))) }
         if defaults.object(forKey: Keys.hiddenControlItemsMigrated) == nil {
             let old = storedHidden ?? []
+            let portraitSet: Set<ControlOptionItem>
+            let landscapeSet: Set<ControlOptionItem>
             if old.isEmpty {
-                hiddenControlItemsLandscape = Self.defaultHiddenItems(for: .landscape)
-                hiddenControlItemsPortrait = Self.defaultHiddenItems(for: .portrait)
+                portraitSet = Self.defaultHiddenItems(for: .portrait)
+                landscapeSet = Self.defaultHiddenItems(for: .landscape)
             } else {
-                hiddenControlItemsLandscape = old
-                hiddenControlItemsPortrait = old
+                portraitSet = old
+                landscapeSet = old
             }
+            hiddenControlItemsPortrait = portraitSet
+            hiddenControlItemsLandscape = landscapeSet
             // Persist the migrated sets now: the marker below makes this branch run
             // once, and a later launch reads the per-direction keys. Without this
             // write the shipped defaults lived only in this process.
-            defaults.set(hiddenControlItemsPortrait.map(\.rawValue).sorted(),
+            defaults.set(portraitSet.map(\.rawValue).sorted(),
                          forKey: Keys.hiddenControlItemsPortraitKey)
-            defaults.set(hiddenControlItemsLandscape.map(\.rawValue).sorted(),
+            defaults.set(landscapeSet.map(\.rawValue).sorted(),
                          forKey: Keys.hiddenControlItemsLandscapeKey)
             defaults.set(true, forKey: Keys.hiddenControlItemsMigrated)
             AppLog.log("[3ds2apple] virtual controls: hidden rows migrated to per-direction defaults (%@)",
