@@ -287,6 +287,65 @@ fn app_attr_exposes_the_installed_app_identity_keys() {
 }
 
 #[test]
+fn orphaned_game_data_is_listed_and_kept_by_the_mock_device() {
+    // A TITLEID directory can exist in Documents/Games without being part of the launcher
+    // library (orphaned game data). The bridge must still list/stat it: the launcher shows
+    // it, never deletes it, and only an overwrite install without confirmation is blocked.
+    let dir = tempdir();
+    let mock = dir.path().join("mock");
+    let ipa = dir.path().join("Shell.ipa");
+    write_file(&ipa, b"fake ipa bytes");
+    mock_install(&mock, &ipa, "com.kratos.3ds2apple");
+
+    let orphan = "0004000000099900";
+    let rom = dir.path().join("orphan-GameRom.cci");
+    write_file(&rom, b"orphan rom bytes");
+    let remote_rom = format!("Documents/Games/{orphan}/GameRom.cci");
+    let (code, _events, stderr) = run(
+        &mock,
+        &[
+            "put",
+            "--bundle-id",
+            "com.kratos.3ds2apple",
+            "--local",
+            rom.to_str().unwrap(),
+            "--remote",
+            &remote_rom,
+        ],
+    );
+    assert_eq!(code, 0, "put failed: {stderr}");
+
+    let (code, events, _stderr) = run(
+        &mock,
+        &[
+            "ls",
+            "--bundle-id",
+            "com.kratos.3ds2apple",
+            "--path",
+            "Documents/Games",
+        ],
+    );
+    assert_eq!(code, 0);
+    let entries = done_payload(&events)["entries"].as_array().unwrap().clone();
+    assert!(entries
+        .iter()
+        .any(|entry| entry["name"] == orphan && entry["isDir"] == true));
+
+    let (code, events, _stderr) = run(
+        &mock,
+        &[
+            "stat",
+            "--bundle-id",
+            "com.kratos.3ds2apple",
+            "--path",
+            &remote_rom,
+        ],
+    );
+    assert_eq!(code, 0);
+    assert_eq!(done_payload(&events)["size"], 16);
+}
+
+#[test]
 fn stable_error_codes_and_exit_codes() {
     let dir = tempdir();
     let mock = dir.path().join("mock");

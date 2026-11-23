@@ -164,6 +164,8 @@
               <TextBlock Text="{Binding DeviceGamesStatus}" Classes="caption" TextWrapping="Wrap" />
               <TextBlock Text="{Binding L.DeployPlanTitle}" Classes="caption" Margin="0,4,0,0" />
               <TextBlock Text="{Binding DeployPlanStatus}" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding HasDeployPlanStatus}" />
+              <TextBlock Text="{Binding DeviceOrphanStatus}" Classes="caption" TextWrapping="Wrap" IsVisible="{Binding HasDeviceOrphans}"
+                         Foreground="{DynamicResource AppWarningBrush}" />
             </StackPanel>
           </Border>
 
@@ -243,6 +245,14 @@
               <TextBlock Text="{Binding DeployErrorFix}" Classes="caption" />
               <TextBlock Text="{Binding DeployStepName}" Classes="caption" />
               <TextBlock Text="{Binding L.DeployFailedHelp}" Classes="caption" />
+            </StackPanel>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding HasOrphanedGamesBlock}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="{Binding L.DeployOrphansBlockedTitle}" Classes="h2" Foreground="{DynamicResource AppWarningBrush}" />
+              <TextBlock Text="{Binding OrphanedGamesWarning}" Classes="muted" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding L.DeployOrphansConfirmHint}" Classes="caption" TextWrapping="Wrap" />
+              <Button Content="{Binding L.DeployOrphansConfirmButton}" Command="{Binding ConfirmOrphanedDeployCommand}" Classes="primary" HorizontalAlignment="Left" />
             </StackPanel>
           </Border>
           <Border Classes="card" IsVisible="{Binding IsDeployCancelled}">

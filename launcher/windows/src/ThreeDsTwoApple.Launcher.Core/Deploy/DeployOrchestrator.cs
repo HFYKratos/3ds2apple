@@ -58,12 +58,18 @@ public sealed record DeployGameResult(
     string? ErrorMessage = null);
 
 /// <summary>What the user selected on the Deploy page.</summary>
+/// <param name="AcceptOrphanedGames">
+/// Explicit confirmation for an overwrite install while the phone holds game data whose
+/// TITLEID is not in this library: the update removes those games' app entries (the
+/// GameRom and saves stay in Documents). The deploy blocks at Install without this flag.
+/// </param>
 public sealed record DeployRequest(
     IReadOnlyList<string> TitleIDs,
     string TemplateIpaPath,
     string? BundleIdOverride,
     string? DeviceUdid,
-    bool RebuildExistingPacks = false);
+    bool RebuildExistingPacks = false,
+    bool AcceptOrphanedGames = false);
 
 /// <summary>Final result of a Deploy run; the failed step is always the exact one to retry.</summary>
 public sealed record DeployOutcome(
@@ -77,7 +83,8 @@ public sealed record DeployOutcome(
     IReadOnlyList<DeployGameResult> Games,
     bool Retryable,
     bool Cancelled = false,
-    DeployDeviceSummary? DeviceSummary = null);
+    DeployDeviceSummary? DeviceSummary = null,
+    IReadOnlyList<DeviceOrphanedGame>? OrphanedGames = null);
 
 /// <summary>Composes the installable IPA (implemented by <see cref="IpaComposer"/>).</summary>
 public interface IComposedIpaComposer
@@ -293,6 +300,7 @@ public sealed class DeployOrchestrator
         var pushBundleId = ResolvePushBundleId(request);
         DeviceDeploySnapshot? device = null;
         DeviceDeployDecision? preflight = null;
+        var orphanedGames = new List<DeviceOrphanedGame>();
         if (_deviceInspector is not null && !string.IsNullOrWhiteSpace(pushBundleId))
         {
             try
@@ -306,9 +314,15 @@ public sealed class DeployOrchestrator
                 log?.Invoke("device: app " + device.App.Describe() + "; expected launcher shell package " + expectedPackageVersion);
                 preflight = DeviceDeployPlanner.Decide(
                     device, expectedPackageVersion, selected, _workspace.State.Games, LocalRomBytes);
+                orphanedGames = preflight.OrphanedGames.ToList();
                 foreach (var note in preflight.Notes)
                 {
                     log?.Invoke("device plan: " + note);
+                }
+                if (orphanedGames.Count > 0)
+                {
+                    log?.Invoke("device: " + orphanedGames.Count + " phone-only game(s) are not in this library (their Documents data stays untouched): "
+                                + string.Join(", ", orphanedGames.Select(game => game.Describe())));
                 }
             }
             catch (LauncherToolException error)
@@ -448,6 +462,33 @@ public sealed class DeployOrchestrator
                         + (decision.PushGames.Count > 0 ? "; pushing " + decision.PushGames.Count + " game(s)" : "; no data push needed"));
         }
         var needsInstall = decision is null || decision.Mode is DeviceDeployMode.FullInstall or DeviceDeployMode.Reinstall;
+        if (orphanedGames.Count > 0)
+        {
+            var phoneOnly = string.Join(", ", orphanedGames.Select(game => game.Describe()));
+            if (needsInstall && device?.App.Installed == true && !request.AcceptOrphanedGames)
+            {
+                // Default: never silently drop a game's app entry. The Documents data would stay,
+                // but the user must decide explicitly (import+build the ROM first, or confirm).
+                var message = "The phone has " + orphanedGames.Count + " game(s) whose data is not in this launcher library: " + phoneOnly + ". "
+                              + "Updating the app would remove their app entries (their GameRom and saves stay in Documents). "
+                              + "Import the ROMs and build their GamePacks first, or confirm the update to keep the data without app entries.";
+                log?.Invoke("deploy blocked (orphaned_games_need_confirmation): " + message);
+                return Fail(progress, DeployStepKind.Install, "orphaned_games_need_confirmation",
+                    message,
+                    "Import those ROMs into the library and build their GamePacks first, then Deploy again — or confirm the update anyway (the data is never deleted).",
+                    games,
+                    retryable: true,
+                    orphanedGames: orphanedGames);
+            }
+            if (needsInstall)
+            {
+                log?.Invoke("deploy: confirmed update without " + orphanedGames.Count + " phone-only game(s); their GameRom/saves stay in Documents (recorded as data-only): " + phoneOnly);
+            }
+            else
+            {
+                log?.Invoke("device: keeping " + orphanedGames.Count + " phone-only game(s) untouched (data-only, no app entry change): " + phoneOnly);
+            }
+        }
         if (needsInstall && decision is not null)
         {
             var notBuilt = decision.IpaGames
@@ -485,7 +526,8 @@ public sealed class DeployOrchestrator
                 "Already up to date — nothing was installed or pushed.", 100);
             log?.Invoke("deploy: already up to date (app " + device!.App.Describe() + ", " + selected.Count + " selected game(s) current)");
             return new DeployOutcome(true, null, null, null, null, null, pushBundleId, games, Retryable: true,
-                DeviceSummary: new DeployDeviceSummary(decision.Mode, 0, 0, device!.App.PackageVersion ?? "unknown", expectedPackageVersion));
+                DeviceSummary: new DeployDeviceSummary(decision.Mode, 0, 0, device!.App.PackageVersion ?? "unknown", expectedPackageVersion),
+                OrphanedGames: orphanedGames.Count > 0 ? orphanedGames : null);
         }
         var pushTargets = decision is null ? selected.ToList() : decision.PushGames.ToList();
 
@@ -732,7 +774,8 @@ public sealed class DeployOrchestrator
                 installedShortVersion,
                 _shell?.Build ?? 0,
                 markerEntries,
-                device.Marker);
+                device.Marker,
+                orphanedGames);
             try
             {
                 await _deviceInspector.WriteMarkerAsync(
@@ -750,7 +793,8 @@ public sealed class DeployOrchestrator
         return new DeployOutcome(true, null, null, null, null, composed?.IpaPath, pushBundleId, games, Retryable: true,
             DeviceSummary: decision is null || device is null
                 ? null
-                : new DeployDeviceSummary(decision.Mode, decision.IpaGames.Count, plans.Count, device.App.PackageVersion ?? "unknown", expectedPackageVersion));
+                : new DeployDeviceSummary(decision.Mode, decision.IpaGames.Count, plans.Count, device.App.PackageVersion ?? "unknown", expectedPackageVersion),
+            OrphanedGames: orphanedGames.Count > 0 ? orphanedGames : null);
         }
         catch (OperationCanceledException)
         {
@@ -977,10 +1021,11 @@ public sealed class DeployOrchestrator
         string message,
         string? fix,
         IReadOnlyList<DeployGameResult> games,
-        bool retryable = true)
+        bool retryable = true,
+        IReadOnlyList<DeviceOrphanedGame>? orphanedGames = null)
     {
         progress?.Report(new DeployProgress(step, DeployStepStatus.Failed, message));
-        return new DeployOutcome(false, step, code, message, fix, null, null, games, retryable);
+        return new DeployOutcome(false, step, code, message, fix, null, null, games, retryable, OrphanedGames: orphanedGames);
     }
 
     private static double BuildPercent(int index, int total, double? innerPercent) =>

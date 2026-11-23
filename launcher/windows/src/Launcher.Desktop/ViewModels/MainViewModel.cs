@@ -427,6 +427,9 @@ public sealed class MainViewModel : ObservableObject
     private string _deviceAppStatus = string.Empty;
     private string _deviceGamesStatus = string.Empty;
     private string _deployPlanStatus = string.Empty;
+    private string _deviceOrphanStatus = string.Empty;
+    private bool _hasOrphanedGamesBlock;
+    private string _orphanedGamesWarning = string.Empty;
 
     public MainViewModel() : this(LauncherServices.Create())
     {
@@ -444,6 +447,7 @@ public sealed class MainViewModel : ObservableObject
         OpenSettingsCommand = new RelayCommand(OpenSettings);
         CloseSettingsCommand = new RelayCommand(CloseSettings);
         DeployCommand = new AsyncRelayCommand(() => RunDeployAsync(), () => CanDeploy);
+        ConfirmOrphanedDeployCommand = new AsyncRelayCommand(() => RunDeployAsync(acceptOrphaned: true), () => CanConfirmOrphanedDeploy);
         StopDeployCommand = new RelayCommand(StopDeploy, () => CanStopDeploy);
         BuildAllCommand = new AsyncRelayCommand(() => BuildAllGamesAsync(), () => !IsBusy && Games.Count > 0);
         SelectAllCommand = new RelayCommand(() => SetAllSelected(true));
@@ -494,6 +498,7 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand OpenSettingsCommand { get; }
     public RelayCommand CloseSettingsCommand { get; }
     public AsyncRelayCommand DeployCommand { get; }
+    public AsyncRelayCommand ConfirmOrphanedDeployCommand { get; }
     public RelayCommand StopDeployCommand { get; }
     public AsyncRelayCommand BuildAllCommand { get; }
     public RelayCommand SelectAllCommand { get; }
@@ -1011,6 +1016,39 @@ public sealed class MainViewModel : ObservableObject
 
     public bool HasDeployPlanStatus => !string.IsNullOrWhiteSpace(_deployPlanStatus);
 
+    /// <summary>Games that only exist on the phone (not in this library): data kept, app entry at risk.</summary>
+    public string DeviceOrphanStatus
+    {
+        get => _deviceOrphanStatus;
+        private set
+        {
+            if (SetProperty(ref _deviceOrphanStatus, value))
+            {
+                OnPropertyChanged(nameof(HasDeviceOrphans));
+            }
+        }
+    }
+
+    public bool HasDeviceOrphans => !string.IsNullOrWhiteSpace(_deviceOrphanStatus);
+
+    public string OrphanedGamesWarning { get => _orphanedGamesWarning; private set => SetProperty(ref _orphanedGamesWarning, value); }
+
+    public bool HasOrphanedGamesBlock
+    {
+        get => _hasOrphanedGamesBlock;
+        private set
+        {
+            if (SetProperty(ref _hasOrphanedGamesBlock, value))
+            {
+                OnPropertyChanged(nameof(CanConfirmOrphanedDeploy));
+                RaiseCommandStates();
+            }
+        }
+    }
+
+    /// <summary>True when the blocked-update confirmation button can run.</summary>
+    public bool CanConfirmOrphanedDeploy => _hasOrphanedGamesBlock && !IsBusy && SelectedDeployCount > 0;
+
     public void OnDeploySelectionChanged()
     {
         OnPropertyChanged(nameof(SelectedDeployCount));
@@ -1063,6 +1101,8 @@ public sealed class MainViewModel : ObservableObject
         DeployErrorDetail = string.Empty;
         DeployErrorFix = string.Empty;
         DeployPlanStatus = string.Empty;
+        HasOrphanedGamesBlock = false;
+        OrphanedGamesWarning = string.Empty;
         ProgressValue = 0;
         OnPropertyChanged(nameof(DeployState));
         OnPropertyChanged(nameof(DeployStateLabel));
@@ -1074,7 +1114,7 @@ public sealed class MainViewModel : ObservableObject
         RaiseCommandStates();
     }
 
-    public async Task RunDeployAsync()
+    public async Task RunDeployAsync(bool acceptOrphaned = false)
     {
         if (IsBusy)
         {
@@ -1112,7 +1152,8 @@ public sealed class MainViewModel : ObservableObject
                 templateIpa,
                 BundleIdOverride: null,
                 DeviceUdid: _device?.Udid,
-                RebuildExistingPacks: false);
+                RebuildExistingPacks: false,
+                AcceptOrphanedGames: acceptOrphaned);
             var progress = new Progress<DeployProgress>(ApplyDeployProgress);
             var outcome = await orchestrator.RunAsync(request, progress, line => Log("[deploy] " + line), cancellation.Token).ConfigureAwait(true);
             ApplyDeployOutcome(outcome);
@@ -1187,9 +1228,32 @@ public sealed class MainViewModel : ObservableObject
             DeployPlanStatus = outcome.DeviceSummary is { } deviceSummary
                 ? LocalizeDeployMode(deviceSummary.Mode, deviceSummary.IpaGameCount, deviceSummary.PushedGameCount)
                 : string.Empty;
+            HasOrphanedGamesBlock = false;
+            OrphanedGamesWarning = string.Empty;
+        }
+        else if (outcome.ErrorCode == "orphaned_games_need_confirmation"
+                 && outcome.OrphanedGames is { Count: > 0 } orphaned)
+        {
+            // Explicit confirmation required: the update would remove these games' app entries
+            // (their GameRom/saves stay in Documents; nothing is deleted).
+            HasOrphanedGamesBlock = true;
+            OrphanedGamesWarning = Loc.T("deploy.orphans.blockedDetail", orphaned.Count,
+                string.Join(", ", orphaned.Select(game => game.Describe())));
+            SetDeployFailed(
+                outcome.FailedStep ?? DeployStepKind.Install,
+                outcome.ErrorCode!,
+                L.DeployOrphansBlockedTitle,
+                L.DeployOrphansConfirmHint);
+            DeployErrorDetail = OrphanedGamesWarning;
+            OnPropertyChanged(nameof(DeployErrorDetail));
+            StatusText = L.DeployFailedTitle;
+            Log("deploy paused for confirmation: " + orphaned.Count + " phone-only game(s) would lose their app entries: "
+                + string.Join(", ", orphaned.Select(game => game.Describe())));
         }
         else
         {
+            HasOrphanedGamesBlock = false;
+            OrphanedGamesWarning = string.Empty;
             var failedStep = outcome.FailedStep is { } kind ? DeploySteps.FirstOrDefault(step => step.Kind == kind) : null;
             var stepLabel = failedStep?.Label ?? Loc.T("deploy.state.failed");
             SetDeployFailed(
@@ -1430,6 +1494,7 @@ public sealed class MainViewModel : ObservableObject
                 DeviceAppStatus = string.Empty;
                 DeviceGamesStatus = string.Empty;
                 DeployPlanStatus = string.Empty;
+                DeviceOrphanStatus = string.Empty;
                 return;
             }
             var selected = DeployGames.Where(row => row.IsSelected).Select(row => row.Entry).ToList();
@@ -1454,6 +1519,14 @@ public sealed class MainViewModel : ObservableObject
                 ? L.DeployDeviceGamesNone
                 : Loc.T("deploy.devicegames.some", installedCount,
                     selected.Count(entry => DeviceDeployPlanner.IsDataCurrent(device, entry, LocalRomBytes(entry))), selected.Count);
+            var orphans = DeviceDeployPlanner.FindOrphanedInstalledGames(
+                device,
+                _services.Workspace.State.Games,
+                titleId => _services.Workspace.Find(titleId) is { } orphanEntry && LocalRomBytes(orphanEntry) is not null);
+            DeviceOrphanStatus = orphans.Count == 0
+                ? string.Empty
+                : Loc.T("deploy.orphans.summary", orphans.Count,
+                    string.Join(", ", orphans.Select(game => game.Describe())));
             if (selected.Count == 0)
             {
                 DeployPlanStatus = string.Empty;
@@ -1466,7 +1539,10 @@ public sealed class MainViewModel : ObservableObject
                         var entry = _services.Workspace.Find(titleId);
                         return entry is null ? (long?)null : LocalRomBytes(entry);
                     });
-                DeployPlanStatus = LocalizeDeployMode(decision.Mode, decision.IpaGames.Count, decision.PushGames.Count);
+                DeployPlanStatus = LocalizeDeployMode(decision.Mode, decision.IpaGames.Count, decision.PushGames.Count)
+                    + (decision.Mode is DeviceDeployMode.Reinstall && orphans.Count > 0
+                        ? " " + Loc.T("deploy.orphans.planSuffix", orphans.Count)
+                        : string.Empty);
             }
         }
         catch (Exception error) when (error is LauncherToolException or IOException or UnauthorizedAccessException or OperationCanceledException)
@@ -1474,6 +1550,7 @@ public sealed class MainViewModel : ObservableObject
             DeviceAppStatus = Loc.T("deploy.deviceapp.unavailable");
             DeviceGamesStatus = string.Empty;
             DeployPlanStatus = string.Empty;
+            DeviceOrphanStatus = string.Empty;
             Log("device deploy state unavailable: " + (error is LauncherToolException tool ? tool.Code + ": " + tool.Message : error.Message));
         }
     }
@@ -1876,8 +1953,8 @@ public sealed class MainViewModel : ObservableObject
         }
         foreach (var command in new System.Windows.Input.ICommand[]
                  {
-                     DeployCommand, StopDeployCommand, BuildAllCommand, RefreshDevicesCommand, RefreshPrerequisitesCommand, RefreshStatusCommand,
-                     RefreshReadinessCommand, OpenImpactorCommand,
+                     DeployCommand, ConfirmOrphanedDeployCommand, StopDeployCommand, BuildAllCommand, RefreshDevicesCommand, RefreshPrerequisitesCommand,
+                     RefreshStatusCommand, RefreshReadinessCommand, OpenImpactorCommand,
                  })
         {
             switch (command)

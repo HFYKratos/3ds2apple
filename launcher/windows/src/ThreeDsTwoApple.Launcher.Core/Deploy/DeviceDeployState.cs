@@ -23,6 +23,22 @@ public sealed record DeviceGameData(string TitleID, long? GameRomBytes, long? Ga
     public bool Complete => GameRomBytes is > 0 && GameInfoBytes is > 0;
 }
 
+/// <summary>
+/// A game whose data exists on the phone (Documents/Games/&lt;TITLEID&gt;) but whose TITLEID is
+/// not in the launcher library or has no local ROM, so its GamePack cannot be rebuilt for the
+/// next app version. The GameRom and saves are user data and are NEVER deleted; only the app
+/// entry (GamePack inside the app) would disappear after an overwrite install. The deploy
+/// therefore stops and asks for explicit confirmation before updating, and the marker records
+/// such a game as data-only.
+/// </summary>
+public sealed record DeviceOrphanedGame(string TitleID, string? DisplayName, long? GameRomBytes, long? GameInfoBytes)
+{
+    /// <summary>Short label for logs/UI: "Name (TITLEID)" or the bare title id.</summary>
+    public string Describe() => string.IsNullOrWhiteSpace(DisplayName)
+        ? TitleID
+        : DisplayName + " (" + TitleID + ")";
+}
+
 /// <summary>One game's build identity recorded on the phone by the launcher's deploy marker.</summary>
 public sealed record DeviceGameBuildRecord(
     [property: JsonPropertyName("titleId")] string TitleID,
@@ -30,7 +46,8 @@ public sealed record DeviceGameBuildRecord(
     [property: JsonPropertyName("buildCompatShort")] string BuildCompatShort,
     [property: JsonPropertyName("packSha256")] string PackSha256,
     [property: JsonPropertyName("romSha256")] string RomSha256,
-    [property: JsonPropertyName("romBytes")] long RomBytes);
+    [property: JsonPropertyName("romBytes")] long RomBytes,
+    [property: JsonPropertyName("dataOnly")] bool DataOnly = false);
 
 /// <summary>
 /// <c>Documents/.3ds2apple-deploy.json</c>: what the launcher last installed/pushed on
@@ -91,7 +108,8 @@ public sealed record DeviceDeployMarker(
         string appShortVersion,
         int appBuild,
         IReadOnlyList<LibraryEntry> installedEntries,
-        DeviceDeployMarker? previous)
+        DeviceDeployMarker? previous,
+        IReadOnlyList<DeviceOrphanedGame>? dataOnlyGames = null)
     {
         var records = new List<DeviceGameBuildRecord>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -103,6 +121,27 @@ public sealed record DeviceDeployMarker(
                 continue;
             }
             records.Add(record);
+        }
+        // Phone-only games have no GamePack in the app: record them as data-only so a future
+        // deploy/UI knows their Documents data is intentionally kept without an app entry.
+        if (dataOnlyGames is not null)
+        {
+            foreach (var game in dataOnlyGames)
+            {
+                var titleId = GameInfoWriter.NormalizeTitleId(game.TitleID);
+                if (!seen.Add(titleId))
+                {
+                    continue;
+                }
+                records.Add(new DeviceGameBuildRecord(
+                    titleId,
+                    string.Empty,
+                    string.Empty,
+                    string.Empty,
+                    string.Empty,
+                    game.GameRomBytes ?? 0,
+                    DataOnly: true));
+            }
         }
         if (previous is not null)
         {
@@ -189,8 +228,12 @@ public sealed record DeviceDeployDecision(
     DeviceAppState AppState,
     IReadOnlyList<LibraryEntry> IpaGames,
     IReadOnlyList<LibraryEntry> PushGames,
-    IReadOnlyList<string> Notes)
+    IReadOnlyList<string> Notes,
+    IReadOnlyList<DeviceOrphanedGame> OrphanedGames)
 {
+    /// <summary>True when an overwrite install would drop these games' app entries.</summary>
+    public bool HasOrphanedGames => OrphanedGames.Count > 0;
+
     /// <summary>Selected games whose data is already current (nothing to push).</summary>
     public bool SkipInstall => Mode is DeviceDeployMode.PushOnly or DeviceDeployMode.UpToDate;
 
@@ -322,14 +365,24 @@ public static class DeviceDeployPlanner
         var notes = new List<string>();
         var appState = EvaluateApp(snapshot, expectedAppPackageVersion);
         var selectedIds = new HashSet<string>(selected.Select(entry => GameInfoWriter.NormalizeTitleId(entry.TitleID)), StringComparer.OrdinalIgnoreCase);
+        var installedIds = CollectInstalledIds(snapshot);
+        // Phone data whose TITLEID cannot be built locally: an overwrite install would remove
+        // its app entry while keeping the Documents data. The orchestrator blocks the update
+        // unless the user explicitly confirms (never deletes the data).
+        var orphaned = FindOrphanedInstalledGames(snapshot, library, titleId => localRomBytes(titleId) is not null);
+        if (orphaned.Count > 0)
+        {
+            notes.Add(orphaned.Count + " phone-only game(s) are not in the launcher library: "
+                      + string.Join(", ", orphaned.Select(game => game.TitleID))
+                      + " (data stays in Documents; an app update would remove their app entries)");
+        }
 
         if (appState == DeviceAppState.NotInstalled)
         {
             notes.Add("the app is not installed on the phone: full compose + install + push");
-            return new DeviceDeployDecision(DeviceDeployMode.FullInstall, appState, selected.ToList(), selected.ToList(), notes);
+            return new DeviceDeployDecision(DeviceDeployMode.FullInstall, appState, selected.ToList(), selected.ToList(), notes, orphaned);
         }
 
-        var installedIds = CollectInstalledIds(snapshot);
         var union = BuildIpaGames(selected, installedIds, library, snapshot.Marker, markerMissingIncludesAllBuiltGames, notes);
 
         var install = false;
@@ -377,13 +430,13 @@ public static class DeviceDeployPlanner
         if (!install && push.Count == 0)
         {
             notes.Add("the app and every selected game's data are already current: nothing to do");
-            return new DeviceDeployDecision(DeviceDeployMode.UpToDate, appState, Array.Empty<LibraryEntry>(), Array.Empty<LibraryEntry>(), notes);
+            return new DeviceDeployDecision(DeviceDeployMode.UpToDate, appState, Array.Empty<LibraryEntry>(), Array.Empty<LibraryEntry>(), notes, orphaned);
         }
         if (!install)
         {
-            return new DeviceDeployDecision(DeviceDeployMode.PushOnly, appState, Array.Empty<LibraryEntry>(), push, notes);
+            return new DeviceDeployDecision(DeviceDeployMode.PushOnly, appState, Array.Empty<LibraryEntry>(), push, notes, orphaned);
         }
-        return new DeviceDeployDecision(DeviceDeployMode.Reinstall, appState, union, push, notes);
+        return new DeviceDeployDecision(DeviceDeployMode.Reinstall, appState, union, push, notes, orphaned);
     }
 
     /// <summary>Every game title id the phone reports (Documents/Games dirs plus marker records).</summary>
@@ -408,6 +461,41 @@ public static class DeviceDeployPlanner
             }
         }
         return ids.ToList();
+    }
+
+    /// <summary>
+    /// Games the phone has real data for (a GameRom.cci under Documents/Games/TITLEID) but the
+    /// launcher cannot rebuild a GamePack for: no library entry, or the library entry has no
+    /// ROM file any more. Pure: the caller supplies the "local ROM exists" probe.
+    /// These are the games an overwrite install would silently drop from the app; the deploy
+    /// blocks on them unless the user explicitly confirms (their data is never deleted).
+    /// </summary>
+    public static IReadOnlyList<DeviceOrphanedGame> FindOrphanedInstalledGames(
+        DeviceDeploySnapshot snapshot,
+        IReadOnlyList<LibraryEntry> library,
+        Func<string, bool> hasLocalRom)
+    {
+        var orphans = new List<DeviceOrphanedGame>();
+        foreach (var titleId in CollectInstalledIds(snapshot))
+        {
+            var data = snapshot.DataFor(titleId);
+            if (data is null || data.GameRomBytes is not > 0)
+            {
+                // No real data on the phone for this id (empty directory or marker-only entry).
+                continue;
+            }
+            var entry = library.FirstOrDefault(item => string.Equals(item.TitleID, titleId, StringComparison.OrdinalIgnoreCase));
+            if (entry is not null && hasLocalRom(titleId))
+            {
+                continue;
+            }
+            orphans.Add(new DeviceOrphanedGame(
+                GameInfoWriter.NormalizeTitleId(titleId),
+                entry is null ? null : DisplayName(entry),
+                data.GameRomBytes,
+                data.GameInfoBytes));
+        }
+        return orphans;
     }
 
     /// <summary>
@@ -441,7 +529,7 @@ public static class DeviceDeployPlanner
             var entry = library.FirstOrDefault(item => string.Equals(item.TitleID, id, StringComparison.OrdinalIgnoreCase));
             if (entry is null)
             {
-                notes.Add("installed game " + id + " is no longer in the launcher library; its GamePack cannot be kept");
+                notes.Add("phone-only game " + id + " is not in the launcher library; keeping its data without a GamePack (data-only)");
                 continue;
             }
             seen.Add(id);

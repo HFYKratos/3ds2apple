@@ -26,6 +26,12 @@ signed shell IPA by the launcher/build step and must never be copied into
 Documents - iOS dyld refuses unsigned code. Launchers push ROM first and GameInfo.json last; executable code is out of
 scope here.
 
+The Windows launcher also tolerates **orphaned game data**: a `Documents/Games/<TITLEID>`
+directory whose game is no longer in the launcher library. The bridge must keep
+listing/statting such data but never delete it; the launcher shows the orphaned games,
+blocks an overwrite app install unless the user explicitly confirms, and keeps no app
+entry for them (GameRom/saves stay in Documents).
+
 ## Build and test (host-side; no device required)
 
     cargo build --release --manifest-path tools/devpush/Cargo.toml

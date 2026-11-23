@@ -19,7 +19,7 @@ UI, log and diagnostics export. The current development checkout adds a Deploy
 window-close cleanup (a running deploy is stopped and its 3dsrecomp/clang/lld/
 devpush/plumesign processes are terminated before the launcher exits), and merges the
 two duplicate "not built yet" Library strings into one status line. This checkout compiles cleanly (0 errors, warnings as
-errors) and its **232 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
+errors) and its **240 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
 `--self-test` on Linux/WSL with the embedded payload (32 PASS / 0 FAIL / 0 WARN), and on a
 Windows host natively through `scripts/release/win-selftest.sh` (32 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a minimal Settings gear; it is
@@ -156,7 +156,15 @@ and the log):
 | No marker on an existing install | unknown state: update once (union with every built library game) and seed the marker |
 | App current, a GamePack build identity changed | recompose + overwrite-install, then push only changed data |
 | App current, only data missing/outdated | push only; no reinstall |
+| Phone has game data whose TITLEID is not in this library (orphaned) | the data is never touched/deleted; when an overwrite install is needed the deploy pauses with a warning and a confirmation button (import+build the ROMs to keep their app entries, or confirm: app entries disappear, GameRom/saves stay, and the marker records them as data-only) |
 | Everything current | no-op: "already up to date" |
+
+Phone-only ("orphaned") game data is never deleted and never silently dropped: the
+Deploy page lists those games in the device-state card, and an overwrite install stops at
+the warning/confirmation card unless the user explicitly confirms. After a confirmed
+update the marker records those TITLEIDs as `dataOnly` (their GameRom/saves stay in
+Documents, only the app entry is gone) and the device card keeps showing them; importing
+the ROM and building its GamePack brings the game back on the next deploy.
 
 The app is never uninstalled (a clean uninstall would clear Documents/saves). Skipped
 steps are reported as `Skipped` with the reason; the marker is written after a successful
@@ -172,7 +180,7 @@ path for now: this incremental behaviour is Windows-only.
   Deploy pipeline + device-aware deploy planner + composed-IPA verifier, IPA composition,
   signing, push, localization catalog, embedded single-file payload, build-compatibility
   cache) / ThreeDsTwoApple.Launcher.Desktop (Avalonia shell) /
-  ThreeDsTwoApple.Launcher.Core.Tests (232 xUnit tests).
+  ThreeDsTwoApple.Launcher.Core.Tests (240 xUnit tests).
 - All external work goes through CLI tools passed as argument arrays (never a
   shell string): 3ds2apple-pack, devpush, the official plumesign.
   The launcher never re-implements ROM parsing, the AOT compile/link,
@@ -210,7 +218,7 @@ path for now: this incremental behaviour is Windows-only.
       Hardware/                           logical/physical cores + RAM probe for the compile line
       src/Launcher.Desktop/             Avalonia UI (Program, App, MainWindow, view model,
                                         Localization/LocalizedText, Assets/app.ico + placeholder)
-      tests/ThreeDsTwoApple.Launcher.Core.Tests/   232 xUnit tests (incl. DeployFlowTests + DeviceDeployTests +
+      tests/ThreeDsTwoApple.Launcher.Core.Tests/   240 xUnit tests (incl. DeployFlowTests + DeviceDeployTests +
                                                   DeployCancellationTests + ProcessRunnerTests + BuildCacheTests +
                                                   ComposedIpaVerifierTests)
       vendor/impactor/             PINS.json + MIT / MPL-2.0 licence texts + source note

@@ -207,6 +207,46 @@ public sealed class DeviceDeployPlannerTests
         var noInfo = Snapshot(new DeviceAppIdentity(true, "0.1.6", "1", Expected), marker, (game, RomBytes(game), null));
         Assert.False(DeviceDeployPlanner.IsDataCurrent(noInfo, game, RomBytes(game)));
     }
+
+    [Fact]
+    public void FindOrphanedInstalledGamesReportsPhoneOnlyData()
+    {
+        using var temp = new TempDir();
+        var known = Entry(temp, TitleA, "Known game");
+        var missingRom = Entry(temp, TitleB, "Missing ROM game");
+        missingRom.RomPath = Path.Combine(temp.Path, "deleted.cci");
+        var phoneOnly = new LibraryEntry { TitleID = TitleC, RomPath = string.Empty };
+        var snapshot = Snapshot(new DeviceAppIdentity(true, "0.1.6", "1", Expected), Marker(Expected, known),
+            (known, RomBytes(known), 64L),
+            (missingRom, 4096L, 64L),
+            (phoneOnly, 4096L, 64L));
+        var library = new[] { known, missingRom };
+        bool HasLocalRom(string titleId) =>
+            library.FirstOrDefault(item => string.Equals(item.TitleID, titleId, StringComparison.OrdinalIgnoreCase))
+                is { RomPath.Length: > 0 } entry && File.Exists(entry.RomPath);
+
+        var orphans = DeviceDeployPlanner.FindOrphanedInstalledGames(snapshot, library, HasLocalRom);
+
+        Assert.Equal(2, orphans.Count);
+        Assert.Contains(orphans, orphan => orphan.TitleID == TitleC && orphan.DisplayName is null);
+        Assert.Contains(orphans, orphan => orphan.TitleID == TitleB && orphan.DisplayName == "Missing ROM game");
+        Assert.DoesNotContain(orphans, orphan => orphan.TitleID == TitleA);
+    }
+
+    [Fact]
+    public void DecisionCarriesOrphansWithoutChangingTheMode()
+    {
+        using var temp = new TempDir();
+        var game = Entry(temp, TitleA, "Game A");
+        var phoneOnly = new LibraryEntry { TitleID = TitleC, RomPath = string.Empty };
+        var snapshot = Snapshot(new DeviceAppIdentity(true, "0.1.6", "1", Expected), Marker(Expected, game),
+            (game, RomBytes(game), 64L), (phoneOnly, 4096L, 64L));
+        var decision = Decide(temp, snapshot, new[] { game }, new[] { game });
+        Assert.Equal(DeviceDeployMode.UpToDate, decision.Mode);
+        var orphan = Assert.Single(decision.OrphanedGames);
+        Assert.Equal(TitleC, orphan.TitleID);
+        Assert.True(decision.HasOrphanedGames);
+    }
 }
 
 /// <summary>Marker file (Documents/.3ds2apple-deploy.json) round-trip and compatibility.</summary>
@@ -276,6 +316,23 @@ public sealed class DeviceDeployMarkerTests
         var created = DeviceDeployMarker.Create("0.1.6-beta2", "0.1.6-beta2", "0.1.6", 1, Array.Empty<LibraryEntry>(), previous);
         var record = Assert.Single(created.Games);
         Assert.Equal("00040000000AAAAA", record.TitleID);
+    }
+
+    [Fact]
+    public void MarkerRecordsPhoneOnlyGamesAsDataOnly()
+    {
+        using var temp = new TempDir();
+        var entry = BuiltEntry(temp);
+        var orphans = new[] { new DeviceOrphanedGame("00040000000AAAAA", "Phone game", 4096, 64) };
+        var marker = DeviceDeployMarker.Create("0.1.6-beta2", "0.1.6-beta2", "0.1.6", 1, new[] { entry }, null, orphans);
+        var orphan = marker.Find("00040000000AAAAA");
+        Assert.NotNull(orphan);
+        Assert.True(orphan!.DataOnly);
+        Assert.Equal(4096, orphan.RomBytes);
+        Assert.False(marker.Find(TitleA)!.DataOnly);
+        var parsed = DeviceDeployMarker.Parse(marker.ToJson());
+        Assert.NotNull(parsed);
+        Assert.True(parsed!.Find("00040000000AAAAA")!.DataOnly);
     }
 }
 
@@ -420,6 +477,113 @@ public sealed class DeviceDeployOrchestratorTests
         Assert.Contains(pipeline.Logs, line => line.Contains("deploy marker could not be written", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task OverwriteInstallIsBlockedWhenPhoneGamesAreMissingFromTheLibrary()
+    {
+        using var temp = new TempDir();
+        var selected = NewEntry(temp, TitleA, "Selected game");
+        var phoneOnly = PhoneOnlyEntry(TitleC);
+        var marker = DeviceDeployMarker.Create(Expected, "0.1.6-beta1", "0.1.6", 1, new[] { selected }, null);
+        var snapshot = Snapshot(new DeviceAppIdentity(true, "0.1.6", "1", "0.1.6-beta1"), marker,
+            (selected, CompleteData(selected)), (phoneOnly, ((long?)4096, (long?)64)));
+        var pipeline = CreatePipeline(temp, snapshot, selected);
+
+        var outcome = await pipeline.Orchestrator.RunAsync(Request(pipeline, TitleA), pipeline.Progress, line => pipeline.Logs.Add(line));
+
+        Assert.False(outcome.Success);
+        Assert.Equal("orphaned_games_need_confirmation", outcome.ErrorCode);
+        Assert.Equal(DeployStepKind.Install, outcome.FailedStep);
+        var orphan = Assert.Single(outcome.OrphanedGames!);
+        Assert.Equal(TitleC, orphan.TitleID);
+        Assert.Empty(pipeline.Composer.Calls);
+        Assert.Empty(pipeline.Installer.Calls);
+        Assert.Empty(pipeline.Pusher.Plans);
+        Assert.Empty(pipeline.Inspector.WrittenMarkers);
+        Assert.Contains(pipeline.Logs, line => line.Contains("orphaned_games_need_confirmation", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ConfirmedOverwriteProceedsAndRecordsThePhoneOnlyGameAsDataOnly()
+    {
+        using var temp = new TempDir();
+        var selected = NewEntry(temp, TitleA, "Selected game");
+        var phoneOnly = PhoneOnlyEntry(TitleC);
+        var marker = DeviceDeployMarker.Create(Expected, "0.1.6-beta1", "0.1.6", 1, new[] { selected }, null);
+        var snapshot = Snapshot(new DeviceAppIdentity(true, "0.1.6", "1", "0.1.6-beta1"), marker,
+            (selected, CompleteData(selected)), (phoneOnly, ((long?)4096, (long?)64)));
+        var pipeline = CreatePipeline(temp, snapshot, selected);
+
+        var outcome = await pipeline.Orchestrator.RunAsync(RequestAcceptingOrphans(pipeline, TitleA), pipeline.Progress, line => pipeline.Logs.Add(line));
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.Single(pipeline.Composer.Calls);
+        Assert.Single(pipeline.Installer.Calls);
+        var written = Assert.Single(pipeline.Inspector.WrittenMarkers);
+        Assert.True(written.Find(TitleC)!.DataOnly);
+        Assert.NotNull(written.Find(TitleA));
+        Assert.Contains(pipeline.Logs, line => line.Contains("confirmed update", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DataOnlyUpdateKeepsPhoneOnlyGamesUntouched()
+    {
+        using var temp = new TempDir();
+        var selected = NewEntry(temp, TitleA, "Selected game");
+        var phoneOnly = PhoneOnlyEntry(TitleC);
+        var marker = DeviceDeployMarker.Create(Expected, Expected, "0.1.6", 1, new[] { selected }, null);
+        var snapshot = Snapshot(new DeviceAppIdentity(true, "0.1.6", "1", Expected), marker,
+            (selected, ((long?)null, (long?)null)), (phoneOnly, ((long?)4096, (long?)64)));
+        var pipeline = CreatePipeline(temp, snapshot, selected);
+
+        var outcome = await pipeline.Orchestrator.RunAsync(Request(pipeline, TitleA), pipeline.Progress, line => pipeline.Logs.Add(line));
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.Empty(pipeline.Composer.Calls);
+        Assert.Empty(pipeline.Installer.Calls);
+        Assert.Single(pipeline.Pusher.Plans);
+        var written = Assert.Single(pipeline.Inspector.WrittenMarkers);
+        Assert.True(written.Find(TitleC)!.DataOnly);
+        Assert.Contains(pipeline.Logs, line => line.Contains("untouched", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task UpToDateWithPhoneOnlyGamesStaysANoOp()
+    {
+        using var temp = new TempDir();
+        var selected = NewEntry(temp, TitleA, "Selected game");
+        var phoneOnly = PhoneOnlyEntry(TitleC);
+        var marker = DeviceDeployMarker.Create(Expected, Expected, "0.1.6", 1, new[] { selected }, null);
+        var snapshot = Snapshot(new DeviceAppIdentity(true, "0.1.6", "1", Expected), marker,
+            (selected, CompleteData(selected)), (phoneOnly, ((long?)4096, (long?)64)));
+        var pipeline = CreatePipeline(temp, snapshot, selected);
+
+        var outcome = await pipeline.Orchestrator.RunAsync(Request(pipeline, TitleA), pipeline.Progress, line => pipeline.Logs.Add(line));
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.Equal(DeviceDeployMode.UpToDate, outcome.DeviceSummary!.Mode);
+        Assert.Empty(pipeline.Composer.Calls);
+        Assert.Empty(pipeline.Installer.Calls);
+        Assert.Empty(pipeline.Pusher.Plans);
+        Assert.Empty(pipeline.Inspector.WrittenMarkers);
+        Assert.Single(outcome.OrphanedGames!);
+        Assert.Contains(pipeline.Logs, line => line.Contains("untouched", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FreshInstallDoesNotBlockOnPreExistingPhoneData()
+    {
+        using var temp = new TempDir();
+        var selected = NewEntry(temp, TitleA, "Selected game");
+        var phoneOnly = PhoneOnlyEntry(TitleC);
+        var snapshot = Snapshot(DeviceAppIdentity.NotInstalled, null, (phoneOnly, ((long?)4096, (long?)64)));
+        var pipeline = CreatePipeline(temp, snapshot, selected);
+
+        var outcome = await pipeline.Orchestrator.RunAsync(Request(pipeline, TitleA), pipeline.Progress);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.Single(pipeline.Installer.Calls);
+    }
+
     // --- fixtures -------------------------------------------------------
 
     private static DeviceDeploySnapshot Snapshot(DeviceAppIdentity app, DeviceDeployMarker? marker, params (LibraryEntry Game, (long? RomBytes, long? InfoBytes) Data)[] installed)
@@ -481,6 +645,13 @@ public sealed class DeviceDeployOrchestratorTests
 
     private static DeployRequest Request(Pipeline pipeline, params string[] titleIds) =>
         new(titleIds, pipeline.TemplatePath, BundleIdOverride: null, DeviceUdid: null);
+
+    private static DeployRequest RequestAcceptingOrphans(Pipeline pipeline, params string[] titleIds) =>
+        new(titleIds, pipeline.TemplatePath, BundleIdOverride: null, DeviceUdid: null, AcceptOrphanedGames: true);
+
+    /// <summary>A game object the phone reports but the launcher workspace/library does not have.</summary>
+    private static LibraryEntry PhoneOnlyEntry(string titleId) =>
+        new() { TitleID = titleId, DisplayName = "Phone-only game", RomPath = string.Empty };
 
     private static LibraryEntry NewEntry(TempDir temp, string titleId, string name)
     {
