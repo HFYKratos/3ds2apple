@@ -49,6 +49,9 @@
 #                                        gives both screens' places in
 #                                        normalised layer pixels and the
 #                                        Vulkan presenter draws them (ABI 8)
+#   0010-presenter-rotation-and-swap.patch the custom layout's picture rotation
+#                                        inside the app's rectangles, and the
+#                                        screen swap for every layout (ABI 8)
 #
 # Application is idempotent: a patch already in the tree is reported and
 # skipped, so re-running a build script is safe even when the checkout was

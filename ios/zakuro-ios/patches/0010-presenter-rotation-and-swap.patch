@@ -1,0 +1,144 @@
+diff --git a/crates/zakuro-gpu/src/backend/mod.rs b/crates/zakuro-gpu/src/backend/mod.rs
+index 1a4770e..ecc5b20 100644
+--- a/crates/zakuro-gpu/src/backend/mod.rs
++++ b/crates/zakuro-gpu/src/backend/mod.rs
+@@ -374,6 +374,18 @@ pub enum Shown {
+     Both,
+ }
+ 
++impl Shown {
++    /// the picture drawn into the same place once the app asks for the two
++    /// screens to trade places; the eyes' own pictures stay as they are
++    pub fn swapped(self) -> Shown {
++        match self {
++            Shown::Top => Shown::Bottom,
++            Shown::Bottom => Shown::Top,
++            right => right,
++        }
++    }
++}
++
+ /// the screens a frame draws, where and from which picture
+ /// the 3D shows when the title drew a picture for the right eye,
+ /// side by side shows the left one's twice otherwise so a 3D TV keeps its halves
+@@ -469,6 +481,14 @@ pub trait Presenter {
+     /// custom places keeps the arrangement's own
+     fn set_custom_viewports(&mut self, _custom: CustomViewports) {}
+ 
++    /// how the custom layout turns each screen's picture inside its place, from
++    /// the next frame on; north is upright and the default
++    fn set_custom_rotation(&mut self, _rotation: ScreenOrientation) {}
++
++    /// swaps which screen's picture each place draws, from the next frame on;
++    /// the places stay put, so presets look exactly as before while this is off
++    fn set_screen_swap(&mut self, _swap: bool) {}
++
+     /// sets the orientation of both screens
+     fn set_orientation(&mut self, orientation: ScreenOrientation);
+ 
+@@ -793,4 +813,36 @@ mod tests {
+         assert_eq!(top.unwrap().width, 1200.0);
+         assert_eq!((bottom.unwrap().width, bottom.unwrap().height), (320.0, 240.0));
+     }
++
++    /// swapping screens trades the pictures drawn in the places, not the places
++    #[test]
++    fn swapping_screens_trades_the_pictures() {
++        assert_eq!(Shown::Top.swapped(), Shown::Bottom);
++        assert_eq!(Shown::Bottom.swapped(), Shown::Top);
++        // the right eye's own pictures don't swap (the console's 3D is the top screen)
++        assert_eq!(Shown::Right.swapped(), Shown::Right);
++        assert_eq!(Shown::Both.swapped(), Shown::Both);
++
++        // a preset's places stay exactly where they are, w/ only the pictures trading
++        let off = place(400, 480, ScreenLayout::Stacked, ScreenOrientation::North, TOP_WIDTH, false, Stereo { mode: StereoMode::Off, swap: false }, true);
++        let on: Vec<_> = off.iter().map(|(viewport, shown)| (*viewport, shown.swapped())).collect();
++        let shown = |places: &[(Viewport, Shown)]| places.iter().map(|(_, shown)| *shown).collect::<Vec<_>>();
++        let bounds = |places: &[(Viewport, Shown)]| places.iter().map(|(viewport, _)| *viewport).collect::<Vec<_>>();
++        assert_eq!(shown(&off), [Shown::Top, Shown::Bottom]);
++        assert_eq!(shown(&on), [Shown::Bottom, Shown::Top]);
++        assert_eq!(bounds(&off), bounds(&on));
++    }
++
++    /// the custom layout's rotation is the same clockwise quarter turns as the presets
++    #[test]
++    fn the_custom_rotation_turns_the_picture_clockwise() {
++        for (rotation, degrees) in [
++            (ScreenOrientation::North, 0),
++            (ScreenOrientation::East, 90),
++            (ScreenOrientation::South, 180),
++            (ScreenOrientation::West, 270),
++        ] {
++            assert_eq!(rotation.clockwise_angle(), degrees, "{rotation:?}");
++        }
++    }
+ }
+diff --git a/crates/zakuro-gpu/src/backend/vulkan.rs b/crates/zakuro-gpu/src/backend/vulkan.rs
+index d006312..45f7051 100644
+--- a/crates/zakuro-gpu/src/backend/vulkan.rs
++++ b/crates/zakuro-gpu/src/backend/vulkan.rs
+@@ -125,6 +125,10 @@ pub struct VulkanPresenter {
+     arrangement: ScreenLayout,
+     /// the custom layout's two places, until the app gives them again
+     custom: CustomViewports,
++    /// the custom layout's own rotation, north is upright
++    custom_rotation: ScreenOrientation,
++    /// the app asked for the two screens' pictures to trade places
++    swap: bool,
+     orientation: ScreenOrientation,
+     top_width: f32,
+     filter: ScreenFilter,
+@@ -405,6 +409,8 @@ impl VulkanPresenter {
+             window: size,
+             arrangement: ScreenLayout::default(),
+             custom: CustomViewports::default(),
++            custom_rotation: ScreenOrientation::default(),
++            swap: false,
+             orientation: ScreenOrientation::default(),
+             top_width: super::TOP_WIDTH,
+             filter: ScreenFilter::default(),
+@@ -766,13 +772,19 @@ impl VulkanPresenter {
+                     Some((self.gpu_sets[self.frame][index], [x, y, width, height, left, top, right, bottom]))
+                 }
+             };
+-            let places = if self.arrangement == ScreenLayout::Custom {
++            let custom = self.arrangement == ScreenLayout::Custom;
++            let places = if custom {
+                 // the app gives the custom layout both places itself, in window pixels already
+                 place_custom(self.extent.width, self.extent.height, self.custom)
+             } else {
+                 place(self.extent.width, self.extent.height, self.arrangement, self.orientation, self.top_width, self.integer, self.stereo, right)
+             };
++            // the custom layout turns each picture inside the app's place; the
++            // presets turn the whole arrangement, viewports included, above
++            let angle = if custom { self.custom_rotation } else { self.orientation };
+             for (viewport, shown) in places {
++                // the app's Swap screens button trades the pictures, not the places
++                let shown = if self.swap { shown.swapped() } else { shown };
+                 let index = match shown {
+                     Shown::Top | Shown::Both => 0,
+                     Shown::Bottom => 1,
+@@ -796,7 +808,7 @@ impl VulkanPresenter {
+                 set_viewport(device, command_buffer, viewport, self.extent);
+                 device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
+                 device.cmd_bind_descriptor_sets(command_buffer, vk::PipelineBindPoint::GRAPHICS, layout, 0, &[set], &[]);
+-                device.cmd_push_constants(command_buffer, layout, vk::ShaderStageFlags::VERTEX, VERT_CONSTANTS_OFFSET, &self.orientation.clockwise_angle().to_le_bytes());
++                device.cmd_push_constants(command_buffer, layout, vk::ShaderStageFlags::VERTEX, VERT_CONSTANTS_OFFSET, &angle.clockwise_angle().to_le_bytes());
+                 device.cmd_push_constants(command_buffer, layout, vk::ShaderStageFlags::FRAGMENT, FRAG_CONSTANTS_OFFSET, &constants);
+                 device.cmd_draw(command_buffer, 3, 1, 0, 0);
+             }
+@@ -958,6 +970,14 @@ impl Presenter for VulkanPresenter {
+         self.custom = custom;
+     }
+ 
++    fn set_custom_rotation(&mut self, rotation: ScreenOrientation) {
++        self.custom_rotation = rotation;
++    }
++
++    fn set_screen_swap(&mut self, swap: bool) {
++        self.swap = swap;
++    }
++
+     fn set_orientation(&mut self, orientation: ScreenOrientation) {
+         self.orientation = orientation;
+     }

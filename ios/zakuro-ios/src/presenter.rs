@@ -34,8 +34,10 @@
 //! its native size, which is the drawable size the app should give the layer;
 //! [`zk_present_touch_map`] applies the same layout when mapping a touch. A
 //! custom layout instead lets the app give both screens' places itself
-//! ([`zk_presenter_set_custom_viewports`]) and maps touches with
-//! [`zk_present_custom_touch_map`].
+//! ([`zk_presenter_set_custom_viewports`]), turns each screen's picture inside
+//! its place ([`zk_presenter_set_custom_rotation`]) and maps touches with
+//! [`zk_present_custom_touch_map`]. [`zk_presenter_set_screen_swap`] trades the
+//! two screens' pictures in every layout.
 //!
 //! Threading follows the rest of the C ABI: a presenter is not thread-safe.
 //! Create, resize and destroy it on the app's main queue (the `UIView` is a
@@ -457,10 +459,10 @@ fn custom_viewports(top: [f32; 4], bottom: [f32; 4]) -> Option<CustomViewports> 
 /// from the layer's top left; the app has already aspect-fitted each screen's
 /// picture inside the user's rectangle (upper 400:240, lower 320:240), so the
 /// presenter draws each screen into exactly its rectangle and leaves the rest
-/// black. They persist for that presenter until replaced. The custom layout is
-/// for an upright picture only: a turned screen keeps the readback path. Returns
-/// 1, 0 for rectangles that are not real places inside the layer (the reason is
-/// in [`crate::zk_last_error`]), or -1 for a `NULL` presenter.
+/// black. They persist for that presenter until replaced. The picture is drawn
+/// upright unless [`zk_presenter_set_custom_rotation`] turns it. Returns 1, 0
+/// for rectangles that are not real places inside the layer (the reason is in
+/// [`crate::zk_last_error`]), or -1 for a `NULL` presenter.
 #[no_mangle]
 pub extern "C" fn zk_presenter_set_custom_viewports(
     presenter: *mut c_void,
@@ -498,6 +500,51 @@ pub extern "C" fn zk_presenter_set_custom_viewports(
     );
     presenter.presenter.set_custom_viewports(custom);
     1
+}
+
+/// Sets how the custom layout turns each screen's picture inside its rectangle,
+/// from the next [`zk_present`] on. The values are the same [`ZK_ORIENTATION_*`]
+/// quarter turns as [`zk_presenter_set_orientation`]: north is the console's
+/// upright picture, the other numbers rotate the picture clockwise inside the
+/// app's rectangle. The custom layout no longer needs the readback path for a
+/// turned screen. North is the default. Returns 0, or -1 for a `NULL` presenter
+/// or an unknown rotation.
+#[no_mangle]
+pub extern "C" fn zk_presenter_set_custom_rotation(presenter: *mut c_void, rotation: u32) -> i32 {
+    if presenter.is_null() {
+        return -1;
+    }
+    let Some(turned) = screen_orientation(rotation) else {
+        let message = format!("zk_presenter_set_custom_rotation: unknown rotation {rotation}");
+        eprintln!("{message}");
+        set_last_error(message);
+        return -1;
+    };
+    // SAFETY: the pointer is non-NULL and, like every presenter call, a live
+    // handle on the calling queue.
+    let presenter = unsafe { &mut *(presenter as *mut PresenterHandle) };
+    eprintln!("zk_presenter_set_custom_rotation: screens turned {turned:?}");
+    presenter.presenter.set_custom_rotation(turned);
+    0
+}
+
+/// Swaps which screen's picture the presenter draws in each place, from the next
+/// [`zk_present`] on, for every layout ([`ZK_LAYOUT_*`], custom included): the
+/// upper screen's picture goes where the lower screen's is drawn and the other
+/// way round. The places themselves don't move, so a preset looks exactly as
+/// before while `swap` is 0 (the default). The app keeps its `UI.swapScreens`
+/// setting and calls this on load and when the Swap screens button toggles.
+/// Touch mapping is unchanged: it still maps to the lower screen's place (for a
+/// custom layout, pass the rectangles in swapped order to follow the picture
+/// drawn there). Returns 0, or -1 for a `NULL` presenter.
+#[no_mangle]
+pub extern "C" fn zk_presenter_set_screen_swap(presenter: *mut c_void, swap: u32) -> i32 {
+    let Some(presenter) = (unsafe { (presenter as *mut PresenterHandle).as_mut() }) else {
+        return -1;
+    };
+    eprintln!("zk_presenter_set_screen_swap: screens swapped {}", swap != 0);
+    presenter.presenter.set_screen_swap(swap != 0);
+    0
 }
 
 /// Reports the drawable size, in pixels, that shows a layout without
@@ -796,12 +843,17 @@ pub extern "C" fn zk_present_touch_map(
 /// `drawable_w` and `drawable_h` are the layer's size in pixels; the rectangles
 /// are the same normalised drawable pixels as
 /// [`zk_presenter_set_custom_viewports`] (they are checked the same way); `x` and
-/// `y` are the touch normalised to `0.0 ... 1.0` from the layer's top left.
-/// Returns 1 and writes the lower-screen pixel coordinates (`0...320`,
-/// `0...240`) when the point is inside the lower screen's rectangle, 0 when it
-/// is not, an argument is missing or a rectangle is not a real place. The custom
-/// GPU path is upright only: a turned screen keeps the readback path and its
-/// rotated touch mapping.
+/// `y` are the touch normalised to `0.0 ... 1.0` from the layer's top left;
+/// `rotation` is the [`ZK_ORIENTATION_*`] value the presenter draws the custom
+/// layout with. The rotation convention is the same as
+/// [`zk_presenter_set_custom_rotation`] and [`zk_present_touch_map`]: the picture
+/// is turned clockwise by that quarter turn inside the rectangle, so this undoes
+/// the turn to land in the lower screen's own upright pixels (north keeps the
+/// rectangle's `(u, v)`, east is `(v, 1 - u)`, south `(1 - u, 1 - v)`, west is
+/// `(1 - v, u)`). Returns 1 and writes the lower-screen pixel coordinates
+/// (`0...320`, `0...240`) when the point is inside the lower screen's rectangle,
+/// 0 when it is not, an argument is missing, the rotation is unknown or a
+/// rectangle is not a real place.
 ///
 /// # Safety
 ///
@@ -821,12 +873,16 @@ pub extern "C" fn zk_present_custom_touch_map(
     bottom_h: f32,
     x: f32,
     y: f32,
+    rotation: u32,
     out_x: *mut u16,
     out_y: *mut u16,
 ) -> i32 {
     if drawable_w == 0 || drawable_h == 0 || out_x.is_null() || out_y.is_null() {
         return 0;
     }
+    let Some(turned) = screen_orientation(rotation) else {
+        return 0;
+    };
     // the touch lands on the lower screen only, but a bad upper rectangle is a
     // caller bug like a bad lower one, so both are checked
     if normalised_rect([top_x, top_y, top_w, top_h]).is_none() {
@@ -845,10 +901,19 @@ pub extern "C" fn zk_present_custom_touch_map(
     if !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
         return 0;
     }
+    // The presenter turns the picture clockwise inside the rectangle by the custom
+    // rotation, so undo the same turn here to land in the screen's own upright
+    // pixels (like zk_present_touch_map() does for a preset's rotation).
+    let (screen_u, screen_v) = match turned {
+        ScreenOrientation::North => (u, v),
+        ScreenOrientation::South => (1.0 - u, 1.0 - v),
+        ScreenOrientation::East => (v, 1.0 - u),
+        ScreenOrientation::West => (1.0 - v, u),
+    };
     // the app's rectangle is the lower screen's whole 320x240 picture, so its own
     // coordinates are the touch panel's
-    let touch_x = (u * 320.0).round().clamp(0.0, 320.0) as u16;
-    let touch_y = (v * 240.0).round().clamp(0.0, 240.0) as u16;
+    let touch_x = (screen_u * 320.0).round().clamp(0.0, 320.0) as u16;
+    let touch_y = (screen_v * 240.0).round().clamp(0.0, 240.0) as u16;
     // SAFETY: both pointers were checked non-NULL and the caller guarantees they
     // are writable.
     unsafe {
@@ -866,11 +931,12 @@ mod tests {
     use super::{
         zk_create_presented, zk_present, zk_present_custom_touch_map, zk_present_layout_size,
         zk_present_mode, zk_present_touch_map, zk_presenter_create, zk_presenter_destroy,
-        zk_presenter_resize, zk_presenter_set_custom_viewports, zk_presenter_set_layout,
-        zk_presenter_set_orientation, zk_presenter_shared_device, ZK_LAYOUT_BOTTOM_ONLY,
-        ZK_LAYOUT_CUSTOM, ZK_LAYOUT_HYBRID, ZK_LAYOUT_LARGE_TOP_RIGHT, ZK_LAYOUT_SIDE_BY_SIDE,
-        ZK_LAYOUT_STACKED, ZK_LAYOUT_TOP_FULL_WIDTH, ZK_LAYOUT_TOP_ONLY, ZK_ORIENTATION_EAST,
-        ZK_ORIENTATION_NORTH, ZK_ORIENTATION_SOUTH, ZK_ORIENTATION_WEST,
+        zk_presenter_resize, zk_presenter_set_custom_rotation, zk_presenter_set_custom_viewports,
+        zk_presenter_set_layout, zk_presenter_set_orientation, zk_presenter_set_screen_swap,
+        zk_presenter_shared_device, ZK_LAYOUT_BOTTOM_ONLY, ZK_LAYOUT_CUSTOM, ZK_LAYOUT_HYBRID,
+        ZK_LAYOUT_LARGE_TOP_RIGHT, ZK_LAYOUT_SIDE_BY_SIDE, ZK_LAYOUT_STACKED,
+        ZK_LAYOUT_TOP_FULL_WIDTH, ZK_LAYOUT_TOP_ONLY, ZK_ORIENTATION_EAST, ZK_ORIENTATION_NORTH,
+        ZK_ORIENTATION_SOUTH, ZK_ORIENTATION_WEST,
     };
 
     /// Copies the calling thread's last error, if any.
@@ -932,6 +998,11 @@ mod tests {
             -1
         );
         assert_eq!(
+            zk_presenter_set_custom_rotation(ptr::null_mut(), ZK_ORIENTATION_NORTH),
+            -1
+        );
+        assert_eq!(zk_presenter_set_screen_swap(ptr::null_mut(), 1), -1);
+        assert_eq!(
             zk_presenter_set_layout(ptr::null_mut(), ZK_LAYOUT_STACKED),
             -1
         );
@@ -948,6 +1019,12 @@ mod tests {
         crate::clear_last_error();
         assert_eq!(zk_presenter_set_layout(ptr::null_mut(), 99), -1);
         assert_eq!(zk_presenter_set_orientation(ptr::null_mut(), 99), -1);
+        // the custom rotation is one of the same quarter turns; its check comes
+        // before the presenter is touched, so a dangling pointer is safe here
+        crate::clear_last_error();
+        assert_eq!(zk_presenter_set_custom_rotation(dangling_view(), 99), -1);
+        let message = last_error_text().expect("a bad rotation must set an error");
+        assert!(message.contains("unknown rotation 99"), "unexpected: {message}");
         let mut width = 0u32;
         let mut height = 0u32;
         assert_eq!(
@@ -1416,6 +1493,7 @@ mod tests {
                 0.5,
                 x,
                 y,
+                ZK_ORIENTATION_NORTH,
                 out.0,
                 out.1,
             )
@@ -1450,34 +1528,71 @@ mod tests {
     }
 
     #[test]
+    fn custom_touch_map_undoes_the_custom_rotation() {
+        let mut x = 0u16;
+        let mut y = 0u16;
+
+        // the lower rectangle covers the layer, and the touch sits at
+        // (0.75, 0.25) of it: the presenter turns the picture clockwise by the
+        // custom rotation, so the console's own pixel turns back the other way
+        fn map(rotation: u32, out: (&mut u16, &mut u16)) -> i32 {
+            zk_present_custom_touch_map(
+                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.75, 0.25, rotation, out.0,
+                out.1,
+            )
+        }
+        assert_eq!(map(ZK_ORIENTATION_NORTH, (&mut x, &mut y)), 1);
+        assert_eq!((x, y), (240, 60), "upright keeps the rectangle's own pixel");
+        assert_eq!(map(ZK_ORIENTATION_SOUTH, (&mut x, &mut y)), 1);
+        assert_eq!((x, y), (80, 180), "upside down turns the point 180");
+        assert_eq!(map(ZK_ORIENTATION_EAST, (&mut x, &mut y)), 1);
+        assert_eq!((x, y), (80, 60), "a quarter turn clockwise");
+        assert_eq!(map(ZK_ORIENTATION_WEST, (&mut x, &mut y)), 1);
+        assert_eq!((x, y), (240, 180), "the other quarter turn");
+        // outside the lower rectangle is outside whatever the rotation says
+        assert_eq!(
+            zk_present_custom_touch_map(
+                1000, 500, 0.0, 0.0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.1, 0.1,
+                ZK_ORIENTATION_EAST, &mut x, &mut y
+            ),
+            0
+        );
+        // an unknown rotation is rejected like a missing argument
+        assert_eq!(map(99, (&mut x, &mut y)), 0);
+    }
+
+    #[test]
     fn custom_touch_map_and_viewports_reject_bad_arguments() {
         let mut x = 0u16;
         let mut y = 0u16;
+        let north = ZK_ORIENTATION_NORTH;
 
         // no layer, no place to map into
         assert_eq!(
             zk_present_custom_touch_map(
-                0, 500, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.25, 0.25, &mut x, &mut y
-            ),
-            0
-        );
-        assert_eq!(
-            zk_present_custom_touch_map(
-                1000, 0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.25, 0.25, &mut x, &mut y
-            ),
-            0
-        );
-        // missing outputs
-        assert_eq!(
-            zk_present_custom_touch_map(
-                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.25, 0.25, ptr::null_mut(),
+                0, 500, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.25, 0.25, north, &mut x,
                 &mut y
             ),
             0
         );
         assert_eq!(
             zk_present_custom_touch_map(
-                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.25, 0.25, &mut x,
+                1000, 0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.25, 0.25, north, &mut x,
+                &mut y
+            ),
+            0
+        );
+        // missing outputs
+        assert_eq!(
+            zk_present_custom_touch_map(
+                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.25, 0.25, north,
+                ptr::null_mut(), &mut y
+            ),
+            0
+        );
+        assert_eq!(
+            zk_present_custom_touch_map(
+                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.25, 0.25, north, &mut x,
                 ptr::null_mut()
             ),
             0
@@ -1485,13 +1600,23 @@ mod tests {
         // a rectangle w/ no size, or off the layer, is not a place
         assert_eq!(
             zk_present_custom_touch_map(
-                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.5, 0.25, 0.25, &mut x, &mut y
+                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.5, 0.25, 0.25, north, &mut x,
+                &mut y
             ),
             0
         );
         assert_eq!(
             zk_present_custom_touch_map(
-                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.5, 0.0, 0.6, 0.5, 0.25, 0.25, &mut x, &mut y
+                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.5, 0.0, 0.6, 0.5, 0.25, 0.25, north, &mut x,
+                &mut y
+            ),
+            0
+        );
+        // an unknown rotation is no mapping either
+        assert_eq!(
+            zk_present_custom_touch_map(
+                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.25, 0.25, 99, &mut x,
+                &mut y
             ),
             0
         );
