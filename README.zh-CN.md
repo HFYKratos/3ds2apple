@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/icon.png" width="128" alt="3ds2apple 图标"></p>
+<p align="center"><img src="docs/assets/readme-icon.png" width="128" alt="3ds2apple 图标"></p>
 
 <h1 align="center">3ds2apple</h1>
 
@@ -36,7 +36,7 @@
 <p align="center"><sub>Windows 10/11 启动器（已验证路径）· macOS 13+ 启动器（开发者预览，见 <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>）· iOS App 由启动器用你自己的 Apple ID 合成、签名并安装，因此没有单独的 iOS 下载。</sub></p>
 
 <p align="center">
-  <img src="assets/readme/hero.png" width="880" alt="3ds2apple 在 iPhone 与 iPad 上运行，以及 Windows 与 macOS 启动器">
+  <img src="docs/assets/hero.png" width="880" alt="3ds2apple 在 iPhone 与 iPad 上运行，以及 Windows 与 macOS 启动器">
 </p>
 
 > [!NOTE]
@@ -49,7 +49,7 @@
 ## 演示
 
 <p align="center">
-  <img src="assets/readme/demo.gif" width="720" alt="合成演示轮播：竖屏按键、横屏按键、暂停菜单虚拟按键选项与屏幕布局设置">
+  <img src="docs/assets/demo.gif" width="720" alt="合成演示轮播：竖屏按键、横屏按键、暂停菜单虚拟按键选项与屏幕布局设置">
 </p>
 
 <p align="center"><sub>合成预览，不含游戏数据：竖屏按键 → 横屏按键 → 暂停菜单虚拟按键选项 → 屏幕布局设置。</sub></p>
@@ -129,7 +129,7 @@
 
 | 竖屏 | 横屏 |
 |:---:|:---:|
-| <img src="assets/readme/portrait.png" width="280" alt="竖屏虚拟按键合成预览"> | <img src="assets/readme/landscape.png" width="520" alt="横屏虚拟按键合成预览"> |
+| <img src="docs/assets/portrait.png" width="280" alt="竖屏虚拟按键合成预览"> | <img src="docs/assets/landscape.png" width="520" alt="横屏虚拟按键合成预览"> |
 | 竖屏按键 | 横屏按键 |
 
 ## 快速开始

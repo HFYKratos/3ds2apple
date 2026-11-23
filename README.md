@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/icon.png" width="128" alt="3ds2apple icon"></p>
+<p align="center"><img src="docs/assets/readme-icon.png" width="128" alt="3ds2apple icon"></p>
 
 <h1 align="center">3ds2apple</h1>
 
@@ -36,7 +36,7 @@
 <p align="center"><sub>Windows 10/11 launcher (verified path) · macOS 13+ launcher (developer preview, see <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>) · the iOS app is composed, signed and installed by the launcher with your own Apple ID, so there is no separate iOS download.</sub></p>
 
 <p align="center">
-  <img src="assets/readme/hero.png" width="880" alt="3ds2apple running on iPhone and iPad, with the Windows and macOS launchers">
+  <img src="docs/assets/hero.png" width="880" alt="3ds2apple running on iPhone and iPad, with the Windows and macOS launchers">
 </p>
 
 > [!NOTE]
@@ -49,7 +49,7 @@
 ## Demo
 
 <p align="center">
-  <img src="assets/readme/demo.gif" width="720" alt="Synthetic demo loop: portrait controls, landscape controls, pause-menu virtual controls and screen-layout settings">
+  <img src="docs/assets/demo.gif" width="720" alt="Synthetic demo loop: portrait controls, landscape controls, pause-menu virtual controls and screen-layout settings">
 </p>
 
 <p align="center"><sub>Synthetic preview, no game data: portrait controls → landscape controls → pause-menu Virtual controls → screen-layout settings.</sub></p>
@@ -129,7 +129,7 @@ Screen layouts are edited separately under **Settings → Display → Screen lay
 
 | Portrait | Landscape |
 |:---:|:---:|
-| <img src="assets/readme/portrait.png" width="280" alt="Synthetic portrait preview with on-screen controls"> | <img src="assets/readme/landscape.png" width="520" alt="Synthetic landscape preview with on-screen controls"> |
+| <img src="docs/assets/portrait.png" width="280" alt="Synthetic portrait preview with on-screen controls"> | <img src="docs/assets/landscape.png" width="520" alt="Synthetic landscape preview with on-screen controls"> |
 | Portrait controls | Landscape controls |
 
 ## Quick start

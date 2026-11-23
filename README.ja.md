@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/icon.png" width="128" alt="3ds2apple アイコン"></p>
+<p align="center"><img src="docs/assets/readme-icon.png" width="128" alt="3ds2apple アイコン"></p>
 
 <h1 align="center">3ds2apple</h1>
 
@@ -39,7 +39,7 @@
 <p align="center"><sub>Windows 10/11 ランチャー（検証済みの経路）· macOS 13+ ランチャー（開発者プレビュー、<a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a> を参照）· iOS アプリはランチャーがあなた自身の Apple ID で構成・署名・インストールするため、iOS 単体のダウンロードはありません。</sub></p>
 
 <p align="center">
-  <img src="assets/readme/hero.png" width="880" alt="iPhone と iPad で動作する 3ds2apple、および Windows と macOS のランチャー">
+  <img src="docs/assets/hero.png" width="880" alt="iPhone と iPad で動作する 3ds2apple、および Windows と macOS のランチャー">
 </p>
 
 > [!NOTE]
@@ -52,7 +52,7 @@
 ## デモ
 
 <p align="center">
-  <img src="assets/readme/demo.gif" width="720" alt="合成デモのループ：縦画面のコントロール、横画面のコントロール、ポーズメニューのバーチャルコントローラー、画面レイアウト設定">
+  <img src="docs/assets/demo.gif" width="720" alt="合成デモのループ：縦画面のコントロール、横画面のコントロール、ポーズメニューのバーチャルコントローラー、画面レイアウト設定">
 </p>
 
 <p align="center"><sub>合成プレビュー、ゲームデータなし：縦画面コントロール → 横画面コントロール → ポーズメニューのバーチャルコントローラー → 画面レイアウト設定。</sub></p>
@@ -132,7 +132,7 @@
 
 | 縦画面 | 横画面 |
 |:---:|:---:|
-| <img src="assets/readme/portrait.png" width="280" alt="オンスクリーンコントロール付きの縦画面合成プレビュー"> | <img src="assets/readme/landscape.png" width="520" alt="オンスクリーンコントロール付きの横画面合成プレビュー"> |
+| <img src="docs/assets/portrait.png" width="280" alt="オンスクリーンコントロール付きの縦画面合成プレビュー"> | <img src="docs/assets/landscape.png" width="520" alt="オンスクリーンコントロール付きの横画面合成プレビュー"> |
 | 縦画面コントロール | 横画面コントロール |
 
 ## クイックスタート
