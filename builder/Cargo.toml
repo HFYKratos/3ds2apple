@@ -3,13 +3,13 @@ resolver = "2"
 members = ["core", "pack"]
 
 [workspace.package]
-version = "0.1.6-beta3"
+version = "0.1.6-beta4"
 edition = "2021"
 license = "Apache-2.0"
 rust-version = "1.80"
 
 [workspace.dependencies]
-builder-core = { path = "core", version = "0.1.6-beta3" }
+builder-core = { path = "core", version = "0.1.6-beta4" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
