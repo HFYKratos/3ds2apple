@@ -658,7 +658,7 @@ struct GameView: View {
             let swapped = settings.swapScreens
             if let top = viewports.top {
                 readbackScreen(
-                    image: screenImage(isUpper: swapped),
+                    image: screenImage(isUpper: !swapped),
                     screen: swapped ? bottomScreen : topScreen,
                     identifier: "top-screen",
                     isTouchscreen: swapped
@@ -670,8 +670,8 @@ struct GameView: View {
             // screen above the small bottom screen in the right column.
             if let topSmall = viewports.topSmall {
                 readbackScreen(
-                    image: screenImage(isUpper: true),
-                    screen: topScreen,
+                    image: screenImage(isUpper: !swapped),
+                    screen: swapped ? bottomScreen : topScreen,
                     identifier: "top-small-screen",
                     isTouchscreen: false
                 )
@@ -680,7 +680,7 @@ struct GameView: View {
             }
             if let bottom = viewports.bottom {
                 readbackScreen(
-                    image: screenImage(isUpper: !swapped),
+                    image: screenImage(isUpper: swapped),
                     screen: swapped ? topScreen : bottomScreen,
                     identifier: "bottom-screen",
                     isTouchscreen: !swapped

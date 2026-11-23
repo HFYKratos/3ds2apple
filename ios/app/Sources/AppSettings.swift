@@ -655,6 +655,13 @@ final class AppSettings: ObservableObject {
                 hiddenControlItemsLandscape = old
                 hiddenControlItemsPortrait = old
             }
+            // Persist the migrated sets now: the marker below makes this branch run
+            // once, and a later launch reads the per-direction keys. Without this
+            // write the shipped defaults lived only in this process.
+            defaults.set(hiddenControlItemsPortrait.map(\.rawValue).sorted(),
+                         forKey: Keys.hiddenControlItemsPortraitKey)
+            defaults.set(hiddenControlItemsLandscape.map(\.rawValue).sorted(),
+                         forKey: Keys.hiddenControlItemsLandscapeKey)
             defaults.set(true, forKey: Keys.hiddenControlItemsMigrated)
             AppLog.log("[3ds2apple] virtual controls: hidden rows migrated to per-direction defaults (%@)",
                        old.isEmpty ? "shipped defaults" : "custom set copied")
