@@ -101,7 +101,7 @@ struct InGameControlEditOverlay: View {
                 }
                 previewCenters = [:]
                 dpadPreviewCenter = nil
-                target = nil
+                self.target = nil
                 dragStart = nil
                 didMove = false
             }
