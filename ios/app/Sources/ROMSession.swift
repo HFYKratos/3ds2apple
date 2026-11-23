@@ -304,6 +304,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// the layout preset; the presenter receives aspect-fitted normalised
     /// viewports when a custom presenter is configured.
     private var customScreenPlacement: CustomScreenPlacement?
+
+    /// The on-screen Swap screens button's persisted setting (0.1.6-beta2).
+    private var screenSwapped = false
     /// Turn of the screens inside their area (Settings → Display). Applied the
     /// same way as the layout.
     private(set) var screenRotation: ScreenRotation = .upright
@@ -891,6 +894,15 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Records the custom rectangles for the current device direction. Callers
     /// set this before a load so a custom presenter gets its viewports, and on
     /// every custom-layout edit/rotation change while running.
+    /// Applies the Swap screens button to the presenter immediately; the
+    /// readback fallback swaps the images in GameView.
+    func setScreenSwap(_ swapped: Bool) {
+        guard swapped != screenSwapped else { return }
+        screenSwapped = swapped
+        AppLog.log("[3ds2apple] screen swap: %@", swapped ? "on" : "off")
+        applyPresentedGeometry()
+    }
+
     func setCustomScreenPlacement(_ placement: CustomScreenPlacement) {
         guard placement != customScreenPlacement else { return }
         customScreenPlacement = placement
@@ -1099,6 +1111,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             _ = zk_presenter_set_layout(presenter, layout)
             _ = zk_presenter_set_orientation(presenter, rotation)
             _ = zk_presenter_resize(presenter, width, height)
+            _ = zk_presenter_set_screen_swap(presenter, screenSwapped ? 1 : 0)
+            if layout == 8 {
+                _ = zk_presenter_set_custom_rotation(presenter, rotation)
+            }
             if let customViewports {
                 _ = zk_presenter_set_custom_viewports(
                     presenter,
@@ -1640,9 +1656,12 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         _ = zk_presenter_set_layout(handle, layout)
         _ = zk_presenter_set_orientation(handle, rotation)
 
+        _ = zk_presenter_set_screen_swap(handle, screenSwapped ? 1 : 0)
         if layout == 8 {
-            // Custom GPU layout: the rects are normalised to the drawable and the
-            // presenter has no layout_size to compare (v1 ABI, upright only).
+            // Custom GPU layout: the rects are normalised to the upright canvas
+            // and the presenter rotates the two pictures for the screen-rotation
+            // setting; there is no layout_size to compare.
+            _ = zk_presenter_set_custom_rotation(handle, rotation)
             let size = presentedDrawableSize
             let applied = applyCustomPresenterGeometry(handle, size: size)
             AppLog.log("[3ds2apple] screen layout custom · %@ · drawable %ux%u · custom viewports %@",
@@ -1705,8 +1724,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         let normY = Float(min(max(normalisedY, 0), 1))
         let onLowerScreen: Int32
         if screenLayout == .custom {
-            // The GPU custom path has no rotation in v1; a rotated custom layout
-            // keeps the readback path and its own touch mapping.
+            // The GPU custom path turns each screen's picture inside its own
+            // rectangle; pass the displayed point and the rotation so the ABI can
+            // undo that turn after finding the lower screen's rectangle.
             if let viewports = customPresenterViewports(for: size) {
                 onLowerScreen = zk_present_custom_touch_map(
                     UInt32(size.width.rounded()), UInt32(size.height.rounded()),
@@ -1714,7 +1734,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
                     Float(viewports.top.width), Float(viewports.top.height),
                     Float(viewports.bottom.minX), Float(viewports.bottom.minY),
                     Float(viewports.bottom.width), Float(viewports.bottom.height),
-                    normX, normY, &x, &y
+                    normX, normY, UInt32(screenRotation.presenterValue), &x, &y
                 )
             } else {
                 onLowerScreen = 0

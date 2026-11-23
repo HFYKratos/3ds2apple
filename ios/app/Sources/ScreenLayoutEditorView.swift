@@ -2,27 +2,18 @@
 //  ScreenLayoutEditorView.swift
 //  3ds2apple
 //
-//  The full-screen custom screen layout drag editor.
+//  Full-screen custom screen layout editor (0.1.6-beta2). No device frame, no
+//  rounded stage border and no padding: the editable canvas is the whole screen
+//  and the two screens can be dragged to its edges.
 //
-//  The numeric custom layout page ("Edit by dragging") opens it for one fixed
-//  direction (portrait edits the portrait layout, landscape the landscape one),
-//  and the canvas is the whole screen. The canvas mirrors the running game view
-//  (GameViewGeometry.swift): the real safe area and the full-bleed picture
-//  stage, with the floating controls over the whole screen. The current
-//  on-screen control layout is drawn over the picture, translucent and
-//  non-interactive, so the screens can be placed between or away from the
-//  controls.
+//  Interaction: ONE stationary DragGesture on the canvas (never on a moving
+//  screen). On start it hit-tests the topmost screen under the finger, captures
+//  its base rectangle and renders a local preview from (base + location - start);
+//  the draft/settings are committed once in onEnded. Pinch on the same stationary
+//  canvas resizes the selected screen. Taps select only; empty space does not
+//  move anything. The Done pill is the only overlay text.
 //
-//  Round-4 interaction: drag a screen directly to move it, drag its large
-//  pinch with two fingers to resize it, and tap the one clear Done pill
-//  (bottom centre) to save and leave. Movement snaps to the stage edges/centre
-//  and to the other screen with dashed guides; every change is saved immediately
-//  and there is no scrolling/zooming surface in the editor.
-//
-//  The custom layout still runs on the software readback path - the upstream
-//  Zakuro presenter only knows its fixed arrangements - so it applies from the
-//  next game load. Archive: CustomScreenLayout version 3 (older archives are
-//  migrated on read); see CustomScreenLayout.swift and ios/app/README.md.
+//  A landscape editor forces the app into landscape while it is open.
 //
 
 import Foundation
@@ -33,31 +24,26 @@ struct ScreenLayoutEditorView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    /// The direction this editor edits. Fixed when the page opens: portrait and
-    /// landscape keep separate saved layouts.
     @State private var orientation: ControlLayoutOrientation
     @State private var draft: CustomScreenLayout
     @State private var selection: ScreenKind = .upper
-    @State private var metrics: GameViewDeviceMetrics = .current()
-    @State private var undoStack: [CustomScreenLayout] = []
 
-    // Gesture bookkeeping: a gesture always applies its total translation to the
-    // rectangle captured when it started, never to the already-moved one.
-    @State private var moveBase: ScreenRect?
-    @State private var resizeBase: ScreenRect?
-    @State private var pinchBase: ScreenRect?
-
-    // Snapping guides (stage points).
-    @State private var guideXs: [CGFloat] = []
-    @State private var guideYs: [CGFloat] = []
-
-    // Round 0.1.6 local drag/pinch preview: the shared draft/settings are only
-    // written once, on gesture end, which removes the start/target jitter.
+    // The stationary-canvas drag: hit-tested kind, base rectangle and start
+    // point are captured once; only a local preview changes while moving.
+    @State private var dragKind: ScreenKind?
+    @State private var dragBase: ScreenRect?
+    @State private var dragStart: CGPoint?
+    @State private var dragMoved = false
     @State private var previewRect: ScreenRect?
     @State private var previewKind: ScreenKind?
 
-    /// `orientation` nil means "the direction the device is held in right now".
-    /// The headless screenshot launch passes one explicitly.
+    // Pinch resize (stationary canvas).
+    @State private var pinchBase: ScreenRect?
+
+    // Snapping guides in canvas points.
+    @State private var guideXs: [CGFloat] = []
+    @State private var guideYs: [CGFloat] = []
+
     init(settings: AppSettings, orientation: ControlLayoutOrientation? = nil) {
         self.settings = settings
         let target = orientation ?? GameViewDeviceMetrics.currentLayoutOrientation
@@ -65,36 +51,10 @@ struct ScreenLayoutEditorView: View {
         _draft = State(initialValue: settings.customScreenLayout)
     }
 
-    private var geometry: GameViewPreviewGeometry {
-        GameViewPreviewGeometry.make(orientation: orientation, metrics: metrics)
-    }
-
-    /// The upright canvas the rectangles are stored in (the stage, or the stage
-    /// with its sides swapped for a quarter-turn screen rotation).
-    private var canvasPointSize: CGSize {
-        CustomScreenGeometry.canvasSize(available: geometry.screenStageRect.size,
-                                        rotation: settings.screenRotation)
-    }
-
-    private var canvasAspect: CGFloat {
-        let canvas = canvasPointSize
-        guard canvas.height > 0 else { return 1 }
-        return canvas.width / canvas.height
-    }
-
-    private var rotationDegrees: Double {
-        switch settings.screenRotation {
-        case .upright: return 0
-        case .clockwise: return 90
-        case .upsideDown: return 180
-        case .counterClockwise: return -90
-        }
-    }
-
     var body: some View {
         GeometryReader { proxy in
-            ZStack(alignment: .topLeading) {
-                Color.black
+            ZStack {
+                Color.black.ignoresSafeArea()
                 canvas(available: proxy.size)
                 doneOverlay
             }
@@ -111,406 +71,214 @@ struct ScreenLayoutEditorView: View {
     }
 
     private func refresh() {
-        metrics = .current()
-        // Heal an older archive that hid a screen: the simplified editor only
-        // knows "both screens shown", and the value is saved on the next edit.
         draft = settings.customScreenLayout.withDefaultsFilled()
-        undoStack = []
         selection = .upper
+        dragKind = nil
+        dragBase = nil
+        dragStart = nil
+        previewRect = nil
+        previewKind = nil
+        guideXs = []
+        guideYs = []
     }
 
     // MARK: - Canvas
 
     private func canvas(available: CGSize) -> some View {
-        let scaler = GameViewPreviewScaler(available: available,
-                                          metrics: metrics,
-                                          orientation: orientation,
-                                          padding: 8)
-        return ZStack(alignment: .topLeading) {
+        ZStack(alignment: .topLeading) {
+            // One stationary gesture layer at the bottom; every drawn item above
+            // is non-interactive, so the gesture coordinate space never moves.
             Color.clear
-            deviceFrame(scaler)
-            stageView(scaler)
-            controlOverlay(scaler)
+                .contentShape(Rectangle())
+                .gesture(canvasDrag(available: available))
+                .simultaneousGesture(pinchGesture(available: available))
+            controlOverlay(available: available)
+                .allowsHitTesting(false)
+            screenBox(.upper, available: available)
+            screenBox(.lower, available: available)
+            guideLines(available: available)
+                .allowsHitTesting(false)
         }
         .frame(width: available.width, height: available.height)
-        .contentShape(Rectangle())
-        .simultaneousGesture(pinchGesture)
         .accessibilityIdentifier("screen-layout-preview")
     }
 
-    private func deviceFrame(_ scaler: GameViewPreviewScaler) -> some View {
-        let rect = scaler.screenRect
-        let radius = min(rect.width, rect.height) * 0.07
-        return RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .fill(Color(white: 0.07))
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
-            )
-            .frame(width: rect.width, height: rect.height)
-            .position(x: rect.midX, y: rect.midY)
+    private func displayedRect(_ kind: ScreenKind, available: CGSize) -> CGRect {
+        let source = (previewKind == kind ? previewRect : nil)
+            ?? draft.placement(for: orientation).rect(for: kind)
+        return CGRect(x: CGFloat(source.x) * available.width,
+                      y: CGFloat(source.y) * available.height,
+                      width: CGFloat(source.width) * available.width,
+                      height: CGFloat(source.height) * available.height)
     }
 
-    /// The translucent current control layout: the reference the user places the
-    /// picture against. Not interactive, so every gesture reaches the screens.
-    private func controlOverlay(_ scaler: GameViewPreviewScaler) -> some View {
-        let container = geometry.controlContainerRect
+    @ViewBuilder
+    private func screenBox(_ kind: ScreenKind, available: CGSize) -> some View {
+        let rect = displayedRect(kind, available: available)
+        EditableScreenBox(kind: kind,
+                          rect: rect,
+                          screenAspect: CustomScreenGeometry.nativeAspect(for: kind),
+                          isSelected: selection == kind,
+                          label: label(for: kind))
+            .position(x: rect.midX, y: rect.midY)
+            .zIndex(kind == .lower ? 2 : 1)
+    }
+
+    private func label(for kind: ScreenKind) -> String {
+        switch kind {
+        case .upper: return L10n.format("Upper screen %@", "400×240")
+        case .lower: return L10n.format("Lower screen %@", "320×240")
+        }
+    }
+
+    /// The translucent current control layout (whole screen), including the
+    /// single-cross D-pad, as a non-interactive reference.
+    private func controlOverlay(available: CGSize) -> some View {
         let profile = settings.controlLayout(for: orientation)
+        let container = CGRect(origin: .zero, size: available)
         return ZStack(alignment: .topLeading) {
-            Color.clear
             ForEach(ControlElement.allCases) { element in
                 if !element.isDpadDirection {
-                    referenceControl(element, container: container, scaler: scaler, profile: profile)
+                    let frame = element.frame(for: profile.placement(for: element),
+                                              in: container.size)
+                    let width = max(frame.width, 6)
+                    let height = max(frame.height, 6)
+                    RoundedRectangle(cornerRadius: min(width, height) * 0.42, style: .continuous)
+                        .fill(Color.white.opacity(0.10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: min(width, height) * 0.42,
+                                             style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.38), lineWidth: 0.7)
+                        )
+                        .frame(width: width, height: height)
+                        .position(frame.center)
                 }
             }
-            let group = profile.dpadGroup(in: container.size)
-            let groupCenter = scaler.point(CGPoint(x: container.minX + group.center.x,
-                                                   y: container.minY + group.center.y))
-            let groupSpan = max(scaler.length(group.span), 6)
-            let groupDiameter = max(scaler.length(group.diameter), 3)
+            let group = profile.dpadGroup(in: available)
+            let span = max(group.span, 6)
             ZStack {
                 DpadCrossShape()
                     .fill(Color.white.opacity(0.10))
                 DpadCrossShape()
                     .stroke(Color.white.opacity(0.38), lineWidth: 0.7)
-                ForEach(ControlLayoutProfile.dpadDirections, id: \.self) { element in
-                    Text(element.symbol)
-                        .font(.system(size: max(min(groupDiameter * 0.24, 10), 5),
-                                      weight: .semibold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.55))
-                        .position(x: groupSpan / 2
-                                    + (element == .dpadLeft ? -groupDiameter * 0.52
-                                       : (element == .dpadRight ? groupDiameter * 0.52 : 0)),
-                                  y: groupSpan / 2
-                                    + (element == .dpadUp ? -groupDiameter * 0.52
-                                       : (element == .dpadDown ? groupDiameter * 0.52 : 0)))
-                }
             }
-            .frame(width: groupSpan, height: groupSpan)
-            .position(groupCenter)
-        }
-        .allowsHitTesting(false)
-    }
-
-    private func stageView(_ scaler: GameViewPreviewScaler) -> some View {
-        let stage = scaler.rect(geometry.screenStageRect)
-        let canvas = canvasPointSize
-        let previewCanvas = CGSize(width: canvas.width * scaler.scale,
-                                   height: canvas.height * scaler.scale)
-        return ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.black)
-            screensCanvas(scaler, canvas: canvas)
-                .frame(width: previewCanvas.width, height: previewCanvas.height)
-                .rotationEffect(.degrees(rotationDegrees))
-        }
-        .frame(width: stage.width, height: stage.height)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-        )
-        .position(x: stage.midX, y: stage.midY)
-    }
-
-    private func screensCanvas(_ scaler: GameViewPreviewScaler,
-                               canvas: CGSize) -> some View {
-        let scale = scaler.scale
-        let preview = CGSize(width: canvas.width * scale, height: canvas.height * scale)
-        let placement = draft.placement(for: orientation)
-        return ZStack(alignment: .topLeading) {
-            Color.clear
-            // Both screens are always shown in the simplified editor; the model
-            // heals the old "only one screen" flags on read.
-            editableScreen(.upper,
-                           source: previewKind == .upper ? (previewRect ?? placement.top) : placement.top,
-                           canvas: canvas, scale: scale)
-            editableScreen(.lower,
-                           source: previewKind == .lower ? (previewRect ?? placement.bottom) : placement.bottom,
-                           canvas: canvas, scale: scale)
-            guideLines(preview: preview, scale: scale)
-        }
-        .frame(width: preview.width, height: preview.height)
-    }
-
-    private func editableScreen(_ kind: ScreenKind,
-                                source: ScreenRect,
-                                canvas: CGSize,
-                                scale: CGFloat) -> some View {
-        let rect = CGRect(x: CGFloat(source.x) * canvas.width * scale,
-                          y: CGFloat(source.y) * canvas.height * scale,
-                          width: CGFloat(source.width) * canvas.width * scale,
-                          height: CGFloat(source.height) * canvas.height * scale)
-        return EditableScreenBox(
-            kind: kind,
-            rect: rect,
-            screenAspect: CustomScreenGeometry.nativeAspect(for: kind),
-            isSelected: selection == kind,
-            label: label(for: kind),
-            onBeginMove: { beginMove(kind) },
-            onMove: { translation in move(kind, translation: translation, scale: scale) },
-            onEndMove: { endMove() },
-            onSelect: { selection = kind }
-        )
-        .position(x: rect.midX, y: rect.midY)
-        .zIndex(selection == kind ? 2 : 1)
-    }
-
-    private func label(for kind: ScreenKind) -> String {
-        switch kind {
-        case .upper:
-            return L10n.format("Upper screen %@", "400×240")
-        case .lower:
-            return L10n.format("Lower screen %@", "320×240")
+            .frame(width: span, height: span)
+            .position(group.center)
         }
     }
 
     @ViewBuilder
-    private func guideLines(preview: CGSize, scale: CGFloat) -> some View {
+    private func guideLines(available: CGSize) -> some View {
         if !guideXs.isEmpty || !guideYs.isEmpty {
             Path { path in
                 for x in guideXs {
-                    path.move(to: CGPoint(x: x * scale, y: 0))
-                    path.addLine(to: CGPoint(x: x * scale, y: preview.height))
+                    path.move(to: CGPoint(x: x, y: 0))
+                    path.addLine(to: CGPoint(x: x, y: available.height))
                 }
                 for y in guideYs {
-                    path.move(to: CGPoint(x: 0, y: y * scale))
-                    path.addLine(to: CGPoint(x: preview.width, y: y * scale))
+                    path.move(to: CGPoint(x: 0, y: y))
+                    path.addLine(to: CGPoint(x: available.width, y: y))
                 }
             }
             .stroke(Color.accentColor.opacity(0.9),
                     style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-            .allowsHitTesting(false)
         }
     }
 
-    @ViewBuilder
-    private func referenceControl(_ element: ControlElement,
-                                  container: CGRect,
-                                  scaler: GameViewPreviewScaler,
-                                  profile: ControlLayoutProfile) -> some View {
-        let frame = element.frame(for: profile.placement(for: element),
-                                  in: container.size)
-        let center = scaler.point(CGPoint(x: container.minX + frame.center.x,
-                                          y: container.minY + frame.center.y))
-        let width = max(scaler.length(frame.width), 6)
-        let height = max(scaler.length(frame.height), 6)
-        RoundedRectangle(cornerRadius: min(width, height) * 0.42, style: .continuous)
-            .fill(Color.white.opacity(0.10))
-            .overlay(
-                RoundedRectangle(cornerRadius: min(width, height) * 0.42,
-                                 style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.38), lineWidth: 0.7)
-            )
-            .overlay(
-                Group {
-                    if let systemImage = element.systemImage {
-                        Image(systemName: systemImage)
-                            .font(.system(size: max(min(height * 0.4, 10), 5)))
-                    } else {
-                        Text(element.symbol)
-                            .font(.system(size: max(min(height * 0.36, 10), 5),
-                                          weight: .semibold, design: .rounded))
+    // MARK: - Stationary gestures
+
+    private func canvasDrag(available: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if dragKind == nil {
+                    guard let hit = hitTest(value.startLocation, available: available) else {
+                        return
                     }
+                    dragKind = hit
+                    selection = hit
+                    dragBase = draft.placement(for: orientation).rect(for: hit)
+                    dragStart = value.startLocation
+                    dragMoved = false
                 }
-                .foregroundColor(.white.opacity(0.55))
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-            )
-            .frame(width: width, height: height)
-            .position(center)
+                guard let kind = dragKind, let base = dragBase, let start = dragStart else {
+                    return
+                }
+                let dx = value.location.x - start.x
+                let dy = value.location.y - start.y
+                if abs(dx) + abs(dy) > 3 { dragMoved = true }
+                var rect = base.cgRect(in: available)
+                rect.origin.x += dx
+                rect.origin.y += dy
+                rect.origin.x = min(max(rect.minX, 0), max(available.width - rect.width, 0))
+                rect.origin.y = min(max(rect.minY, 0), max(available.height - rect.height, 0))
+                let other = otherRect(for: kind, available: available)
+                let snapped = ScreenLayoutSnapping.snap(rect: rect, canvas: available, other: other)
+                guideXs = snapped.guidesX
+                guideYs = snapped.guidesY
+                previewKind = kind
+                previewRect = ScreenRect.normalised(snapped.rect, in: available)
+            }
+            .onEnded { _ in
+                if dragMoved { commitPreview() }
+                dragKind = nil
+                dragBase = nil
+                dragStart = nil
+                dragMoved = false
+                guideXs = []
+                guideYs = []
+            }
     }
 
-    // MARK: - Bars
-
-    /// The Done surface, centered on the screen (round-8 user request, matching
-    /// the in-game control editor): one obvious pill with the interaction hint
-    /// above it. The VStack keeps its intrinsic size, so only the hint and the
-    /// pill are hit-testable and the canvas around them still drags.
-    private var doneOverlay: some View {
-        VStack(spacing: 10) {
-            Text(L10n.tr("Drag a screen to move it. Pinch with two fingers to resize the selected screen. Done saves the layout."))
-                .font(.caption2)
-                .foregroundColor(.white.opacity(0.72))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 18)
-            Button {
-                commit()
-                dismiss()
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark")
-                    Text(L10n.tr("Done"))
+    private func pinchGesture(available: CGSize) -> some Gesture {
+        MagnificationGesture()
+            .onChanged { factor in
+                if pinchBase == nil {
+                    pinchBase = draft.placement(for: orientation).rect(for: selection)
                 }
-                .font(.body.weight(.semibold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 26)
-                .padding(.vertical, 13)
-                .background(Capsule().fill(Color.accentColor))
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
-                .shadow(color: .black.opacity(0.45), radius: 10, y: 4)
+                guard let base = pinchBase else { return }
+                let rect = base.cgRect(in: available)
+                let centre = CGPoint(x: rect.midX, y: rect.midY)
+                let scale = max(CGFloat(factor), 0.2)
+                var width = min(max(rect.width * scale, 24), available.width)
+                var height = min(max(rect.height * scale, 24), available.height)
+                if draft.placement(for: orientation).keepsNativeAspect {
+                    let aspect = CustomScreenGeometry.nativeAspect(for: selection)
+                    height = width / aspect
+                    if height > available.height {
+                        height = available.height
+                        width = height * aspect
+                    }
+                }
+                var x = centre.x - width / 2
+                var y = centre.y - height / 2
+                x = min(max(x, 0), max(available.width - width, 0))
+                y = min(max(y, 0), max(available.height - height, 0))
+                previewKind = selection
+                previewRect = ScreenRect.normalised(
+                    CGRect(x: x, y: y, width: width, height: height), in: available)
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("screen-editor-done")
+            .onEnded { _ in
+                guard pinchBase != nil else { return }
+                pinchBase = nil
+                commitPreview()
+            }
+    }
+
+    private func hitTest(_ point: CGPoint, available: CGSize) -> ScreenKind? {
+        // The lower screen is drawn on top; check it first.
+        for kind in [ScreenKind.lower, .upper] {
+            if displayedRect(kind, available: available).contains(point) { return kind }
         }
-        .padding(.horizontal, 18)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        return nil
     }
 
-    private var bottomBar: some View {
-        VStack(spacing: 8) {
-            Text(L10n.tr("Drag to move, pinch to scale. The controls are shown for reference."))
-                .font(.caption2)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if settings.screenRotation != .upright {
-                Text(L10n.tr("The game applies the screen rotation; this editor arranges the upright screens."))
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            HStack(spacing: 14) {
-                Button {
-                    undo()
-                } label: {
-                    Label(L10n.tr("Undo"), systemImage: "arrow.uturn.backward")
-                }
-                .disabled(undoStack.isEmpty)
-                Toggle(isOn: keepsAspectBinding) {
-                    Label(L10n.tr("Lock ratio"), systemImage: "lock")
-                }
-                .fixedSize()
-                .accessibilityIdentifier("screen-lock-ratio")
-                Spacer(minLength: 4)
-                Menu {
-                    Button(L10n.tr("Reset screen layout"), role: .destructive) {
-                        resetOrientation()
-                    }
-                    Button(L10n.tr("Reset both screen layouts"), role: .destructive) {
-                        resetBoth()
-                    }
-                } label: {
-                    Label(L10n.tr("Reset"), systemImage: "arrow.counterclockwise")
-                }
-            }
-            .font(.caption)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    // MARK: - Bindings
-
-    private var keepsAspectBinding: Binding<Bool> {
-        Binding(
-            get: { draft.placement(for: orientation).keepsNativeAspect },
-            set: { value in
-                pushUndo()
-                var layout = draft
-                var placement = layout.placement(for: orientation)
-                placement.keepsNativeAspect = value
-                if value {
-                    placement = placement.withNativeAspect(containerAspect: canvasAspect)
-                }
-                layout.setPlacement(placement, for: orientation)
-                draft = layout
-                commit()
-            }
-        )
-    }
-
-    // MARK: - Gestures
-
-    private func beginMove(_ kind: ScreenKind) {
-        selection = kind
-        guard moveBase == nil else { return }
-        pushUndo()
-        moveBase = draft.placement(for: orientation).rect(for: kind)
-    }
-
-    private func move(_ kind: ScreenKind, translation: CGSize, scale: CGFloat) {
-        guard let base = moveBase else { return }
-        let canvas = canvasPointSize
-        let factor = max(scale, 0.0001)
-        var rect = base.cgRect(in: canvas)
-        rect.origin.x += translation.width / factor
-        rect.origin.y += translation.height / factor
-        rect.origin.x = min(max(rect.minX, 0), max(canvas.width - rect.width, 0))
-        rect.origin.y = min(max(rect.minY, 0), max(canvas.height - rect.height, 0))
+    private func otherRect(for kind: ScreenKind, available: CGSize) -> CGRect? {
         let placement = draft.placement(for: orientation)
-        var other: CGRect?
-        switch kind {
-        case .upper: other = placement.bottom.cgRect(in: canvas)
-        case .lower: other = placement.top.cgRect(in: canvas)
-        }
-        let snapped = ScreenLayoutSnapping.snap(rect: rect, canvas: canvas, other: other)
-        guideXs = snapped.guidesX
-        guideYs = snapped.guidesY
-        applyPreview(kind, rect: ScreenRect.normalised(snapped.rect, in: canvas))
+        let other: ScreenRect = kind == .upper ? placement.bottom : placement.top
+        return other.cgRect(in: available)
     }
 
-    private func endMove() {
-        moveBase = nil
-        guideXs = []
-        guideYs = []
-        commitPreview()
-    }
-
-    private func beginResize(_ kind: ScreenKind) {
-        selection = kind
-        guard resizeBase == nil else { return }
-        pushUndo()
-        resizeBase = draft.placement(for: orientation).rect(for: kind)
-    }
-
-    private func resize(_ kind: ScreenKind, translation: CGSize, scale: CGFloat) {
-        guard let base = resizeBase else { return }
-        let canvas = canvasPointSize
-        let factor = max(scale, 0.0001)
-        let rect = base.cgRect(in: canvas)
-        let screenAspect = CustomScreenGeometry.nativeAspect(for: kind)
-        let locked = draft.placement(for: orientation).keepsNativeAspect
-        let maximumWidth = max(canvas.width - rect.minX, 32)
-        let maximumHeight = max(canvas.height - rect.minY, 32)
-        var width = max(rect.width + translation.width / factor, 32)
-        var height = max(rect.height + translation.height / factor, 32)
-        if locked {
-            // The console screen's shape: in points, width / height = aspect.
-            width = min(width, maximumWidth)
-            height = width / screenAspect
-            if height > maximumHeight {
-                height = maximumHeight
-                width = height * screenAspect
-            }
-            if width > maximumWidth {
-                width = maximumWidth
-                height = width / screenAspect
-            }
-        } else {
-            width = min(width, maximumWidth)
-            height = min(height, maximumHeight)
-        }
-        let newRect = CGRect(x: rect.minX, y: rect.minY, width: width, height: height)
-        applyPreview(kind, rect: ScreenRect.normalised(newRect, in: canvas))
-    }
-
-    private func endResize() {
-        resizeBase = nil
-        commitPreview()
-    }
-
-    /// Live preview only: the draft and the settings are not touched while a
-    /// finger moves, so the box cannot oscillate between start and target.
-    private func applyPreview(_ kind: ScreenKind, rect: ScreenRect) {
-        previewKind = kind
-        previewRect = rect
-    }
-
-    /// Commits the previewed rectangle once (gesture end) and clears it.
+    /// One write for a finished drag/pinch.
     private func commitPreview() {
         guard let kind = previewKind, let rect = previewRect else { return }
         var layout = draft
@@ -520,113 +288,43 @@ struct ScreenLayoutEditorView: View {
         draft = layout
         previewKind = nil
         previewRect = nil
-        commit()
-    }
-
-    /// Pinch over the canvas shrinks/enlarges the selected screen about its
-    /// centre (tap a screen to select it).
-    private var pinchGesture: some Gesture {
-        MagnificationGesture()
-            .onChanged { factor in
-                if pinchBase == nil {
-                    pushUndo()
-                    pinchBase = draft.placement(for: orientation).rect(for: selection)
-                }
-                guard let base = pinchBase else { return }
-                let canvas = canvasPointSize
-                let placement = draft.placement(for: orientation)
-                let rect = base.cgRect(in: canvas)
-                let centre = CGPoint(x: rect.midX, y: rect.midY)
-                let scale = max(CGFloat(factor), 0.2)
-                var width = min(max(rect.width * scale, 32), canvas.width)
-                var height = min(max(rect.height * scale, 32), canvas.height)
-                if placement.keepsNativeAspect {
-                    let aspect = CustomScreenGeometry.nativeAspect(for: selection)
-                    height = width / aspect
-                    if height > canvas.height {
-                        height = canvas.height
-                        width = height * aspect
-                    }
-                }
-                var x = centre.x - width / 2
-                var y = centre.y - height / 2
-                x = min(max(x, 0), max(canvas.width - width, 0))
-                y = min(max(y, 0), max(canvas.height - height, 0))
-                let newRect = CGRect(x: x, y: y, width: width, height: height)
-                applyPreview(selection, rect: ScreenRect.normalised(newRect, in: canvas))
-            }
-            .onEnded { _ in
-                guard pinchBase != nil else { return }
-                pinchBase = nil
-                commitPreview()
-            }
-    }
-
-    // MARK: - Actions
-
-    private func pushUndo() {
-        if undoStack.last != draft {
-            undoStack.append(draft)
-        }
-        if undoStack.count > 40 {
-            undoStack.removeFirst()
-        }
-    }
-
-    private func undo() {
-        guard let previous = undoStack.popLast() else { return }
-        draft = previous
-        commit()
-    }
-
-    private func commit() {
-        // Hand editing a custom screen layout is exactly that direction's Custom
-        // choice; the numeric custom page also switches it before opening the
-        // editor.
         settings.selectCustomScreenLayout(for: orientation)
         settings.customScreenLayout = draft
         settings.persist()
     }
 
-    private func resetOrientation() {
-        pushUndo()
-        var layout = draft
-        layout.setPlacement(CustomScreenLayout.defaultPlacement(for: orientation),
-                            for: orientation)
-        draft = layout
-        commit()
-    }
-
-    private func resetBoth() {
-        pushUndo()
-        let layout = CustomScreenLayout.standard()
-        settings.customScreenLayout = layout
-        settings.persist()
-        draft = layout
-        undoStack = []
+    private var doneOverlay: some View {
+        Button {
+            dismiss()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark")
+                Text(L10n.tr("Done"))
+            }
+            .font(.body.weight(.semibold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 26)
+            .padding(.vertical, 13)
+            .background(Capsule().fill(Color.accentColor))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+            .shadow(color: .black.opacity(0.45), radius: 10, y: 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("screen-editor-done")
     }
 }
 
-// MARK: - One editable screen
-
-/// A screen box in the editor canvas. The translucent outer box is the layout
-/// rectangle; the brighter inner box is the picture at the console's own
-/// aspect, so a non-native rectangle shows the letterboxing the game will show.
+/// A screen box on the full-screen canvas (display only; the canvas gesture
+/// owns all interaction).
 private struct EditableScreenBox: View {
     let kind: ScreenKind
     let rect: CGRect
     let screenAspect: CGFloat
     let isSelected: Bool
     let label: String
-    let onBeginMove: () -> Void
-    let onMove: (CGSize) -> Void
-    let onEndMove: () -> Void
-    let onSelect: () -> Void
-
-    @State private var isMoving = false
 
     private var size: CGSize {
-        CGSize(width: max(rect.width, 24), height: max(rect.height, 24))
+        CGSize(width: max(rect.width, 16), height: max(rect.height, 16))
     }
 
     var body: some View {
@@ -640,7 +338,7 @@ private struct EditableScreenBox: View {
                 .strokeBorder(isSelected ? Color.accentColor : Color.white.opacity(0.45),
                               lineWidth: isSelected ? 2 : 1)
             Text(label)
-                .font(.system(size: max(min(size.width, size.height) * 0.14, 9),
+                .font(.system(size: max(min(size.width, size.height) * 0.12, 9),
                               weight: .semibold))
                 .foregroundColor(.white.opacity(0.85))
                 .lineLimit(1)
@@ -648,29 +346,6 @@ private struct EditableScreenBox: View {
                 .padding(2)
         }
         .frame(width: size.width, height: size.height)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onSelect()
-        }
-        .gesture(
-            DragGesture(minimumDistance: 3)
-                .onChanged { value in
-                    guard !isMoving else {
-                        onMove(value.translation)
-                        return
-                    }
-                    isMoving = true
-                    onSelect()
-                    onBeginMove()
-                    onMove(value.translation)
-                }
-                .onEnded { _ in
-                    if isMoving {
-                        isMoving = false
-                        onEndMove()
-                    }
-                }
-        )
         .accessibilityIdentifier("editor-screen-\(kind == .upper ? "upper" : "lower")")
     }
 

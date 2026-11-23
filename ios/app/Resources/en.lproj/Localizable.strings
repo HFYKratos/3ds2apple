@@ -666,4 +666,7 @@
 /* --- Round 0.1.6 app buttons --- */
 "Quick save" = "Quick save";
 "Quick saved" = "Quick saved";
+"Quick load" = "Quick load";
+"Quick loaded" = "Quick loaded";
+"Swap screens" = "Swap screens";
 

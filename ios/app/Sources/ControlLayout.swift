@@ -69,6 +69,8 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
     /// tap quick save. They report no 3DS button bit.
     case fastForward
     case quickSave
+    case quickLoad
+    case swapScreens
 
     var id: String { rawValue }
 
@@ -90,7 +92,8 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
         case .buttonZR: return ZKButton.zr
         case .buttonStart: return ZKButton.start
         case .buttonSelect: return ZKButton.select
-        case .circlePad, .cStick, .fastForward, .quickSave: return nil
+        case .circlePad, .cStick, .fastForward, .quickSave, .quickLoad, .swapScreens:
+            return nil
         }
     }
 
@@ -142,6 +145,8 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
         case .cStick: return "◍"
         case .fastForward: return "⏩"
         case .quickSave: return "⤓"
+        case .quickLoad: return "⤒"
+        case .swapScreens: return "⇄"
         }
     }
 
@@ -151,6 +156,8 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .fastForward: return "forward.fill"
         case .quickSave: return "square.and.arrow.down"
+        case .quickLoad: return "arrow.clockwise"
+        case .swapScreens: return "arrow.left.arrow.right"
         default: return nil
         }
     }
@@ -175,6 +182,8 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
         case .cStick: return L10n.tr("C-stick")
         case .fastForward: return L10n.tr("Fast-forward")
         case .quickSave: return L10n.tr("Quick save")
+        case .quickLoad: return L10n.tr("Quick load")
+        case .swapScreens: return L10n.tr("Swap screens")
         }
     }
 
@@ -201,6 +210,8 @@ enum ControlOptionItem: String, CaseIterable, Identifiable {
     case cStick
     case fastForward
     case quickSave
+    case quickLoad
+    case swapScreens
 
     var id: String { rawValue }
 
@@ -223,6 +234,8 @@ enum ControlOptionItem: String, CaseIterable, Identifiable {
         case .cStick: return [.cStick]
         case .fastForward: return [.fastForward]
         case .quickSave: return [.quickSave]
+        case .quickLoad: return [.quickLoad]
+        case .swapScreens: return [.swapScreens]
         }
     }
 
@@ -244,6 +257,8 @@ enum ControlOptionItem: String, CaseIterable, Identifiable {
         case .cStick: return .cStick
         case .fastForward: return .fastForward
         case .quickSave: return .quickSave
+        case .quickLoad: return .quickLoad
+        case .swapScreens: return .swapScreens
         }
     }
 
@@ -264,6 +279,8 @@ enum ControlOptionItem: String, CaseIterable, Identifiable {
         case .cStick: return L10n.tr("C-stick")
         case .fastForward: return L10n.tr("Fast-forward")
         case .quickSave: return L10n.tr("Quick save")
+        case .quickLoad: return L10n.tr("Quick load")
+        case .swapScreens: return L10n.tr("Swap screens")
         }
     }
 }
@@ -436,8 +453,10 @@ struct ControlLayoutProfile: Codable, Equatable {
                 // Not in the skin: above/right of the A-B-X-Y cluster.
                 (.cStick, ControlPlacement(x: 0.84821, y: 0.48309, size: 0.10, opacity: 0.85)),
                 // Round 0.1.6 app buttons, in the free centre area.
-                (.fastForward, ControlPlacement(x: 0.50, y: 0.70, size: 0.08, opacity: 0.85)),
-                (.quickSave, ControlPlacement(x: 0.50, y: 0.82, size: 0.08, opacity: 0.85))
+                (.fastForward, ControlPlacement(x: 0.48, y: 0.70, size: 0.08, opacity: 0.85)),
+                (.quickSave, ControlPlacement(x: 0.48, y: 0.82, size: 0.08, opacity: 0.85)),
+                (.quickLoad, ControlPlacement(x: 0.56, y: 0.70, size: 0.08, opacity: 0.85)),
+                (.swapScreens, ControlPlacement(x: 0.56, y: 0.82, size: 0.08, opacity: 0.85))
             ]
         case .portrait:
             // mappingSize 414 x 896 pt. Round-6 screenshot revision: the shoulder
@@ -469,7 +488,9 @@ struct ControlLayoutProfile: Codable, Equatable {
                 // Round 0.1.6 app buttons: the free band between the shoulder row
                 // and the main set (the D-pad cross starts around y=0.84).
                 (.fastForward, ControlPlacement(x: 0.50, y: 0.80, size: 0.07, opacity: 0.85)),
-                (.quickSave, ControlPlacement(x: 0.62, y: 0.80, size: 0.07, opacity: 0.85))
+                (.quickSave, ControlPlacement(x: 0.62, y: 0.80, size: 0.07, opacity: 0.85)),
+                (.quickLoad, ControlPlacement(x: 0.56, y: 0.80, size: 0.07, opacity: 0.85)),
+                (.swapScreens, ControlPlacement(x: 0.56, y: 0.875, size: 0.07, opacity: 0.85))
             ]
         }
     }

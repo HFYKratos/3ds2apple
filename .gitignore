@@ -91,3 +91,6 @@ AGENTS.md
 node_modules/
 # Local layout reference screenshots (contain commercial game pictures; local only, never commit)
 /docs/azahar-shot/
+
+# User-provided screen recordings (local only)
+/temp_file/

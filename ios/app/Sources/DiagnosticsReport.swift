@@ -217,9 +217,14 @@ enum DiagnosticsExporter {
             ? "readback-\(activeLayoutValue)"
             : model.screenLayout.rawValue
         // Round-4 in-game virtual-control options (global, not per direction).
-        let hiddenControlsText = settings.hiddenControlItems.isEmpty
+        let hiddenForDiagnostics = layoutIsLandscape
+            ? settings.hiddenControlItemsLandscape
+            : settings.hiddenControlItemsPortrait
+        let hiddenControlsText = hiddenForDiagnostics.isEmpty
             ? "none"
-            : settings.hiddenControlItems.map(\.rawValue).sorted().joined(separator: ",")
+            : hiddenForDiagnostics.map(\.rawValue).sorted().joined(separator: ",")
+        let hiddenPortraitText = settings.hiddenControlItemsPortrait.map(\.rawValue).sorted().joined(separator: ",")
+        let hiddenLandscapeText = settings.hiddenControlItemsLandscape.map(\.rawValue).sorted().joined(separator: ",")
         let controlSizeScalesText = settings.controlSizeScales.isEmpty
             ? "-"
             : settings.controlSizeScales
@@ -294,6 +299,8 @@ enum DiagnosticsExporter {
         screen_layout_readback=\(layoutUsesReadback ? 1 : 0)
         custom_screen_layout=\(settings.usesCustomLayout(for: .landscape) || settings.usesCustomLayout(for: .portrait) ? 1 : 0)
         virtual_controls_hidden=\(hiddenControlsText)
+virtual_controls_hidden_portrait=\(hiddenPortraitText.isEmpty ? "none" : hiddenPortraitText)
+virtual_controls_hidden_landscape=\(hiddenLandscapeText.isEmpty ? "none" : hiddenLandscapeText)
         control_size_scales=\(controlSizeScalesText)
         control_layout_mode=\(settings.controlLayoutMode.rawValue)
         control_layout_portrait_version=\(settings.storedControlLayout(for: .portrait).version)

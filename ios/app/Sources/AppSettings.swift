@@ -495,9 +495,14 @@ final class AppSettings: ObservableObject {
 
     // MARK: In-game virtual control options (round 4)
 
-    /// Rows the user hid from the pause menu's "Toggle controls" sheet. Global,
-    /// not per orientation; an empty set means every control is visible.
-    @Published var hiddenControlItems: Set<ControlOptionItem>
+    /// Rows the user hid from the pause menu's "Toggle controls" sheet, one set
+    /// per device direction since 0.1.6-beta2 (the sheet edits the current
+    /// direction). Size scales stay global.
+    @Published var hiddenControlItemsPortrait: Set<ControlOptionItem>
+    @Published var hiddenControlItemsLandscape: Set<ControlOptionItem>
+    /// The on-screen Swap screens button: swaps which screen is drawn in the
+    /// top/bottom place (persisted, applies to presenter and readback).
+    @Published var swapScreens: Bool
     /// Per-row size scale (1.0 = 100%, supported range 0.10...2.0). Global; a
     /// row missing from the dictionary means 100%. Keys are
     /// ControlOptionItem raw values.
@@ -634,17 +639,38 @@ final class AppSettings: ObservableObject {
         } else {
             controlLayoutMode = .standard
         }
-        // In-game virtual-control options (round 4): hidden rows and per-row
-        // size scales. Both are global (not per orientation); an unreadable
-        // value falls back to "all visible / 100%".
-        let storedHidden = defaults.stringArray(forKey: Keys.hiddenControlItems) ?? []
-        hiddenControlItems = Set(storedHidden.compactMap(ControlOptionItem.init(rawValue:)))
+        // In-game virtual-control options: the hidden rows became per direction
+        // in 0.1.6-beta2. Migrate the old global set once: an empty/absent old
+        // set gets the new shipped defaults (C-stick/ZL/ZR hidden in both
+        // directions, D-pad additionally hidden in portrait); a customised old
+        // set is copied to both directions unchanged.
+        let storedHidden = defaults.stringArray(forKey: Keys.hiddenControlItems)
+            .map { Set($0.compactMap(ControlOptionItem.init(rawValue:))) }
+        if defaults.object(forKey: Keys.hiddenControlItemsMigrated) == nil {
+            let old = storedHidden ?? []
+            if old.isEmpty {
+                hiddenControlItemsLandscape = Self.defaultHiddenItems(for: .landscape)
+                hiddenControlItemsPortrait = Self.defaultHiddenItems(for: .portrait)
+            } else {
+                hiddenControlItemsLandscape = old
+                hiddenControlItemsPortrait = old
+            }
+            defaults.set(true, forKey: Keys.hiddenControlItemsMigrated)
+            AppLog.log("[3ds2apple] virtual controls: hidden rows migrated to per-direction defaults (%@)",
+                       old.isEmpty ? "shipped defaults" : "custom set copied")
+        } else {
+            let portrait = defaults.stringArray(forKey: Keys.hiddenControlItemsPortraitKey)
+            let landscape = defaults.stringArray(forKey: Keys.hiddenControlItemsLandscapeKey)
+            hiddenControlItemsPortrait = Set((portrait ?? []).compactMap(ControlOptionItem.init(rawValue:)))
+            hiddenControlItemsLandscape = Set((landscape ?? []).compactMap(ControlOptionItem.init(rawValue:)))
+        }
         if let data = defaults.data(forKey: Keys.controlSizeScales),
            let decoded = try? JSONDecoder().decode([String: Double].self, from: data) {
             controlSizeScales = decoded
         } else {
             controlSizeScales = [:]
         }
+        swapScreens = defaults.bool(forKey: Keys.swapScreens)
 
         // The performance page no longer offers a frame cap: the console
         // timeline runs at its native 60 Hz and Fast-forward is the only
@@ -707,9 +733,13 @@ final class AppSettings: ObservableObject {
         if let data = customScreenLayout.encoded() {
             defaults.set(data, forKey: Keys.customScreenLayout)
         }
-        // Round-4 in-game virtual-control options.
-        defaults.set(hiddenControlItems.map(\.rawValue).sorted(),
-                     forKey: Keys.hiddenControlItems)
+        // In-game virtual-control options (per-direction hidden rows since
+        // 0.1.6-beta2, global size scales).
+        defaults.set(hiddenControlItemsPortrait.map(\.rawValue).sorted(),
+                     forKey: Keys.hiddenControlItemsPortraitKey)
+        defaults.set(hiddenControlItemsLandscape.map(\.rawValue).sorted(),
+                     forKey: Keys.hiddenControlItemsLandscapeKey)
+        defaults.set(swapScreens, forKey: Keys.swapScreens)
         if let data = try? JSONEncoder().encode(controlSizeScales) {
             defaults.set(data, forKey: Keys.controlSizeScales)
         }
@@ -744,10 +774,10 @@ final class AppSettings: ObservableObject {
     /// presenter ABI only handles the upright orientation, so that case keeps
     /// the readback placement).
     func usesReadbackPresentation(isLandscape: Bool) -> Bool {
-        let custom = isLandscape
-            ? landscapeScreenLayout == .custom
-            : portraitScreenLayout == .custom
-        return custom && screenRotation != .upright
+        // 0.1.6-beta2: every custom rotation is a GPU presenter layout. Only a
+        // device where no presenter can be made keeps the readback fallback,
+        // which is decided at runtime by ROMSession.
+        false
     }
 
     /// The title of the active choice for one direction (the Settings rows).
@@ -811,21 +841,41 @@ final class AppSettings: ObservableObject {
         min(max(value, controlSizeScaleRange.lowerBound), controlSizeScaleRange.upperBound)
     }
 
+    /// The shipped hidden rows: both directions hide the C-stick and the two
+    /// triggers; portrait also hides the D-pad.
+    static func defaultHiddenItems(
+        for orientation: ControlLayoutOrientation
+    ) -> Set<ControlOptionItem> {
+        var items: Set<ControlOptionItem> = [.cStick, .buttonZL, .buttonZR]
+        if orientation == .portrait { items.insert(.dpad) }
+        return items
+    }
+
+    private func hiddenItems(for orientation: ControlLayoutOrientation) -> Set<ControlOptionItem> {
+        orientation == .landscape ? hiddenControlItemsLandscape : hiddenControlItemsPortrait
+    }
+
     /// Whether one control element is drawn and hit-testable right now.
-    func isControlVisible(_ element: ControlElement) -> Bool {
-        !hiddenControlItems.contains(ControlOptionItem.item(containing: element))
+    func isControlVisible(_ element: ControlElement,
+                          orientation: ControlLayoutOrientation) -> Bool {
+        !hiddenItems(for: orientation).contains(ControlOptionItem.item(containing: element))
     }
 
-    /// Whether one option row (control or D-pad group) is visible.
-    func isControlItemVisible(_ item: ControlOptionItem) -> Bool {
-        !hiddenControlItems.contains(item)
+    /// Whether one option row (control or D-pad group) is visible in a direction.
+    func isControlItemVisible(_ item: ControlOptionItem,
+                              orientation: ControlLayoutOrientation) -> Bool {
+        !hiddenItems(for: orientation).contains(item)
     }
 
-    func setControlItem(_ item: ControlOptionItem, visible: Bool) {
-        if visible {
-            hiddenControlItems.remove(item)
+    func setControlItem(_ item: ControlOptionItem,
+                        visible: Bool,
+                        orientation: ControlLayoutOrientation) {
+        if orientation == .landscape {
+            if visible { hiddenControlItemsLandscape.remove(item) }
+            else { hiddenControlItemsLandscape.insert(item) }
         } else {
-            hiddenControlItems.insert(item)
+            if visible { hiddenControlItemsPortrait.remove(item) }
+            else { hiddenControlItemsPortrait.insert(item) }
         }
     }
 
@@ -849,7 +899,8 @@ final class AppSettings: ObservableObject {
         controlLayoutMode = .standard
         controlLayoutPortrait = .standard(for: .portrait)
         controlLayoutLandscape = .standard(for: .landscape)
-        hiddenControlItems = []
+        hiddenControlItemsPortrait = Self.defaultHiddenItems(for: .portrait)
+        hiddenControlItemsLandscape = Self.defaultHiddenItems(for: .landscape)
         controlSizeScales = [:]
         persist()
     }
@@ -888,9 +939,14 @@ final class AppSettings: ObservableObject {
         static let legacyScreenLayoutMode = "UI.screenLayoutMode"
         /// 0.1.3 Default/Custom choice for the on-screen controls.
         static let controlLayoutMode = "UI.controlLayoutMode"
-        /// Round-4 in-game virtual-control options (global).
+        /// Round-4 in-game virtual-control options; the pre-beta2 key held one
+        /// global set and is only read for the one-time migration.
         static let hiddenControlItems = "UI.hiddenControlItems"
+        static let hiddenControlItemsPortraitKey = "UI.hiddenControlItemsPortrait"
+        static let hiddenControlItemsLandscapeKey = "UI.hiddenControlItemsLandscape"
+        static let hiddenControlItemsMigrated = "UI.hiddenControlItemsMigrated"
         static let controlSizeScales = "UI.controlSizeScales"
+        static let swapScreens = "UI.swapScreens"
         static let controlLayoutPortrait = "UI.controlLayoutPortrait"
         static let controlLayoutLandscape = "UI.controlLayoutLandscape"
         static let customScreenLayout = "UI.customScreenLayout"

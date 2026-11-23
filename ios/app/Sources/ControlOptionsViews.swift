@@ -35,6 +35,9 @@ enum ControlOptionsPage: String, Identifiable {
 
 struct ControlVisibilitySheet: View {
     @ObservedObject var settings: AppSettings
+    /// The direction the pause menu was opened in: visibility is per direction
+    /// since 0.1.6-beta2 (size stays global).
+    let orientation: ControlLayoutOrientation
 
     @Environment(\.dismiss) private var dismiss
 
@@ -60,7 +63,9 @@ struct ControlVisibilitySheet: View {
                     Button(L10n.tr("Done")) { dismiss() }
                 }
             }
-            .onChange(of: settings.hiddenControlItems) { _ in
+            .onChange(of: orientation == .landscape
+                        ? settings.hiddenControlItemsLandscape
+                        : settings.hiddenControlItemsPortrait) { _ in
                 settings.persist()
             }
         }
@@ -68,8 +73,8 @@ struct ControlVisibilitySheet: View {
 
     private func visibilityBinding(_ item: ControlOptionItem) -> Binding<Bool> {
         Binding(
-            get: { settings.isControlItemVisible(item) },
-            set: { settings.setControlItem(item, visible: $0) }
+            get: { settings.isControlItemVisible(item, orientation: orientation) },
+            set: { settings.setControlItem(item, visible: $0, orientation: orientation) }
         )
     }
 }

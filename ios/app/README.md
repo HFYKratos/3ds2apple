@@ -427,15 +427,19 @@ hint sits above it and the empty area stays inert) saves the current direction's
   - The D-pad is drawn and edited as **one cross**: dragging it moves all four
     directional placements together, snapping uses the cross centre, and the
     Toggle controls / Adjust size sheets keep their single D-pad row.
-  - Round 0.1.6 adds two app-only on-screen buttons: **Fast-forward** (hold to
-    raise the runtime to at least 2x, release restores the previous speed, drawn
-    with the SF Symbol forward.fill) and **Quick save** (tap to save to the
-    existing quick slot and show a brief "Quick saved" toast; no-op when saving
-    is unavailable). They appear in Toggle controls / Adjust size like every
-    other row and are visible by default in both orientations.
-  - Dragging a control (or the D-pad) uses a local preview inside the edit
-    overlay; the profile is committed once when the finger lifts, so the control
-    follows the finger without start/target jitter.
+  - Round 0.1.6 adds four app-only on-screen buttons: **Fast-forward** (a
+    2x/normal toggle drawn with forward.fill; a second tap restores the menu's
+    playback speed), **Quick save** (tap: quick slot + "Quick saved" toast),
+    **Quick load** (tap: load the quick slot + "Quick loaded" toast) and **Swap
+    screens** (tap: swap which screen is shown top/bottom, persisted and applied
+    to the GPU presenter immediately). They appear in Toggle controls / Adjust
+    size like every other row.
+  - 0.1.6-beta2 makes control visibility **per device direction** (defaults:
+    C-stick/ZL/ZR hidden in both; portrait also hides the D-pad) and migrates
+    the old global hidden set once. Both editors now use one stationary canvas
+    drag gesture: the item is hit-tested on start, a local preview follows the
+    finger and the profile is committed once on release (tap selects, moving
+    controls no longer carry the gesture, so the jitter videos are fixed).
   The old Settings → Controls full-screen editor and its Default/Custom mode are
   no longer exposed: every change is stored immediately from the in-game editor
   (the profile archive and the per-row visibility/size scales are global). The
@@ -1189,10 +1193,11 @@ Instant save states:
   exported and imported; instant states stay in the app container.
 - Custom layouts now use the GPU presenter too (layout id 8 with two arbitrary
   normalised viewports, round 0.1.6): the app aspect-fits each screen inside the
-  user rectangle, and the presenter draws the textures there with the same touch
-  map. The only fallback is a non-upright screen rotation (the v1 custom
-  presenter ABI handles upright only) or a device where no presenter can be
-  made; those keep the older readback placement. The presenter side needs the
+  user rectangle. 0.1.6-beta2 also sends the screen-rotation value
+  (zk_presenter_set_custom_rotation) so all four custom rotations render on the
+  GPU, and zk_presenter_set_screen_swap applies the Swap screens button to any
+  layout immediately. Only a device where no presenter can be made keeps the
+  older readback fallback. The presenter side needs the
   round-0.1.6 library/patch 0009; an older library falls back to readback.
   The custom rectangles still apply from the next game load.
 - The shipped default controls come from the ModernCenteredX2 reference skin,

@@ -175,13 +175,7 @@ struct ContentView: View {
             model.setFrameRateCap(cap.rawValue)
         }
         .onChange(of: settings.screenRotation) { rotation in
-            let isLandscape = GameViewDeviceMetrics.currentLayoutOrientation == .landscape
             model.setScreenRotation(rotation)
-            // The custom layout's GPU presenter path is upright-only in v1; a
-            // rotation change must re-select the readback fallback.
-            model.setReadbackPresentationRequired(
-                settings.usesReadbackPresentation(isLandscape: isLandscape)
-            )
         }
         .onChange(of: settings.landscapeScreenLayout) { _ in
             let isLandscape = GameViewDeviceMetrics.currentLayoutOrientation == .landscape
@@ -216,6 +210,9 @@ struct ContentView: View {
         .onChange(of: settings.playbackSpeed) { speed in
             model.setPlaybackSpeed(speed.rawValue)
         }
+        .onChange(of: settings.swapScreens) { swapped in
+            model.setScreenSwap(swapped)
+        }
         .onChange(of: settings.systemMetalHUD) { enabled in
             model.setSystemMetalHUD(enabled)
         }
@@ -249,6 +246,7 @@ struct ContentView: View {
             )
         )
         model.setScreenRotation(settings.screenRotation)
+        model.setScreenSwap(settings.swapScreens)
         model.setIntegerScaling(settings.integerScale)
         model.applyRenderScale(CGFloat(settings.renderScale))
         model.setPlaybackSpeed(settings.playbackSpeed.rawValue)

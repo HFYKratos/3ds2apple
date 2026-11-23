@@ -285,24 +285,36 @@ check "control editing lives in the in-game pause menu, not Settings" \
 check "control layout page exposes only Default / Custom" contains ios/app/Sources/AppSettings.swift 'enum ControlLayoutMode'
 check "in-game control editor drags controls and has a Done pill" \
   bash -c 'grep -q "DragGesture" ios/app/Sources/InGameControlEditOverlay.swift && grep -q "control-edit-done" ios/app/Sources/InGameControlEditOverlay.swift'
-check "control edit gestures are attached before .position (no full-screen hit area)" \
-  bash -c 'awk "/private struct EditableControlBox/,/^}/ {if (/\\.contentShape\\(/) c=NR; if (/\\.gesture\\(/) g=NR; if (/\\.position\\(/) p=NR} END {exit !(c && g && p && c < g && g < p)}" ios/app/Sources/InGameControlEditOverlay.swift && awk "/private struct EditableDpadCrossBox/,/^}/ {if (/\\.contentShape\\(/) c=NR; if (/\\.gesture\\(/) g=NR; if (/\\.position\\(/) p=NR} END {exit !(c && g && p && c < g && g < p)}" ios/app/Sources/InGameControlEditOverlay.swift'
-check "both layout editors center the Done pill and keep empty space inert" \
-  bash -c '! grep -q "padding(.bottom, 26)" ios/app/Sources/InGameControlEditOverlay.swift && ! grep -q "padding(.bottom, 26)" ios/app/Sources/ScreenLayoutEditorView.swift && grep -q "alignment: .center" ios/app/Sources/ScreenLayoutEditorView.swift'
+check "each editor has exactly one stationary canvas drag gesture" \
+  bash -c 'test "$(grep -c "DragGesture(minimumDistance: 0)" ios/app/Sources/InGameControlEditOverlay.swift)" = "1" && test "$(grep -c "DragGesture(minimumDistance: 0)" ios/app/Sources/ScreenLayoutEditorView.swift)" = "1"'
+check "both layout editors keep the Done pill and no bottom bar hint" \
+  bash -c 'grep -q "control-edit-done" ios/app/Sources/InGameControlEditOverlay.swift && grep -q "screen-editor-done" ios/app/Sources/ScreenLayoutEditorView.swift && ! grep -q "padding(.bottom, 26)" ios/app/Sources/InGameControlEditOverlay.swift && ! grep -q "padding(.bottom, 26)" ios/app/Sources/ScreenLayoutEditorView.swift'
 check "custom screen numeric page shows a live screen preview" \
   bash -c 'grep -q "CustomScreenLayoutPreview" ios/app/Sources/CustomScreenLayoutValuesView.swift && grep -q "custom-layout-preview" ios/app/Sources/CustomScreenLayoutValuesView.swift && grep -q "custom-layout-preview-top" ios/app/Sources/CustomScreenLayoutValuesView.swift'
 check "custom layouts use the GPU presenter (layout id 8, custom viewports, touch map)" \
   bash -c 'grep -q "case custom" ios/app/Sources/AppSettings.swift && grep -q "case .custom: return 8" ios/app/Sources/AppSettings.swift && grep -q "zk_presenter_set_custom_viewports" ios/app/Sources/ROMSession.swift && grep -q "zk_present_custom_touch_map" ios/app/Sources/ROMSession.swift && grep -q "presenterNormalisedViewports" ios/app/Sources/CustomScreenLayout.swift && grep -q "setCustomFill" ios/app/Sources/MetalScreenView.swift'
 check "screen layout editor drag is a local preview committed on end" \
-  bash -c 'grep -q "previewRect" ios/app/Sources/ScreenLayoutEditorView.swift && grep -q "commitPreview" ios/app/Sources/ScreenLayoutEditorView.swift && ! grep -q "screen-resize-handle" ios/app/Sources/ScreenLayoutEditorView.swift && grep -q "onTapGesture" ios/app/Sources/ScreenLayoutEditorView.swift'
+  bash -c 'grep -q "previewRect" ios/app/Sources/ScreenLayoutEditorView.swift && grep -q "commitPreview" ios/app/Sources/ScreenLayoutEditorView.swift && ! grep -q "screen-resize-handle" ios/app/Sources/ScreenLayoutEditorView.swift'
 check "screen layout editor forces the edited orientation and drops the grey banner" \
   bash -c 'grep -q "AppOrientation.beginOverride" ios/app/Sources/ScreenLayoutEditorView.swift && grep -q "AppOrientation.endOverride" ios/app/Sources/ScreenLayoutEditorView.swift && ! grep -q "topBar" ios/app/Sources/ScreenLayoutEditorView.swift'
 check "in-game control dragging uses a local preview and commits once" \
-  bash -c 'grep -q "previewCenters" ios/app/Sources/InGameControlEditOverlay.swift && grep -q "onPreview" ios/app/Sources/InGameControlEditOverlay.swift && grep -q "onCommit" ios/app/Sources/InGameControlEditOverlay.swift'
+  bash -c 'grep -q "previewCenters" ios/app/Sources/InGameControlEditOverlay.swift && grep -q "canvasGesture" ios/app/Sources/InGameControlEditOverlay.swift && grep -q "hitTest" ios/app/Sources/InGameControlEditOverlay.swift'
 check "fast-forward and quick-save on-screen buttons exist and are wired" \
   bash -c 'grep -q "case fastForward" ios/app/Sources/ControlLayout.swift && grep -q "case quickSave" ios/app/Sources/ControlLayout.swift && grep -q "onFastForward" ios/app/Sources/VirtualControlsView.swift && grep -q "performQuickSave" ios/app/Sources/GameView.swift && grep -q "quick-save-toast" ios/app/Sources/GameView.swift'
 check "the old Settings controls-editor hint is gone" \
   bash -c '! grep -q "Virtual control visibility, size and layout are edited" ios/app/Sources/SettingsView.swift'
+check "both editors use one stationary canvas gesture with a commit on end" \
+  bash -c 'grep -q "canvasGesture" ios/app/Sources/InGameControlEditOverlay.swift && grep -q "hitTest" ios/app/Sources/InGameControlEditOverlay.swift && grep -q "canvasDrag" ios/app/Sources/ScreenLayoutEditorView.swift && grep -q "stationary" ios/app/Sources/ScreenLayoutEditorView.swift'
+check "fast-forward is a 2x toggle and quick load/swap buttons are wired" \
+  bash -c 'grep -q "toggleFastForward" ios/app/Sources/GameView.swift && ! grep -q "fastForwardRestoreSpeed" ios/app/Sources/GameView.swift && grep -q "case quickLoad" ios/app/Sources/ControlLayout.swift && grep -q "case swapScreens" ios/app/Sources/ControlLayout.swift && grep -q "performQuickLoad" ios/app/Sources/GameView.swift && grep -q "performSwapScreens" ios/app/Sources/GameView.swift && grep -q "onQuickLoad" ios/app/Sources/VirtualControlsView.swift'
+check "control visibility is per orientation with migrated defaults" \
+  bash -c 'grep -q "hiddenControlItemsPortrait" ios/app/Sources/AppSettings.swift && grep -q "hiddenControlItemsLandscape" ios/app/Sources/AppSettings.swift && grep -q "defaultHiddenItems" ios/app/Sources/AppSettings.swift && grep -q "hiddenControlItemsMigrated" ios/app/Sources/AppSettings.swift && grep -q "orientation: orientation" ios/app/Sources/ControlOptionsViews.swift'
+check "the screen layout editor is full-screen (no frame or padding)" \
+  bash -c '! grep -q "deviceFrame" ios/app/Sources/ScreenLayoutEditorView.swift && ! grep -q "GameViewPreviewScaler" ios/app/Sources/ScreenLayoutEditorView.swift && grep -q "full-screen" ios/app/Sources/ScreenLayoutEditorView.swift'
+check "custom rotations/swap use the presenter ABIs and no readback rotation fallback" \
+  bash -c 'grep -q "zk_presenter_set_custom_rotation" ios/app/Sources/ROMSession.swift && grep -q "zk_presenter_set_screen_swap" ios/app/Sources/ROMSession.swift && grep -q "swapScreens" ios/app/Sources/AppSettings.swift && ! grep -q "custom && screenRotation != .upright" ios/app/Sources/AppSettings.swift'
+check "the Starting Zakuro text and both editor hints are gone" \
+  bash -c '! grep -q "Starting Zakuro" ios/app/Sources/GameView.swift && ! grep -q "Drag the controls to move them" ios/app/Sources/InGameControlEditOverlay.swift && ! grep -q "Drag a screen to move it" ios/app/Sources/ScreenLayoutEditorView.swift'
 check "control editor is full screen and edits the current direction" contains ios/app/Sources/ControlLayoutEditorView.swift 'currentLayoutOrientation'
 check "control editor overlays the current screen layout" contains ios/app/Sources/ControlLayoutEditorView.swift 'screenViewports'
 check "GameView floats the editable control overlay and draws the hybrid small top screen" \

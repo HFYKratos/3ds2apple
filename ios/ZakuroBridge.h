@@ -505,6 +505,24 @@ int32_t zk_presenter_set_custom_viewports(zk_presenter_t presenter,
                                           float bottom_w, float bottom_h);
 
 /**
+ * Sets how the custom layout turns each screen's picture inside its rectangle,
+ * from the next zk_present() on. The values are the ZK_ORIENTATION_* quarter
+ * turns: north is the upright picture, the others rotate it clockwise inside
+ * the app's rectangle. North is the default. Returns 0, or -1 for a NULL
+ * presenter or an unknown rotation.
+ */
+int32_t zk_presenter_set_custom_rotation(zk_presenter_t presenter, uint32_t rotation);
+
+/**
+ * Swaps which screen's picture the presenter draws in each place, from the next
+ * zk_present() on, for every layout (presets and custom included). The places
+ * themselves do not move; with swap 0 the output is unchanged. The app keeps
+ * its UI.swapScreens setting and calls this on load and when its Swap screens
+ * button toggles. Returns 0, or -1 for a NULL presenter.
+ */
+int32_t zk_presenter_set_screen_swap(zk_presenter_t presenter, uint32_t swap);
+
+/**
  * Sets which way the screens are turned on the layer, from the next
  * zk_present() on (see ZK_ORIENTATION_*). Called the same way as
  * zk_presenter_set_layout(). Returns 0, or -1 for a NULL presenter or an
@@ -563,17 +581,20 @@ int32_t zk_present_touch_map(uint32_t width, uint32_t height,
  * width and height are the layer's size in pixels; the rectangles use the same
  * normalised drawable pixels as zk_presenter_set_custom_viewports() (and are
  * checked the same way); x and y are normalised to 0.0 ... 1.0 from the layer's
- * top left. Returns 1 and writes the lower-screen pixel coordinates (0...320,
- * 0...240) when the point is inside the lower screen's rectangle, 0 when it is
- * not, an argument is missing or a rectangle is not a real place. Upright only,
- * like the custom GPU path itself.
+ * top left; rotation is the ZK_ORIENTATION_* value passed to
+ * zk_presenter_set_custom_rotation() (the picture is turned clockwise inside
+ * the rectangle, so the map undoes the turn: north (u,v), east (v,1-u),
+ * south (1-u,1-v), west (1-v,u)). Returns 1 and writes the lower-screen pixel
+ * coordinates (0...320, 0...240) when the point is inside the lower screen's
+ * rectangle, 0 when it is not, an argument is missing, the rotation is unknown
+ * or a rectangle is not a real place.
  */
 int32_t zk_present_custom_touch_map(uint32_t width, uint32_t height,
                                     float top_x, float top_y,
                                     float top_w, float top_h,
                                     float bottom_x, float bottom_y,
                                     float bottom_w, float bottom_h,
-                                    float x, float y,
+                                    float x, float y, uint32_t rotation,
                                     uint16_t *out_x, uint16_t *out_y);
 
 /* --------------------------------------------------- hardware diagnostics -- */

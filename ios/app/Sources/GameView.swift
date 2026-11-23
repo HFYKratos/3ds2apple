@@ -66,9 +66,9 @@ struct GameView: View {
     @State private var isConfirmationPresented = false
     @State private var confirmationKind: ConfirmationKind = .reset
 
-    /// Round 0.1.6 app buttons: the speed to restore after a held fast-forward
-    /// and the brief quick-save confirmation toast.
-    @State private var fastForwardRestoreSpeed: Int?
+    /// Round 0.1.6 app buttons: FF is a toggle (2x / the menu's normal speed)
+    /// and the toast reports quick save/load results.
+    @State private var fastForwardToggled = false
     @State private var quickSaveToast: String?
 
     private let topScreen = ZakuroScreen(which: 0)
@@ -117,6 +117,7 @@ struct GameView: View {
                 if isMenuPresented {
                     InGameMenuView(
                         romName: romName,
+                        orientation: isLandscape ? .landscape : .portrait,
                         settings: settings,
                         saveStates: model.saveStates,
                         onResume: resumeGame,
@@ -170,6 +171,16 @@ struct GameView: View {
             .onChange(of: settings.portraitScreenLayout) { _ in
                 syncPresentedLayout(isLandscape)
             }
+            .onChange(of: settings.playbackSpeed) { _ in
+                // The menu's speed setting overrides an active FF toggle.
+                fastForwardToggled = false
+            }
+            .onChange(of: model.phase) { phase in
+                switch phase {
+                case .idle, .failed, .finished: fastForwardToggled = false
+                default: break
+                }
+            }
         }
         .preferredColorScheme(.dark)
         .sheet(item: $sheet) { sheet in
@@ -209,7 +220,9 @@ struct GameView: View {
             if isEditingControls, let controlDraft {
                 InGameControlEditOverlay(
                     profile: controlDraft,
-                    isVisible: { settings.isControlVisible($0) },
+                    isVisible: {
+                        settings.isControlVisible($0, orientation: editingOrientation)
+                    },
                     sizeScale: { settings.controlSizeScale(for: $0) },
                     opacityScale: settings.controlsBackgroundOpacity,
                     haptics: settings.haptics,
@@ -262,10 +275,15 @@ struct GameView: View {
             onButton: { bit, pressed in model.setOverlayButton(bit, pressed: pressed) },
             onCirclePad: { x, y in model.setOverlayStick(x: x, y: y) },
             onCStick: { x, y in model.setOverlayCStick(x: x, y: y) },
-            isVisible: { settings.isControlVisible($0) },
+            isVisible: {
+                settings.isControlVisible($0, orientation: isLandscape ? .landscape : .portrait)
+            },
             sizeScale: { settings.controlSizeScale(for: $0) },
-            onFastForward: { pressed in handleFastForwardButton(pressed) },
-            onQuickSave: { performQuickSave() }
+            onFastForward: { _ in toggleFastForward() },
+            onQuickSave: { performQuickSave() },
+            onQuickLoad: { performQuickLoad() },
+            onSwapScreens: { performSwapScreens() },
+            fastForwardActive: fastForwardToggled
         )
         .ignoresSafeArea()
         .opacity(showsTouchControls ? 1 : 0)
@@ -320,6 +338,7 @@ struct GameView: View {
         model.setReadbackPresentationRequired(
             settings.usesReadbackPresentation(isLandscape: isLandscape)
         )
+        model.setScreenSwap(settings.swapScreens)
         // The GPU custom layout needs the current direction's rectangles; every
         // other preset ignores this.
         model.setCustomScreenPlacement(
@@ -395,19 +414,47 @@ struct GameView: View {
         }
     }
 
-    /// Round 0.1.6 Fast-forward button: press and hold temporarily raises the
-    /// runtime speed (at least 2x); release restores the previous request.
-    private func handleFastForwardButton(_ pressed: Bool) {
-        if pressed {
-            let current = model.requestedPlaybackSpeedValue
-            fastForwardRestoreSpeed = current
-            model.setPlaybackSpeed(max(2, current))
+    /// Round 0.1.6-beta2 Fast-forward button: one tap switches the runtime to
+    /// 2x, the next tap restores the menu's playback speed.
+    private func toggleFastForward() {
+        fastForwardToggled.toggle()
+        model.setPlaybackSpeed(fastForwardToggled ? 2 : settings.playbackSpeedValue)
+        if settings.haptics {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+    }
+
+    /// A quick load of the quick slot, with a short toast on success.
+    private func performQuickLoad() {
+        guard model.saveStates.canLoad else { return }
+        model.saveStates.load(slot: SaveStateSupport.quickSlot) { result in
+            guard case .success = result else { return }
             if settings.haptics {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
             }
-        } else if let restore = fastForwardRestoreSpeed {
-            fastForwardRestoreSpeed = nil
-            model.setPlaybackSpeed(restore)
+            showToast(L10n.tr("Quick loaded"))
+        }
+    }
+
+    /// Swap screens: toggles the persisted setting; the session applies it to
+    /// the GPU presenter immediately (the readback fallback swaps the images).
+    private func performSwapScreens() {
+        settings.swapScreens.toggle()
+        settings.persist()
+        model.setScreenSwap(settings.swapScreens)
+        if settings.haptics {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+    }
+
+    private func showToast(_ text: String) {
+        withAnimation(.easeOut(duration: 0.12)) {
+            quickSaveToast = text
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            withAnimation(.easeIn(duration: 0.18)) {
+                quickSaveToast = nil
+            }
         }
     }
 
@@ -419,14 +466,7 @@ struct GameView: View {
         if settings.haptics {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
-        withAnimation(.easeOut(duration: 0.12)) {
-            quickSaveToast = L10n.tr("Quick saved")
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            withAnimation(.easeIn(duration: 0.18)) {
-                quickSaveToast = nil
-            }
-        }
+        showToast(L10n.tr("Quick saved"))
     }
 
     private func resumeGame() {
@@ -615,12 +655,13 @@ struct GameView: View {
         let stretchY = stretches && layoutBox.height > 0 ? area.height / layoutBox.height : 1
         return ZStack(alignment: .topLeading) {
             Color.clear
+            let swapped = settings.swapScreens
             if let top = viewports.top {
                 readbackScreen(
-                    image: screenImage(isUpper: true),
-                    screen: topScreen,
+                    image: screenImage(isUpper: swapped),
+                    screen: swapped ? bottomScreen : topScreen,
                     identifier: "top-screen",
-                    isTouchscreen: false
+                    isTouchscreen: swapped
                 )
                 .frame(width: top.width, height: top.height)
                 .offset(x: top.minX, y: top.minY)
@@ -639,10 +680,10 @@ struct GameView: View {
             }
             if let bottom = viewports.bottom {
                 readbackScreen(
-                    image: screenImage(isUpper: false),
-                    screen: bottomScreen,
+                    image: screenImage(isUpper: !swapped),
+                    screen: swapped ? topScreen : bottomScreen,
                     identifier: "bottom-screen",
-                    isTouchscreen: true
+                    isTouchscreen: !swapped
                 )
                 .frame(width: bottom.width, height: bottom.height)
                 .offset(x: bottom.minX, y: bottom.minY)
@@ -676,8 +717,8 @@ struct GameView: View {
             Color.black
             if let image {
                 rotatedScreenImage(image, rotation: rotation)
-            } else {
-                Text(isRuntimeStarting ? L10n.tr("Starting Zakuro…") : L10n.tr("Waiting for first frame…"))
+            } else if !isRuntimeStarting {
+                Text(L10n.tr("Waiting for first frame…"))
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.65))
             }
@@ -717,9 +758,11 @@ struct GameView: View {
     @ViewBuilder
     private var metalFirstFramePlaceholder: some View {
         if model.frameStats.frames == 0 {
-            Text(isRuntimeStarting ? L10n.tr("Starting Zakuro…") : L10n.tr("Waiting for first frame…"))
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.65))
+            if !isRuntimeStarting {
+                Text(L10n.tr("Waiting for first frame…"))
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.65))
+            }
         }
     }
 

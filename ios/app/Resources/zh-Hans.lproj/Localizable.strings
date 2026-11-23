@@ -668,4 +668,7 @@
 /* --- Round 0.1.6 app buttons --- */
 "Quick save" = "快速保存";
 "Quick saved" = "已快速保存";
+"Quick load" = "快速读取";
+"Quick loaded" = "已快速读取";
+"Swap screens" = "交换屏幕";
 

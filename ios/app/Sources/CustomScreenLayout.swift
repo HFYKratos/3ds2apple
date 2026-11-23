@@ -575,6 +575,23 @@ enum CustomScreenGeometry {
     /// and centred inside the user's rectangle, then normalised to the drawable
     /// (0..1, top-left origin). Only used for the upright rotation; the custom
     /// layout falls back to readback for any other rotation.
+    /// Inversely rotates a normalised display point into the upright canvas the
+    /// custom-touch helper expects (the presenter rotates the pictures for the
+    /// screen-rotation setting).
+    static func inverseRotatedNormalisedPoint(_ point: CGPoint,
+                                              rotation: ScreenRotation) -> CGPoint {
+        switch rotation {
+        case .upright:
+            return point
+        case .clockwise:
+            return CGPoint(x: point.y, y: 1 - point.x)
+        case .upsideDown:
+            return CGPoint(x: 1 - point.x, y: 1 - point.y)
+        case .counterClockwise:
+            return CGPoint(x: 1 - point.y, y: point.x)
+        }
+    }
+
     static func presenterNormalisedViewports(
         available: CGSize,
         placement: CustomScreenPlacement

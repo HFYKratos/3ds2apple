@@ -46,6 +46,11 @@ struct VirtualControlsView: View {
     var onFastForward: (Bool) -> Void = { _ in }
     /// Round 0.1.6 app buttons: quick-save tapped.
     var onQuickSave: () -> Void = {}
+    /// Round 0.1.6-beta2 app buttons.
+    var onQuickLoad: () -> Void = {}
+    var onSwapScreens: () -> Void = {}
+    /// Whether the Fast-forward toggle is currently active (button highlight).
+    var fastForwardActive: Bool = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -118,9 +123,41 @@ struct VirtualControlsView: View {
                 height: frame.height,
                 cornerFactor: CGFloat(element.shapeCornerFactor),
                 opacity: opacity,
+                haptics: haptics,
+                isActive: fastForwardActive
+            ) { pressed in
+                // A tap toggles the temporary 2x mode (0.1.6-beta2).
+                if !pressed { onFastForward(true) }
+            }
+            .position(frame.center)
+        } else if element == .quickLoad {
+            OverlayButtonControl(
+                symbol: element.symbol,
+                systemImage: element.systemImage,
+                accessibilityLabel: element.accessibilityTitle,
+                identifier: "control-\(element.rawValue)",
+                width: frame.width,
+                height: frame.height,
+                cornerFactor: CGFloat(element.shapeCornerFactor),
+                opacity: opacity,
                 haptics: haptics
             ) { pressed in
-                onFastForward(pressed)
+                if !pressed { onQuickLoad() }
+            }
+            .position(frame.center)
+        } else if element == .swapScreens {
+            OverlayButtonControl(
+                symbol: element.symbol,
+                systemImage: element.systemImage,
+                accessibilityLabel: element.accessibilityTitle,
+                identifier: "control-\(element.rawValue)",
+                width: frame.width,
+                height: frame.height,
+                cornerFactor: CGFloat(element.shapeCornerFactor),
+                opacity: opacity,
+                haptics: haptics
+            ) { pressed in
+                if !pressed { onSwapScreens() }
             }
             .position(frame.center)
         } else if element == .quickSave {
@@ -175,6 +212,8 @@ private struct OverlayButtonControl: View {
     let cornerFactor: CGFloat
     let opacity: Double
     let haptics: Bool
+    /// Toggled buttons (Fast-forward) draw their active background.
+    var isActive: Bool = false
     let onButton: (Bool) -> Void
 
     @State private var isPressed = false
@@ -233,9 +272,11 @@ private struct OverlayButtonControl: View {
 
     private var backgroundFill: LinearGradient {
         LinearGradient(
-            colors: isPressed
-                ? [Color.white.opacity(0.44), Color.white.opacity(0.26)]
-                : [Color.black.opacity(0.42), Color.black.opacity(0.26)],
+            colors: isActive
+                ? [Color.accentColor.opacity(0.75), Color.accentColor.opacity(0.50)]
+                : (isPressed
+                    ? [Color.white.opacity(0.44), Color.white.opacity(0.26)]
+                    : [Color.black.opacity(0.42), Color.black.opacity(0.26)]),
             startPoint: .top,
             endPoint: .bottom
         )

@@ -21,6 +21,8 @@ import SwiftUI
 
 struct InGameMenuView: View {
     let romName: String
+    /// The device direction the menu opened in (per-direction control visibility).
+    let orientation: ControlLayoutOrientation
     @ObservedObject var settings: AppSettings
     @ObservedObject var saveStates: SaveStateSupport
     let onResume: () -> Void
@@ -69,7 +71,7 @@ struct InGameMenuView: View {
         .sheet(item: $controlOptionsSheet) { page in
             switch page {
             case .visibility:
-                ControlVisibilitySheet(settings: settings)
+                ControlVisibilitySheet(settings: settings, orientation: orientation)
             case .size:
                 ControlSizeSheet(settings: settings)
             case .opacity:
