@@ -650,7 +650,7 @@
 "The size scale multiplies each control (or the D-pad group) in the running overlay. 100% is the layout's own size." = "尺寸倍率会乘到运行时的每个按键（或十字方向键组）上；100% 为布局原始大小。";
 "The opacity applies to every on-screen control, including the sticks." = "透明度作用于所有屏幕按键，包括摇杆。";
 "Drag the controls to move them. Done saves this orientation's layout and resumes the game." = "拖动按键调整位置；点“完成”保存当前方向的布局并直接继续游戏。";
-"Drag a screen to move it. Drag the large corner handle or pinch to resize. Done saves the layout." = "拖动屏幕移动；拖大角手柄或双指捏合缩放；点“完成”保存布局。";
+"Drag a screen to move it. Pinch with two fingers to resize the selected screen. Done saves the layout." = "拖动屏幕移动；双指捏合缩放选中的屏幕；点“完成”保存布局。";
 "Button L" = "按键 L";
 "Button R" = "按键 R";
 "Button ZL" = "按键 ZL";

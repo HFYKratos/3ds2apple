@@ -14,7 +14,7 @@
 //  controls.
 //
 //  Round-4 interaction: drag a screen directly to move it, drag its large
-//  (>=44 pt) corner handle or pinch to resize it, and tap the one clear Done pill
+//  pinch with two fingers to resize it, and tap the one clear Done pill
 //  (bottom centre) to save and leave. Movement snaps to the stage edges/centre
 //  and to the other screen with dashed guides; every change is saved immediately
 //  and there is no scrolling/zooming surface in the editor.
@@ -329,7 +329,7 @@ struct ScreenLayoutEditorView: View {
     /// pill are hit-testable and the canvas around them still drags.
     private var doneOverlay: some View {
         VStack(spacing: 10) {
-            Text(L10n.tr("Drag a screen to move it. Drag the large corner handle or pinch to resize. Done saves the layout."))
+            Text(L10n.tr("Drag a screen to move it. Pinch with two fingers to resize the selected screen. Done saves the layout."))
                 .font(.caption2)
                 .foregroundColor(.white.opacity(0.72))
                 .multilineTextAlignment(.center)

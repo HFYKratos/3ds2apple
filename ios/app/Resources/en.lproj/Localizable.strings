@@ -648,7 +648,7 @@
 "The size scale multiplies each control (or the D-pad group) in the running overlay. 100% is the layout's own size." = "The size scale multiplies each control (or the D-pad group) in the running overlay. 100% is the layout's own size.";
 "The opacity applies to every on-screen control, including the sticks." = "The opacity applies to every on-screen control, including the sticks.";
 "Drag the controls to move them. Done saves this orientation's layout and resumes the game." = "Drag the controls to move them. Done saves this orientation's layout and resumes the game.";
-"Drag a screen to move it. Drag the large corner handle or pinch to resize. Done saves the layout." = "Drag a screen to move it. Drag the large corner handle or pinch to resize. Done saves the layout.";
+"Drag a screen to move it. Pinch with two fingers to resize the selected screen. Done saves the layout." = "Drag a screen to move it. Pinch with two fingers to resize the selected screen. Done saves the layout.";
 "Button L" = "Button L";
 "Button R" = "Button R";
 "Button ZL" = "Button ZL";
