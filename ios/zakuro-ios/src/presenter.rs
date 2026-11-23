@@ -37,7 +37,8 @@
 //! ([`zk_presenter_set_custom_viewports`]), turns each screen's picture inside
 //! its place ([`zk_presenter_set_custom_rotation`]) and maps touches with
 //! [`zk_present_custom_touch_map`]. [`zk_presenter_set_screen_swap`] trades the
-//! two screens' pictures in every layout.
+//! two screens' pictures in every layout, and both touch maps take its flag so a
+//! touch follows the picture that is drawn.
 //!
 //! Threading follows the rest of the C ABI: a presenter is not thread-safe.
 //! Create, resize and destroy it on the app's main queue (the `UIView` is a
@@ -534,9 +535,9 @@ pub extern "C" fn zk_presenter_set_custom_rotation(presenter: *mut c_void, rotat
 /// way round. The places themselves don't move, so a preset looks exactly as
 /// before while `swap` is 0 (the default). The app keeps its `UI.swapScreens`
 /// setting and calls this on load and when the Swap screens button toggles.
-/// Touch mapping is unchanged: it still maps to the lower screen's place (for a
-/// custom layout, pass the rectangles in swapped order to follow the picture
-/// drawn there). Returns 0, or -1 for a `NULL` presenter.
+/// [`zk_present_touch_map`] and [`zk_present_custom_touch_map`] take the same
+/// flag: while swapped they map into the upper place, where the lower screen's
+/// picture is drawn. Returns 0, or -1 for a `NULL` presenter.
 #[no_mangle]
 pub extern "C" fn zk_presenter_set_screen_swap(presenter: *mut c_void, swap: u32) -> i32 {
     let Some(presenter) = (unsafe { (presenter as *mut PresenterHandle).as_mut() }) else {
@@ -768,12 +769,15 @@ pub extern "C" fn zk_present_mode(system: *mut c_void, presenter: *mut c_void) -
 /// [`zk_presenter_set_layout`] and [`zk_presenter_set_orientation`] — pass what
 /// the presenter is configured with. `x` and `y` are the touch position
 /// normalised to `0.0 ... 1.0` from the view's top-left, so the caller does not
-/// have to care about points versus pixels.
+/// have to care about points versus pixels. `swap` is
+/// [`zk_presenter_set_screen_swap`]'s flag: 0 for normal, nonzero while the
+/// presenter draws the lower screen's picture in the upper place.
 ///
-/// The same layout the presenter uses decides whether the point is on the lower
-/// screen: not on it for the upper-only layout, beside it for the console's side
-/// margins, and a point on a turned layout is mapped back into the lower
-/// screen's own upright pixels. Returns 1 and writes the lower-screen pixel
+/// The same layout the presenter uses decides where the point lands: the lower
+/// screen's place normally, and the upper place while `swap` is nonzero (the
+/// lower screen's picture is drawn there then). Points that are not on that
+/// place are rejected, and a point on a turned layout is mapped back into the
+/// lower screen's own upright pixels. Returns 1 and writes the lower-screen pixel
 /// coordinates (`0...320`, `0...240`) to `out_x`/`out_y` when the point is on the
 /// lower screen, 0 when it is not (the touch releases) or an argument is
 /// missing/unknown.
@@ -788,6 +792,7 @@ pub extern "C" fn zk_present_touch_map(
     height: u32,
     layout_id: u32,
     orientation_id: u32,
+    swap: u32,
     x: f32,
     y: f32,
     out_x: *mut u16,
@@ -801,8 +806,11 @@ pub extern "C" fn zk_present_touch_map(
     else {
         return 0;
     };
-    let (_, bottom) = layout(width, height, arrangement, turned, TOP_WIDTH, false);
-    let Some(viewport) = bottom else {
+    let (top, bottom) = layout(width, height, arrangement, turned, TOP_WIDTH, false);
+    // the lower screen's picture is drawn in its own place normally and in the
+    // upper place while the app has swapped the screens
+    let viewport = if swap != 0 { top } else { bottom };
+    let Some(viewport) = viewport else {
         return 0;
     };
     if viewport.width <= 0.0 || viewport.height <= 0.0 {
@@ -850,10 +858,12 @@ pub extern "C" fn zk_present_touch_map(
 /// is turned clockwise by that quarter turn inside the rectangle, so this undoes
 /// the turn to land in the lower screen's own upright pixels (north keeps the
 /// rectangle's `(u, v)`, east is `(v, 1 - u)`, south `(1 - u, 1 - v)`, west is
-/// `(1 - v, u)`). Returns 1 and writes the lower-screen pixel coordinates
-/// (`0...320`, `0...240`) when the point is inside the lower screen's rectangle,
-/// 0 when it is not, an argument is missing, the rotation is unknown or a
-/// rectangle is not a real place.
+/// `(1 - v, u)`). `swap` is [`zk_presenter_set_screen_swap`]'s flag: normally
+/// the point is mapped in the lower rectangle, and while `swap` is nonzero in
+/// the upper rectangle, where the lower screen's picture is drawn then. Returns
+/// 1 and writes the lower-screen pixel coordinates (`0...320`, `0...240`) when
+/// the point is inside that rectangle, 0 when it is not, an argument is missing,
+/// the rotation is unknown or a rectangle is not a real place.
 ///
 /// # Safety
 ///
@@ -874,6 +884,7 @@ pub extern "C" fn zk_present_custom_touch_map(
     x: f32,
     y: f32,
     rotation: u32,
+    swap: u32,
     out_x: *mut u16,
     out_y: *mut u16,
 ) -> i32 {
@@ -883,19 +894,22 @@ pub extern "C" fn zk_present_custom_touch_map(
     let Some(turned) = screen_orientation(rotation) else {
         return 0;
     };
-    // the touch lands on the lower screen only, but a bad upper rectangle is a
-    // caller bug like a bad lower one, so both are checked
-    if normalised_rect([top_x, top_y, top_w, top_h]).is_none() {
+    // both rectangles are checked: a bad upper one is a caller bug like a bad
+    // lower one, even while only one of them is used
+    let Some(top) = normalised_rect([top_x, top_y, top_w, top_h]) else {
         return 0;
-    }
+    };
     let Some(bottom) = normalised_rect([bottom_x, bottom_y, bottom_w, bottom_h]) else {
         return 0;
     };
+    // the lower screen's picture is drawn in its own rectangle normally and in
+    // the upper rectangle while the app has swapped the screens
+    let rect = if swap != 0 { top } else { bottom };
     let (drawable_w, drawable_h) = (drawable_w as f32, drawable_h as f32);
-    let left = bottom[0] * drawable_w;
-    let top = bottom[1] * drawable_h;
-    let width = bottom[2] * drawable_w;
-    let height = bottom[3] * drawable_h;
+    let left = rect[0] * drawable_w;
+    let top = rect[1] * drawable_h;
+    let width = rect[2] * drawable_w;
+    let height = rect[3] * drawable_h;
     let u = (x * drawable_w - left) / width;
     let v = (y * drawable_h - top) / height;
     if !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
@@ -929,9 +943,10 @@ mod tests {
     use std::ptr;
 
     use super::{
-        zk_create_presented, zk_present, zk_present_custom_touch_map, zk_present_layout_size,
-        zk_present_mode, zk_present_touch_map, zk_presenter_create, zk_presenter_destroy,
-        zk_presenter_resize, zk_presenter_set_custom_rotation, zk_presenter_set_custom_viewports,
+        zk_create_presented, zk_present, zk_present_custom_touch_map as raw_custom_touch_map,
+        zk_present_layout_size, zk_present_mode, zk_present_touch_map as raw_touch_map,
+        zk_presenter_create, zk_presenter_destroy, zk_presenter_resize,
+        zk_presenter_set_custom_rotation, zk_presenter_set_custom_viewports,
         zk_presenter_set_layout, zk_presenter_set_orientation, zk_presenter_set_screen_swap,
         zk_presenter_shared_device, ZK_LAYOUT_BOTTOM_ONLY, ZK_LAYOUT_CUSTOM, ZK_LAYOUT_HYBRID,
         ZK_LAYOUT_LARGE_TOP_RIGHT, ZK_LAYOUT_SIDE_BY_SIDE, ZK_LAYOUT_STACKED,
@@ -958,6 +973,131 @@ mod tests {
     /// checks the arguments before it touches the view.
     fn dangling_view() -> *mut c_void {
         ptr::NonNull::<c_void>::dangling().as_ptr()
+    }
+
+    /// [`zk_present_touch_map`] with the screens not swapped, the usual case.
+    fn zk_present_touch_map(
+        width: u32,
+        height: u32,
+        layout: u32,
+        orientation: u32,
+        x: f32,
+        y: f32,
+        out_x: *mut u16,
+        out_y: *mut u16,
+    ) -> i32 {
+        raw_touch_map(width, height, layout, orientation, 0, x, y, out_x, out_y)
+    }
+
+    /// [`zk_present_custom_touch_map`] with the screens not swapped.
+    #[allow(clippy::too_many_arguments)]
+    fn zk_present_custom_touch_map(
+        drawable_w: u32,
+        drawable_h: u32,
+        top_x: f32,
+        top_y: f32,
+        top_w: f32,
+        top_h: f32,
+        bottom_x: f32,
+        bottom_y: f32,
+        bottom_w: f32,
+        bottom_h: f32,
+        x: f32,
+        y: f32,
+        rotation: u32,
+        out_x: *mut u16,
+        out_y: *mut u16,
+    ) -> i32 {
+        raw_custom_touch_map(
+            drawable_w, drawable_h, top_x, top_y, top_w, top_h, bottom_x, bottom_y, bottom_w,
+            bottom_h, x, y, rotation, 0, out_x, out_y,
+        )
+    }
+
+    #[test]
+    fn touch_map_follows_the_swapped_screens() {
+        let mut x = 0u16;
+        let mut y = 0u16;
+
+        // 400x480 stacked: normally the lower screen is the bottom band; while
+        // swapped its picture is drawn in the top band
+        assert_eq!(
+            raw_touch_map(400, 480, ZK_LAYOUT_STACKED, ZK_ORIENTATION_NORTH, 1, 0.5, 0.25, &mut x, &mut y),
+            1
+        );
+        assert_eq!((x, y), (160, 120), "the middle of the picture in the top band");
+        assert_eq!(
+            raw_touch_map(400, 480, ZK_LAYOUT_STACKED, ZK_ORIENTATION_NORTH, 1, 0.5, 0.75, &mut x, &mut y),
+            0,
+            "the other band draws the upper screen now"
+        );
+        // unswapped the top band is not a touch surface
+        assert_eq!(
+            raw_touch_map(400, 480, ZK_LAYOUT_STACKED, ZK_ORIENTATION_NORTH, 0, 0.5, 0.25, &mut x, &mut y),
+            0
+        );
+
+        // a turned layout turns the picture in the swapped place too
+        assert_eq!(
+            raw_touch_map(480, 400, ZK_LAYOUT_STACKED, ZK_ORIENTATION_EAST, 1, 0.75, 0.5, &mut x, &mut y),
+            1
+        );
+        assert_eq!((x, y), (160, 120), "the middle of the turned picture");
+        // w/o swap that column is the upper screen's own
+        assert_eq!(
+            raw_touch_map(480, 400, ZK_LAYOUT_STACKED, ZK_ORIENTATION_EAST, 0, 0.75, 0.5, &mut x, &mut y),
+            0
+        );
+
+        // upper screen only: swapped, its place draws the lower screen
+        assert_eq!(
+            raw_touch_map(400, 240, ZK_LAYOUT_TOP_ONLY, ZK_ORIENTATION_NORTH, 1, 0.5, 0.5, &mut x, &mut y),
+            1
+        );
+        assert_eq!((x, y), (160, 120));
+        // lower screen only: swapped, the lower screen isn't drawn anywhere
+        assert_eq!(
+            raw_touch_map(320, 240, ZK_LAYOUT_BOTTOM_ONLY, ZK_ORIENTATION_NORTH, 1, 0.5, 0.5, &mut x, &mut y),
+            0
+        );
+    }
+
+    #[test]
+    fn custom_touch_map_follows_the_swapped_screens() {
+        let mut x = 0u16;
+        let mut y = 0u16;
+
+        // the upper place covers the left half, the lower place the right half
+        let left = [0.0, 0.0, 0.5, 1.0];
+        let right = [0.5, 0.0, 0.5, 1.0];
+        let map = |x: f32, y: f32, rotation: u32, swap: u32, out: (&mut u16, &mut u16)| {
+            raw_custom_touch_map(
+                1000, 500, left[0], left[1], left[2], left[3], right[0], right[1], right[2],
+                right[3], x, y, rotation, swap, out.0, out.1,
+            )
+        };
+        // normal: the point goes into the lower (right) rectangle
+        assert_eq!(map(0.75, 0.25, ZK_ORIENTATION_NORTH, 0, (&mut x, &mut y)), 1);
+        assert_eq!((x, y), (160, 60), "the right half's own pixel");
+        // swapped: the lower screen's picture is in the upper (left) rectangle
+        assert_eq!(map(0.25, 0.25, ZK_ORIENTATION_NORTH, 1, (&mut x, &mut y)), 1);
+        assert_eq!((x, y), (160, 60), "the left half's own pixel");
+        // any nonzero swap counts
+        assert_eq!(map(0.25, 0.25, ZK_ORIENTATION_NORTH, 2, (&mut x, &mut y)), 1);
+        assert_eq!((x, y), (160, 60));
+        // the old lower rectangle draws the upper screen while swapped
+        assert_eq!(map(0.75, 0.25, ZK_ORIENTATION_NORTH, 1, (&mut x, &mut y)), 0);
+
+        // the rotation undoes in the swapped rectangle too: east turns (u, v)
+        // into (v, 1 - u)
+        assert_eq!(
+            raw_custom_touch_map(
+                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.5, 0.25, 0.25,
+                ZK_ORIENTATION_EAST, 1, &mut x, &mut y
+            ),
+            1
+        );
+        assert_eq!((x, y), (80, 180), "the turned picture's own pixel");
     }
 
     #[test]
