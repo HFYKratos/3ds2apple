@@ -2,73 +2,202 @@
 
 <h1 align="center">3ds2apple</h1>
 
-[English](README.md) · [简体中文](README.zh-CN.md) · [Download the launchers](https://github.com/HFYKratos/3ds2apple/releases) · [All releases](https://github.com/HFYKratos/3ds2apple/releases) · [Contributing](CONTRIBUTING.md)
+<p align="center">
+  <a href="README.md">EN</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a>
+</p>
+
+<p align="center">
+  <a href="#download"><b>Download</b></a> ·
+  <a href="https://hfykratos.github.io/3ds2apple/">Website</a> ·
+  <a href="https://hfykratos.github.io/3ds2apple/press/">Press kit</a> ·
+  <a href="https://github.com/HFYKratos/3ds2apple/releases">Releases</a> ·
+  <a href="https://github.com/HFYKratos/3ds2apple/discussions">Discussions</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.5"><img src="https://img.shields.io/badge/release-v0.1.5-brightgreen" alt="Latest release: v0.1.5"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/platforms-iOS%2016%2B%20%C2%B7%20Windows%2010%2F11%20%C2%B7%20macOS%2013%2B-blue" alt="Platforms: iOS 16+, Windows 10/11, macOS 13+"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/github/downloads/HFYKratos/3ds2apple/total?label=downloads" alt="GitHub downloads"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/HFYKratos/3ds2apple/ci.yml?branch=main&label=CI" alt="CI status"></a>
+</p>
+
+**Run your own Nintendo 3DS games natively on iPhone and iPad — AOT-compiled ARM64, Metal via MoltenVK, no CPU JIT and no interpreter fallback.**
+
+## Download
+
+<p align="center">
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.5/3ds2apple-0.1.5-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download the Windows launcher"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.5/3ds2apple-0.1.5-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download the macOS launcher"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="All releases on GitHub"></a>
+</p>
+
+<p align="center"><sub>Windows 10/11 launcher (verified path) · macOS 13+ launcher (developer preview, see <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>) · the iOS app is composed, signed and installed by the launcher with your own Apple ID, so there is no separate iOS download.</sub></p>
+
+<p align="center">
+  <img src="assets/readme/hero.png" width="880" alt="3ds2apple running on iPhone and iPad, with the Windows and macOS launchers">
+</p>
 
 > [!NOTE]
 > 3ds2apple is free and open source (Apache-2.0). The launchers and the iOS app ship no games, keys or BIOS: you build your own library from decrypted ROMs that you own and dump yourself.
 
-**Your own Nintendo 3DS games, running natively on iPhone and iPad.** Game code is rewritten to native ARM64 ahead of time and runs directly on the phone processor, with graphics going to Metal through MoltenVK. Your whole library lives in one app, and a few clicks in the Windows or macOS launcher take a game from import to play.
+## 30-second explainer
 
-Platforms: iPhone / iPad (iOS 16 and later) · Windows 10/11 (launcher, no Mac needed) · macOS 13+ (launcher, Intel + Apple silicon) · Build on Windows or macOS · License: Apache-2.0 · **Bring your own games**
+3ds2apple is a native port pipeline for your own Nintendo 3DS games, not an emulator app. Import a decrypted ROM you dumped yourself into the Windows or macOS launcher: 3dsrecomp translates the 3DS code to C, your local LLVM or Apple clang toolchain builds one ARM64 `GamePack` per title, and the launcher composes a ROM-free base IPA, signs and installs it with your own Apple ID, then pushes only the game data (`GameRom.cci` + `GameInfo.json`) into the app's Documents folder. On the phone, the Zakuro HLE runtime executes that native code directly and MoltenVK turns the PICA200 GPU calls into Metal. One app holds the whole library, and the pause menu covers screen layouts, controls, save states and diagnostics. No games, keys or BIOS are included — bring your own.
+
+## Demo
 
 <p align="center">
-  <img src="launcher/windows/docs/ui/v4-library-en.png" width="470" alt="Windows launcher library">
-  <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="380" alt="macOS launcher empty library">
+  <img src="assets/readme/demo.gif" width="720" alt="Synthetic demo loop: portrait controls, landscape controls, pause-menu virtual controls and screen-layout settings">
 </p>
-<p align="center"><sub>Windows launcher (Library; synthetic demo entries) and macOS launcher (empty library).</sub></p>
 
-## A native port, not an emulator
+<p align="center"><sub>Synthetic preview, no game data: portrait controls → landscape controls → pause-menu Virtual controls → screen-layout settings.</sub></p>
 
-Each game is recompiled ahead of time: the 3DS code is translated to C by 3dsrecomp and built into an ARM64 `GamePack` on your own computer with a local LLVM or Apple clang toolchain. The phone runs that native code directly through the Zakuro HLE runtime — there is no CPU JIT and no interpreter fallback. The PICA200 GPU path is translated to Metal by MoltenVK, and the GPU presenter draws the preset screen layouts straight to a `CAMetalLayer` with zero per-frame screen readback (custom screen layouts read the two screens back).
+## Features at a glance
 
-## One app, your whole library
+<table>
+  <tr>
+    <td align="center" width="25%">⚡<br><b>Native AOT, not emulation</b><br><sub>Every game is recompiled to ARM64 before it runs. No CPU JIT, no interpreter fallback on the shipping path.</sub></td>
+    <td align="center" width="25%">📚<br><b>One app, your whole library</b><br><sub>Each selected title is a GamePack inside one signed app; pushed game data survives updates.</sub></td>
+    <td align="center" width="25%">🎮<br><b>Full New 3DS controls</b><br><sub>D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a real analog Circle Pad and the C-stick; MFi, Xbox and DualSense controllers.</sub></td>
+    <td align="center" width="25%">🧭<br><b>6 landscape + 3 portrait layouts</b><br><sub>Presets are drawn by the GPU presenter with zero per-frame readback; custom rectangles get a live preview.</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="25%">✏️<br><b>Edit controls in-game</b><br><sub>Pause, drag controls over the picture and tap Done; per-button visibility, 10%–200% size and opacity.</sub></td>
+    <td align="center" width="25%">💾<br><b>Saves and save states</b><br><sub>Battery saves in the app container, three instant save-state slots per game, save export and import in the Save Manager.</sub></td>
+    <td align="center" width="25%">⏩<br><b>Fast-forward, FPS and HUD</b><br><sub>1x/2x/4x fast-forward, an optional FPS pill, the system Metal HUD and one-tap diagnostics export.</sub></td>
+    <td align="center" width="25%">🖥️<br><b>Windows and macOS launchers</b><br><sub>Import → compile → sign → install → push from one window; the Windows path needs no Mac.</sub></td>
+  </tr>
+</table>
 
-Every game you select is compiled into its own `GamePack<TITLEID>.dylib` and composed into a single signed app together with a `GameCatalog.json`. Install one app and the whole library travels with it; adding or removing a game means deploying again, and the pushed game data survives reinstalls and updates. Per-game code must live inside the signed IPA because iOS will not load unsigned code from `Documents`.
+## Screen layouts: six landscape, three portrait
 
-Each library card is built from what the launcher already read out of the ROM at import time: the game's own SMDH icon, the title in the app's language, the publisher and the pushed game size. The launcher pushes that metadata in `GameInfo.json` next to the game data, so the phone never parses the ROM. A library pushed by an older launcher keeps working: the card falls back to the catalog name, hides the publisher row and draws a placeholder icon until you deploy again.
+**Settings → Display → Screen layout** keeps the two directions independent.
 
-## Full 3DS controls on screen
+- **Landscape screen layout (6):** Large screen · Single screen · Side by side · Hybrid · Original · Custom layout.
+- **Portrait screen layout (3):** Default · Original · Custom layout.
 
-The on-screen pad is the complete New 3DS set: D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a real analog Circle Pad and the New 3DS C-stick. The Circle Pad reports true analog values (-1 to 1 per axis, with a small dead zone so a resting finger reads exactly 0) instead of acting as a second D-pad, and the C-stick works the same way. A hardware controller's left stick feeds the Circle Pad and its right stick feeds the C-stick; L2/R2 map to ZL/ZR, and several fingers can hold buttons and drag the sticks at the same time.
+**Hybrid** shows one large top screen with two small screens stacked beside it; the portrait **Default** places the top screen full width above the bottom screen.
 
-Positions and sizes come from a ModernCenteredX2 Delta-style skin (geometry only): in portrait the whole control set sits in the empty area below the picture, and the D-pad is drawn as a single cross - four direction zones, press and slide to change direction - instead of four separate buttons. Landscape keeps the skin-inspired placement over the picture.
+All preset arrangements are drawn by the GPU presenter — the Metal path with zero per-frame screen readback. **Custom layout** places each screen at its own rectangle: edit X/Y/width/height percentages with a live preview under the fields, or drag the screens; it applies from the next game load and uses the screen-readback path, so it is slower than the presets, which stay on the GPU path.
 
-The paused game's **Virtual controls** card is where the pad is customised: show/hide the pad, show the FPS readout, haptics, **Edit layout** (drag the controls over the paused picture; the centred **Done** saves the current orientation and resumes), **Toggle controls** (per-button visibility), **Adjust size** (10%-200% per button or group, 100% default), **Adjust opacity** and **Reset**. Visibility and size are global; portrait and landscape positions stay separate. The C-stick needs a game that uses the New 3DS nub, and a shell built with the current runtime (`scripts/build-zakuro-ios.sh` from source has it).
+Screen rotation and interface orientation are kept, and render resolution (1x–4x) still applies on the next game load. 0.1.5 removed the old aspect-ratio and integer-scaling switches.
 
-## Screen layouts: six landscape, three portrait presets
+## Controls and the pause menu
 
-**Settings -> Display -> Screen layout** keeps the two directions independent:
+The on-screen pad is the complete New 3DS set: D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a real analog Circle Pad and the New 3DS C-stick. The Circle Pad reports true analog values (-1 to 1 per axis, with a small dead zone so a resting finger reads exactly 0) instead of acting as a second D-pad, and the C-stick works the same way. Positions and sizes come from a ModernCenteredX2 Delta-style skin (geometry only): in portrait the whole control set sits in the empty area below the picture, and the D-pad is drawn as a single cross — four direction zones, press and slide to change direction — instead of four separate buttons. Landscape keeps the skin-inspired placement over the picture.
 
-- **Landscape screen layout**: Large screen, Single screen, Side by side, Hybrid (one large top screen with two small screens stacked beside it), Original and Custom layout.
-- **Portrait screen layout**: Default (top screen full width above the bottom screen), Original and Custom layout.
+A hardware controller's left stick feeds the Circle Pad and its right stick feeds the C-stick; L2/R2 map to ZL/ZR, and several fingers can hold buttons and drag the sticks at the same time.
 
-The preset arrangements are drawn by the GPU presenter - the Metal path with no per-frame screen readback. Custom layouts place each screen at its own rectangle, edited by percentages (X/Y/width/height with a live preview under the fields) or by dragging, apply from the next game load and use the screen-readback path.
+The paused game's **Virtual controls** card is where the pad is customised:
 
-Screen rotation and orientation are kept, and render resolution (1x-4x) still applies on the next game load. The old aspect-ratio and integer-scaling switches were removed in 0.1.5.
+- **Show/hide the pad**, show the FPS readout, haptics.
+- **Edit layout** — drag the controls over the paused picture; the centred **Done** saves the current orientation and resumes.
+- **Toggle controls** — per-button visibility.
+- **Adjust size** — 10%–200% per button or group, 100% default.
+- **Adjust opacity** and **Reset**.
 
-## What the phone shows while you play
+Visibility and size are global; portrait and landscape positions stay separate. The C-stick needs a game that uses the New 3DS nub, and a shell built with the current runtime (building `scripts/build-zakuro-ios.sh` from source includes it).
 
-The picture is full-bleed: no title bar, card border or game name. The app's own game-view overlay is a single **FPS pill**, on by default and floating in the top-right safe-area corner over the picture, plus the floating pause button and the on-screen controls; turn the pill off in the pause menu's **Virtual controls** card. Everything else is kept out of the game view: the AOT state, the renderer path, the Metal HUD state and the per-phase frame timings are recorded in the device log and the diagnostics report (the About page repeats the runtime summary for diagnostics, but nothing is drawn over the game).
+## Edit layout in-game
 
-The Settings page no longer shows the old "Metal backend" info row and no longer has a first-load graphics warm-up switch: a game is revealed as soon as it loads, and the runtime's pipeline cache still makes later loads of the same title warm. Apple's separate system Metal HUD switch (the GPU/FPS overlay) is still in Settings -> Performance.
+Pause any game and open **Virtual controls → Edit layout**: every control has its own hit area, so you drag just the one you grabbed over the paused picture, and the centred **Done** saves the current orientation and resumes. The same card gives per-button visibility, 10%–200% size and opacity, and **Reset** restores the defaults. Portrait and landscape positions are stored separately.
 
-## Graphical launchers, next to zero setup
+Screen layouts are edited separately under **Settings → Display → Screen layout**, by percentage fields with a live preview or by dragging. Presets apply immediately; a custom screen layout applies from the next game load.
 
-There is a launcher for Windows and one for macOS. Import your own decrypted `.3ds`/`.cci`, pick the games and press the one deploy button: the launcher compiles the GamePacks, composes a ROM-free base IPA, signs and installs it with your own Apple ID (bundled official Impactor/plumesign on Windows, Xcode automatic signing on macOS), then pushes only `GameRom.cci` + `GameInfo.json` into the app Documents folder.
+## Screenshots
 
-The launchers keep a portable data folder beside the executable/.app, read the ROM SMDH metadata (icon, localized name, publisher), detect the compile hardware and parallelise 3dsrecomp automatically, and show a startup readiness light plus a self-test so a missing tool never fails a deploy silently.
+**Desktop launchers** — real app screenshots; the library entries are synthetic demo entries and no game art appears.
 
-## Real numbers
+| Windows launcher | Windows launcher (简体中文) | macOS launcher |
+|:---:|:---:|:---:|
+| <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="Windows launcher library, English UI"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="Windows launcher library, Chinese UI"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS launcher with an empty library, dark theme"> |
+| Library (EN) | Library (中文) | Empty library (dark) |
 
-On a physical iPhone, one retail title run through the Windows launcher path measures **about 57-60 fps** with **AOT 100%** and the **Metal GPU** renderer: `zk_perf` reports GPU 4-6 ms per frame, present 10-11 ms and zero screen readback. These numbers are from the maintainers testing that title; compatibility and performance are per game.
+**iOS app** — synthetic previews of the on-screen controls; no game data.
 
-## Platforms
+| Portrait | Landscape |
+|:---:|:---:|
+| <img src="assets/readme/portrait.png" width="280" alt="Synthetic portrait preview with on-screen controls"> | <img src="assets/readme/landscape.png" width="520" alt="Synthetic landscape preview with on-screen controls"> |
+| Portrait controls | Landscape controls |
+
+## Quick start
+
+**Requirement:** a decrypted 3DS ROM that you own, an iPhone/iPad on iOS 16+ with Developer Mode enabled, a USB cable, and your own Apple ID for signing. No game data is included.
+
+1. **Download the launcher.** Windows 10/11: extract the zip into a writable folder (not `Program Files`) and run `3ds2apple-launcher.exe`; install *Apple Devices* so the phone is reachable over USB. macOS 13+: unzip `3ds2apple-launcher.app` (developer preview; it also needs Xcode 15+, `xcodegen`, a repository checkout and the built tools).
+2. **Import and deploy.** Import your own decrypted `.3ds`/`.cci`, select the games and press the single deploy button: the launcher compiles one GamePack per game, composes a ROM-free IPA, signs and installs it with your own Apple ID, then pushes only the game data.
+3. **Play.** Open the app on the phone. Deploy again to add or remove games; pushed game data survives reinstalls and updates, and a clean uninstall clears it.
+
+The full walkthrough, including macOS setup and signing limits, is in [Getting started](#getting-started).
+
+## FAQ
+
+### Is 3ds2apple an emulator?
+
+No. It is a native port and recompilation pipeline: each game is translated to C, compiled to ARM64 ahead of time and run directly through the Zakuro HLE runtime. There is no CPU JIT and no interpreter fallback on the shipping path.
+
+### Does every game work?
+
+Compatibility is per game. Some titles may fail to boot or render incorrectly, and some menus in some titles can render incorrectly — tracked in [#2](https://github.com/HFYKratos/3ds2apple/issues/2). No compatibility or performance guarantee is made; reports with the 16-hex title ID are welcome.
+
+### Where do I get ROMs, keys or BIOS?
+
+Not from this project. 3ds2apple ships no game data and provides no ROM, BIOS or key download or piracy support. Only decrypted ROMs that you legally own and dump yourself are supported.
+
+### Do I need a Mac?
+
+Not for the verified Windows path. The macOS launcher is a **developer preview**: it needs macOS 13+, Xcode 15+ with your Apple ID, `xcodegen`, a repository checkout and the built tools, and its real-device install has not been verified by the maintainers yet (issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)).
+
+### Is the app on the App Store?
+
+No. The launcher composes and signs the app with your own Apple ID (bundled official Impactor on Windows, Xcode automatic signing on macOS) and installs it over USB. 3ds2apple is not affiliated with or endorsed by Nintendo or Apple.
+
+### Why does the app stop opening after about a week?
+
+A free Apple ID allows 3 apps per device and about 7 days of signing; deploy again to refresh the signature. A paid developer account removes those limits.
+
+### Will redeploying erase saves or game data?
+
+Game data lives in `Documents/Games/<TITLEID>/` and saves/save states live in the app container. Pushed data and saves survive reinstalls and updates; a clean uninstall removes them, so back up anything you care about first. Your ROMs on the computer are never touched.
+
+### How does it perform?
+
+On a physical iPhone, **one retail title** run through the Windows launcher path measured about 57-60 fps with AOT 100% and the Metal GPU renderer by the maintainers; that is one title, not a guarantee — compatibility and performance are per game.
+
+### Why is a custom screen layout slower?
+
+A custom layout uses the screen-readback path, while every preset stays on the GPU presenter path with zero per-frame readback. Custom layouts also apply from the next game load.
+
+## Legal and limits
+
+- **Bring your own games.** No ROMs, keys, BIOS, system files or game assets are provided or linked; there is no piracy support. Only use decrypted ROMs that you legally own and dump yourself.
+- **No endorsement.** 3ds2apple is not affiliated with, sponsored or endorsed by Nintendo or Apple, and it is not distributed on the App Store. You sign and install it with your own Apple ID.
+- **No guarantees.** Compatibility and performance are per game: some titles may fail to boot or render incorrectly, and some menus in some titles can render incorrectly (issue [#2](https://github.com/HFYKratos/3ds2apple/issues/2)). Compatibility and performance are not guaranteed.
+- **macOS is a developer preview.** Its package is not self-contained and its real-device install is not yet verified by the maintainers (issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)); the Windows path is verified.
+- **Custom screen layouts are a trade-off.** They use the screen-readback path, are slower than the presets and apply from the next game load.
+- **No CPU JIT by design.** The shipping path is AOT code plus the Zakuro HLE runtime; there is no interpreter fallback.
+
+## Project links
+
+| | |
+|---|---|
+| **Website** | <https://hfykratos.github.io/3ds2apple/> |
+| **Press kit** | <https://hfykratos.github.io/3ds2apple/press/> |
+| **Download** | [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases) |
+| **Issues** | <https://github.com/HFYKratos/3ds2apple/issues> |
+| **Discussions** | <https://github.com/HFYKratos/3ds2apple/discussions> |
+| **Contributing** | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| **License** | [Apache-2.0](LICENSE) |
+
+## Platform support
 
 | Platform | Support |
 |---|---|
 | **iPhone / iPad** | iOS 16 and later. One app holds the library, in-game menu, the full New 3DS control set with in-game layout editing, six landscape and three portrait screen layouts, save states and the FPS readout. |
-| **Windows** | Windows 10/11 x64. One self-contained launcher executable; builds, signs, installs and pushes without a Mac. |
-| **macOS** | macOS 13+ (Intel + Apple silicon). SwiftUI launcher using Xcode signing; the package is not self-contained yet and device install is not verified by the maintainers. |
+| **Windows** | Windows 10/11 x64. One self-contained launcher executable; builds, signs, installs and pushes without a Mac. **Verified path.** |
+| **macOS** | macOS 13+ (Intel + Apple silicon). SwiftUI launcher using Xcode signing; the package is not self-contained yet and device install is not verified by the maintainers. **Developer preview.** |
 | **Build host** | Windows (bundled LLVM/LLD) or macOS (Apple clang + Xcode). |
 
 ## Getting started
@@ -78,42 +207,42 @@ On a physical iPhone, one retail title run through the Windows launcher path mea
 ### Windows launcher
 
 1. Download `3ds2apple-<version>-windows-x64.zip` and extract it into a writable folder (not `Program Files`). Install *Apple Devices* so the phone is reachable over USB.
-2. Run `3ds2apple-launcher.exe` (not code-signed; check the digest, then *More info -> Run anyway*). Run Settings -> self-test once and expect it green.
-3. **Library -> Import** your own decrypted `.3ds`/`.cci`; only the ROM header and SMDH icon/metadata are read.
+2. Run `3ds2apple-launcher.exe` (not code-signed; check the digest, then *More info → Run anyway*). Run Settings → self-test once and expect it green.
+3. **Library → Import** your own decrypted `.3ds`/`.cci`; only the ROM header and SMDH icon/metadata are read.
 4. **Deploy**: select the games and press the single deploy button. The launcher compiles one GamePack per game, composes a ROM-free IPA, signs and installs it with the bundled Impactor (sign in with your own Apple ID), then pushes only the game data.
 5. Open the app on the phone and play. Deploy again to add or remove games; pushed game data stays across reinstalls, a clean uninstall clears it.
 
 ### macOS launcher
 
-1. Download `3ds2apple-<version>-macos-universal.zip`; you get `3ds2apple-launcher.app` (not notarised; right-click -> *Open* on first launch).
+1. Download `3ds2apple-<version>-macos-universal.zip`; you get `3ds2apple-launcher.app` (not notarised; right-click → *Open* on first launch).
 2. The package is **not self-contained yet**: it needs macOS 13+, Xcode 15+ with your Apple ID, `xcodegen`, a repository checkout and the built tools (`scripts/build-zakuro-ios.sh`, the `builder` pack CLI and `tools/devpush`). The launcher looks in its bundle, the checkout and `PATH`.
-3. Import -> Deploy: Apple clang compiles the GamePacks, Xcode automatic signing + `devicectl` installs the composed IPA, and the launcher pushes the game data. Selection rules match Windows.
+3. Import → Deploy: Apple clang compiles the GamePacks, Xcode automatic signing + `devicectl` installs the composed IPA, and the launcher pushes the game data. Selection rules match Windows.
 
 ### Phone data, saves and limits
 
 - Game data lives in `Documents/Games/<TITLEID>/` (visible in the Files app); saves and save states live in the app container.
-- The on-screen controls are edited in the pause menu's **Virtual controls -> Edit layout** (drag on the paused picture, then **Done**); the screen layout under **Settings -> Display -> Screen layout**. Presets apply immediately; a custom screen layout applies from the next game load.
+- The on-screen controls are edited in the pause menu's **Virtual controls → Edit layout** (drag on the paused picture, then **Done**); the screen layout is under **Settings → Display → Screen layout**. Presets apply immediately; a custom screen layout applies from the next game load.
 - A free Apple ID allows 3 apps per device and about 7 days of signing; deploy again to refresh. A paid developer account removes those limits.
 - Uninstalling the app removes its data; your ROMs on the computer are never touched.
 
-## Download
+## Download packages and policy
 
 Public builds are published on [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases). Each release carries exactly two platform packages:
 
-- `3ds2apple-<version>-windows-x64.zip` - Windows 10/11 launcher: the self-contained `3ds2apple-launcher.exe` plus `LICENSE`, `NOTICE` and `THIRD_PARTY.md`.
-- `3ds2apple-<version>-macos-universal.zip` - macOS 13+ launcher: `3ds2apple-launcher.app` (Intel + Apple silicon) plus `LICENSE`, `NOTICE` and `THIRD_PARTY.md`.
+- `3ds2apple-<version>-windows-x64.zip` — Windows 10/11 launcher: the self-contained `3ds2apple-launcher.exe` plus `LICENSE`, `NOTICE` and `THIRD_PARTY.md`.
+- `3ds2apple-<version>-macos-universal.zip` — macOS 13+ launcher: `3ds2apple-launcher.app` (Intel + Apple silicon) plus `LICENSE`, `NOTICE` and `THIRD_PARTY.md`.
 
-From 0.1.1 on, both zips carry those three license texts at their root, byte-identical to the copies in this repository, so a downloaded package is self-contained. They are not published as separate release assets, and the GPL projects listed in [THIRD_PARTY.md](THIRD_PARTY.md) remain read-only references - no GPL code or text is packaged. The 0.1.0 packages predate this and rely on the repository copies. The ROM-free shell template is embedded in both launchers and is not a separate download. GitHub shows the SHA-256 digest of every release asset; no game data is ever attached.
+From 0.1.1 on, both zips carry those three license texts at their root, byte-identical to the copies in this repository, so a downloaded package is self-contained. They are not published as separate release assets, and the GPL projects listed in [THIRD_PARTY.md](THIRD_PARTY.md) remain read-only references — no GPL code or text is packaged. The 0.1.0 packages predate this and rely on the repository copies. The ROM-free shell template is embedded in both launchers and is not a separate download. GitHub shows the SHA-256 digest of every release asset; no game data is ever attached.
 
 ## Build from source
 
 | Component | Build / test |
 |---|---|
-| Windows launcher | `cd launcher/windows && dotnet build Launcher.slnx -c Release` / `dotnet test Launcher.slnx -c Debug` - see [launcher/windows/README.md](launcher/windows/README.md) |
-| macOS launcher | XcodeGen + `xcodebuild` on macOS - see [launcher/macos/README.md](launcher/macos/README.md) |
-| iOS app / shell | `scripts/build-zakuro-ios.sh` -> `scripts/build-ios-app.sh` -> `scripts/package-ipa.sh` - see [scripts/README.md](scripts/README.md) |
-| Pack CLI (`3ds2apple-pack`) | `cd builder && cargo build --workspace` / `cargo test --workspace` - see [builder/README.md](builder/README.md) |
-| Device bridge (`devpush`) | `cargo build --release --manifest-path tools/devpush/Cargo.toml` - see [tools/devpush/README.md](tools/devpush/README.md) |
+| Windows launcher | `cd launcher/windows && dotnet build Launcher.slnx -c Release` / `dotnet test Launcher.slnx -c Debug` — see [launcher/windows/README.md](launcher/windows/README.md) |
+| macOS launcher | XcodeGen + `xcodebuild` on macOS — see [launcher/macos/README.md](launcher/macos/README.md) |
+| iOS app / shell | `scripts/build-zakuro-ios.sh` → `scripts/build-ios-app.sh` → `scripts/package-ipa.sh` — see [scripts/README.md](scripts/README.md) |
+| Pack CLI (`3ds2apple-pack`) | `cd builder && cargo build --workspace` / `cargo test --workspace` — see [builder/README.md](builder/README.md) |
+| Device bridge (`devpush`) | `cargo build --release --manifest-path tools/devpush/Cargo.toml` — see [tools/devpush/README.md](tools/devpush/README.md) |
 
 Host-side self-checks need no ROM, phone or Xcode:
 
@@ -125,6 +254,34 @@ bash scripts/tests/aot-selfcheck.sh
 bash scripts/tests/game-catalog-selfcheck.sh
 bash scripts/tests/desktop-aot-selfcheck.sh
 ```
+
+## Under the hood
+
+### A native port, not an emulator
+
+Each game is recompiled ahead of time: the 3DS code is translated to C by 3dsrecomp and built into an ARM64 `GamePack` on your own computer with a local LLVM or Apple clang toolchain. The phone runs that native code directly through the Zakuro HLE runtime — there is no CPU JIT and no interpreter fallback. The PICA200 GPU path is translated to Metal by MoltenVK, and the GPU presenter draws the preset screen layouts straight to a `CAMetalLayer` with zero per-frame screen readback (custom screen layouts read the two screens back).
+
+### One app, your whole library
+
+Every game you select is compiled into its own `GamePack<TITLEID>.dylib` and composed into a single signed app together with a `GameCatalog.json`. Install one app and the whole library travels with it; adding or removing a game means deploying again, and the pushed game data survives reinstalls and updates. Per-game code must live inside the signed IPA because iOS will not load unsigned code from `Documents`.
+
+Each library card is built from what the launcher already read out of the ROM at import time: the game's own SMDH icon, the title in the app's language, the publisher and the pushed game size. The launcher pushes that metadata in `GameInfo.json` next to the game data, so the phone never parses the ROM. A library pushed by an older launcher keeps working: the card falls back to the catalog name, hides the publisher row and draws a placeholder icon until you deploy again.
+
+### Graphical launchers, next to zero setup
+
+There is a launcher for Windows and one for macOS. Import your own decrypted `.3ds`/`.cci`, pick the games and press the one deploy button: the launcher compiles the GamePacks, composes a ROM-free base IPA, signs and installs it with your own Apple ID (bundled official Impactor/plumesign on Windows, Xcode automatic signing on macOS), then pushes only `GameRom.cci` + `GameInfo.json` into the app Documents folder.
+
+The launchers keep a portable data folder beside the executable/.app, read the ROM SMDH metadata (icon, localized name, publisher), detect the compile hardware and parallelise 3dsrecomp automatically, and show a startup readiness light plus a self-test so a missing tool never fails a deploy silently.
+
+### What the phone shows while you play
+
+The picture is full-bleed: no title bar, card border or game name. The app's own game-view overlay is a single **FPS pill**, on by default and floating in the top-right safe-area corner over the picture, plus the floating pause button and the on-screen controls; turn the pill off in the pause menu's **Virtual controls** card. Everything else is kept out of the game view: the AOT state, the renderer path, the Metal HUD state and the per-phase frame timings are recorded in the device log and the diagnostics report (the About page repeats the runtime summary for diagnostics, but nothing is drawn over the game).
+
+The Settings page no longer shows the old "Metal backend" info row and no longer has a first-load graphics warm-up switch: a game is revealed as soon as it loads, and the runtime's pipeline cache still makes later loads of the same title warm. Apple's separate system Metal HUD switch (the GPU/FPS overlay) is still in Settings → Performance.
+
+### Real numbers
+
+On a physical iPhone, **one retail title** run through the Windows launcher path measures **about 57-60 fps** with **AOT 100%** and the **Metal GPU** renderer: `zk_perf` reports GPU 4-6 ms per frame, present 10-11 ms and zero screen readback. These numbers are from the maintainers testing that one title; compatibility and performance are per game and are not guaranteed.
 
 ## Repository layout
 
@@ -144,12 +301,12 @@ licenses/          third-party license texts (Impactor MIT, apple-codesign MPL-2
 
 ## Honest boundaries
 
-- **Compatibility is per game.** Some titles may fail to boot or render incorrectly; reports with the title ID are welcome - see [Issue reports and performance data](#issue-reports-and-performance-data).
+- **Compatibility is per game.** Some titles may fail to boot or render incorrectly, and some menus in some titles can render incorrectly (issue [#2](https://github.com/HFYKratos/3ds2apple/issues/2)); reports with the title ID are welcome — see [Issue reports and performance data](#issue-reports-and-performance-data).
 - **A custom screen layout is a performance trade-off.** Arbitrary rectangles run on the screen-readback path (the GPU presenter draws a fixed set of preset arrangements), apply from the next game load and are slower than the presets, which stay on the GPU path.
 - **The C-stick depends on the game.** It is reported through the New 3DS nub API; a title that never reads the nub ignores it, and a shell built from an older runtime does not provide it.
-- **A mainland-China iPhone can ask for "wireless data" on the first text input.** This is a known iOS quirk: when the system text input first appears (for example the in-game keyboard overlay) UIKit's own dictation/network path check is attributed to the app, so iOS shows its "allow wireless data" alert. 3ds2apple makes no network requests and its cellular data usage stays at 0 - choose *Don't Allow* or *Wi-Fi only* and everything keeps working (a reinstall can show the alert again). Details in [ios/app/README.md](ios/app/README.md).
-- **Older installs and older pushes keep working.** `GameInfo.json` only gained optional fields (schema version stays 1), so game data pushed by a 0.1.0 launcher still validates and plays - until you redeploy, the card has no publisher, no real SMDH icon and no size. An app updated from 0.1.0 keeps its library and saves.
-- **The macOS package is a developer preview.** It is not self-contained and its device install has not been verified by the maintainers yet - the real-device acceptance call is tracked in [#1](https://github.com/HFYKratos/3ds2apple/issues/1); the Windows package is the verified path.
+- **A mainland-China iPhone can ask for "wireless data" on the first text input.** This is a known iOS quirk: when the system text input first appears (for example the in-game keyboard overlay), UIKit's own dictation/network path check is attributed to the app, so iOS shows its "allow wireless data" alert. 3ds2apple makes no network requests and its cellular data usage stays at 0 — choose *Don't Allow* or *Wi-Fi only* and everything keeps working (a reinstall can show the alert again). Details in [ios/app/README.md](ios/app/README.md).
+- **Older installs and older pushes keep working.** `GameInfo.json` only gained optional fields (schema version stays 1), so game data pushed by a 0.1.0 launcher still validates and plays — until you redeploy, the card has no publisher, no real SMDH icon and no size. An app updated from 0.1.0 keeps its library and saves.
+- **The macOS package is a developer preview.** It is not self-contained and its device install has not been verified by the maintainers yet — the real-device acceptance call is tracked in [#1](https://github.com/HFYKratos/3ds2apple/issues/1); the Windows package is the verified path.
 - **No ROMs, keys or BIOS are provided.** Only decrypted ROMs that you own are supported.
 - **No CPU JIT by design.** The shipping path is AOT code plus the Zakuro HLE runtime; there is no interpreter fallback.
 
@@ -157,7 +314,7 @@ licenses/          third-party license texts (Impactor MIT, apple-codesign MPL-2
 
 Bug reports and compatibility reports are welcome. Start with the [compatibility report form](.github/ISSUE_TEMPLATE/compatibility-report.yml) (GitHub offers it under **New issue**): it asks for the game title, the 16-hex title ID, region and version (base/update/DLC), device model and iOS version, the 3ds2apple version or commit, the AOT state, what happens and how to reproduce it. Never attach ROMs, decryption keys, BIOS/firmware, generated C, screenshots or recordings that contain game art, signed IPAs, Apple credentials or a device UDID.
 
-Every build can export a diagnostics report: open the in-game menu and press **Export logs** (the menu pauses the frame loop, so the stutter counters stop at the moment you tap it), then share the `.txt` through the system share sheet. The home page path **Settings -> More -> Export logs** works too, but unloading a game resets the frame and stutter counters - use the in-game menu when those numbers matter; the Settings copy still contains the complete session log. Builds from 0.1.1 on also write each export to `Documents/Diagnostics/<timestamp>.txt` in the app container (the last five are kept); the same folder appears in the Files app under **On My iPhone -> 3ds2apple -> Diagnostics**, or you can pull it over USB with the device bridge:
+Every build can export a diagnostics report: open the in-game menu and press **Export logs** (the menu pauses the frame loop, so the stutter counters stop at the moment you tap it), then share the `.txt` through the system share sheet. The home page path **Settings → More → Export logs** works too, but unloading a game resets the frame and stutter counters — use the in-game menu when those numbers matter; the Settings copy still contains the complete session log. Builds from 0.1.1 on also write each export to `Documents/Diagnostics/<timestamp>.txt` in the app container (the last five are kept); the same folder appears in the Files app under **On My iPhone → 3ds2apple → Diagnostics**, or you can pull it over USB with the device bridge:
 
 ```bash
 devpush ls  --bundle-id com.kratos.3ds2apple --remote Documents/Diagnostics
@@ -170,10 +327,10 @@ Testers with a Mac and an iPhone/iPad are especially useful: the [macOS acceptan
 
 ## Contributing and release
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) - contribution rules, issue reports and the release policy.
-- [Issue templates](.github/ISSUE_TEMPLATE) - compatibility reports and the macOS real-device acceptance checklist.
-- [LICENSE](LICENSE) - Apache-2.0.
-- [THIRD_PARTY.md](THIRD_PARTY.md) and [NOTICE](NOTICE) - third-party components and legal notices.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — contribution rules, issue reports and the release policy.
+- [Issue templates](.github/ISSUE_TEMPLATE) — compatibility reports and the macOS real-device acceptance checklist.
+- [LICENSE](LICENSE) — Apache-2.0.
+- [THIRD_PARTY.md](THIRD_PARTY.md) and [NOTICE](NOTICE) — third-party components and legal notices.
 
 ## Thanks
 
@@ -181,6 +338,6 @@ Testers with a Mac and an iPhone/iPad are especially useful: the [macOS acceptan
 
 ## License and legal
 
-3ds2apple is licensed under **Apache-2.0** (see [LICENSE](LICENSE)). It ships no Nintendo ROMs, decryption keys, BIOS, system files, game assets or gameplay screenshots, and provides no ROM download or piracy support. Only use games that you legally own and dump yourself.
+3ds2apple is licensed under **Apache-2.0** (see [LICENSE](LICENSE)). It ships no Nintendo ROMs, decryption keys, BIOS, system files, game assets or gameplay screenshots, and provides no ROM download or piracy support. Only use games that you legally own and dump yourself. 3ds2apple is not affiliated with, sponsored or endorsed by Nintendo or Apple.
 
-Third-party components and licenses are listed in [THIRD_PARTY.md](THIRD_PARTY.md) and [NOTICE](NOTICE). The Windows launcher bundles the official Impactor v2.7.3 + plumesign release files unmodified (MIT; the embedded apple-codesign 0.29.0 is MPL-2.0) and keeps the license texts in [licenses/impactor](licenses/impactor); the macOS launcher signs through Xcode instead and does not bundle Impactor. The iOS shell template and the macOS launcher embed the unmodified MoltenVK 1.4.2 framework (Apache-2.0). GPL projects are read as architecture references only - no GPL code or text is copied into this repository or packaged with it.
+Third-party components and licenses are listed in [THIRD_PARTY.md](THIRD_PARTY.md) and [NOTICE](NOTICE). The Windows launcher bundles the official Impactor v2.7.3 + plumesign release files unmodified (MIT; the embedded apple-codesign 0.29.0 is MPL-2.0) and keeps the license texts in [licenses/impactor](licenses/impactor); the macOS launcher signs through Xcode instead and does not bundle Impactor. The iOS shell template and the macOS launcher embed the unmodified MoltenVK 1.4.2 framework (Apache-2.0). GPL projects are read as architecture references only — no GPL code or text is copied into this repository or packaged with it.
