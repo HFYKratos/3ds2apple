@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="许可证：Apache-2.0"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.5"><img src="https://img.shields.io/badge/release-v0.1.5-brightgreen" alt="最新版本：v0.1.5"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6"><img src="https://img.shields.io/badge/release-v0.1.6-brightgreen" alt="最新版本：v0.1.6"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/platforms-iOS%2016%2B%20%C2%B7%20Windows%2010%2F11%20%C2%B7%20macOS%2013%2B-blue" alt="平台：iOS 16+、Windows 10/11、macOS 13+"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/github/downloads/HFYKratos/3ds2apple/total?label=downloads" alt="GitHub 下载量"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/HFYKratos/3ds2apple/ci.yml?branch=main&label=CI" alt="CI 状态"></a>
@@ -28,8 +28,8 @@
 ## 下载
 
 <p align="center">
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.5/3ds2apple-0.1.5-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="下载 Windows 启动器"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.5/3ds2apple-0.1.5-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="下载 macOS 启动器"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="下载 Windows 启动器"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="下载 macOS 启动器"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="在 GitHub 查看全部版本"></a>
 </p>
 
@@ -54,20 +54,29 @@
 
 <p align="center"><sub>合成预览，不含游戏数据：竖屏按键 → 横屏按键 → 暂停菜单虚拟按键选项 → 屏幕布局设置。</sub></p>
 
+## 0.1.6 新特性
+
+- **自定义屏幕布局进 GPU。** 任意矩形、四向屏幕旋转与上下屏交换都由 GPU presenter 绘制，无需屏幕回读——0.1.5 的较慢回读路径已成为历史。
+- **更多屏幕按键。** 快进切换按钮（2x 开/关），以及可编辑的快速存档、快速读档与交换屏幕按钮，与现有虚拟按键并列。
+- **按键显隐按横竖方向。** 「切换控制」现在按当前方向分别编辑；C 杆、ZL、ZR 在横竖两个方向都默认隐藏，竖屏还默认隐藏十字键。大小与透明度仍是全局设置。
+- **全屏布局编辑器不再抖。** 拖动移动、双指缩放，本地预览在松手时一次提交，布局不再抖动；编辑横向布局时强制横屏。
+- **Metal HUD 默认关闭。** 系统 GPU/FPS 浮层从 0.1.6 起默认关闭（已有安装一次性迁移）；可在 设置 → 性能 里打开。
+- **更聪明的 Windows 部署。** 启动器先读取手机已安装的 App 与游戏：已是最新则跳过；覆盖更新保留游戏数据、存档与 ROM；手机上有本机库缺失的游戏时先列出并确认，且绝不会删除。
+
 ## 功能一览
 
 <table>
   <tr>
     <td align="center" width="25%">⚡<br><b>原生 AOT，不是模拟</b><br><sub>每款游戏在运行前都被重新编译成 ARM64；正式路径上既没有 CPU JIT，也没有解释器兜底。</sub></td>
     <td align="center" width="25%">📚<br><b>一个 App，整个游戏库</b><br><sub>勾选的每款游戏都是同一個已签名 App 里的 GamePack；推送的游戏数据在更新后仍然保留。</sub></td>
-    <td align="center" width="25%">🎮<br><b>完整 New 3DS 按键</b><br><sub>十字键、A/B/X/Y、L/R、ZL/ZR、Start/Select、真模拟量 Circle Pad 与 C 杆；支持 MFi、Xbox、DualSense 手柄。</sub></td>
-    <td align="center" width="25%">🧭<br><b>横屏 6 种 + 竖屏 3 种布局</b><br><sub>预设排列由 GPU presenter 绘制，每帧零回读；自定义矩形可实时预览。</sub></td>
+    <td align="center" width="25%">🎮<br><b>完整 New 3DS 按键</b><br><sub>十字键、A/B/X/Y、L/R、ZL/ZR、Start/Select、真模拟量 Circle Pad 与 C 杆；可编辑的快进、快速存档、快速读档与交换屏幕按钮；支持 MFi、Xbox、DualSense 手柄。</sub></td>
+    <td align="center" width="25%">🧭<br><b>横屏 6 种 + 竖屏 3 种布局，全部走 GPU</b><br><sub>横屏 6 种、竖屏 3 种预设，加上任意自定义矩形——全部由 GPU presenter 绘制、每帧零回读；含四向旋转与上下屏交换。</sub></td>
   </tr>
   <tr>
     <td align="center" width="25%">✏️<br><b>游戏内编辑按键布局</b><br><sub>暂停后在画面上拖动按键，点中央「完成」保存；支持逐键显隐、10%–200% 大小与透明度。</sub></td>
     <td align="center" width="25%">💾<br><b>存档与即时存档</b><br><sub>电池存档保存在 App 容器内，每款游戏三个即时存档槽，存档管理器可导出与导入存档。</sub></td>
-    <td align="center" width="25%">⏩<br><b>快进、帧率与 HUD</b><br><sub>1x/2x/4x 快进、可选的帧率胶囊、系统 Metal HUD，以及一键导出诊断。</sub></td>
-    <td align="center" width="25%">🖥️<br><b>Windows 与 macOS 启动器</b><br><sub>在同一个窗口里导入 → 编译 → 签名 → 安装 → 推送；Windows 路径不需要 Mac。</sub></td>
+    <td align="center" width="25%">⏩<br><b>快进、帧率与 HUD</b><br><sub>2x 快进切换按钮、可编辑的快速存档与快速读档、可选的帧率胶囊、系统 Metal HUD（默认关闭），以及一键导出诊断。</sub></td>
+    <td align="center" width="25%">🖥️<br><b>Windows 与 macOS 启动器</b><br><sub>在同一个窗口里导入 → 编译 → 签名 → 安装 → 推送；Windows 路径不需要 Mac，并支持保留游戏数据的增量部署。</sub></td>
   </tr>
 </table>
 
@@ -80,7 +89,7 @@
 
 **混合式屏幕**是一个大的上屏加右侧上下两个小屏；竖屏**默认**把上屏满宽放在下屏上方。
 
-所有预设排列都由 GPU presenter 绘制——走 Metal 路径，每帧零屏幕回读。**自定义布局**把两块屏幕放在任意矩形：可以在数值页按百分比编辑 X/Y/宽/高（下方实时预览），也可以拖动屏幕；它从下一次加载游戏起生效，并走屏幕回读路径，因此比预设慢，预设始终留在 GPU 路径上。
+所有预设排列都由 GPU presenter 绘制——走 Metal 路径，每帧零屏幕回读。**自定义布局**把两块屏幕放在任意矩形：可以在数值页按百分比编辑 X/Y/宽/高（下方实时预览），也可以拖动屏幕；自定义布局同样由 GPU presenter 绘制（任意矩形、四向旋转与上下屏交换），不再退回较慢的回读路径。自定义布局仍从下一次加载游戏起生效。
 
 屏幕旋转与界面方向保留，渲染分辨率（1x–4x）仍在下次载入游戏时生效。0.1.5 已移除旧的画面比例与整数缩放开关。
 
@@ -93,18 +102,19 @@
 暂停游戏后的 **虚拟按键选项** 卡负责自定义：
 
 - **显示/隐藏虚拟按键**、显示帧率、触摸反馈。
+- **屏幕按键**——快进切换按钮（2x 开/关），以及可编辑的快速存档、快速读档与交换屏幕按钮。
 - **编辑布局**——在暂停画面上直接拖动按键；中央 **完成** 保存当前方向并继续游戏。
-- **切换控制**——逐键显隐。
-- **调整大小**——每个按钮或组 10%–200%，默认 100%。
+- **切换控制**——按当前方向分别设置显隐：C 杆、ZL、ZR 两个方向都默认隐藏，十字键竖屏默认隐藏。
+- **调整大小**——每个按钮或组 10%–200%，默认 100%（全局）。
 - **调整透明度** 与 **重置**。
 
-显隐与大小是全局设置，横竖屏位置各自独立。C 杆需要游戏本身读取 New 3DS 摇杆，且壳必须用当前运行库构建（用 `scripts/build-zakuro-ios.sh` 从源码构建的壳已包含）。
+显隐按横竖方向分别设置（「切换控制」编辑当前方向）；大小与透明度是全局设置，横竖屏位置各自独立。C 杆需要游戏本身读取 New 3DS 摇杆，且壳必须用当前运行库构建（用 `scripts/build-zakuro-ios.sh` 从源码构建的壳已包含）。
 
 ## 游戏内编辑布局
 
 暂停任意游戏后打开 **虚拟按键选项 → 编辑布局**：每个控件都有自己的命中区，你拖动的就是抓住的那一个；中央 **完成** 保存当前方向并继续游戏。同一张卡里还有逐键显隐、10%–200% 大小与透明度，以及 **重置**。竖屏与横屏的位置分开保存。
 
-屏幕布局在 **设置 → 显示 → 屏幕布局** 里单独编辑：按百分比填 X/Y/宽/高并提供实时预览，或者直接拖动。预设立即生效；自定义屏幕布局从下一次加载游戏起生效。
+屏幕布局在 **设置 → 显示 → 屏幕布局** 里单独编辑：按百分比填 X/Y/宽/高并提供实时预览，或使用全屏拖拽编辑器（拖动移动、双指缩放；预览跟手、松手才提交，布局不再抖动）。编辑横向自定义布局时会强制横屏。预设立即生效；自定义屏幕布局从下一次加载游戏起生效。
 
 ## 截图
 
@@ -166,9 +176,9 @@
 
 维护者在真机 iPhone 上经 Windows 启动器链路运行**某款商业游戏**实测约 57–60 fps，AOT 100%，Metal GPU 渲染；这只是维护者对那一款游戏的实测，不是保证——兼容性与性能因游戏而异。
 
-### 为什么自定义屏幕布局更慢？
+### 自定义屏幕布局比预设慢吗？
 
-自定义布局走屏幕回读路径，而所有预设都留在 GPU presenter 路径上、每帧零回读。自定义布局也要从下一次加载游戏起生效。
+不再慢了。从 0.1.6 起，自定义布局也由 GPU presenter 绘制——任意矩形、四向旋转与上下屏交换——与预设一样走零回读的 Metal 路径。自定义布局仍从下一次加载游戏起生效。
 
 ## 法律与限制
 
@@ -176,7 +186,7 @@
 - **无关联、无背书。** 3ds2apple 与 Nintendo、Apple 均无关联、未获赞助或背书，也不通过 App Store 分发；请用你自己的 Apple ID 签名并安装。
 - **不做保证。** 兼容性与性能因游戏而异：部分游戏可能无法启动或渲染异常，个别游戏的某些菜单也可能渲染异常（issue [#2](https://github.com/HFYKratos/3ds2apple/issues/2)）。不提供兼容性或性能保证。
 - **macOS 是开发者预览。** 分发包尚不自包含，真机安装也还未由维护者验证（issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)）；Windows 是已验证路径。
-- **自定义屏幕布局是性能取舍。** 它走屏幕回读路径，比预设慢，并从下一次加载游戏起生效。
+- **自定义屏幕布局自 0.1.6 起走 GPU 路径。** 任意矩形、四向旋转与上下屏交换都由 GPU presenter 绘制（0.1.5 及更早使用较慢的回读路径）；自定义布局仍从下一次加载游戏起生效。
 - **设计上没有 CPU JIT。** 正式路径是 AOT 代码 + Zakuro HLE 运行时，没有解释器兜底。
 
 ## 项目链接
@@ -209,7 +219,7 @@
 1. 下载 `3ds2apple-<version>-windows-x64.zip`，解压到可写目录（不要放 `Program Files`）。安装 *Apple 设备*，保证手机可通过 USB 访问。
 2. 运行 `3ds2apple-launcher.exe`（未做代码签名；校验 digest 后在 SmartScreen 选 *更多信息 → 仍要运行*）。先跑一次 设置 → 自检，应为绿色。
 3. **游戏库 → 导入** 你自有的已解密 `.3ds`/`.cci`；只读取 ROM 头与 SMDH 图标/元数据。
-4. **部署**：勾选游戏后按唯一的一键部署按钮。启动器为每个游戏编译 GamePack、合成不含 ROM 的 IPA、用内置 Impactor（登录你自己的 Apple ID）签名安装，然后只推送游戏数据。
+4. **部署**：勾选游戏后按唯一的一键部署按钮。启动器为每个游戏编译 GamePack、合成不含 ROM 的 IPA、用内置 Impactor（登录你自己的 Apple ID）签名安装，然后只推送游戏数据。启动器会先检查手机：若已安装的 App 与所选游戏都是最新，就完全跳过部署；覆盖更新保留游戏数据、存档与 ROM；若手机上有本机库缺失的游戏，会列出并在更新前询问（绝不会删除这些数据）。
 5. 在手机上打开 App 开玩。增删游戏重新部署即可；已推送数据在重装后保留，彻底卸载 App 会清空。
 
 ### macOS 启动器
@@ -259,7 +269,7 @@ bash scripts/tests/desktop-aot-selfcheck.sh
 
 ### 原生移植，不是模拟器
 
-每款游戏都会被提前重编译：3DS 代码先由 3dsrecomp 翻成 C，再用本机的 LLVM 或 Apple clang 工具链编译成 ARM64 `GamePack`。手机通过 Zakuro HLE 运行时直接执行这些原生代码——没有 CPU JIT，也没有解释器兜底。PICA200 GPU 路径由 MoltenVK 转成 Metal，预设屏幕布局由 GPU presenter 直接画到 `CAMetalLayer`，每帧零屏幕回读（自定义屏幕布局会回读两块屏幕）。
+每款游戏都会被提前重编译：3DS 代码先由 3dsrecomp 翻成 C，再用本机的 LLVM 或 Apple clang 工具链编译成 ARM64 `GamePack`。手机通过 Zakuro HLE 运行时直接执行这些原生代码——没有 CPU JIT，也没有解释器兜底。PICA200 GPU 路径由 MoltenVK 转成 Metal，所有屏幕布局（预设与自定义矩形）都由 GPU presenter 直接画到 `CAMetalLayer`，每帧零屏幕回读。
 
 ### 一个 App，装下整个游戏库
 
@@ -271,13 +281,13 @@ bash scripts/tests/desktop-aot-selfcheck.sh
 
 Windows 与 macOS 各有一个启动器。导入你自有的已解密 `.3ds`/`.cci`，勾选游戏，按唯一的一键部署按钮：启动器编译 GamePack、合成不含 ROM 的基础壳 IPA、用你自己的 Apple ID 签名安装（Windows 用内置官方 Impactor/plumesign，macOS 用 Xcode 自动签名），然后只把 `GameRom.cci` + `GameInfo.json` 推送到 App 的 Documents 目录。
 
-启动器会把数据放在 exe/.app 旁的便携目录，读取 ROM 的 SMDH 元数据（图标、本地化名称、发行商），检测编译硬件并自动并行 3dsrecomp，还会显示启动就绪灯与自检——缺工具时不会在部署中途静默失败。
+启动器会把数据放在 exe/.app 旁的便携目录，读取 ROM 的 SMDH 元数据（图标、本地化名称、发行商），检测编译硬件并自动并行 3dsrecomp，还会显示启动就绪灯与自检——缺工具时不会在部署中途静默失败。Windows 的部署是设备感知的：先读取手机已安装的 App 与游戏，已是最新则跳过；覆盖更新会保留游戏数据与存档；手机上有本机库缺失的游戏时会列出并在更新前询问——这些数据绝不会被删除。
 
 ### 游戏画面上的显示
 
 画面铺满整屏：没有标题栏、卡片边框或游戏名。App 自己在画面上的元素只有 **帧率（FPS）胶囊**（默认开启，浮在右上安全区）、悬浮暂停按钮和虚拟按键；帧率可在暂停菜单的 **虚拟按键选项** 里关掉。其余信息都不画在画面上：AOT 状态、渲染路径、Metal HUD 状态和各阶段帧耗时只写入设备日志与诊断报告（设置里的「关于」页仍保留运行状态摘要供排查，但不会盖在游戏上）。
 
-设置页也已去掉旧的「Metal backend」信息行和「首次载入图形预热」开关：游戏加载完立即显示，运行库的管线缓存仍会让同一游戏的后续加载变快。Apple 自己的系统 Metal HUD 开关（GPU/FPS 浮层）仍保留在 设置 → 性能。
+设置页也已去掉旧的「Metal backend」信息行和「首次载入图形预热」开关：游戏加载完立即显示，运行库的管线缓存仍会让同一游戏的后续加载变快。Apple 自己的系统 Metal HUD 开关（GPU/FPS 浮层）自 0.1.6 起默认关闭，位于 设置 → 性能。
 
 ### 实测数据
 
@@ -302,7 +312,7 @@ licenses/          第三方许可文本（Impactor MIT、apple-codesign MPL-2.0
 ## 实话实说的边界
 
 - **兼容性因游戏而异。** 部分游戏可能无法启动或渲染异常，个别游戏的某些菜单也可能渲染异常（issue [#2](https://github.com/HFYKratos/3ds2apple/issues/2)）；欢迎带上 title ID 反馈——见[问题反馈与性能数据](#问题反馈与性能数据)。
-- **自定义屏幕布局是性能取舍。** 任意矩形走屏幕回读路径（GPU presenter 只绘制固定的一组预设排列），从下一次加载游戏起生效，比预设慢；预设布局仍走 GPU 路径。
+- **自定义屏幕布局自 0.1.6 起走 GPU 路径。** 任意矩形、四向旋转与上下屏交换都由 GPU presenter 绘制；0.1.5 及更早走屏幕回读路径。自定义布局仍从下一次加载游戏起生效。
 - **C 杆依赖游戏支持。** 它通过 New 3DS 摇杆 API 上报；不读取该摇杆的游戏会忽略它，用旧运行库构建的壳也不提供它。
 - **国行 iPhone 首次弹出键盘时可能询问「无线数据」。** 这是 iOS 的已知系统问题：系统文本输入首次出现时（例如游戏内键盘覆盖层），UIKit 内部的听写/网络路径自检会被系统归因到 App，于是弹出「允许使用无线数据」。本应用不发起任何网络请求、蜂窝数据用量为 0，选*不允许*或*仅限无线局域网*即可，功能不受影响（重装后可能再次出现）。详见 [ios/app/README.md](ios/app/README.md)。
 - **旧安装与旧推送仍然兼容。** `GameInfo.json` 只新增了可选字段（schema 版本仍为 1），0.1.0 启动器推送的数据仍能校验并运行；在重新部署之前，卡片没有发行商、没有真实 SMDH 图标、也没有大小。从 0.1.0 升级上来的 App 会保留游戏库与存档。

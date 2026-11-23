@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.5"><img src="https://img.shields.io/badge/release-v0.1.5-brightgreen" alt="Latest release: v0.1.5"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6"><img src="https://img.shields.io/badge/release-v0.1.6-brightgreen" alt="Latest release: v0.1.6"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/platforms-iOS%2016%2B%20%C2%B7%20Windows%2010%2F11%20%C2%B7%20macOS%2013%2B-blue" alt="Platforms: iOS 16+, Windows 10/11, macOS 13+"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/github/downloads/HFYKratos/3ds2apple/total?label=downloads" alt="GitHub downloads"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/HFYKratos/3ds2apple/ci.yml?branch=main&label=CI" alt="CI status"></a>
@@ -28,8 +28,8 @@
 ## Download
 
 <p align="center">
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.5/3ds2apple-0.1.5-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download the Windows launcher"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.5/3ds2apple-0.1.5-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download the macOS launcher"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download the Windows launcher"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download the macOS launcher"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="All releases on GitHub"></a>
 </p>
 
@@ -54,20 +54,29 @@
 
 <p align="center"><sub>Synthetic preview, no game data: portrait controls → landscape controls → pause-menu Virtual controls → screen-layout settings.</sub></p>
 
+## What's new in 0.1.6
+
+- **Custom screen layouts on the GPU.** Arbitrary rectangles, four-way screen rotation and top/bottom screen swap are drawn by the GPU presenter with no screen readback — the slower readback path from 0.1.5 is gone.
+- **More on-screen buttons.** A Fast-forward toggle (2x on/off) plus editable Quick save, Quick load and Swap screens buttons, next to the existing pad.
+- **Per-orientation control visibility.** Toggle controls now edits each orientation separately; C-stick, ZL and ZR start hidden in both, and the D-pad starts hidden in portrait. Size and opacity stay global.
+- **A full-screen layout editor that doesn't fight you.** Drag to move and pinch to resize, with a local preview that commits when the gesture ends, so the layout no longer jitters; editing a landscape layout forces landscape.
+- **Metal HUD off by default.** The system GPU/FPS overlay starts off in 0.1.6 (existing installs migrate once); turn it on in Settings → Performance.
+- **A smarter Windows deploy.** The launcher reads the phone's installed app and games first: already up to date → skip; an overwrite update keeps game data, saves and ROMs; phone games missing from the local library are listed and confirmed before an update — and never deleted.
+
 ## Features at a glance
 
 <table>
   <tr>
     <td align="center" width="25%">⚡<br><b>Native AOT, not emulation</b><br><sub>Every game is recompiled to ARM64 before it runs. No CPU JIT, no interpreter fallback on the shipping path.</sub></td>
     <td align="center" width="25%">📚<br><b>One app, your whole library</b><br><sub>Each selected title is a GamePack inside one signed app; pushed game data survives updates.</sub></td>
-    <td align="center" width="25%">🎮<br><b>Full New 3DS controls</b><br><sub>D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a real analog Circle Pad and the C-stick; MFi, Xbox and DualSense controllers.</sub></td>
-    <td align="center" width="25%">🧭<br><b>6 landscape + 3 portrait layouts</b><br><sub>Presets are drawn by the GPU presenter with zero per-frame readback; custom rectangles get a live preview.</sub></td>
+    <td align="center" width="25%">🎮<br><b>Full New 3DS controls</b><br><sub>D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a real analog Circle Pad and the C-stick; editable Fast-forward, Quick save, Quick load and Swap screens buttons; MFi, Xbox and DualSense controllers.</sub></td>
+    <td align="center" width="25%">🧭<br><b>6 + 3 layouts, all on the GPU</b><br><sub>Six landscape and three portrait presets plus custom rectangles — all drawn by the GPU presenter with zero per-frame readback; four-way rotation and screen swap included.</sub></td>
   </tr>
   <tr>
     <td align="center" width="25%">✏️<br><b>Edit controls in-game</b><br><sub>Pause, drag controls over the picture and tap Done; per-button visibility, 10%–200% size and opacity.</sub></td>
     <td align="center" width="25%">💾<br><b>Saves and save states</b><br><sub>Battery saves in the app container, three instant save-state slots per game, save export and import in the Save Manager.</sub></td>
-    <td align="center" width="25%">⏩<br><b>Fast-forward, FPS and HUD</b><br><sub>1x/2x/4x fast-forward, an optional FPS pill, the system Metal HUD and one-tap diagnostics export.</sub></td>
-    <td align="center" width="25%">🖥️<br><b>Windows and macOS launchers</b><br><sub>Import → compile → sign → install → push from one window; the Windows path needs no Mac.</sub></td>
+    <td align="center" width="25%">⏩<br><b>Fast-forward, FPS and HUD</b><br><sub>A 2x Fast-forward toggle, editable Quick save and Quick load, an optional FPS pill, the system Metal HUD (off by default) and one-tap diagnostics export.</sub></td>
+    <td align="center" width="25%">🖥️<br><b>Windows and macOS launchers</b><br><sub>Import → compile → sign → install → push from one window; the Windows path needs no Mac and deploys incrementally without touching game data.</sub></td>
   </tr>
 </table>
 
@@ -80,7 +89,7 @@
 
 **Hybrid** shows one large top screen with two small screens stacked beside it; the portrait **Default** places the top screen full width above the bottom screen.
 
-All preset arrangements are drawn by the GPU presenter — the Metal path with zero per-frame screen readback. **Custom layout** places each screen at its own rectangle: edit X/Y/width/height percentages with a live preview under the fields, or drag the screens; it applies from the next game load and uses the screen-readback path, so it is slower than the presets, which stay on the GPU path.
+All preset arrangements are drawn by the GPU presenter — the Metal path with zero per-frame screen readback. **Custom layout** places each screen at its own rectangle: edit X/Y/width/height percentages with a live preview under the fields, or drag the screens; custom layouts are drawn by the GPU presenter too (arbitrary rectangles, four-way rotation and top/bottom screen swap), so nothing falls back to a slower readback path. A custom layout still applies from the next game load.
 
 Screen rotation and interface orientation are kept, and render resolution (1x–4x) still applies on the next game load. 0.1.5 removed the old aspect-ratio and integer-scaling switches.
 
@@ -93,18 +102,19 @@ A hardware controller's left stick feeds the Circle Pad and its right stick feed
 The paused game's **Virtual controls** card is where the pad is customised:
 
 - **Show/hide the pad**, show the FPS readout, haptics.
+- **On-screen buttons** — a Fast-forward toggle (2x on/off) plus editable Quick save, Quick load and Swap screens buttons.
 - **Edit layout** — drag the controls over the paused picture; the centred **Done** saves the current orientation and resumes.
-- **Toggle controls** — per-button visibility.
-- **Adjust size** — 10%–200% per button or group, 100% default.
+- **Toggle controls** — visibility is per orientation: C-stick, ZL and ZR start hidden in both, the D-pad starts hidden in portrait.
+- **Adjust size** — 10%–200% per button or group, 100% default (global).
 - **Adjust opacity** and **Reset**.
 
-Visibility and size are global; portrait and landscape positions stay separate. The C-stick needs a game that uses the New 3DS nub, and a shell built with the current runtime (building `scripts/build-zakuro-ios.sh` from source includes it).
+Visibility is per orientation (the Toggle controls sheet edits the current one); size and opacity are global, and portrait and landscape positions stay separate. The C-stick needs a game that uses the New 3DS nub, and a shell built with the current runtime (building `scripts/build-zakuro-ios.sh` from source includes it).
 
 ## Edit layout in-game
 
 Pause any game and open **Virtual controls → Edit layout**: every control has its own hit area, so you drag just the one you grabbed over the paused picture, and the centred **Done** saves the current orientation and resumes. The same card gives per-button visibility, 10%–200% size and opacity, and **Reset** restores the defaults. Portrait and landscape positions are stored separately.
 
-Screen layouts are edited separately under **Settings → Display → Screen layout**, by percentage fields with a live preview or by dragging. Presets apply immediately; a custom screen layout applies from the next game load.
+Screen layouts are edited separately under **Settings → Display → Screen layout**, by percentage fields with a live preview or in the full-screen drag editor (drag to move, pinch to resize; the preview follows your finger and commits when the gesture ends, so the layout no longer jitters). Editing a landscape custom layout switches the app to landscape. Presets apply immediately; a custom screen layout applies from the next game load.
 
 ## Screenshots
 
@@ -166,9 +176,9 @@ Game data lives in `Documents/Games/<TITLEID>/` and saves/save states live in th
 
 On a physical iPhone, **one retail title** run through the Windows launcher path measured about 57-60 fps with AOT 100% and the Metal GPU renderer by the maintainers; that is one title, not a guarantee — compatibility and performance are per game.
 
-### Why is a custom screen layout slower?
+### Are custom screen layouts slower than the presets?
 
-A custom layout uses the screen-readback path, while every preset stays on the GPU presenter path with zero per-frame readback. Custom layouts also apply from the next game load.
+No longer. Since 0.1.6 the GPU presenter draws custom layouts too — arbitrary rectangles, four-way rotation and top/bottom screen swap — so they stay on the same zero-readback Metal path as the presets. A custom layout still applies from the next game load.
 
 ## Legal and limits
 
@@ -176,7 +186,7 @@ A custom layout uses the screen-readback path, while every preset stays on the G
 - **No endorsement.** 3ds2apple is not affiliated with, sponsored or endorsed by Nintendo or Apple, and it is not distributed on the App Store. You sign and install it with your own Apple ID.
 - **No guarantees.** Compatibility and performance are per game: some titles may fail to boot or render incorrectly, and some menus in some titles can render incorrectly (issue [#2](https://github.com/HFYKratos/3ds2apple/issues/2)). Compatibility and performance are not guaranteed.
 - **macOS is a developer preview.** Its package is not self-contained and its real-device install is not yet verified by the maintainers (issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)); the Windows path is verified.
-- **Custom screen layouts are a trade-off.** They use the screen-readback path, are slower than the presets and apply from the next game load.
+- **Custom screen layouts are on the GPU path since 0.1.6.** Arbitrary rectangles, four-way rotation and screen swap are drawn by the GPU presenter (0.1.5 and earlier used a slower readback path); a custom layout still applies from the next game load.
 - **No CPU JIT by design.** The shipping path is AOT code plus the Zakuro HLE runtime; there is no interpreter fallback.
 
 ## Project links
@@ -209,7 +219,7 @@ A custom layout uses the screen-readback path, while every preset stays on the G
 1. Download `3ds2apple-<version>-windows-x64.zip` and extract it into a writable folder (not `Program Files`). Install *Apple Devices* so the phone is reachable over USB.
 2. Run `3ds2apple-launcher.exe` (not code-signed; check the digest, then *More info → Run anyway*). Run Settings → self-test once and expect it green.
 3. **Library → Import** your own decrypted `.3ds`/`.cci`; only the ROM header and SMDH icon/metadata are read.
-4. **Deploy**: select the games and press the single deploy button. The launcher compiles one GamePack per game, composes a ROM-free IPA, signs and installs it with the bundled Impactor (sign in with your own Apple ID), then pushes only the game data.
+4. **Deploy**: select the games and press the single deploy button. The launcher compiles one GamePack per game, composes a ROM-free IPA, signs and installs it with the bundled Impactor (sign in with your own Apple ID), then pushes only the game data. The launcher checks the phone first: if the installed app and the selected games are already current it skips the deploy entirely; an overwrite update keeps game data, saves and ROMs; if the phone has games that are not in your local library, it lists them and asks before updating (it never deletes them).
 5. Open the app on the phone and play. Deploy again to add or remove games; pushed game data stays across reinstalls, a clean uninstall clears it.
 
 ### macOS launcher
@@ -259,7 +269,7 @@ bash scripts/tests/desktop-aot-selfcheck.sh
 
 ### A native port, not an emulator
 
-Each game is recompiled ahead of time: the 3DS code is translated to C by 3dsrecomp and built into an ARM64 `GamePack` on your own computer with a local LLVM or Apple clang toolchain. The phone runs that native code directly through the Zakuro HLE runtime — there is no CPU JIT and no interpreter fallback. The PICA200 GPU path is translated to Metal by MoltenVK, and the GPU presenter draws the preset screen layouts straight to a `CAMetalLayer` with zero per-frame screen readback (custom screen layouts read the two screens back).
+Each game is recompiled ahead of time: the 3DS code is translated to C by 3dsrecomp and built into an ARM64 `GamePack` on your own computer with a local LLVM or Apple clang toolchain. The phone runs that native code directly through the Zakuro HLE runtime — there is no CPU JIT and no interpreter fallback. The PICA200 GPU path is translated to Metal by MoltenVK, and the GPU presenter draws every screen layout — presets and custom rectangles alike — straight to a `CAMetalLayer` with zero per-frame screen readback.
 
 ### One app, your whole library
 
@@ -271,13 +281,13 @@ Each library card is built from what the launcher already read out of the ROM at
 
 There is a launcher for Windows and one for macOS. Import your own decrypted `.3ds`/`.cci`, pick the games and press the one deploy button: the launcher compiles the GamePacks, composes a ROM-free base IPA, signs and installs it with your own Apple ID (bundled official Impactor/plumesign on Windows, Xcode automatic signing on macOS), then pushes only `GameRom.cci` + `GameInfo.json` into the app Documents folder.
 
-The launchers keep a portable data folder beside the executable/.app, read the ROM SMDH metadata (icon, localized name, publisher), detect the compile hardware and parallelise 3dsrecomp automatically, and show a startup readiness light plus a self-test so a missing tool never fails a deploy silently.
+The launchers keep a portable data folder beside the executable/.app, read the ROM SMDH metadata (icon, localized name, publisher), detect the compile hardware and parallelise 3dsrecomp automatically, and show a startup readiness light plus a self-test so a missing tool never fails a deploy silently. On Windows, Deploy is device-aware: it reads the installed app and pushed games first, skips the work when the phone is already up to date, keeps game data and saves when it overwrites an app, and lists/asks about phone games missing from the local library before updating — their data is never deleted.
 
 ### What the phone shows while you play
 
 The picture is full-bleed: no title bar, card border or game name. The app's own game-view overlay is a single **FPS pill**, on by default and floating in the top-right safe-area corner over the picture, plus the floating pause button and the on-screen controls; turn the pill off in the pause menu's **Virtual controls** card. Everything else is kept out of the game view: the AOT state, the renderer path, the Metal HUD state and the per-phase frame timings are recorded in the device log and the diagnostics report (the About page repeats the runtime summary for diagnostics, but nothing is drawn over the game).
 
-The Settings page no longer shows the old "Metal backend" info row and no longer has a first-load graphics warm-up switch: a game is revealed as soon as it loads, and the runtime's pipeline cache still makes later loads of the same title warm. Apple's separate system Metal HUD switch (the GPU/FPS overlay) is still in Settings → Performance.
+The Settings page no longer shows the old "Metal backend" info row and no longer has a first-load graphics warm-up switch: a game is revealed as soon as it loads, and the runtime's pipeline cache still makes later loads of the same title warm. Apple's separate system Metal HUD switch (the GPU/FPS overlay) is off by default since 0.1.6 and lives in Settings → Performance.
 
 ### Real numbers
 
@@ -302,7 +312,7 @@ licenses/          third-party license texts (Impactor MIT, apple-codesign MPL-2
 ## Honest boundaries
 
 - **Compatibility is per game.** Some titles may fail to boot or render incorrectly, and some menus in some titles can render incorrectly (issue [#2](https://github.com/HFYKratos/3ds2apple/issues/2)); reports with the title ID are welcome — see [Issue reports and performance data](#issue-reports-and-performance-data).
-- **A custom screen layout is a performance trade-off.** Arbitrary rectangles run on the screen-readback path (the GPU presenter draws a fixed set of preset arrangements), apply from the next game load and are slower than the presets, which stay on the GPU path.
+- **Custom screen layouts are on the GPU path since 0.1.6.** Arbitrary rectangles, four-way rotation and top/bottom screen swap are drawn by the GPU presenter; 0.1.5 and earlier used the screen-readback path. A custom layout still applies from the next game load.
 - **The C-stick depends on the game.** It is reported through the New 3DS nub API; a title that never reads the nub ignores it, and a shell built from an older runtime does not provide it.
 - **A mainland-China iPhone can ask for "wireless data" on the first text input.** This is a known iOS quirk: when the system text input first appears (for example the in-game keyboard overlay), UIKit's own dictation/network path check is attributed to the app, so iOS shows its "allow wireless data" alert. 3ds2apple makes no network requests and its cellular data usage stays at 0 — choose *Don't Allow* or *Wi-Fi only* and everything keeps working (a reinstall can show the alert again). Details in [ios/app/README.md](ios/app/README.md).
 - **Older installs and older pushes keep working.** `GameInfo.json` only gained optional fields (schema version stays 1), so game data pushed by a 0.1.0 launcher still validates and plays — until you redeploy, the card has no publisher, no real SMDH icon and no size. An app updated from 0.1.0 keeps its library and saves.

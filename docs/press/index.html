@@ -40,7 +40,7 @@
         <path d="M16 44h32l4 8H12z" fill="#efe2ff" opacity=".92"/>
       </svg>
       <span class="brand-name">3ds2apple</span>
-      <span class="brand-ver">v0.1.5</span>
+      <span class="brand-ver">v0.1.6</span>
     </a>
     <nav class="site-nav" aria-label="Primary">
       <a href="../">Home</a>
@@ -62,8 +62,8 @@
       <h1>Press kit</h1>
       <p class="lede">Everything needed to write about 3ds2apple: fact sheet, quote-ready descriptions in English and Simplified Chinese, release digests, logos, synthetic screenshots and a demo-video shot list.</p>
       <div class="press-meta">
-        <span>Version <b>0.1.5</b></span>
-        <span>Released <b>2026-11-20</b></span>
+        <span>Version <b>0.1.6</b></span>
+        <span>Released <b>2026-11-23</b></span>
         <span>Licence <b>Apache-2.0</b></span>
         <span>Contact <b>GitHub Issues / Discussions</b></span>
         <span>Maintainer <b>HFYKratos</b></span>
@@ -77,7 +77,7 @@
         <div class="card">
           <h3>Download media kit</h3>
           <p>All text, logos, the hero/OG images, the demo GIF and 13 screenshots in one zip.</p>
-          <p class="mono dim" style="font-size:11.5px">media-kit.zip · 2,425,292 B (2.43 MB)</p>
+          <p class="mono dim" style="font-size:11.5px">media-kit.zip · 2,426,393 B (2.43 MB)</p>
           <a class="btn btn-primary" href="media-kit.zip">Download ZIP</a>
         </div>
         <div class="card">
@@ -85,7 +85,7 @@
           <ul>
             <li><a href="https://github.com/HFYKratos/3ds2apple" rel="noopener">GitHub repository</a></li>
             <li><a href="https://github.com/HFYKratos/3ds2apple/releases" rel="noopener">Releases</a></li>
-            <li><a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.5" rel="noopener">v0.1.5 release</a></li>
+            <li><a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6" rel="noopener">v0.1.6 release</a></li>
             <li><a href="https://github.com/HFYKratos/3ds2apple#readme" rel="noopener">README (usage + limits)</a></li>
             <li><a href="https://github.com/HFYKratos/3ds2apple/blob/main/CONTRIBUTING.md" rel="noopener">CONTRIBUTING</a></li>
             <li><a href="../">Public site (EN)</a> · <a href="../zh/" hreflang="zh-Hans" lang="zh-Hans">中文</a></li>
@@ -120,10 +120,11 @@
             <tbody>
               <tr><th>Product</th><td>3ds2apple</td></tr>
               <tr><th>One-liner</th><td>Your own Nintendo 3DS games, running natively on iPhone and iPad.</td></tr>
-              <tr><th>Version</th><td>0.1.5 — released 2026-11-20</td></tr>
+              <tr><th>Version</th><td>0.1.6 — released 2026-11-23</td></tr>
               <tr><th>Platforms</th><td>iPhone / iPad on iOS 16+ · Windows 10/11 launcher · macOS 13+ launcher (Intel + Apple silicon)</td></tr>
               <tr><th>Components</th><td>Windows launcher (C#/Avalonia, single executable) · macOS launcher (SwiftUI, Xcode signing) · iOS app</td></tr>
-              <tr><th>Rendering</th><td>Static recompilation to native ARM64; Metal through MoltenVK; GPU presenter draws the screen-layout presets with zero per-frame readback</td></tr>
+              <tr><th>Rendering</th><td>Static recompilation to native ARM64; Metal through MoltenVK; the GPU presenter draws every screen layout — presets and custom rectangles — with zero per-frame readback</td></tr>
+              <tr><th>0.1.6 highlights</th><td>GPU custom screen layouts with four-way rotation and screen swap; fast-forward toggle; quick save / quick load; swap screens; per-orientation control visibility; full-screen editors; Metal HUD off by default; device-aware incremental Windows deploy</td></tr>
               <tr><th>No JIT</th><td>No CPU JIT and no interpreter fallback on the phone — AOT only</td></tr>
               <tr><th>Licence / price</th><td>Apache-2.0 · free and open source</td></tr>
               <tr><th>Downloads</th><td><a href="https://github.com/HFYKratos/3ds2apple/releases" rel="noopener">GitHub Releases</a> (two platform zips, no game data)</td></tr>
@@ -141,24 +142,24 @@
           <h3>Short — English</h3>
           <div class="copy-block">
             <div class="label">Short · EN · ~60 words</div>
-            <p>3ds2apple is a free, open-source native port that recompiles your own Nintendo 3DS games to native ARM64 ahead of time and runs them on iPhone and iPad — Metal through MoltenVK, no CPU JIT, no interpreter fallback. Windows and macOS launchers handle import, compilation, signing, install and data push. Bring your own legally owned, dumped games. Version 0.1.5, Apache-2.0.</p>
+            <p>3ds2apple is a free, open-source native port that recompiles your own Nintendo 3DS games to native ARM64 ahead of time and runs them on iPhone and iPad — Metal through MoltenVK, no CPU JIT, no interpreter fallback. Windows and macOS launchers handle import, compilation, signing, install and data push. Bring your own legally owned, dumped games. Version 0.1.6, Apache-2.0.</p>
           </div>
           <h3>Short — 简体中文</h3>
           <div class="copy-block zh">
             <div class="label">Short · ZH · 约 100 字</div>
-            <p>3ds2apple 是一款免费开源的原生移植工具：它把你自有的 Nintendo 3DS 游戏提前重编译为原生 ARM64，直接运行在 iPhone 与 iPad 上——图形经 MoltenVK 走 Metal，没有 CPU JIT，也没有解释器兜底。Windows 与 macOS 启动器包办导入、编译、签名、安装与数据推送。请自备合法拥有并自行导出的游戏。当前版本 0.1.5，Apache-2.0。</p>
+            <p>3ds2apple 是一款免费开源的原生移植工具：它把你自有的 Nintendo 3DS 游戏提前重编译为原生 ARM64，直接运行在 iPhone 与 iPad 上——图形经 MoltenVK 走 Metal，没有 CPU JIT，也没有解释器兜底。Windows 与 macOS 启动器包办导入、编译、签名、安装与数据推送。请自备合法拥有并自行导出的游戏。当前版本 0.1.6，Apache-2.0。</p>
           </div>
           <h3>Long — English</h3>
           <div class="copy-block">
             <div class="label">Long · EN · ~190 words</div>
             <p>3ds2apple brings your own Nintendo 3DS games to iPhone and iPad as a native port, not an emulator. Each game is statically recompiled to C on your Windows or macOS computer, built into an ARM64 GamePack with a local LLVM or Apple clang toolchain, and executed natively on the phone through the Zakuro HLE runtime. Graphics take the Metal path via MoltenVK, and the GPU presenter draws the screen-layout presets with no per-frame screen readback. There is no CPU JIT and no interpreter fallback on the device.</p>
-            <p>One signed app holds the whole selected library: every game is its own GamePack plus a GameCatalog, and game data is pushed separately into the app's Documents folder, so adding or removing a title is a re-deploy and pushed data survives reinstalls. The on-screen pad is the complete New 3DS set — D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, an analog Circle Pad and the C-stick — with in-game drag-to-edit layout, per-control visibility, 10–200% sizes and opacity from the pause menu. Version 0.1.5 adds a full-bleed game view, six landscape and three portrait screen layouts, and the Virtual controls card. The Windows launcher is the verified path; the macOS launcher is a developer preview. 3ds2apple is free and open source under Apache-2.0, ships no ROMs, keys, BIOS or game assets, and is not affiliated with Nintendo.</p>
+            <p>One signed app holds the whole selected library: every game is its own GamePack plus a GameCatalog, and game data is pushed separately into the app's Documents folder, so adding or removing a title is a re-deploy and pushed data survives reinstalls. The on-screen pad is the complete New 3DS set — D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, an analog Circle Pad and the C-stick — with in-game drag-to-edit layout, per-control visibility, 10–200% sizes and opacity from the pause menu. Version 0.1.6 adds GPU custom screen layouts with four-way rotation and screen swap, on-screen fast-forward / quick save / quick load / swap-screen buttons, per-orientation control visibility, full-screen editors and a device-aware incremental Windows deploy; 0.1.5 introduced the full-bleed view, the six landscape / three portrait layouts and the Virtual controls card. The Windows launcher is the verified path; the macOS launcher is a developer preview. 3ds2apple is free and open source under Apache-2.0, ships no ROMs, keys, BIOS or game assets, and is not affiliated with Nintendo.</p>
           </div>
           <h3>Long — 简体中文</h3>
           <div class="copy-block zh">
             <div class="label">Long · ZH · 约 300 字</div>
             <p>3ds2apple 以原生移植而非模拟器的方式，把你自有的 Nintendo 3DS 游戏带到 iPhone 与 iPad。每款游戏先在 Windows 或 macOS 电脑上被静态重编译为 C，再由本机 LLVM 或 Apple clang 工具链编译成 ARM64 GamePack，最后通过 Zakuro HLE 运行时在手机上原生执行。图形经 MoltenVK 走 Metal，屏幕布局预设由 GPU presenter 绘制，每帧零屏幕回读；手机端没有 CPU JIT，也没有解释器兜底。</p>
-            <p>一个已签名 App 装下你选定的整个游戏库：每款游戏是独立的 GamePack 加 GameCatalog，游戏数据单独推送到 App 的 Documents 目录，因此增删一款游戏只需重新部署，已推送的数据在重装后仍然保留。屏幕上的虚拟按键是完整的 New 3DS 键位——十字键、A/B/X/Y、L/R、ZL/ZR、Start/Select、真模拟量 Circle Pad 与 C 杆——并可在暂停菜单里游戏内拖动编辑布局、逐键显隐、调整 10%–200% 的大小与透明度。0.1.5 带来全屏游戏画面、横向六种与纵向三种屏幕布局，以及「虚拟按键选项」卡片。Windows 启动器是已验证路径；macOS 启动器为开发者预览。3ds2apple 以 Apache-2.0 免费开源，不附带 ROM、密钥、BIOS 或游戏资源，与 Nintendo 无隶属关系。</p>
+            <p>一个已签名 App 装下你选定的整个游戏库：每款游戏是独立的 GamePack 加 GameCatalog，游戏数据单独推送到 App 的 Documents 目录，因此增删一款游戏只需重新部署，已推送的数据在重装后仍然保留。屏幕上的虚拟按键是完整的 New 3DS 键位——十字键、A/B/X/Y、L/R、ZL/ZR、Start/Select、真模拟量 Circle Pad 与 C 杆——并可在暂停菜单里游戏内拖动编辑布局、逐键显隐、调整 10%–200% 的大小与透明度。0.1.6 带来 GPU 自定义屏幕布局（含四种旋转与屏幕交换）、快进/快速保存/快速读取/交换屏幕按钮、按方向显隐、全屏编辑器与 Windows 增量部署；0.1.5 已带来全屏游戏画面、横向六种与纵向三种屏幕布局，以及「虚拟按键选项」卡片。Windows 启动器是已验证路径；macOS 启动器为开发者预览。3ds2apple 以 Apache-2.0 免费开源，不附带 ROM、密钥、BIOS 或游戏资源，与 Nintendo 无隶属关系。</p>
           </div>
           <p class="fine">Both long descriptions are also included as separate files in the media kit (<code>description-long-en.md</code>, <code>description-long-zh.md</code>).</p>
         </section>
@@ -170,8 +171,12 @@
             <li><strong>Metal via MoltenVK:</strong> the PICA200 GPU path is translated to Metal; the GPU presenter draws the preset screen layouts with zero per-frame screen readback.</li>
             <li><strong>One app, whole library:</strong> one signed app holds every selected game and catalog; only <code>GameRom.cci</code> + <code>GameInfo.json</code> are pushed into Documents.</li>
             <li><strong>Full New 3DS controls:</strong> D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, analog Circle Pad and C-stick, with hardware-controller mapping.</li>
-            <li><strong>Virtual controls card (0.1.5):</strong> show/hide, FPS pill, haptics, in-game drag-to-edit layout with centred Done, per-control toggles, 10–200% size, opacity and reset.</li>
-            <li><strong>Screen layouts (0.1.5):</strong> six landscape presets (Large, Single, Side by side, Hybrid, Original, Custom) and three portrait presets (Default, Original, Custom), set independently.</li>
+            <li><strong>Virtual controls card:</strong> show/hide, FPS pill, haptics, in-game drag-to-edit layout with centred Done, per-control toggles, 10–200% size, opacity and reset. 0.1.6 adds Fast-forward, Quick save, Quick load and Swap screens as editable buttons.</li>
+            <li><strong>Screen layouts:</strong> six landscape presets (Large, Single, Side by side, Hybrid, Original, Custom) and three portrait presets (Default, Original, Custom), set independently. Since 0.1.6 the custom rectangles are GPU presenter arrangements with four-way rotation and screen swap.</li>
+            <li><strong>GPU custom layouts (0.1.6):</strong> arbitrary per-screen rectangles are drawn by the presenter (layout id 8) with no per-frame readback, including all four screen rotations and screen swap.</li>
+            <li><strong>Faster controls (0.1.6):</strong> fast-forward 2× toggle, quick save / quick load, swap screens; per-orientation visibility with C-stick/ZL/ZR hidden by default and the D-pad hidden in portrait.</li>
+            <li><strong>Editors and HUD (0.1.6):</strong> full-screen borderless screen editor and a stationary-canvas control editor that commit once on release; the system Metal HUD is off by default.</li>
+            <li><strong>Incremental Windows deploy (0.1.6):</strong> the launcher reads the phone first; an update overwrite-installs without losing Documents or saves, pushes only missing data and never deletes phone-only game data.</li>
             <li><strong>Full-bleed game view:</strong> no title bar, card border or game name; only the FPS pill, pause button and controls sit over the picture.</li>
             <li><strong>Save states and diagnostics:</strong> pause-menu save/load and a manual diagnostics export with frame timings, stutter counters and both app logs.</li>
           </ul>
@@ -183,14 +188,14 @@
             <thead><tr><th>Asset</th><th>Size</th><th>SHA-256</th></tr></thead>
             <tbody>
               <tr>
-                <th><a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.5/3ds2apple-0.1.5-windows-x64.zip" rel="noopener">3ds2apple-0.1.5-windows-x64.zip</a></th>
-                <td>157,455,106 B<br>(157.5 MB)</td>
-                <td><code style="font-size:11px;word-break:break-all">e37a924e4f4f694544842a908432024d4712c8d7de6cb202506d9762845b2e16</code></td>
+                <th><a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-windows-x64.zip" rel="noopener">3ds2apple-0.1.6-windows-x64.zip</a></th>
+                <td>zip package<br>size on the release page</td>
+                <td><a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6" rel="noopener">SHA-256 on the release page</a></td>
               </tr>
               <tr>
-                <th><a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.5/3ds2apple-0.1.5-macos-universal.zip" rel="noopener">3ds2apple-0.1.5-macos-universal.zip</a></th>
-                <td>5,532,777 B<br>(5.53 MB)</td>
-                <td><code style="font-size:11px;word-break:break-all">bba678ce0862794b2de73a2901bf25410db355900a31c3a50254725cb9e6407c</code></td>
+                <th><a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-macos-universal.zip" rel="noopener">3ds2apple-0.1.6-macos-universal.zip</a></th>
+                <td>zip package<br>size on the release page</td>
+                <td><a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6" rel="noopener">SHA-256 on the release page</a></td>
               </tr>
             </tbody>
           </table>
@@ -351,7 +356,7 @@
     </div>
     <div class="footer-bottom">
       <span>© 2026 3ds2apple contributors · maintained by HFYKratos</span>
-      <span>Press kit · v0.1.5 · <a href="media-kit.zip">media-kit.zip</a></span>
+      <span>Press kit · v0.1.6 · <a href="media-kit.zip">media-kit.zip</a></span>
     </div>
   </div>
 </footer>

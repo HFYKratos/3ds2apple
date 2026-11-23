@@ -4,6 +4,10 @@ All images on this site and in the press kit are **project-owned synthetic media
 commercial game screenshots, logos, box art, ROM data, save data or game assets appear
 anywhere, and no commercial game name is used in any filename, caption or alt text.
 
+The images are unchanged from the synthetic 0.1.5 preview archive and are reused for the
+0.1.6 media kit; no new screenshots were added. The 0.1.6 UI changes are described in the
+text files (and on the site) rather than in new media.
+
 ## Sources
 
 | Committed file | Built from |

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>3ds2apple — run your own Nintendo 3DS games natively on iPhone &amp; iPad</title>
-<meta name="description" content="3ds2apple recompiles your own Nintendo 3DS games to native ARM64 ahead of time and runs them on iPhone and iPad: Metal through MoltenVK, no CPU JIT, no interpreter fallback. Windows and macOS launchers, Apache-2.0, version 0.1.5.">
+<meta name="description" content="3ds2apple recompiles your own Nintendo 3DS games to native ARM64 ahead of time and runs them on iPhone and iPad: Metal through MoltenVK, no CPU JIT, no interpreter fallback. Windows and macOS launchers, Apache-2.0, version 0.1.6.">
 <meta name="keywords" content="3ds2apple, Nintendo 3DS on iPhone, Nintendo 3DS on iPad, 3DS native port, AOT recompilation, ARM64, Metal, MoltenVK, no JIT, iOS 16, homebrew, Apache-2.0, bring your own games">
 <meta name="author" content="HFYKratos">
 <meta name="robots" content="index, follow">
@@ -20,7 +20,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="3ds2apple">
 <meta property="og:title" content="3ds2apple — your own 3DS games, native on iPhone &amp; iPad">
-<meta property="og:description" content="AOT-compiled ARM64 Nintendo 3DS games on iPhone and iPad: Metal via MoltenVK, no CPU JIT, no interpreter fallback. Bring your own legally owned, dumped games. v0.1.5, Apache-2.0.">
+<meta property="og:description" content="AOT-compiled ARM64 Nintendo 3DS games on iPhone and iPad: Metal via MoltenVK, no CPU JIT, no interpreter fallback. Bring your own legally owned, dumped games. v0.1.6, Apache-2.0.">
 <meta property="og:url" content="https://hfykratos.github.io/3ds2apple/">
 <meta property="og:image" content="https://hfykratos.github.io/3ds2apple/assets/og.png">
 <meta property="og:image:type" content="image/png">
@@ -29,7 +29,7 @@
 <meta property="og:image:alt" content="3ds2apple: a synthetic portrait preview and landscape preview on a dark grid background.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="3ds2apple — native 3DS games on iPhone &amp; iPad">
-<meta name="twitter:description" content="AOT ARM64 recompilation, Metal via MoltenVK, no CPU JIT. Bring your own games. Version 0.1.5, Apache-2.0.">
+<meta name="twitter:description" content="AOT ARM64 recompilation, Metal via MoltenVK, no CPU JIT. Bring your own games. Version 0.1.6, Apache-2.0.">
 <meta name="twitter:image" content="https://hfykratos.github.io/3ds2apple/assets/og.png">
 <meta name="twitter:image:alt" content="3ds2apple: your own Nintendo 3DS games, native on iPhone and iPad.">
 <script type="application/ld+json">
@@ -42,8 +42,8 @@
   "description": "Recompiles your own Nintendo 3DS games to native ARM64 ahead of time and runs them on iPhone and iPad with Metal via MoltenVK, no CPU JIT and no interpreter fallback.",
   "url": "https://hfykratos.github.io/3ds2apple/",
   "downloadUrl": "https://github.com/HFYKratos/3ds2apple/releases",
-  "softwareVersion": "0.1.5",
-  "datePublished": "2026-11-20",
+  "softwareVersion": "0.1.6",
+  "datePublished": "2026-11-23",
   "license": "https://www.apache.org/licenses/LICENSE-2.0",
   "isAccessibleForFree": true,
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -64,10 +64,11 @@
         <path d="M16 44h32l4 8H12z" fill="#efe2ff" opacity=".92"/>
       </svg>
       <span class="brand-name">3ds2apple</span>
-      <span class="brand-ver">v0.1.5</span>
+      <span class="brand-ver">v0.1.6</span>
     </a>
     <nav class="site-nav" aria-label="Primary">
       <a href="#why">Why native</a>
+      <a href="#whats-new">What&rsquo;s new</a>
       <a href="#features">Features</a>
       <a href="#layouts">Layouts</a>
       <a href="#controls">Controls</a>
@@ -89,16 +90,16 @@
         <h1>Your own 3DS games, <span class="accent">native</span> on iPhone and iPad.</h1>
         <p class="lede">Game code is recompiled ahead of time to native ARM64 and runs directly on the phone processor — Metal through MoltenVK, with no CPU JIT and no interpreter fallback. The Windows or macOS launcher compiles, signs, installs and pushes; one app holds your whole library.</p>
         <div class="cta-row">
-          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.5/3ds2apple-0.1.5-windows-x64.zip">
+          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-windows-x64.zip">
             <svg class="os" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 4.55 11 3.4v8.05H3V4.55Zm9-1.3 9-1.25v9.45h-9V3.25ZM3 12.45h8v8.05L3 19.4v-6.95Zm9 0h9v9.45l-9-1.25v-8.2Z"/></svg>
-            Download for Windows <span class="meta">157.5 MB · zip</span>
+            Download for Windows <span class="meta">zip</span>
           </a>
-          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.5/3ds2apple-0.1.5-macos-universal.zip">
+          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-macos-universal.zip">
             <svg class="os" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M2 19h20"/></svg>
-            Download for macOS <span class="meta">5.53 MB · zip</span>
+            Download for macOS <span class="meta">zip</span>
           </a>
         </div>
-        <p class="cta-note">v0.1.5 · released 2026-11-20 · Apache-2.0 · <a href="https://github.com/HFYKratos/3ds2apple/releases" rel="noopener">all releases</a> · <a href="#download">file sizes &amp; SHA-256</a></p>
+        <p class="cta-note">v0.1.6 · released 2026-11-23 · Apache-2.0 · <a href="https://github.com/HFYKratos/3ds2apple/releases" rel="noopener">all releases</a> · <a href="#download">file sizes &amp; SHA-256</a></p>
         <ul class="hero-facts">
           <li>iOS 16 and later</li>
           <li>Windows 10/11</li>
@@ -118,7 +119,7 @@
   <section class="section dl-section" id="download">
     <div class="wrap">
       <div class="section-head">
-        <p class="eyebrow">Download · v0.1.5</p>
+        <p class="eyebrow">Download · v0.1.6</p>
         <h2>Two packages, published on GitHub Releases.</h2>
         <p>Each zip carries <code>LICENSE</code>, <code>NOTICE</code> and <code>THIRD_PARTY.md</code> at its root. No game data is ever attached to a release.</p>
       </div>
@@ -129,14 +130,14 @@
             <h3>Windows launcher</h3>
             <span class="tag tag-gpu">Verified path</span>
           </div>
-          <p class="dl-file">3ds2apple-0.1.5-windows-x64.zip</p>
-          <p class="dl-meta"><span>version <b>0.1.5</b></span><span>size <b>157,455,106 B</b> (157.5 MB)</span><span>Windows 10/11 x64</span></p>
-          <p class="fine" style="margin:0">One self-contained <code>3ds2apple-launcher.exe</code> that builds, signs, installs and pushes without a Mac. The executable is not code-signed: check the digest below, then choose <em>More info → Run anyway</em>.</p>
+          <p class="dl-file">3ds2apple-0.1.6-windows-x64.zip</p>
+          <p class="dl-meta"><span>version <b>0.1.6</b></span><span>Windows 10/11 x64</span><span>size &amp; SHA-256 on the release page</span></p>
+          <p class="fine" style="margin:0">One self-contained <code>3ds2apple-launcher.exe</code> that builds, signs, installs and pushes without a Mac. The executable is not code-signed: verify the digest from the release page, then choose <em>More info → Run anyway</em>.</p>
           <details>
             <summary>SHA-256 digest</summary>
-            <code>e37a924e4f4f694544842a908432024d4712c8d7de6cb202506d9762845b2e16</code>
+            <p class="fine" style="margin:10px 0 0">The digest is published on the <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6" rel="noopener">v0.1.6 release page</a>; compare it with the local hash (commands below).</p>
           </details>
-          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.5/3ds2apple-0.1.5-windows-x64.zip">Download for Windows</a>
+          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-windows-x64.zip">Download for Windows</a>
         </article>
         <article class="dl-card">
           <div class="dl-head">
@@ -144,25 +145,77 @@
             <h3>macOS launcher</h3>
             <span class="tag tag-readback">Developer preview</span>
           </div>
-          <p class="dl-file">3ds2apple-0.1.5-macos-universal.zip</p>
-          <p class="dl-meta"><span>version <b>0.1.5</b></span><span>size <b>5,532,777 B</b> (5.53 MB)</span><span>macOS 13+, Intel + Apple silicon</span></p>
+          <p class="dl-file">3ds2apple-0.1.6-macos-universal.zip</p>
+          <p class="dl-meta"><span>version <b>0.1.6</b></span><span>macOS 13+, Intel + Apple silicon</span><span>size &amp; SHA-256 on the release page</span></p>
           <p class="fine" style="margin:0">Not notarised: right-click → <em>Open</em> on first launch. The package is <strong>not self-contained yet</strong> (Xcode, a checkout and built tools are required) and real-device installation is not verified by the maintainers — tracked in <a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a>.</p>
           <details>
             <summary>SHA-256 digest</summary>
-            <code>bba678ce0862794b2de73a2901bf25410db355900a31c3a50254725cb9e6407c</code>
+            <p class="fine" style="margin:10px 0 0">The digest is published on the <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6" rel="noopener">v0.1.6 release page</a>; compare it with the local hash (commands below).</p>
           </details>
-          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.5/3ds2apple-0.1.5-macos-universal.zip">Download for macOS</a>
+          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-macos-universal.zip">Download for macOS</a>
         </article>
       </div>
       <details class="verify">
-        <summary>Verify a download against these digests</summary>
-        <p class="muted">GitHub also shows the SHA-256 of every asset on the release page. Compute it locally and compare:</p>
+        <summary>Verify a download against the release digests</summary>
+        <p class="muted">GitHub shows the SHA-256 of every asset on the release page. Compute it locally and compare:</p>
         <pre class="code-block"><code># Windows (PowerShell)
-Get-FileHash .\3ds2apple-0.1.5-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\3ds2apple-0.1.6-windows-x64.zip -Algorithm SHA256
 
 # macOS
-shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
+shasum -a 256 3ds2apple-0.1.6-macos-universal.zip</code></pre>
       </details>
+    </div>
+  </section>
+
+  <section class="section" id="whats-new">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">What&rsquo;s new · 0.1.6</p>
+        <h2>Custom layouts on the GPU, faster controls.</h2>
+        <p>0.1.6 makes the arbitrary custom screen layouts first-class GPU presenter arrangements, adds editable fast-forward / quick save / quick load / swap-screen buttons, and turns the Windows deploy incremental.</p>
+      </div>
+      <div class="features">
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M3 13h18M8 20h8M12 17v3"/></svg>
+          <h3>Custom layouts on the GPU</h3>
+          <p>Arbitrary rectangles are now presenter viewports (layout id 8) with no per-frame readback, including all four screen rotations and screen swap.</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5h9v14H4z"/><path d="M16 12h5M21 12l-4-4M21 12l-4 4"/></svg>
+          <h3>Fast-forward toggle</h3>
+          <p>A 2× on-screen toggle: tap again to return to the menu&rsquo;s playback speed. It behaves like every other editable control.</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 13h8M8 17h5M8 4v5h8"/></svg>
+          <h3>Quick save &amp; quick load</h3>
+          <p>Two on-screen buttons write and restore the quick save slot with a toast, without opening the pause menu.</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="6" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M12 3v3M12 20v1"/></svg>
+          <h3>Swap screens</h3>
+          <p>One tap swaps which screen is shown top and bottom — on the GPU path, with the touch map following the swap.</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 4v16"/><path d="m13 13 3 3-3 3"/></svg>
+          <h3>Full-screen editors</h3>
+          <p>The screen editor is borderless and forced landscape; both editors use one stationary canvas, show a local preview and commit once when you release.</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 4v4M16 10v4M10 16v4"/></svg>
+          <h3>Per-orientation visibility</h3>
+          <p>Control visibility is per device direction: C-stick, ZL and ZR are hidden by default in both, portrait also hides the D-pad. Existing profiles migrate once.</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="5" width="19" height="12" rx="2"/><path d="M8 21h8M4 9h16"/></svg>
+          <h3>Metal HUD off by default</h3>
+          <p>The system Metal performance HUD is off for new and existing installs; its switch stays in Settings → Performance.</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 17v3h16v-3"/></svg>
+          <h3>Incremental Windows deploy</h3>
+          <p>The launcher reads the phone first: update installs keep Documents and saves, only missing data is pushed, and phone-only game data is never deleted.</p>
+        </article>
+      </div>
     </div>
   </section>
 
@@ -177,7 +230,7 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
         <li><span class="step">01</span><h3>Your own ROM</h3><p>Import a decrypted <code>.3ds</code>/<code>.cci</code> that you own and dumped yourself. Only the ROM header and SMDH metadata are read.</p></li>
         <li><span class="step">02</span><h3>3dsrecomp → C</h3><p>Static recompilation translates the game's code ahead of time on the host; generated code is never committed or shared.</p></li>
         <li><span class="step">03</span><h3>ARM64 GamePack</h3><p>A local LLVM (Windows) or Apple clang (macOS) toolchain builds a <code>GamePack</code>, and the launcher composes a ROM-free base IPA.</p></li>
-        <li><span class="step">04</span><h3>Metal via MoltenVK</h3><p>The PICA200 GPU path is translated to Metal; the GPU presenter draws the preset screen layouts with zero per-frame readback.</p></li>
+        <li><span class="step">04</span><h3>Metal via MoltenVK</h3><p>The PICA200 GPU path is translated to Metal; the GPU presenter draws every screen layout — presets and custom rectangles — with zero per-frame readback.</p></li>
       </ol>
       <div class="why-grid">
         <article class="note-card"><h3>No CPU JIT. No interpreter fallback.</h3><p>The shipping path is AOT code plus the Zakuro HLE runtime. iOS never executes JIT-compiled game code.</p></article>
@@ -191,7 +244,7 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
     <div class="wrap">
       <div class="section-head">
         <p class="eyebrow">Features</p>
-        <h2>What 0.1.5 gives you.</h2>
+        <h2>The full feature set.</h2>
         <p>Full-bleed play, a complete New 3DS control set, GPU-drawn screen layouts and a launcher that handles the whole pipeline.</p>
       </div>
       <div class="features">
@@ -208,22 +261,22 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="7" width="19" height="11" rx="4"/><path d="M8 10.5v4M6 12.5h4M16 11.5h.01M18.5 13.5h.01"/></svg>
           <h3>Full New 3DS controls</h3>
-          <p>D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a true analog Circle Pad and the New 3DS C-stick — with hardware-controller mapping.</p>
+          <p>D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a true analog Circle Pad and the New 3DS C-stick — with hardware-controller mapping. 0.1.6 adds Fast-forward, Quick save, Quick load and Swap screens as editable on-screen buttons.</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
           <h3>6 + 3 screen layouts</h3>
-          <p>Six landscape and three portrait presets, set independently. Every preset is drawn by the GPU presenter.</p>
+          <p>Six landscape and three portrait presets plus arbitrary custom rectangles, set independently and drawn by the GPU presenter with zero per-frame readback.</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v18M3 12h18M12 3l3 3M12 3 9 6M12 21l3-3M12 21l-3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>
           <h3>Edit the pad in place</h3>
-          <p>Pause → <em>Virtual controls → Edit layout</em>: drag each control over the paused picture, tap the centred <em>Done</em> to save and resume.</p>
+          <p>Pause → <em>Virtual controls → Edit layout</em>: drag each control over the paused picture, tap the centred <em>Done</em> to save and resume. The 0.1.6 editor runs full-screen with one stationary canvas and commits once on release.</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h8M8 13h8M8 17h5"/></svg>
           <h3>Save states + diagnostics</h3>
-          <p>Save and load the running game from the pause menu, and export a diagnostics report with frame timings, stutter counters and logs.</p>
+          <p>Save and load from the pause menu or the on-screen Quick save / Quick load buttons, and export a diagnostics report with frame timings, stutter counters and logs.</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 13h4l3-7 4 12 3-6h6"/></svg>
@@ -232,8 +285,8 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9V3Z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15V3.5Z"/></svg>
-          <h3>Fast preset path</h3>
-          <p>Hybrid, LargeTopRight and TopFullWidth keep every preset on the GPU path with no per-frame screen readback; custom layouts still read back.</p>
+          <h3>GPU path for every layout</h3>
+          <p>Hybrid, LargeTopRight and TopFullWidth add presenter arrangements, and custom rectangles now run on the same GPU path — with rotation and screen swap.</p>
         </article>
       </div>
     </div>
@@ -244,7 +297,7 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
       <div class="section-head">
         <p class="eyebrow">Screen layouts</p>
         <h2>Six landscape, three portrait.</h2>
-        <p><strong>Settings → Display → Screen layout</strong> keeps both directions independent. Presets are drawn by the GPU presenter; custom layouts use the screen-readback path and apply from the next game load.</p>
+        <p><strong>Settings → Display → Screen layout</strong> keeps both directions independent. Every arrangement — preset or custom rectangle — is drawn by the GPU presenter, with rotation and screen swap supported.</p>
       </div>
 
       <div class="layout-block">
@@ -273,7 +326,7 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
           </figure>
           <figure class="layout-card">
             <img class="shot" src="assets/screenshots/layout-custom.png" width="780" height="360" loading="lazy" decoding="async" alt="Synthetic landscape preview of the Custom layout: the two screens at user-placed rectangles over a dark canvas.">
-            <div class="body"><h4>Custom layout <span class="tag tag-readback">Readback</span></h4><p>Place each screen at its own rectangle by percentage or by dragging; applies from the next game load.</p></div>
+            <div class="body"><h4>Custom layout <span class="tag tag-gpu">GPU path</span></h4><p>Place each screen at its own rectangle by percentage or in the full-screen drag editor; four rotations and screen swap stay on the GPU path.</p></div>
           </figure>
         </div>
       </div>
@@ -292,11 +345,11 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
           </figure>
           <figure class="layout-card">
             <img class="shot" src="assets/screenshots/layout-portrait-custom.png" width="460" height="997" loading="lazy" decoding="async" alt="Synthetic portrait preview of the Custom layout: the two screens placed at custom rectangles.">
-            <div class="body"><h4>Custom layout <span class="tag tag-readback">Readback</span></h4><p>Percentage fields with a live preview, or drag the screens; applies from the next game load.</p></div>
+            <div class="body"><h4>Custom layout <span class="tag tag-gpu">GPU path</span></h4><p>Percentage fields with a live preview, or drag in the full-screen editor; rotation and screen swap stay on the GPU path.</p></div>
           </figure>
         </div>
       </div>
-      <p class="fine">Screen rotation and orientation are kept. Render resolution (1x–4x) still applies on the next game load; the old aspect-ratio and integer-scaling switches were removed in 0.1.5.</p>
+      <p class="fine">Screen rotation and orientation are kept, and custom layouts now rotate and swap with the GPU presenter. If no GPU presenter can be created, the app falls back to the screen-readback path. Render resolution (1x–4x) still applies on the next game load; the old aspect-ratio and integer-scaling switches were removed in 0.1.5.</p>
     </div>
   </section>
 
@@ -305,7 +358,7 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
       <div class="section-head">
         <p class="eyebrow">Controls</p>
         <h2>Full 3DS controls, on screen.</h2>
-        <p>The on-screen pad is the complete New 3DS set, with real analog sticks and per-control customisation from the pause menu.</p>
+        <p>The on-screen pad is the complete New 3DS set, with real analog sticks and per-control customisation from the pause menu. 0.1.6 adds Fast-forward, Quick save, Quick load and Swap screens as editable on-screen buttons.</p>
       </div>
       <div class="controls-grid">
         <div class="two-shots">
@@ -322,14 +375,15 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
           <h3>Complete New 3DS set</h3>
           <ul class="control-list">
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg><div><b>True analog Circle Pad</b><span>Reports −1…1 per axis with a small dead zone, so a resting finger reads exactly 0 — not a second D-pad.</span></div></li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg><div><b>New 3DS C-stick</b><span>Works the same way as the Circle Pad. It needs a game that reads the New 3DS nub and a shell built with the current runtime.</span></div></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg><div><b>New 3DS C-stick</b><span>Works the same way as the Circle Pad. It needs a game that reads the New 3DS nub and a shell built with the current runtime. Hidden by default since 0.1.6 — turn it on in Toggle controls for games that read the nub.</span></div></li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 4v16M4 12h16M12 4l-3 3M12 4l3 3M12 20l-3-3M12 20l3-3M4 12l3-3M4 12l3 3M20 12l-3-3M20 12l-3 3"/></svg><div><b>Single-cross D-pad</b><span>One cross-shaped control: four direction zones, press and slide to change direction, haptic feedback on pickup.</span></div></li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="4"/><path d="M7 11v2M6 12h2M15 11.5h.01M17.5 13.5h.01"/></svg><div><b>Every button</b><span>A/B/X/Y, L/R, ZL/ZR, Start/Select. A hardware controller's left stick feeds the Circle Pad, right stick the C-stick, and L2/R2 map to ZL/ZR.</span></div></li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3"/><rect x="4" y="11" width="16" height="10" rx="2"/></svg><div><b>Multitouch + haptics</b><span>Several fingers can hold buttons and drag the sticks at the same time; touch feedback is switchable.</span></div></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><div><b>Action buttons (0.1.6)</b><span>Fast-forward (2× toggle), Quick save, Quick load and Swap screens are editable rows in Toggle controls and Adjust size.</span></div></li>
           </ul>
           <div class="vc-card">
             <h3>Pause menu → Virtual controls</h3>
-            <p>Show or hide the pad, show the FPS pill, edit the layout in place, toggle individual controls, resize each button or group from 10% to 200%, adjust opacity and reset to the defaults. Visibility and size are global; portrait and landscape positions stay separate.</p>
+            <p>Show or hide the pad, show the FPS pill, edit the layout in place, toggle individual controls, resize each button or group from 10% to 200%, adjust opacity and reset to the defaults. Since 0.1.6 visibility is per device direction (C-stick, ZL and ZR are hidden by default; portrait also hides the D-pad), while size and opacity stay global.</p>
             <div class="vc-shots">
               <figure><img src="assets/screenshots/control-edit.png" width="800" height="1734" loading="lazy" decoding="async" alt="Synthetic in-game edit mode: controls over the paused picture with a centred Done button."><figcaption>Edit layout · drag, then Done</figcaption></figure>
               <figure><img src="assets/screenshots/controls-size.png" width="800" height="1734" loading="lazy" decoding="async" alt="Synthetic Adjust size screen: per-button size sliders from Button A through Start."><figcaption>Adjust size · 10–200%</figcaption></figure>
@@ -383,7 +437,7 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
             <li>Download and extract <code>3ds2apple-&lt;version&gt;-windows-x64.zip</code> into a writable folder (not <em>Program Files</em>). Install <em>Apple Devices</em> so the phone is reachable over USB.</li>
             <li>Run <code>3ds2apple-launcher.exe</code>. It is not code-signed: check the digest, then <em>More info → Run anyway</em>. Run <em>Settings → self-test</em> once and expect it green.</li>
             <li><b>Library → Import</b> your own decrypted <code>.3ds</code>/<code>.cci</code>. Only the ROM header and SMDH icon/metadata are read.</li>
-            <li>Select games and press <b>Deploy</b>: GamePacks compile, a ROM-free IPA is signed and installed with the bundled Impactor (your Apple ID), then only the game data is pushed.</li>
+            <li>Select games and press <b>Deploy</b>: GamePacks compile, a ROM-free IPA is signed and installed with the bundled Impactor (your Apple ID), then only the game data is pushed. Since 0.1.6 the launcher reads the phone first and updates incrementally; an overwrite install keeps Documents and saves, and game data that exists only on the phone is never deleted.</li>
             <li>Open the app and play. Deploy again to add or remove games; a clean uninstall clears the pushed data.</li>
           </ol>
         </article>
@@ -401,7 +455,7 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
           <p class="warn">macOS real-device installation is not verified by the maintainers yet — tracked in <a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a>. The Windows package is the verified path.</p>
         </article>
       </div>
-      <p class="start-note"><strong>Free Apple ID:</strong> 3 apps per device and about 7 days of signing — deploy again to refresh. A paid developer account removes those limits. Game data lives in <code>Documents/Games/&lt;TITLEID&gt;/</code>; saves and save states live in the app container. Uninstalling the app removes its data; your ROMs on the computer are never touched.</p>
+      <p class="start-note"><strong>Free Apple ID:</strong> 3 apps per device and about 7 days of signing — deploy again to refresh. A paid developer account removes those limits. Game data lives in <code>Documents/Games/&lt;TITLEID&gt;/</code>; saves and save states live in the app container. A re-deploy or an overwrite update keeps them; a clean uninstall removes them. Your ROMs on the computer are never touched.</p>
     </div>
   </section>
 
@@ -434,7 +488,7 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
         </details>
         <details>
           <summary>What exactly does the launcher do?</summary>
-          <div class="a"><p>It reads your ROM's header and SMDH metadata, compiles one GamePack per selected game with a local LLVM or Apple clang toolchain, composes a ROM-free base IPA with a GameCatalog, signs and installs it with your Apple ID, then pushes only <code>GameRom.cci</code> and <code>GameInfo.json</code> into the app's Documents folder.</p></div>
+          <div class="a"><p>It reads your ROM's header and SMDH metadata, compiles one GamePack per selected game with a local LLVM or Apple clang toolchain, composes a ROM-free base IPA with a GameCatalog, signs and installs it with your Apple ID, then pushes only <code>GameRom.cci</code> and <code>GameInfo.json</code> into the app's Documents folder. On Windows since 0.1.6 the deploy is device-aware: it checks the installed app version and game data first, so an update overwrite-installs without losing Documents or saves and only pushes what is missing.</p></div>
         </details>
         <details>
           <summary>Is the macOS launcher ready?</summary>
@@ -446,7 +500,11 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
         </details>
         <details>
           <summary>Where are saves and game data stored?</summary>
-          <div class="a"><p>Pushed game data lives in <code>Documents/Games/&lt;TITLEID&gt;/</code> and is visible in the Files app. Saves and save states live in the app container. A clean uninstall removes the app's data; your ROMs on the computer are never touched. Diagnostics exports are written to <code>Documents/Diagnostics/</code> (last five kept).</p></div>
+          <div class="a"><p>Pushed game data lives in <code>Documents/Games/&lt;TITLEID&gt;/</code> and is visible in the Files app. Saves and save states live in the app container. A re-deploy or an overwrite update keeps them; a clean uninstall removes the app's data, and your ROMs on the computer are never touched. Diagnostics exports are written to <code>Documents/Diagnostics/</code> (last five kept).</p></div>
+        </details>
+        <details>
+          <summary>How do I update from an older version?</summary>
+          <div class="a"><p>Deploy again with the 0.1.6 launcher. On Windows the launcher detects the installed app and games and updates incrementally — the app is never uninstalled, so Documents and saves survive, and phone-only game data is never deleted. On macOS, run the same import → deploy flow as before.</p></div>
         </details>
         <details>
           <summary>How can I help?</summary>
@@ -465,9 +523,8 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
       </div>
       <div class="limits">
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>Some menus can render incorrectly</h3><p>In a few titles, certain menu screens can show corrupted graphics on the top screen. The diagnostics path has been examined but the fix is still under investigation — <a href="https://github.com/HFYKratos/3ds2apple/issues/2" rel="noopener">issue #2</a>.</p></div></article>
-        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>Custom screen layouts use readback</h3><p>Arbitrary rectangles run on the screen-readback path, so they are slower than the GPU presets. A custom layout applies from the next game load.</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>macOS is a developer preview</h3><p>The macOS launcher is not self-contained yet and its real-device install is unverified — <a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a>. The Windows path is the verified one.</p></div></article>
-        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>The C-stick depends on the game</h3><p>It is reported through the New 3DS nub API; a title that never reads the nub ignores it, and a shell built with an older runtime does not provide it.</p></div></article>
+        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>The C-stick depends on the game</h3><p>It is reported through the New 3DS nub API; a title that never reads the nub ignores it, and a shell built with an older runtime does not provide it. It is hidden by default in 0.1.6 — enable it in Toggle controls when a game uses the nub.</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>No compatibility or performance promises</h3><p>Some titles may fail to boot or run slowly. The reference numbers in the README come from the maintainers testing specific titles — they are not a guarantee.</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>Two behaviours are not implemented</h3><p>Azahar-style button sliding and relative-stick-centre options are not implemented. Landscape controls overlay the picture, following the skin geometry.</p></div></article>
         <article class="limit legal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 4 7v5c0 5 3.5 8 8 9 4.5-1 8-4 8-9V7l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg><div><h3>Legal boundaries</h3><p>No ROMs, keys, BIOS, system files or game assets are provided, and there is no piracy support. Use only games you legally own and dump yourself. 3ds2apple is not affiliated with Nintendo.</p></div></article>
@@ -480,10 +537,10 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
       <div class="panel">
         <div>
           <h2>Bring your own games.</h2>
-          <p>v0.1.5 is available now for Windows and macOS. Read the README for the full guide, the diagnostics workflow and the complete list of limits.</p>
+          <p>v0.1.6 is available now for Windows and macOS. Read the README for the full guide, the diagnostics workflow and the complete list of limits.</p>
         </div>
         <div class="cta-row">
-          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.5" rel="noopener">Get v0.1.5</a>
+          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6" rel="noopener">Get v0.1.6</a>
           <a class="btn btn-ghost" href="https://github.com/HFYKratos/3ds2apple#readme" rel="noopener">Read the README</a>
           <a class="btn btn-ghost" href="press/">Press kit</a>
         </div>
@@ -537,7 +594,7 @@ shasum -a 256 3ds2apple-0.1.5-macos-universal.zip</code></pre>
     </div>
     <div class="footer-bottom">
       <span>© 2026 3ds2apple contributors · maintained by HFYKratos</span>
-      <span>v0.1.5 · 2026-11-20 · <a href="https://github.com/HFYKratos/3ds2apple" rel="noopener">GitHub</a></span>
+      <span>v0.1.6 · 2026-11-23 · <a href="https://github.com/HFYKratos/3ds2apple" rel="noopener">GitHub</a></span>
     </div>
   </div>
 </footer>

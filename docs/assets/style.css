@@ -72,6 +72,10 @@ code,kbd{font-family:var(--mono);font-size:.88em}
 .site-nav a.nav-github:hover{border-color:var(--line-strong)}
 .lang{font-family:var(--mono);font-size:13px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:6px 12px;white-space:nowrap}
 .lang:hover{color:var(--text);border-color:var(--line-strong);text-decoration:none}
+@media (min-width:821px){
+  .header-inner{flex-wrap:nowrap}
+  .site-nav a{padding:7px 8px;font-size:13.5px}
+}
 @media (max-width:820px){
   .header-inner{gap:10px}
   .site-nav{order:3;flex-basis:100%;padding-bottom:2px;
@@ -414,3 +418,4 @@ figure{margin:0}
   .bilingual{grid-template-columns:1fr}
 }
 @media (max-width:620px){ .shot-grid{grid-template-columns:1fr} .fact-table th{width:120px} }
+@media (max-width:420px){ .fact-table th{width:100px;padding-right:10px} .fact-table td{overflow-wrap:anywhere} }
