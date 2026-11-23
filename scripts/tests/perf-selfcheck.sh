@@ -216,7 +216,7 @@ check "the obsolete background-release string is gone" \
   bash -c '! grep -rFq "The runtime was stopped when the app went to the background" ios/app/Resources'
 
 section 'Frame timing pause/resume logic (Swift, macOS only)'
-if command -v swiftc >/dev/null 2>&1; then
+if [ "$(uname -s)" = "Darwin" ] && command -v swiftc >/dev/null 2>&1; then
   SELFTEST_BIN="${TMPDIR:-/tmp}/3ds2apple-frame-timing-selftest.$$"
   if swiftc -parse-as-library -O -o "${SELFTEST_BIN}" \
       ios/app/Sources/FrameTiming.swift scripts/tests/frame-timing-selftest.swift >/dev/null 2>&1; then
