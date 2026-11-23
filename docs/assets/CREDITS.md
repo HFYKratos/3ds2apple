@@ -12,7 +12,7 @@ text files (and on the site) rather than in new media.
 
 | Committed file | Built from |
 |---|---|
-| `assets/readme/portrait.png` | `out/archive/0.1.5/sim-shots-all.tar.gz` → `20261120-r7/01-portrait-controls-final.png` (iOS Simulator, 1290×2796) |
+| `docs/assets/portrait.png` | `out/archive/0.1.5/sim-shots-all.tar.gz` → `20261120-r7/01-portrait-controls-final.png` (iOS Simulator, 1290×2796) |
 | `assets/readme/landscape.png` | same archive → `20261120-r7/02-landscape-controls-final.png` |
 | `assets/readme/hero.png` | generated composite of the two previews above (1600×900) |
 | `assets/readme/og.png` | generated Open Graph / Twitter card (1200×630) |
