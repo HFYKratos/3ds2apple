@@ -42,6 +42,8 @@ public sealed class LauncherServices
     private readonly IProcessRunner _runner;
     private readonly LauncherWorkspace _workspace;
     private readonly ToolLocator _locator;
+    private string? _expectedAppPackageVersion;
+    private string? _expectedAppPackageVersionKey;
 
     private LauncherServices(IProcessRunner runner, LauncherWorkspace workspace, ToolLocator locator)
     {
@@ -158,7 +160,33 @@ public sealed class LauncherServices
         CreateComposer(),
         CreateShellInstallService(),
         CreatePushService() is { } push ? new LauncherGameDataPusher(push) : null,
-        BuildCompatibility);
+        BuildCompatibility,
+        CreateDeviceDeployInspector(),
+        ResolveExpectedAppPackageVersion(shell));
+
+    /// <summary>
+    /// Device-aware deploy inspection (app identity, installed games, deploy marker); null when
+    /// the devpush bridge is missing. The Deploy page and the orchestrator share this factory.
+    /// </summary>
+    public IDeviceDeployInspector? CreateDeviceDeployInspector() =>
+        DevPush is null ? null : new DevPushDeviceDeployInspector(DevPush, _workspace.StagingDirectory);
+
+    /// <summary>
+    /// The app package version the bundled shell template would install (read from its
+    /// Info.plist <c>ThreeDS2ApplePackageVersion</c>; cached per template).
+    /// </summary>
+    public string ResolveExpectedAppPackageVersion(ShellManifest shell)
+    {
+        var key = shell.Version + "|" + shell.Sha256 + "|" + shell.Bytes.ToString();
+        if (_expectedAppPackageVersion is not null && string.Equals(_expectedAppPackageVersionKey, key, StringComparison.Ordinal))
+        {
+            return _expectedAppPackageVersion;
+        }
+        var resolved = ShellPackageVersion.Resolve(shell, ShellDirectory);
+        _expectedAppPackageVersion = resolved;
+        _expectedAppPackageVersionKey = key;
+        return resolved;
+    }
 
     /// <summary>"Build now" service for the Library page (one game or every imported game).</summary>
     public LibraryBuildService CreateLibraryBuildService() => new(_workspace, CreateDeployBuildProvider(), BuildCompatibility);

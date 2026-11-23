@@ -156,6 +156,17 @@
             </StackPanel>
           </Border>
 
+          <!-- Device-aware incremental deploy: what is installed and what this run will do. -->
+          <Border Classes="card">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding L.DeployDeviceStateTitle}" Classes="h2" />
+              <TextBlock Text="{Binding DeviceAppStatus}" Classes="muted" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding DeviceGamesStatus}" Classes="caption" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding L.DeployPlanTitle}" Classes="caption" Margin="0,4,0,0" />
+              <TextBlock Text="{Binding DeployPlanStatus}" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding HasDeployPlanStatus}" />
+            </StackPanel>
+          </Border>
+
           <Border Classes="card">
             <StackPanel Spacing="10">
               <Grid ColumnDefinitions="*,Auto">

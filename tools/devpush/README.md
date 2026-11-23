@@ -4,7 +4,10 @@ A small CLI that talks to an iPhone/iPad through Apple usbmuxd (USB or Wi-Fi):
 
 - list connected devices (name/model/iOS version/transport)
 - install / uninstall a signed IPA through installation_proxy
-- read Info.plist attributes of an installed app
+- read Info.plist attributes of an installed app (the JSON `keys` map includes
+  `CFBundleShortVersionString`, `CFBundleVersion` and the shell's
+  `ThreeDS2ApplePackageVersion`, which the Windows launcher uses to decide whether an
+  overwrite install is needed)
 - open an app's container with house_arrest (VendContainer) + AFC and
   put / get / ls / stat / mkdir / rm / put-tar, with progress events and a
   90-second stall watchdog
@@ -45,6 +48,12 @@ contract and a full mock-device roundtrip; they do not need an iPhone.
 The mock keeps `state.json` (devices + installed apps) and maps container paths to
 `containers/<bundleId>/` and `documents/<bundleId>/` under the mock root. Same JSON
 contract and exit codes as a real device.
+
+Mock installs also merge optional `<mock>/install-attrs.json` into the app-attr `keys`
+map, so launcher tests can simulate an installed shell version without an iPhone:
+
+    echo '{"ThreeDS2ApplePackageVersion":"0.1.6-beta2","CFBundleVersion":"7"}' \
+        > /tmp/devpush-mock/install-attrs.json
 
 ## Environment variables
 

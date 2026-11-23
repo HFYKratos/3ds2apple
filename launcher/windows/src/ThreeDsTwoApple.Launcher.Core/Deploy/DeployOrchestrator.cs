@@ -76,7 +76,8 @@ public sealed record DeployOutcome(
     string? InstalledBundleId,
     IReadOnlyList<DeployGameResult> Games,
     bool Retryable,
-    bool Cancelled = false);
+    bool Cancelled = false,
+    DeployDeviceSummary? DeviceSummary = null);
 
 /// <summary>Composes the installable IPA (implemented by <see cref="IpaComposer"/>).</summary>
 public interface IComposedIpaComposer
@@ -195,11 +196,22 @@ public sealed class DeployOrchestrator
     private readonly IAppIpaInstaller? _installer;
     private readonly IGameDataPusher? _pusher;
     private readonly IBuildCompatibilityProvider? _buildCompatibility;
+    private readonly IDeviceDeployInspector? _deviceInspector;
+    private readonly string? _expectedAppPackageVersion;
 
     /// <param name="buildCompatibility">
     /// Optional so the pipeline stays constructible with pure fakes; the launcher always
     /// supplies it (see <c>LauncherServices.CreateDeployOrchestrator</c>). With it, a pack
     /// is reused only when the recorded buildCompatVersion AND ROM SHA-256 still match.
+    /// </param>
+    /// <param name="deviceInspector">
+    /// Optional device-aware preflight. The shipped launcher always supplies it; without it
+    /// the pipeline keeps the legacy full deploy behaviour (compose + install + push always).
+    /// </param>
+    /// <param name="expectedAppPackageVersion">
+    /// The <c>ThreeDS2ApplePackageVersion</c> of the bundled shell template (the version the
+    /// launcher would install). A device that reports a different value gets one overwrite
+    /// install; a device that does not report it at all is "unknown" and gets one update too.
     /// </param>
     public DeployOrchestrator(
         LauncherWorkspace workspace,
@@ -209,7 +221,9 @@ public sealed class DeployOrchestrator
         IComposedIpaComposer? composer,
         IAppIpaInstaller? installer,
         IGameDataPusher? pusher,
-        IBuildCompatibilityProvider? buildCompatibility = null)
+        IBuildCompatibilityProvider? buildCompatibility = null,
+        IDeviceDeployInspector? deviceInspector = null,
+        string? expectedAppPackageVersion = null)
     {
         _workspace = workspace;
         _shell = shell;
@@ -219,6 +233,8 @@ public sealed class DeployOrchestrator
         _installer = installer;
         _pusher = pusher;
         _buildCompatibility = buildCompatibility;
+        _deviceInspector = deviceInspector;
+        _expectedAppPackageVersion = expectedAppPackageVersion;
     }
 
     /// <summary>True when every component needed to even attempt a deploy is present.</summary>
@@ -266,15 +282,75 @@ public sealed class DeployOrchestrator
                 "Tick one or more games on the Deploy page, then press Deploy.", games, retryable: false);
         }
 
-        // --- Step 1: build (or reuse) every selected real GamePack ----------
+        // --- Device-aware preflight ------------------------------------------
+        // Read the phone BEFORE building/installing: the installed app identity, the installed
+        // games and the launcher's deploy marker decide whether this run can skip the whole
+        // compose/install/push chain (rules in DeviceDeployPlanner). A missing/unreachable
+        // phone keeps the existing build-first behaviour; install/push then report the error.
+        var expectedPackageVersion = string.IsNullOrWhiteSpace(_expectedAppPackageVersion)
+            ? LauncherInfo.Version
+            : _expectedAppPackageVersion!;
+        var pushBundleId = ResolvePushBundleId(request);
+        DeviceDeploySnapshot? device = null;
+        DeviceDeployDecision? preflight = null;
+        if (_deviceInspector is not null && !string.IsNullOrWhiteSpace(pushBundleId))
+        {
+            try
+            {
+                Report(progress, DeployStepKind.Build, DeployStepStatus.Running,
+                    "Checking the connected phone (app version, installed games, deploy state)…", 0);
+                device = await _deviceInspector.InspectAsync(
+                    new DeviceDeployInspectRequest(pushBundleId!, request.DeviceUdid, selected.Select(entry => entry.TitleID).ToList()),
+                    log,
+                    cancellationToken).ConfigureAwait(false);
+                log?.Invoke("device: app " + device.App.Describe() + "; expected launcher shell package " + expectedPackageVersion);
+                preflight = DeviceDeployPlanner.Decide(
+                    device, expectedPackageVersion, selected, _workspace.State.Games, LocalRomBytes);
+                foreach (var note in preflight.Notes)
+                {
+                    log?.Invoke("device plan: " + note);
+                }
+            }
+            catch (LauncherToolException error)
+            {
+                log?.Invoke("device check skipped (" + error.Code + "): " + error.Message + "; running the full deploy.");
+                device = null;
+                preflight = null;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                log?.Invoke("device check skipped: " + error.Message + "; running the full deploy.");
+                device = null;
+                preflight = null;
+            }
+        }
+
+        // The IPA must keep every installed game when the app is (re)composed, so the union
+        // from the preflight is built here as well (its GamePack must be current in the new app).
+        var selectedIds = new HashSet<string>(
+            selected.Select(entry => GameInfoWriter.NormalizeTitleId(entry.TitleID)),
+            StringComparer.OrdinalIgnoreCase);
+        var buildTargets = selected.Select(entry => (Entry: entry, Selected: true)).ToList();
+        if (preflight is not null)
+        {
+            foreach (var entry in preflight.IpaGames)
+            {
+                if (!selectedIds.Contains(GameInfoWriter.NormalizeTitleId(entry.TitleID)))
+                {
+                    buildTargets.Add((entry, false));
+                }
+            }
+        }
+
+        // --- Step 1: build (or reuse) every GamePack needed for this deploy ----------
         Report(progress, DeployStepKind.Build, DeployStepStatus.Running,
             "Compiling " + selected.Count + " selected game(s) locally…", 0);
         log?.Invoke("deploy: " + selected.Count + " selected game(s); local build is the only build path.");
         var packs = new List<ComposedPack>();
-        for (var index = 0; index < selected.Count; index++)
+        for (var index = 0; index < buildTargets.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var entry = selected[index];
+            var (entry, isSelected) = buildTargets[index];
             var displayName = LauncherGameDataPusher.DisplayName(entry);
             var cached = await ResolveCachedBuildAsync(entry, request.RebuildExistingPacks, cancellationToken).ConfigureAwait(false);
             var packPath = cached.PackPath;
@@ -305,7 +381,7 @@ public sealed class DeployOrchestrator
                         "The ROM for " + displayName + " is gone: " + entry.RomPath + ".",
                         "Re-import the ROM, then press Retry.", games);
                 }
-                var buildProgress = new BuildProgressAdapter(progress, entry.TitleID, displayName, index, selected.Count);
+                var buildProgress = new BuildProgressAdapter(progress, entry.TitleID, displayName, index, buildTargets.Count);
                 var outcome = await _buildProvider.BuildAsync(
                     new PackBuildRequest(entry.TitleID, displayName, entry.ProductCode, entry.RomPath, _workspace.WorkDirectory),
                     buildProgress,
@@ -345,196 +421,336 @@ public sealed class DeployOrchestrator
                     "Build this game again (the pack file is missing), then press Retry.", games);
             }
             packs.Add(new ComposedPack(entry.TitleID, displayName, entry.ProductCode, LauncherInfo.GamePackAbiVersion, packPath));
-            games.Add(new DeployGameResult(entry.TitleID, displayName, Built: true, Pushed: false, Verified: false));
+            if (isSelected)
+            {
+                games.Add(new DeployGameResult(entry.TitleID, displayName, Built: true, Pushed: false, Verified: false));
+            }
         }
         Report(progress, DeployStepKind.Build, DeployStepStatus.Succeeded,
             packs.Count + " game pack(s) ready", BuildEnd);
 
-        // --- Step 2: compose one ROM-free IPA with all selected packs -------
-        Report(progress, DeployStepKind.Compose, DeployStepStatus.Running,
-            "Composing one ROM-free app IPA with " + packs.Count + " game(s)…", BuildEnd);
-        if (!File.Exists(request.TemplateIpaPath))
+        // --- Authoritative device decision (after the build) -----------------
+        // Builds refreshed every GamePack identity, so decide again: a rebuild that changed a
+        // GamePack recipe must trigger one overwrite install (to update the code in the app),
+        // while a data-only difference stays a push. Without a device inspector this is null
+        // and the legacy full deploy runs unchanged.
+        var decision = device is null
+            ? null
+            : DeviceDeployPlanner.Decide(device, expectedPackageVersion, selected, _workspace.State.Games, LocalRomBytes);
+        if (decision is not null)
         {
-            return Fail(progress, DeployStepKind.Compose, "shell_missing",
-                "The ROM-free base shell template IPA is missing: " + request.TemplateIpaPath + ".",
-                "Reinstall the launcher ZIP (it contains Shell/3ds2apple-shell.ipa), then press Retry.", games);
+            foreach (var note in decision.Notes)
+            {
+                log?.Invoke("deploy plan: " + note);
+            }
+            log?.Invoke("deploy plan: " + decision.Mode + " — app " + device!.App.Describe() + "; launcher shell package " + expectedPackageVersion
+                        + (decision.IpaGames.Count > 0 ? "; app keeps " + decision.IpaGames.Count + " game(s)" : string.Empty)
+                        + (decision.PushGames.Count > 0 ? "; pushing " + decision.PushGames.Count + " game(s)" : "; no data push needed"));
         }
-        if (_composer is null)
+        var needsInstall = decision is null || decision.Mode is DeviceDeployMode.FullInstall or DeviceDeployMode.Reinstall;
+        if (needsInstall && decision is not null)
         {
-            return Fail(progress, DeployStepKind.Compose, "composer_unavailable",
-                "The IPA composer is unavailable because 3ds2apple-pack.exe was not found.",
-                "Reinstall the launcher ZIP so Bin/3ds2apple-pack.exe exists, then press Retry.", games);
+            var notBuilt = decision.IpaGames
+                .Where(entry => !packs.Any(pack => string.Equals(pack.TitleID, entry.TitleID, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+            if (notBuilt.Count > 0)
+            {
+                Report(progress, DeployStepKind.Compose, DeployStepStatus.Running,
+                    "Preparing " + notBuilt.Count + " installed GamePack(s) the app update must keep…", BuildEnd);
+                foreach (var entry in notBuilt)
+                {
+                    var kept = await PrepareKeptPackAsync(entry, log, cancellationToken).ConfigureAwait(false);
+                    if (kept is null)
+                    {
+                        log?.Invoke("deploy plan: cannot keep " + entry.TitleID + " inside this app update; its data on the phone is untouched.");
+                        continue;
+                    }
+                    packs.Add(kept);
+                }
+            }
         }
-        ComposedAppIpa composed;
-        try
+        if (decision?.Mode == DeviceDeployMode.UpToDate)
         {
-            composed = await _composer.ComposeAsync(
-                request.TemplateIpaPath,
-                packs,
-                Path.Combine(_workspace.WorkDirectory, "deploy-ipa"),
-                log,
-                cancellationToken).ConfigureAwait(false);
+            for (var index = 0; index < games.Count; index++)
+            {
+                games[index] = games[index] with { Pushed = true, Verified = true };
+            }
+            Report(progress, DeployStepKind.Compose, DeployStepStatus.Skipped,
+                "Skipped: the installed app is current (package " + (device!.App.PackageVersion ?? "unknown") + ").", ComposeEnd);
+            Report(progress, DeployStepKind.Install, DeployStepStatus.Skipped,
+                "Skipped: no reinstall is needed; Documents and saves are untouched.", InstallEnd);
+            Report(progress, DeployStepKind.Push, DeployStepStatus.Skipped,
+                "Skipped: every selected game's data is already current on the phone.", PushEnd);
+            Report(progress, DeployStepKind.Verify, DeployStepStatus.Skipped,
+                "Already up to date — nothing was installed or pushed.", 100);
+            log?.Invoke("deploy: already up to date (app " + device!.App.Describe() + ", " + selected.Count + " selected game(s) current)");
+            return new DeployOutcome(true, null, null, null, null, null, pushBundleId, games, Retryable: true,
+                DeviceSummary: new DeployDeviceSummary(decision.Mode, 0, 0, device!.App.PackageVersion ?? "unknown", expectedPackageVersion));
         }
-        catch (LauncherToolException error)
-        {
-            return Fail(progress, DeployStepKind.Compose, error.Code, error.Message, error.Hint, games);
-        }
-        var verification = ComposedIpaVerifier.Verify(composed.IpaPath, packs);
-        if (!verification.Ok)
-        {
-            return Fail(progress, DeployStepKind.Compose, verification.ErrorCode ?? "composed_ipa_invalid",
-                verification.Error ?? "The composed IPA is not installable.", verification.Fix, games);
-        }
-        log?.Invoke("deploy: composed IPA verified (" + verification.Describe() + ", sha256 " + composed.Sha256[..16] + "…)");
-        Report(progress, DeployStepKind.Compose, DeployStepStatus.Succeeded,
-            "Verified " + composed.GameCount + " pack(s) + schema-2 catalogue in the app IPA (sha256 " + composed.Sha256[..12] + "…)", ComposeEnd);
+        var pushTargets = decision is null ? selected.ToList() : decision.PushGames.ToList();
 
-        // --- Step 3: sign + install the composed app ------------------------
-        Report(progress, DeployStepKind.Install, DeployStepStatus.Running,
-            "Signing and installing the app with the bundled Impactor/plumesign…", ComposeEnd);
-        if (_shell is null)
+        // --- Step 2/3: compose + sign/install only when the app must change ----
+        ComposedAppIpa? composed = null;
+        if (needsInstall)
         {
-            return Fail(progress, DeployStepKind.Install, "shell_missing",
-                "The base shell manifest (Shell/manifest.json) is missing.",
-                "Reinstall the launcher ZIP, then press Retry.", games);
-        }
-        if (_installer is null)
-        {
-            return Fail(progress, DeployStepKind.Install, "impactor_missing",
-                "The bundled official Impactor/plumesign was not found.",
-                "Reinstall the launcher ZIP (ThirdParty/Impactor) or run tools/fetch-impactor.ps1, then press Retry.", games);
-        }
-        ShellInstallOutcome install;
-        try
-        {
-            install = await _installer.InstallAsync(
-                _shell,
-                _shellDirectory,
-                composed.IpaPath,
-                request.BundleIdOverride,
-                request.DeviceUdid,
-                log,
-                cancellationToken).ConfigureAwait(false);
-        }
-        catch (LauncherToolException error)
-        {
-            return Fail(progress, DeployStepKind.Install, error.Code, error.Message, error.Hint, games);
-        }
-        if (!install.Installed)
-        {
-            var error = install.Error;
-            return Fail(progress, DeployStepKind.Install, error?.Code ?? "device_install_failed",
-                error is null ? "Signing/installing the app failed." : error.Title + (string.IsNullOrWhiteSpace(error.Detail) ? string.Empty : " — " + error.Detail),
-                error?.Fix ?? "Keep the phone unlocked and connected (Apple Devices running), then press Retry.", games);
-        }
-        _workspace.State.InstalledBundleId = install.BundleId;
-        _workspace.State.InstalledAt = DateTimeOffset.UtcNow;
-        _workspace.State.InstalledGameCount = packs.Count;
-        _workspace.SaveState();
-        log?.Invoke("deploy: installed " + install.BundleId + " with " + packs.Count + " pack(s)");
-        Report(progress, DeployStepKind.Install, DeployStepStatus.Succeeded,
-            "Installed " + install.BundleId + " with " + packs.Count + " game(s)", InstallEnd);
-
-        // --- Step 4: push ROM data using the ACTUAL installed bundle id ----
-        var installedBundleId = _workspace.State.InstalledBundleId;
-        var pushBundleId = string.IsNullOrWhiteSpace(installedBundleId)
-            ? (string.IsNullOrWhiteSpace(request.BundleIdOverride) ? _shell.BundleId : request.BundleIdOverride.Trim())
-            : installedBundleId;
-        if (string.IsNullOrWhiteSpace(pushBundleId))
-        {
-            return Fail(progress, DeployStepKind.Push, "push_no_bundle_id",
-                "No installed bundle id is known, so the ROM data cannot be pushed.",
-                "Install the app again (Deploy), then press Retry.", games);
-        }
-        if (_pusher is null)
-        {
-            return Fail(progress, DeployStepKind.Push, "devpush_missing",
-                "The device bridge (devpush.exe) was not found, so ROM data cannot be pushed.",
-                "Reinstall the launcher ZIP so Bin/devpush.exe exists, then press Retry.", games);
-        }
-        Report(progress, DeployStepKind.Push, DeployStepStatus.Running,
-            "Pushing " + selected.Count + " ROM(s) + GameInfo.json to " + pushBundleId + "…", InstallEnd);
-        var plans = new List<(LibraryEntry Entry, GamePushPlan Plan)>();
-        for (var index = 0; index < selected.Count; index++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var entry = selected[index];
-            var displayName = LauncherGameDataPusher.DisplayName(entry);
-            GamePushPlan plan;
+            // --- Step 2: compose one ROM-free IPA with all selected packs -------
+            Report(progress, DeployStepKind.Compose, DeployStepStatus.Running,
+                "Composing one ROM-free app IPA with " + packs.Count + " game(s)…", BuildEnd);
+            if (!File.Exists(request.TemplateIpaPath))
+            {
+                return Fail(progress, DeployStepKind.Compose, "shell_missing",
+                    "The ROM-free base shell template IPA is missing: " + request.TemplateIpaPath + ".",
+                    "Reinstall the launcher ZIP (it contains Shell/3ds2apple-shell.ipa), then press Retry.", games);
+            }
+            if (_composer is null)
+            {
+                return Fail(progress, DeployStepKind.Compose, "composer_unavailable",
+                    "The IPA composer is unavailable because 3ds2apple-pack.exe was not found.",
+                    "Reinstall the launcher ZIP so Bin/3ds2apple-pack.exe exists, then press Retry.", games);
+            }
             try
             {
-                plan = await _pusher.CreatePlanAsync(entry, _workspace.StagingDirectory, log, cancellationToken).ConfigureAwait(false);
+                composed = await _composer.ComposeAsync(
+                    request.TemplateIpaPath,
+                    packs,
+                    Path.Combine(_workspace.WorkDirectory, "deploy-ipa"),
+                    log,
+                    cancellationToken).ConfigureAwait(false);
             }
             catch (LauncherToolException error)
             {
-                return Fail(progress, DeployStepKind.Push, error.Code,
-                    "Could not prepare the push for " + displayName + ": " + error.Message,
-                    error.Hint ?? "Fix the ROM file and press Retry.", games);
+                return Fail(progress, DeployStepKind.Compose, error.Code, error.Message, error.Hint, games);
             }
-            var pushProgress = new PushProgressAdapter(progress, entry.TitleID, displayName, index, selected.Count);
-            PushOutcome outcome;
+            var verification = ComposedIpaVerifier.Verify(composed.IpaPath, packs);
+            if (!verification.Ok)
+            {
+                return Fail(progress, DeployStepKind.Compose, verification.ErrorCode ?? "composed_ipa_invalid",
+                    verification.Error ?? "The composed IPA is not installable.", verification.Fix, games);
+            }
+            log?.Invoke("deploy: composed IPA verified (" + verification.Describe() + ", sha256 " + composed.Sha256[..16] + "…)");
+            Report(progress, DeployStepKind.Compose, DeployStepStatus.Succeeded,
+                "Verified " + composed.GameCount + " pack(s) + schema-2 catalogue in the app IPA (sha256 " + composed.Sha256[..12] + "…)", ComposeEnd);
+
+            // --- Step 3: sign + install the composed app ------------------------
+            Report(progress, DeployStepKind.Install, DeployStepStatus.Running,
+                "Signing and installing the app with the bundled Impactor/plumesign…", ComposeEnd);
+            if (_shell is null)
+            {
+                return Fail(progress, DeployStepKind.Install, "shell_missing",
+                    "The base shell manifest (Shell/manifest.json) is missing.",
+                    "Reinstall the launcher ZIP, then press Retry.", games);
+            }
+            if (_installer is null)
+            {
+                return Fail(progress, DeployStepKind.Install, "impactor_missing",
+                    "The bundled official Impactor/plumesign was not found.",
+                    "Reinstall the launcher ZIP (ThirdParty/Impactor) or run tools/fetch-impactor.ps1, then press Retry.", games);
+            }
+            ShellInstallOutcome install;
             try
             {
-                outcome = await _pusher.PushAsync(plan, pushBundleId, request.DeviceUdid, resume: true, pushProgress,
-                    line => log?.Invoke("[push] " + line), cancellationToken).ConfigureAwait(false);
+                install = await _installer.InstallAsync(
+                    _shell,
+                    _shellDirectory,
+                    composed.IpaPath,
+                    request.BundleIdOverride,
+                    request.DeviceUdid,
+                    log,
+                    cancellationToken).ConfigureAwait(false);
             }
             catch (LauncherToolException error)
             {
-                return Fail(progress, DeployStepKind.Push, error.Code,
-                    "Pushing " + displayName + " failed: " + error.Message,
-                    error.Hint ?? "Check USB/unlock/Trust and Apple Devices running, then press Retry.", games);
+                return Fail(progress, DeployStepKind.Install, error.Code, error.Message, error.Hint, games);
             }
-            if (!outcome.Success)
+            if (!install.Installed)
             {
-                games[index] = games[index] with { Pushed = false, ErrorCode = outcome.ErrorCode, ErrorMessage = outcome.ErrorMessage };
-                return Fail(progress, DeployStepKind.Push, outcome.ErrorCode ?? "push_failed",
-                    "Pushing " + displayName + " failed: " + (outcome.ErrorMessage ?? "unknown error"),
-                    "Check USB/unlock/Trust and Apple Devices running, then press Retry; already-pushed files are resumed by size.", games);
+                var error = install.Error;
+                return Fail(progress, DeployStepKind.Install, error?.Code ?? "device_install_failed",
+                    error is null ? "Signing/installing the app failed." : error.Title + (string.IsNullOrWhiteSpace(error.Detail) ? string.Empty : " — " + error.Detail),
+                    error?.Fix ?? "Keep the phone unlocked and connected (Apple Devices running), then press Retry.", games);
             }
-            plans.Add((entry, plan));
-            games[index] = games[index] with { Pushed = true };
-            log?.Invoke("push: " + displayName + " -> " + plan.RemoteDirectory);
-            Report(progress, DeployStepKind.Push, DeployStepStatus.Running,
-                displayName + ": ROM + GameInfo.json pushed", PushPercent(index + 1, selected.Count, 100), entry.TitleID);
-        }
-        Report(progress, DeployStepKind.Push, DeployStepStatus.Succeeded,
-            "Pushed " + plans.Count + " game(s) to " + pushBundleId, PushEnd);
-
-        // --- Step 5: read-back verification ---------------------------------
-        Report(progress, DeployStepKind.Verify, DeployStepStatus.Running,
-            "Verifying the pushed files on the phone…", PushEnd);
-        var verifyFailures = new List<string>();
-        for (var index = 0; index < plans.Count; index++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var (entry, plan) = plans[index];
-            var displayName = LauncherGameDataPusher.DisplayName(entry);
-            var problems = await _pusher.VerifyAsync(plan, pushBundleId, request.DeviceUdid, cancellationToken).ConfigureAwait(false);
-            if (problems.Count > 0)
-            {
-                verifyFailures.Add(displayName + ": " + string.Join("; ", problems));
-                games[index] = games[index] with { Verified = false, ErrorCode = "push_verify_failed", ErrorMessage = string.Join("; ", problems) };
-                continue;
-            }
-            entry.PushedAt = DateTimeOffset.UtcNow;
-            entry.PushedFiles = plan.Files.Select(file => file.RemoteName).ToList();
-            entry.LastError = null;
+            _workspace.State.InstalledBundleId = install.BundleId;
+            _workspace.State.InstalledAt = DateTimeOffset.UtcNow;
+            _workspace.State.InstalledGameCount = packs.Count;
             _workspace.SaveState();
-            games[index] = games[index] with { Verified = true };
-            log?.Invoke("deploy: verified " + displayName + " (" + plan.RemoteDirectory + ")");
-            Report(progress, DeployStepKind.Verify, DeployStepStatus.Running,
-                displayName + ": size/sha verified", PushEnd + 10.0 * (index + 1) / plans.Count, entry.TitleID);
+            log?.Invoke("deploy: installed " + install.BundleId + " with " + packs.Count + " pack(s)");
+            Report(progress, DeployStepKind.Install, DeployStepStatus.Succeeded,
+                "Installed " + install.BundleId + " with " + packs.Count + " game(s)", InstallEnd);
         }
-        if (verifyFailures.Count > 0)
+        else
         {
-            return Fail(progress, DeployStepKind.Verify, "push_verify_failed",
-                "Data verification failed: " + string.Join(" | ", verifyFailures),
-                "Reconnect the phone and press Retry; the push resumes and verifies again.", games);
+            Report(progress, DeployStepKind.Compose, DeployStepStatus.Skipped,
+                "Skipped: the installed app is current; no new app IPA is needed for a data-only update.", ComposeEnd);
+            Report(progress, DeployStepKind.Install, DeployStepStatus.Skipped,
+                "Skipped: no overwrite install is needed; Documents and saves are untouched.", InstallEnd);
         }
-        Report(progress, DeployStepKind.Verify, DeployStepStatus.Succeeded,
-            "All selected games are installed and their ROM data is verified on the phone.", 100);
-        log?.Invoke("deploy: done — " + plans.Count + " game(s) ready in " + pushBundleId);
-        return new DeployOutcome(true, null, null, null, null, composed.IpaPath, pushBundleId, games, Retryable: true);
+
+        // The app may have just been installed (actual bundle id) or kept as-is; always push
+        // into the app that is really on the phone.
+        var installedBundleId = _workspace.State.InstalledBundleId;
+        pushBundleId = string.IsNullOrWhiteSpace(installedBundleId)
+            ? (_shell?.BundleId ?? request.BundleIdOverride?.Trim())
+            : installedBundleId;
+
+        // --- Step 4: push only missing/outdated ROM data ---------------------
+        var plans = new List<(LibraryEntry Entry, GamePushPlan Plan)>();
+        if (pushTargets.Count == 0)
+        {
+            Report(progress, DeployStepKind.Push, DeployStepStatus.Skipped,
+                "Skipped: every selected game's data is already current on the phone.", InstallEnd);
+            foreach (var entry in selected)
+            {
+                MarkGame(games, entry.TitleID, game => game with { Pushed = true, Verified = true });
+                log?.Invoke("push: " + LauncherGameDataPusher.DisplayName(entry) + " data is already current; nothing to push");
+            }
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(pushBundleId))
+            {
+                return Fail(progress, DeployStepKind.Push, "push_no_bundle_id",
+                    "No installed bundle id is known, so the ROM data cannot be pushed.",
+                    "Install the app again (Deploy), then press Retry.", games);
+            }
+            if (_pusher is null)
+            {
+                return Fail(progress, DeployStepKind.Push, "devpush_missing",
+                    "The device bridge (devpush.exe) was not found, so ROM data cannot be pushed.",
+                    "Reinstall the launcher ZIP so Bin/devpush.exe exists, then press Retry.", games);
+            }
+            Report(progress, DeployStepKind.Push, DeployStepStatus.Running,
+                "Pushing " + pushTargets.Count + " game(s) of missing/outdated data to " + pushBundleId + "…", InstallEnd);
+            for (var index = 0; index < pushTargets.Count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var entry = pushTargets[index];
+                var displayName = LauncherGameDataPusher.DisplayName(entry);
+                GamePushPlan plan;
+                try
+                {
+                    plan = await _pusher.CreatePlanAsync(entry, _workspace.StagingDirectory, log, cancellationToken).ConfigureAwait(false);
+                }
+                catch (LauncherToolException error)
+                {
+                    return Fail(progress, DeployStepKind.Push, error.Code,
+                        "Could not prepare the push for " + displayName + ": " + error.Message,
+                        error.Hint ?? "Fix the ROM file and press Retry.", games);
+                }
+                var pushProgress = new PushProgressAdapter(progress, entry.TitleID, displayName, index, pushTargets.Count);
+                PushOutcome outcome;
+                try
+                {
+                    outcome = await _pusher.PushAsync(plan, pushBundleId, request.DeviceUdid, resume: true, pushProgress,
+                        line => log?.Invoke("[push] " + line), cancellationToken).ConfigureAwait(false);
+                }
+                catch (LauncherToolException error)
+                {
+                    return Fail(progress, DeployStepKind.Push, error.Code,
+                        "Pushing " + displayName + " failed: " + error.Message,
+                        error.Hint ?? "Check USB/unlock/Trust and Apple Devices running, then press Retry.", games);
+                }
+                if (!outcome.Success)
+                {
+                    MarkGame(games, entry.TitleID, game => game with { Pushed = false, ErrorCode = outcome.ErrorCode, ErrorMessage = outcome.ErrorMessage });
+                    return Fail(progress, DeployStepKind.Push, outcome.ErrorCode ?? "push_failed",
+                        "Pushing " + displayName + " failed: " + (outcome.ErrorMessage ?? "unknown error"),
+                        "Check USB/unlock/Trust and Apple Devices running, then press Retry; already-pushed files are resumed by size.", games);
+                }
+                plans.Add((entry, plan));
+                MarkGame(games, entry.TitleID, game => game with { Pushed = true });
+                log?.Invoke("push: " + displayName + " -> " + plan.RemoteDirectory);
+                Report(progress, DeployStepKind.Push, DeployStepStatus.Running,
+                    displayName + ": ROM + GameInfo.json pushed", PushPercent(index + 1, pushTargets.Count, 100), entry.TitleID);
+            }
+            Report(progress, DeployStepKind.Push, DeployStepStatus.Succeeded,
+                "Pushed " + plans.Count + " game(s) to " + pushBundleId, PushEnd);
+            foreach (var entry in selected.Where(entry => !pushTargets.Any(pushed => string.Equals(pushed.TitleID, entry.TitleID, StringComparison.OrdinalIgnoreCase))))
+            {
+                MarkGame(games, entry.TitleID, game => game with { Pushed = true, Verified = true });
+                log?.Invoke("push: " + LauncherGameDataPusher.DisplayName(entry) + " data is already current; nothing to push");
+            }
+        }
+
+        // --- Step 5: read-back verification (only for data pushed now) -------
+        var verifyFailures = new List<string>();
+        if (plans.Count == 0)
+        {
+            Report(progress, DeployStepKind.Verify, DeployStepStatus.Skipped,
+                decision is null
+                    ? "Nothing was pushed, so there is nothing to verify."
+                    : "Skipped: the app and the selected game data were already current.",
+                PushEnd);
+        }
+        else
+        {
+            Report(progress, DeployStepKind.Verify, DeployStepStatus.Running,
+                "Verifying the pushed files on the phone…", PushEnd);
+            for (var index = 0; index < plans.Count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var (entry, plan) = plans[index];
+                var displayName = LauncherGameDataPusher.DisplayName(entry);
+                var problems = await _pusher!.VerifyAsync(plan, pushBundleId!, request.DeviceUdid, cancellationToken).ConfigureAwait(false);
+                if (problems.Count > 0)
+                {
+                    verifyFailures.Add(displayName + ": " + string.Join("; ", problems));
+                    MarkGame(games, entry.TitleID, game => game with { Verified = false, ErrorCode = "push_verify_failed", ErrorMessage = string.Join("; ", problems) });
+                    continue;
+                }
+                entry.PushedAt = DateTimeOffset.UtcNow;
+                entry.PushedFiles = plan.Files.Select(file => file.RemoteName).ToList();
+                entry.LastError = null;
+                _workspace.SaveState();
+                MarkGame(games, entry.TitleID, game => game with { Verified = true });
+                log?.Invoke("deploy: verified " + displayName + " (" + plan.RemoteDirectory + ")");
+                Report(progress, DeployStepKind.Verify, DeployStepStatus.Running,
+                    displayName + ": size/sha verified", PushEnd + 10.0 * (index + 1) / plans.Count, entry.TitleID);
+            }
+            if (verifyFailures.Count > 0)
+            {
+                return Fail(progress, DeployStepKind.Verify, "push_verify_failed",
+                    "Data verification failed: " + string.Join(" | ", verifyFailures),
+                    "Reconnect the phone and press Retry; the push resumes and verifies again.", games);
+            }
+            Report(progress, DeployStepKind.Verify, DeployStepStatus.Succeeded,
+                "The game data pushed by this deploy is verified on the phone.", 100);
+        }
+
+        // Record what is really on the phone so the next deploy can be incremental. The marker
+        // is only meaningful when the device state was read (legacy pipeline: no marker).
+        if (_deviceInspector is not null && decision is not null && device is not null && !string.IsNullOrWhiteSpace(pushBundleId))
+        {
+            var markerEntries = MarkerEntries(decision, device, selected);
+            // After a (re)install the app on the phone is the launcher's shell template, so the
+            // marker records the template's short version; a data-only update keeps the installed one.
+            var installedShortVersion = decision.Mode is DeviceDeployMode.FullInstall or DeviceDeployMode.Reinstall
+                ? (_shell?.Version ?? device.App.ShortVersion ?? "unknown")
+                : (device.App.ShortVersion ?? _shell?.Version ?? "unknown");
+            var marker = DeviceDeployMarker.Create(
+                LauncherInfo.Version,
+                expectedPackageVersion,
+                installedShortVersion,
+                _shell?.Build ?? 0,
+                markerEntries,
+                device.Marker);
+            try
+            {
+                await _deviceInspector.WriteMarkerAsync(
+                    new DeviceDeployMarkerWriteRequest(pushBundleId, request.DeviceUdid, marker),
+                    log,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (LauncherToolException error)
+            {
+                log?.Invoke("deploy warning: the deploy marker could not be written (" + error.Code + "): " + error.Message
+                            + "; the next deploy treats the phone state as unknown and updates once.");
+            }
+        }
+        log?.Invoke("deploy: done — " + plans.Count + " game(s) pushed/verified in " + pushBundleId + " (" + (decision?.Mode.ToString() ?? "full deploy") + ")");
+        return new DeployOutcome(true, null, null, null, null, composed?.IpaPath, pushBundleId, games, Retryable: true,
+            DeviceSummary: decision is null || device is null
+                ? null
+                : new DeployDeviceSummary(decision.Mode, decision.IpaGames.Count, plans.Count, device.App.PackageVersion ?? "unknown", expectedPackageVersion));
         }
         catch (OperationCanceledException)
         {
@@ -553,6 +769,142 @@ public sealed class DeployOrchestrator
     public const string LocalBuildFix =
         "This launcher needs 3dsrecomp.exe and the official LLVM 23.1.6 tools (clang.exe, llvm-ar.exe, ld64.lld.exe, lib/clang/23/include). "
         + "Install LLVM 23.1.6 for Windows x86_64 and build 3dsrecomp once, or place both under the launcher's distribution Bin/ (Bin/3dsrecomp.exe and Bin/llvm/), then press Retry.";
+
+    /// <summary>
+    /// The bundle id a device read/push must use before the (possible) install: the last
+    /// installed app, the user's override, or the shell template bundle id.
+    /// </summary>
+    private string? ResolvePushBundleId(DeployRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(_workspace.State.InstalledBundleId))
+        {
+            return _workspace.State.InstalledBundleId!.Trim();
+        }
+        if (!string.IsNullOrWhiteSpace(request.BundleIdOverride))
+        {
+            return request.BundleIdOverride.Trim();
+        }
+        return string.IsNullOrWhiteSpace(_shell?.BundleId) ? null : _shell!.BundleId.Trim();
+    }
+
+    /// <summary>Local ROM size for one library game (cheap; never reads the file).</summary>
+    private long? LocalRomBytes(string titleId)
+    {
+        var entry = _workspace.Find(titleId);
+        if (entry is null || string.IsNullOrWhiteSpace(entry.RomPath))
+        {
+            return null;
+        }
+        try
+        {
+            var info = new FileInfo(entry.RomPath);
+            return info.Exists ? info.Length : null;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Resolve the GamePack of an installed game that must stay inside a recomposed app.
+    /// Reuses the cached build when current, otherwise the existing pack file (keeping the
+    /// game runnable beats dropping it), and only rebuilds when there is no pack at all.
+    /// Null means the game cannot be kept; the caller logs it and continues (its data on the
+    /// phone is untouched).
+    /// </summary>
+    private async Task<ComposedPack?> PrepareKeptPackAsync(LibraryEntry entry, Action<string>? log, CancellationToken cancellationToken)
+    {
+        var displayName = LauncherGameDataPusher.DisplayName(entry);
+        var cached = await ResolveCachedBuildAsync(entry, forceRebuild: false, cancellationToken).ConfigureAwait(false);
+        if (cached.PackPath is not null && File.Exists(cached.PackPath))
+        {
+            log?.Invoke("compose: keeping installed game " + entry.TitleID + " (" + displayName + ") in the updated app: " + cached.Detail);
+            return new ComposedPack(entry.TitleID, displayName, entry.ProductCode, LauncherInfo.GamePackAbiVersion, cached.PackPath);
+        }
+        if (entry.Pack is { IsPlaceholder: false } && !string.IsNullOrWhiteSpace(entry.PackPath) && File.Exists(entry.PackPath))
+        {
+            log?.Invoke("compose: keeping installed game " + entry.TitleID + " with its existing GamePack (not rebuilt: " + cached.Detail + ")");
+            return new ComposedPack(entry.TitleID, displayName, entry.ProductCode, LauncherInfo.GamePackAbiVersion, entry.PackPath);
+        }
+        if (_buildProvider is null || !File.Exists(entry.RomPath))
+        {
+            log?.Invoke("compose: installed game " + entry.TitleID + " has no usable GamePack and no ROM to rebuild it");
+            return null;
+        }
+        try
+        {
+            var outcome = await _buildProvider.BuildAsync(
+                new PackBuildRequest(entry.TitleID, displayName, entry.ProductCode, entry.RomPath, _workspace.WorkDirectory),
+                progress: null,
+                line => log?.Invoke("[build] " + line),
+                cancellationToken).ConfigureAwait(false);
+            if (!outcome.Success || !outcome.Installable || string.IsNullOrWhiteSpace(outcome.PackPath))
+            {
+                log?.Invoke("compose: rebuild of installed game " + entry.TitleID + " failed (" + (outcome.ErrorCode ?? "build_failed") + "); it stays out of the app update");
+                return null;
+            }
+            entry.Pack = outcome.Pack;
+            entry.PackPath = outcome.PackPath;
+            entry.State = "built";
+            entry.BuiltAt = DateTimeOffset.UtcNow;
+            entry.Build = await CaptureBuildArtifactAsync(entry, outcome, cancellationToken).ConfigureAwait(false);
+            _workspace.SaveState();
+            return new ComposedPack(entry.TitleID, displayName, entry.ProductCode, LauncherInfo.GamePackAbiVersion, outcome.PackPath);
+        }
+        catch (LauncherToolException error)
+        {
+            log?.Invoke("compose: rebuild of installed game " + entry.TitleID + " failed (" + error.Code + "); it stays out of the app update");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Library entries the deploy marker must describe after a successful run:
+    /// all games inside the app after a (re)install, or the current installed set for a
+    /// data-only update (selected + everything the phone already reports).
+    /// </summary>
+    private List<LibraryEntry> MarkerEntries(DeviceDeployDecision decision, DeviceDeploySnapshot device, IReadOnlyList<LibraryEntry> selected)
+    {
+        if (decision.Mode is DeviceDeployMode.FullInstall or DeviceDeployMode.Reinstall)
+        {
+            return decision.IpaGames.ToList();
+        }
+        var entries = new List<LibraryEntry>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in selected)
+        {
+            if (seen.Add(GameInfoWriter.NormalizeTitleId(entry.TitleID)))
+            {
+                entries.Add(entry);
+            }
+        }
+        foreach (var titleId in DeviceDeployPlanner.CollectInstalledIds(device))
+        {
+            if (!seen.Add(titleId))
+            {
+                continue;
+            }
+            var entry = _workspace.Find(titleId);
+            if (entry is not null)
+            {
+                entries.Add(entry);
+            }
+        }
+        return entries;
+    }
+
+    /// <summary>Update one selected game's row in the deploy result (rows are keyed by title id).</summary>
+    private static void MarkGame(List<DeployGameResult> games, string titleId, Func<DeployGameResult, DeployGameResult> update)
+    {
+        for (var index = 0; index < games.Count; index++)
+        {
+            if (string.Equals(games[index].TitleID, titleId, StringComparison.OrdinalIgnoreCase))
+            {
+                games[index] = update(games[index]);
+            }
+        }
+    }
 
     /// <summary>
     /// Reuse decision for one selected game: only a recorded buildCompatVersion + ROM

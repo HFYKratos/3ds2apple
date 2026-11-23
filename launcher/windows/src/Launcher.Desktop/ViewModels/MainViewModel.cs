@@ -424,6 +424,9 @@ public sealed class MainViewModel : ObservableObject
     private readonly HardwareProfile _hardware = HardwareProbe.Current;
     private BuildCompatibility? _buildCompatibility;
     private bool _libraryBuildRunning;
+    private string _deviceAppStatus = string.Empty;
+    private string _deviceGamesStatus = string.Empty;
+    private string _deployPlanStatus = string.Empty;
 
     public MainViewModel() : this(LauncherServices.Create())
     {
@@ -989,6 +992,25 @@ public sealed class MainViewModel : ObservableObject
 
     public string InstalledStatus { get => _installedStatus; private set => SetProperty(ref _installedStatus, value); }
 
+    /// <summary>Device-aware Deploy lines: installed app version/package, installed game data, plan.</summary>
+    public string DeviceAppStatus { get => _deviceAppStatus; private set => SetProperty(ref _deviceAppStatus, value); }
+
+    public string DeviceGamesStatus { get => _deviceGamesStatus; private set => SetProperty(ref _deviceGamesStatus, value); }
+
+    public string DeployPlanStatus
+    {
+        get => _deployPlanStatus;
+        private set
+        {
+            if (SetProperty(ref _deployPlanStatus, value))
+            {
+                OnPropertyChanged(nameof(HasDeployPlanStatus));
+            }
+        }
+    }
+
+    public bool HasDeployPlanStatus => !string.IsNullOrWhiteSpace(_deployPlanStatus);
+
     public void OnDeploySelectionChanged()
     {
         OnPropertyChanged(nameof(SelectedDeployCount));
@@ -1040,6 +1062,7 @@ public sealed class MainViewModel : ObservableObject
         DeployErrorTitle = string.Empty;
         DeployErrorDetail = string.Empty;
         DeployErrorFix = string.Empty;
+        DeployPlanStatus = string.Empty;
         ProgressValue = 0;
         OnPropertyChanged(nameof(DeployState));
         OnPropertyChanged(nameof(DeployStateLabel));
@@ -1161,6 +1184,9 @@ public sealed class MainViewModel : ObservableObject
             DeployErrorFix = string.Empty;
             StatusText = L.DeployDoneTitle;
             Log("deploy done: " + L.DeployDoneTitle + (outcome.ComposedIpaPath is null ? string.Empty : " (" + outcome.ComposedIpaPath + ")"));
+            DeployPlanStatus = outcome.DeviceSummary is { } deviceSummary
+                ? LocalizeDeployMode(deviceSummary.Mode, deviceSummary.IpaGameCount, deviceSummary.PushedGameCount)
+                : string.Empty;
         }
         else
         {
@@ -1376,10 +1402,105 @@ public sealed class MainViewModel : ObservableObject
             Log(report.AllReady
                 ? "deploy prerequisites: all 5 ready"
                 : "deploy prerequisites red: " + string.Join(", ", report.Blocked.Select(item => item.Kind + (string.IsNullOrWhiteSpace(item.Detail) ? string.Empty : " (" + item.Detail + ")"))));
+            await RefreshDeviceDeployStateAsync().ConfigureAwait(true);
         }
         catch (Exception exception)
         {
             Log("deploy prerequisite check failed: " + exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// Read the connected phone's app identity, installed game data and deploy marker and show
+    /// what the next Deploy would do. Best-effort: without a phone, devpush or shell template the
+    /// lines are cleared; the deploy steps still report any real failure.
+    /// </summary>
+    private async Task RefreshDeviceDeployStateAsync()
+    {
+        if (!IsDeploySection)
+        {
+            return;
+        }
+        try
+        {
+            _shell ??= await _services.LoadShellAsync().ConfigureAwait(true);
+            var inspector = _services.CreateDeviceDeployInspector();
+            if (_shell is null || inspector is null)
+            {
+                DeviceAppStatus = string.Empty;
+                DeviceGamesStatus = string.Empty;
+                DeployPlanStatus = string.Empty;
+                return;
+            }
+            var selected = DeployGames.Where(row => row.IsSelected).Select(row => row.Entry).ToList();
+            var bundleId = _services.Workspace.State.InstalledBundleId ?? _shell.BundleId;
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+            var device = await inspector.InspectAsync(
+                new DeviceDeployInspectRequest(
+                    bundleId,
+                    _device?.Udid ?? _services.Workspace.State.LastDeviceUdid,
+                    selected.Select(entry => entry.TitleID).ToList()),
+                line => Log("[device] " + line),
+                timeout.Token).ConfigureAwait(true);
+            var expected = _services.ResolveExpectedAppPackageVersion(_shell);
+            DeviceAppStatus = device.App.Installed
+                ? Loc.T("deploy.deviceapp.version",
+                    string.IsNullOrWhiteSpace(device.App.ShortVersion) ? Loc.T("deploy.deviceapp.unknown") : device.App.ShortVersion,
+                    string.IsNullOrWhiteSpace(device.App.PackageVersion) ? Loc.T("deploy.deviceapp.unknown") : device.App.PackageVersion,
+                    expected)
+                : L.DeployDeviceAppNotInstalled;
+            var installedCount = device.InstalledGameTitleIds.Count;
+            DeviceGamesStatus = installedCount == 0
+                ? L.DeployDeviceGamesNone
+                : Loc.T("deploy.devicegames.some", installedCount,
+                    selected.Count(entry => DeviceDeployPlanner.IsDataCurrent(device, entry, LocalRomBytes(entry))), selected.Count);
+            if (selected.Count == 0)
+            {
+                DeployPlanStatus = string.Empty;
+            }
+            else
+            {
+                var decision = DeviceDeployPlanner.Decide(device, expected, selected, _services.Workspace.State.Games,
+                    titleId =>
+                    {
+                        var entry = _services.Workspace.Find(titleId);
+                        return entry is null ? (long?)null : LocalRomBytes(entry);
+                    });
+                DeployPlanStatus = LocalizeDeployMode(decision.Mode, decision.IpaGames.Count, decision.PushGames.Count);
+            }
+        }
+        catch (Exception error) when (error is LauncherToolException or IOException or UnauthorizedAccessException or OperationCanceledException)
+        {
+            DeviceAppStatus = Loc.T("deploy.deviceapp.unavailable");
+            DeviceGamesStatus = string.Empty;
+            DeployPlanStatus = string.Empty;
+            Log("device deploy state unavailable: " + (error is LauncherToolException tool ? tool.Code + ": " + tool.Message : error.Message));
+        }
+    }
+
+    private string LocalizeDeployMode(DeviceDeployMode mode, int ipaGames, int pushGames) => mode switch
+    {
+        DeviceDeployMode.FullInstall => Loc.T("deploy.mode.full", pushGames),
+        DeviceDeployMode.Reinstall => Loc.T("deploy.mode.reinstall", ipaGames, pushGames),
+        DeviceDeployMode.PushOnly => Loc.T("deploy.mode.push", pushGames),
+        _ => Loc.T("deploy.mode.uptodate"),
+    };
+
+    /// <summary>Local ROM size for the "n of m current" line (cheap; never reads the file).</summary>
+    private static long? LocalRomBytes(LibraryEntry entry)
+    {
+        if (string.IsNullOrWhiteSpace(entry.RomPath))
+        {
+            return null;
+        }
+        try
+        {
+            var info = new FileInfo(entry.RomPath);
+            return info.Exists ? info.Length : null;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return null;
         }
     }
 

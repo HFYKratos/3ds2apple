@@ -137,11 +137,21 @@ public sealed record DeviceInfo(
 }
 
 /// <summary>Result of <c>devpush app-attr --bundle-id ... --json</c>.</summary>
+/// <remarks>
+/// <see cref="Attributes"/> keeps every scalar Info.plist key the bridge reports (devpush/1
+/// <c>keys</c> map). The three identity keys the device-aware deploy needs are surfaced as
+/// typed properties: <c>CFBundleShortVersionString</c>, <c>CFBundleVersion</c> and the shell's
+/// own <c>ThreeDS2ApplePackageVersion</c> (missing on old shells -> null = unknown).
+/// </remarks>
 public sealed record AppAttributes(
     bool Installed,
     string? DataContainer,
     string? AppBundleVersion,
-    bool? FileSharingEnabled);
+    bool? FileSharingEnabled,
+    string? ShortVersion = null,
+    string? BuildVersion = null,
+    string? PackageVersion = null,
+    IReadOnlyDictionary<string, string>? Attributes = null);
 
 /// <summary>One remote file/directory entry from <c>devpush ls</c> / <c>devpush stat</c>.</summary>
 public sealed record RemoteEntry(string Name, bool IsDir, long Size, long? MtimeUnix);

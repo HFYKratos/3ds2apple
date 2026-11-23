@@ -248,6 +248,45 @@ fn install_put_get_ls_stat_and_push_tar_roundtrip() {
 }
 
 #[test]
+fn app_attr_exposes_the_installed_app_identity_keys() {
+    let dir = tempdir();
+    let mock = dir.path().join("mock");
+    // Mock-only install attributes: what a real shell's Info.plist reports through
+    // installation_proxy (ThreeDS2ApplePackageVersion is the launcher's version key).
+    write_file(
+        &mock.join("install-attrs.json"),
+        b"{\"ThreeDS2ApplePackageVersion\":\"0.1.6-beta2\",\"CFBundleVersion\":\"7\"}",
+    );
+    let ipa = dir.path().join("Shell.ipa");
+    write_file(&ipa, b"fake ipa bytes");
+    mock_install(&mock, &ipa, "com.kratos.3ds2apple");
+
+    let (code, events, stderr) = run(&mock, &["app-attr", "--bundle-id", "com.kratos.3ds2apple"]);
+    assert_eq!(code, 0, "app-attr failed: {stderr}");
+    let payload = done_payload(&events);
+    assert_eq!(payload["installed"], true);
+    assert_eq!(
+        payload["keys"]["ThreeDS2ApplePackageVersion"],
+        "0.1.6-beta2"
+    );
+    assert_eq!(payload["keys"]["CFBundleVersion"], "7");
+    assert_eq!(payload["keys"]["CFBundleShortVersionString"], "1.0");
+
+    let (code, events, _stderr) = run(
+        &mock,
+        &[
+            "app-attr",
+            "--bundle-id",
+            "com.kratos.3ds2apple",
+            "--key",
+            "ThreeDS2ApplePackageVersion",
+        ],
+    );
+    assert_eq!(code, 0);
+    assert_eq!(done_payload(&events)["value"], "0.1.6-beta2");
+}
+
+#[test]
 fn stable_error_codes_and_exit_codes() {
     let dir = tempdir();
     let mock = dir.path().join("mock");

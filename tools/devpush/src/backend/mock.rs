@@ -124,6 +124,16 @@ impl MockBackend {
         })
     }
 
+    /// Optional mock install attributes (launcher tests): <mock>/install-attrs.json.
+    fn install_attrs(&self) -> BTreeMap<String, serde_json::Value> {
+        std::fs::read(self.root.join("install-attrs.json"))
+            .ok()
+            .and_then(|bytes| {
+                serde_json::from_slice::<BTreeMap<String, serde_json::Value>>(&bytes).ok()
+            })
+            .unwrap_or_default()
+    }
+
     fn root_for(&self, bundle: &str, container: ContainerKind) -> PathBuf {
         match container {
             ContainerKind::App => self.root.join("containers").join(bundle),
@@ -183,12 +193,17 @@ impl MockBackend {
         }
         let (bytes, sha256) = hash_file(ipa).await?;
         let mut state = self.load()?;
-        let mut attrs = BTreeMap::new();
-        attrs.insert("CFBundleVersion".to_string(), serde_json::json!("1.0"));
-        attrs.insert(
-            "CFBundleShortVersionString".to_string(),
-            serde_json::json!("1.0"),
-        );
+        // Optional mock-only Info.plist attributes: <mock>/install-attrs.json, e.g.
+        // {"ThreeDS2ApplePackageVersion":"0.1.6-beta2"}. The real device reports these
+        // through installation_proxy; the mock uses the file so launcher tests can
+        // exercise the device-aware deploy version comparison without an iPhone.
+        let mut attrs = self.install_attrs();
+        attrs
+            .entry("CFBundleVersion".to_string())
+            .or_insert_with(|| serde_json::json!("1.0"));
+        attrs
+            .entry("CFBundleShortVersionString".to_string())
+            .or_insert_with(|| serde_json::json!("1.0"));
         state.apps.insert(
             bundle.clone(),
             MockApp {

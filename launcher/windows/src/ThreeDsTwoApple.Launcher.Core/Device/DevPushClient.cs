@@ -114,11 +114,30 @@ public sealed class DevPushClient
         try
         {
             var run = await RunAsync(arguments, "app-attr", null, cancellationToken).ConfigureAwait(false);
+            // devpush/1 returns every scalar Info.plist key in "keys"; the three identity keys
+            // drive the device-aware deploy decision (a missing ThreeDS2ApplePackageVersion on
+            // an old shell is "unknown" and forces one update to seed it, never a silent skip).
+            var attributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (Json.Obj(run.Done, "keys") is { } keys)
+            {
+                foreach (var property in keys.EnumerateObject())
+                {
+                    var text = Json.String(keys, property.Name);
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        attributes[property.Name] = text;
+                    }
+                }
+            }
             return new AppAttributes(
                 Json.Bool(run.Done, "installed") ?? true,
                 Json.String(run.Done, "dataContainer"),
                 Json.String(run.Done, "appBundleVersion"),
-                Json.Bool(run.Done, "fileSharingEnabled"));
+                Json.Bool(run.Done, "fileSharingEnabled"),
+                attributes.GetValueOrDefault("CFBundleShortVersionString"),
+                attributes.GetValueOrDefault("CFBundleVersion"),
+                attributes.GetValueOrDefault("ThreeDS2ApplePackageVersion"),
+                attributes);
         }
         catch (LauncherToolException error) when (error.Code == "app_missing")
         {

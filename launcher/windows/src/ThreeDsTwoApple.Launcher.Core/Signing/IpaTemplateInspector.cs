@@ -1,12 +1,13 @@
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using ThreeDsTwoApple.Launcher.Core;
 using ThreeDsTwoApple.Launcher.Core.Util;
 
 namespace ThreeDsTwoApple.Launcher.Core.Signing;
 
 /// <summary>Identity read from the template IPA (Info.plist + bundle catalogue).</summary>
-public sealed record TemplateIdentity(string? Version, int? Build, int CatalogSchemaVersion, int GameCount, bool HasRoms);
+public sealed record TemplateIdentity(string? Version, int? Build, int CatalogSchemaVersion, int GameCount, bool HasRoms, string? PackageVersion = null);
 
 /// <summary>Result of inspecting an IPA as a launcher template/app.</summary>
 public sealed record TemplateInspection(bool Ok, TemplateIdentity? Identity, string? Error, string? Fix);
@@ -153,6 +154,8 @@ public static class IpaTemplateInspector
             var version = plist.TryGetValue("CFBundleShortVersionString", out var v) ? v?.ToString() : null;
             var buildText = plist.TryGetValue("CFBundleVersion", out var b) ? b?.ToString() : null;
             var build = int.TryParse(buildText, out var parsedBuild) ? parsedBuild : (int?)null;
+            // The app's own build identity used by the device-aware deploy (project.yml writes it).
+            var packageVersion = plist.TryGetValue("ThreeDS2ApplePackageVersion", out var packageValue) ? packageValue?.ToString() : null;
             var identityRules = ShellTemplateRules.Validate(version, build, "Info.plist");
             if (!identityRules.Ok)
             {
@@ -194,7 +197,7 @@ public static class IpaTemplateInspector
             {
                 return Fail("The IPA contains a Roms/ directory with files; game data must stay out of the signed app.", "Use the ROM-free template; ROM data is pushed separately.");
             }
-            return new TemplateInspection(true, new TemplateIdentity(version, build, schemaVersion, gameCount, false), null, null);
+            return new TemplateInspection(true, new TemplateIdentity(version, build, schemaVersion, gameCount, false, packageVersion), null, null);
         }
     }
 
@@ -208,6 +211,31 @@ public static class IpaTemplateInspector
         if (entry is null) return null;
         var index = entry.FullName.IndexOf(".app/", StringComparison.OrdinalIgnoreCase);
         return entry.FullName[..(index + ".app/".Length)];
+    }
+}
+
+/// <summary>
+/// Resolves the app package version (<c>ThreeDS2ApplePackageVersion</c>) the bundled shell
+/// template installs. The device-aware deploy compares this with the value reported by the
+/// installed app; a template without the key (old shell) falls back to the launcher version.
+/// </summary>
+public static class ShellPackageVersion
+{
+    public static string Resolve(ShellManifest shell, string shellDirectory)
+    {
+        try
+        {
+            var inspection = IpaTemplateInspector.Inspect(Path.Combine(shellDirectory, shell.FileName), requireEmptyCatalog: true);
+            if (inspection.Ok && !string.IsNullOrWhiteSpace(inspection.Identity?.PackageVersion))
+            {
+                return inspection.Identity!.PackageVersion!;
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            // Fall through to the launcher version; Install re-reports a broken template.
+        }
+        return LauncherInfo.Version;
     }
 }
 

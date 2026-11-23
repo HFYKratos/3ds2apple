@@ -19,7 +19,7 @@ UI, log and diagnostics export. The current development checkout adds a Deploy
 window-close cleanup (a running deploy is stopped and its 3dsrecomp/clang/lld/
 devpush/plumesign processes are terminated before the launcher exits), and merges the
 two duplicate "not built yet" Library strings into one status line. This checkout compiles cleanly (0 errors, warnings as
-errors) and its **212 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
+errors) and its **232 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
 `--self-test` on Linux/WSL with the embedded payload (32 PASS / 0 FAIL / 0 WARN), and on a
 Windows host natively through `scripts/release/win-selftest.sh` (32 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a minimal Settings gear; it is
@@ -85,8 +85,11 @@ travels as an internal devpush/plumesign command argument.
    local build toolchain, devpush device bridge, shell template) with one short fix hint
    on every red row; **Refresh status** re-probes everything (opening Deploy does too) and
    **Open Impactor** covers the Apple-ID login the launcher cannot detect. Then tick one
-   or many library games and press **一键部署 / Deploy selected**. One
-   action then runs, in order, with a live per-step state and one Retry button on failure:
+   or many library games and press **一键部署 / Deploy selected**. The launcher first reads
+   the connected phone (installed app version, installed games, deploy marker) and skips
+   every step that is already current - the "Device state" card shows what it found and
+   what the run will do (see "Device-aware incremental deploy" below). One action then runs,
+   in order, with a live per-step state and one Retry button on failure:
    - compile each selected game locally (3dsrecomp + open-source LLVM/LLD on this PC; real
      packs already built are reused). The old macOS Build Agent / preview choices are gone
      and there is no silent fallback — a missing toolchain is one actionable error.
@@ -130,15 +133,46 @@ template with an unchanged recipe keeps every GamePack. Packs built by a launche
 older than 0.1.2 have no marker yet: they are rebuilt once on the next Deploy or
 "Build now", after which the cache applies normally.
 
+### Device-aware incremental deploy (0.1.6-beta2)
+
+Deploy no longer always composes, installs and pushes everything. Once the phone is
+connected it reads the device state before building anything:
+
+- `devpush app-attr --json` for the installed app identity: `CFBundleShortVersionString`,
+  `CFBundleVersion` and the shell's own `ThreeDS2ApplePackageVersion`;
+- `devpush ls Documents/Games` plus `stat` for each `GameRom.cci` / `GameInfo.json`;
+- `Documents/.3ds2apple-deploy.json` — a launcher-written marker recording the app
+  package version and, per installed game, the `buildCompatVersion`, GamePack SHA-256 and
+  ROM SHA-256 of the last successful deploy.
+
+Rules (implemented by `Deploy/DeviceDeployState.cs` `DeviceDeployPlanner` and unit
+tested in `DeviceDeployTests.cs`; the Deploy page shows them in the "Device state" card
+and the log):
+
+| Phone state | Deploy action |
+|---|---|
+| App not installed | full flow: compile, compose, sign, install, push the selected games |
+| App package version differs from the launcher shell (or an old shell does not report it) | recompose an IPA with the union of the installed games' GamePacks and the selected ones, overwrite-install (Documents and saves are preserved), then push only missing/outdated data |
+| No marker on an existing install | unknown state: update once (union with every built library game) and seed the marker |
+| App current, a GamePack build identity changed | recompose + overwrite-install, then push only changed data |
+| App current, only data missing/outdated | push only; no reinstall |
+| Everything current | no-op: "already up to date" |
+
+The app is never uninstalled (a clean uninstall would clear Documents/saves). Skipped
+steps are reported as `Skipped` with the reason; the marker is written after a successful
+install/push, and a marker write failure only warns (the next deploy treats the phone
+state as unknown and updates once). The macOS launcher keeps the previous full deploy
+path for now: this incremental behaviour is Windows-only.
+
 ## Stack
 
 - .NET 10 + **Avalonia 12.1.6** desktop UI (same stack family S2Arm's Windows
   launcher uses; our code is original — S2Arm is an Apache-2.0 reference only).
 - Projects: ThreeDsTwoApple.Launcher.Core (no UI: tool clients, contracts, batch
-  Deploy pipeline + composed-IPA verifier, IPA composition, signing, push, localization
-  catalog, embedded single-file payload, build-compatibility cache) /
-  ThreeDsTwoApple.Launcher.Desktop (Avalonia shell) /
-  ThreeDsTwoApple.Launcher.Core.Tests (198 xUnit tests).
+  Deploy pipeline + device-aware deploy planner + composed-IPA verifier, IPA composition,
+  signing, push, localization catalog, embedded single-file payload, build-compatibility
+  cache) / ThreeDsTwoApple.Launcher.Desktop (Avalonia shell) /
+  ThreeDsTwoApple.Launcher.Core.Tests (232 xUnit tests).
 - All external work goes through CLI tools passed as argument arrays (never a
   shell string): 3ds2apple-pack, devpush, the official plumesign.
   The launcher never re-implements ROM parsing, the AOT compile/link,
@@ -176,8 +210,9 @@ older than 0.1.2 have no marker yet: they are rebuilt once on the next Deploy or
       Hardware/                           logical/physical cores + RAM probe for the compile line
       src/Launcher.Desktop/             Avalonia UI (Program, App, MainWindow, view model,
                                         Localization/LocalizedText, Assets/app.ico + placeholder)
-      tests/ThreeDsTwoApple.Launcher.Core.Tests/   212 xUnit tests (incl. DeployFlowTests + DeployCancellationTests +
-                                                  ProcessRunnerTests + BuildCacheTests + ComposedIpaVerifierTests)
+      tests/ThreeDsTwoApple.Launcher.Core.Tests/   232 xUnit tests (incl. DeployFlowTests + DeviceDeployTests +
+                                                  DeployCancellationTests + ProcessRunnerTests + BuildCacheTests +
+                                                  ComposedIpaVerifierTests)
       vendor/impactor/             PINS.json + MIT / MPL-2.0 licence texts + source note
       shell/                            shell template IPA placement + manifest example (unchanged):
                                         the template is ROM-free and pinned; packs are injected at install time

@@ -64,6 +64,10 @@ public sealed class LocalizedText
     public string DeployToolchainFix => Loc.T("deploy.toolchain.fix");
     public string DeployDeviceNone => Loc.T("deploy.deviceNone");
     public string DeployNotInstalled => Loc.T("deploy.notInstalled");
+    public string DeployDeviceStateTitle => Loc.T("deploy.deviceState.title");
+    public string DeployDeviceAppNotInstalled => Loc.T("deploy.deviceapp.notInstalled");
+    public string DeployDeviceGamesNone => Loc.T("deploy.devicegames.none");
+    public string DeployPlanTitle => Loc.T("deploy.plan.title");
     public string DeployLog => Loc.T("deploy.log");
     public string DeployLogShow => Loc.T("deploy.logShow");
     public string DeployLogHide => Loc.T("deploy.logHide");
