@@ -1,0 +1,34 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  selfchecks:
+    name: Host self-checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check whitespace
+        run: git diff --check
+      - name: Run layout, AOT, catalog and release self-checks
+        run: |
+          bash scripts/tests/perf-selfcheck.sh
+          bash scripts/tests/library-selfcheck.sh
+          bash scripts/tests/aot-selfcheck.sh
+          bash scripts/tests/game-catalog-selfcheck.sh
+          bash scripts/tests/desktop-aot-selfcheck.sh
+  rust:
+    name: Rust crates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Pack CLI tests
+        run: cd builder && cargo test --workspace
+      - name: devpush tests
+        run: cd tools/devpush && cargo test
