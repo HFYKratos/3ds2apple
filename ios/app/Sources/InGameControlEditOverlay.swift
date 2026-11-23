@@ -28,6 +28,12 @@ struct InGameControlEditOverlay: View {
     var onMove: (ControlElement, CGPoint) -> Void
     var onDone: () -> Void
 
+    /// Round 0.1.6 local drag preview: the profile is committed once, on gesture
+    /// end, and the moving control draws at this preview centre meanwhile (no
+    /// per-frame draft writes, no start/target jitter).
+    @State private var previewCenters: [ControlElement: CGPoint] = [:]
+    @State private var dpadPreviewCenter: CGPoint?
+
     var body: some View {
         GeometryReader { geometry in
             let container = geometry.size
@@ -89,12 +95,17 @@ struct InGameControlEditOverlay: View {
     private func editableDpad(in container: CGSize) -> some View {
         let group = profile.dpadGroup(in: container, sizeScale: sizeScale(.dpadUp))
         let opacity = min(max(group.opacity * opacityScale, 0.30), 1.0)
-        return EditableDpadCrossBox(center: group.center,
+        let displayCenter = dpadPreviewCenter ?? group.center
+        return EditableDpadCrossBox(center: displayCenter,
                                     diameter: group.diameter,
                                     container: container,
                                     opacity: opacity,
                                     haptics: haptics,
-                                    onMove: { point in
+                                    onPreview: { point in
+                                        dpadPreviewCenter = point
+                                    },
+                                    onCommit: { point in
+                                        dpadPreviewCenter = nil
                                         onMove(.dpadUp,
                                                CGPoint(x: point.x / max(container.width, 1),
                                                        y: point.y / max(container.height, 1)))
@@ -108,14 +119,21 @@ struct InGameControlEditOverlay: View {
                                   in: container,
                                   sizeScale: sizeScale(element))
         let opacity = min(max(placement.opacity * opacityScale, 0.30), 1.0)
+        let displayCenter = previewCenters[element] ?? frame.center
         EditableControlBox(element: element,
                            frame: frame,
+                           displayCenter: displayCenter,
                            container: container,
                            opacity: opacity,
                            haptics: haptics,
-                           onMove: { point in
-                               onMove(element, CGPoint(x: point.x / max(container.width, 1),
-                                                       y: point.y / max(container.height, 1)))
+                           onPreview: { point in
+                               previewCenters[element] = point
+                           },
+                           onCommit: { point in
+                               previewCenters[element] = nil
+                               onMove(element,
+                                      CGPoint(x: point.x / max(container.width, 1),
+                                              y: point.y / max(container.height, 1)))
                            })
     }
 }
@@ -126,10 +144,13 @@ struct InGameControlEditOverlay: View {
 private struct EditableControlBox: View {
     let element: ControlElement
     let frame: ControlFrame
+    /// Where the control draws (a drag preview while one is active).
+    let displayCenter: CGPoint
     let container: CGSize
     let opacity: Double
     let haptics: Bool
-    let onMove: (CGPoint) -> Void
+    let onPreview: (CGPoint) -> Void
+    let onCommit: (CGPoint) -> Void
 
     @State private var dragStart: CGPoint?
 
@@ -145,13 +166,21 @@ private struct EditableControlBox: View {
             RoundedRectangle(cornerRadius: min(frame.width, frame.height) * 0.42,
                              style: .continuous)
                 .strokeBorder(Color.white.opacity(0.85), lineWidth: 1.5)
-            Text(element.symbol)
-                .font(.system(size: max(min(frame.height * 0.36, 14), 7),
-                              weight: .semibold, design: .rounded))
-                .foregroundColor(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-                .padding(.horizontal, 2)
+            Group {
+                if let systemImage = element.systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: max(min(frame.height * 0.4, 16), 7),
+                                      weight: .semibold))
+                } else {
+                    Text(element.symbol)
+                        .font(.system(size: max(min(frame.height * 0.36, 14), 7),
+                                      weight: .semibold, design: .rounded))
+                }
+            }
+            .foregroundColor(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .padding(.horizontal, 2)
         }
         // Round-8 fix: contentShape/gesture attach BEFORE .position. SwiftUI's
         // .position fills the parent container, so a gesture attached after it
@@ -166,7 +195,7 @@ private struct EditableControlBox: View {
                     if let dragStart {
                         start = dragStart
                     } else {
-                        start = frame.center
+                        start = displayCenter
                         dragStart = start
                         if haptics {
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -174,14 +203,18 @@ private struct EditableControlBox: View {
                     }
                     let proposed = CGPoint(x: start.x + value.translation.width,
                                            y: start.y + value.translation.height)
-                    onMove(frame.clampedCenter(proposed, in: container))
+                    onPreview(frame.clampedCenter(proposed, in: container))
                 }
-                .onEnded { _ in
+                .onEnded { value in
+                    guard let start = dragStart else { return }
+                    let proposed = CGPoint(x: start.x + value.translation.width,
+                                           y: start.y + value.translation.height)
                     dragStart = nil
+                    onCommit(frame.clampedCenter(proposed, in: container))
                 }
         )
         .accessibilityIdentifier("control-edit-\(element.rawValue)")
-        .position(frame.center)
+        .position(displayCenter)
     }
 }
 /// The single D-pad cross in edit mode: one draggable plus. It moves all four
@@ -193,7 +226,8 @@ private struct EditableDpadCrossBox: View {
     let container: CGSize
     let opacity: Double
     let haptics: Bool
-    let onMove: (CGPoint) -> Void
+    let onPreview: (CGPoint) -> Void
+    let onCommit: (CGPoint) -> Void
 
     @State private var dragStart: CGPoint?
 
@@ -239,10 +273,19 @@ private struct EditableDpadCrossBox: View {
                         x: min(max(proposed.x, half), max(container.width - half, half)),
                         y: min(max(proposed.y, half), max(container.height - half, half))
                     )
-                    onMove(clamped)
+                    onPreview(clamped)
                 }
-                .onEnded { _ in
+                .onEnded { value in
+                    guard let start = dragStart else { return }
+                    let half = span / 2
+                    let proposed = CGPoint(x: start.x + value.translation.width,
+                                           y: start.y + value.translation.height)
+                    let clamped = CGPoint(
+                        x: min(max(proposed.x, half), max(container.width - half, half)),
+                        y: min(max(proposed.y, half), max(container.height - half, half))
+                    )
                     dragStart = nil
+                    onCommit(clamped)
                 }
         )
         .accessibilityIdentifier("control-edit-dpad")

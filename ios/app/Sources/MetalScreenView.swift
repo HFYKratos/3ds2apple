@@ -45,6 +45,11 @@ final class MetalScreenView: UIView {
     /// only.
     private var renderScale: CGFloat = 1
 
+    /// Round 0.1.6 custom GPU layouts: the drawable is the whole game-view stage
+    /// at the display's native pixel size instead of a fixed arrangement. Main
+    /// queue only; changed through `setCustomFill`.
+    private var customFill = false
+
     /// Whole-console-pixel scaling: the layer is magnified with nearest-pixel
     /// filtering so each 3DS pixel stays a square block instead of a blurred
     /// edge. Main queue only; changed through `setPresentedGeometry`.
@@ -121,8 +126,42 @@ final class MetalScreenView: UIView {
     /// to run once. Main queue only.
     func prepareForPresentation() {
         if bounds.width < 1 || bounds.height < 1 {
-            bounds = CGRect(origin: .zero, size: drawablePixelSize)
+            bounds = CGRect(origin: .zero,
+                            size: customFill
+                                ? UIScreen.main.bounds.size
+                                : drawablePixelSize)
         }
+        updateCustomFillDrawableSize(force: false)
+        updateDrawableSize(force: true)
+    }
+
+    /// Switches between a fixed presenter arrangement (false) and the custom GPU
+    /// layout's full-stage fill (true). While enabled the drawable is the view's
+    /// own size in native device pixels, so the presenter's normalised custom
+    /// viewports map directly onto the game-view stage. Main queue only.
+    func setCustomFill(_ enabled: Bool) {
+        if enabled {
+            customFill = true
+            renderScale = 1
+            integerScaling = false
+            applyPictureFilters()
+            updateCustomFillDrawableSize(force: true)
+        } else {
+            customFill = false
+        }
+    }
+
+    private func updateCustomFillDrawableSize(force: Bool) {
+        guard customFill, bounds.width >= 1, bounds.height >= 1 else { return }
+        let displayScale = window?.screen.scale ?? UIScreen.main.scale
+        let size = CGSize(width: max(bounds.width * displayScale, 1),
+                          height: max(bounds.height * displayScale, 1))
+        guard size != nativePixelSize else {
+            if force { updateDrawableSize(force: true) }
+            return
+        }
+        nativePixelSize = size
+        renderScale = 1
         updateDrawableSize(force: true)
     }
 
@@ -137,6 +176,8 @@ final class MetalScreenView: UIView {
         integerScaling: Bool
     ) {
         let factor = min(max(renderScale.rounded(), 1), 4)
+        // A fixed arrangement leaves the custom full-stage mode.
+        customFill = false
         let size = CGSize(
             width: max(nativePixelSize.width, 1),
             height: max(nativePixelSize.height, 1)
@@ -185,12 +226,14 @@ final class MetalScreenView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         updateScaleFromWindow()
+        updateCustomFillDrawableSize(force: false)
         updateDrawableSize(force: false)
     }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
         updateScaleFromWindow()
+        updateCustomFillDrawableSize(force: false)
         updateDrawableSize(force: false)
     }
 

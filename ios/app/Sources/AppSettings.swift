@@ -51,6 +51,10 @@ enum ScreenLayout: String, CaseIterable, Identifiable {
     /// the lower screen scaled to the same width (400x300) below it;
     /// arrangement 400x540 (presenter layout size, ABI 7). Portrait only.
     case topFullWidth
+    /// Round-0.1.6: the user-defined custom rectangles, drawn by the presenter
+    /// with two arbitrary normalised viewports (ABI 8; fallback readback when
+    /// the screen rotation is not upright or no presenter can be made).
+    case custom
 
     var id: String { rawValue }
 
@@ -70,6 +74,7 @@ enum ScreenLayout: String, CaseIterable, Identifiable {
         case .largeTopRight: return 5
         case .hybrid: return 6
         case .topFullWidth: return 7
+        case .custom: return 8
         }
     }
 }
@@ -113,7 +118,7 @@ enum LandscapeScreenLayout: String, CaseIterable, Identifiable {
         case .side: return .sideBySide
         case .hybrid: return .hybrid
         case .original: return .stacked
-        case .custom: return nil
+        case .custom: return .custom
         }
     }
 
@@ -151,7 +156,7 @@ enum PortraitScreenLayout: String, CaseIterable, Identifiable {
         switch self {
         case .topFullWidth: return .topFullWidth
         case .original: return .stacked
-        case .custom: return nil
+        case .custom: return .custom
         }
     }
 
@@ -733,11 +738,16 @@ final class AppSettings: ObservableObject {
     }
 
     /// Whether this direction's picture is drawn by the app's own readback
-    /// placement instead of the presenter.
+    /// placement instead of the presenter. Every preset is a presenter
+    /// arrangement; the custom layout is a GPU presenter arrangement too since
+    /// 0.1.6, except while the screen rotation is not upright (the v1 custom
+    /// presenter ABI only handles the upright orientation, so that case keeps
+    /// the readback placement).
     func usesReadbackPresentation(isLandscape: Bool) -> Bool {
-        isLandscape
-            ? landscapeScreenLayout.presenterLayout == nil
-            : portraitScreenLayout.presenterLayout == nil
+        let custom = isLandscape
+            ? landscapeScreenLayout == .custom
+            : portraitScreenLayout == .custom
+        return custom && screenRotation != .upright
     }
 
     /// The title of the active choice for one direction (the Settings rows).

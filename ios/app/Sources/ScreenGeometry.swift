@@ -35,6 +35,11 @@ enum ScreenGeometry {
         case .largeTopRight: upright = CGSize(width: 543, height: 240)
         case .hybrid: upright = CGSize(width: 578, height: 240)
         case .topFullWidth: upright = CGSize(width: 400, height: 540)
+        case .custom:
+            // The custom layout is drawn into the whole game-view stage at the
+            // display's native pixel size (MetalScreenView custom-fill), so this
+            // arrangement size is only a placeholder for generic code paths.
+            upright = CGSize(width: 400, height: 480)
         }
         let quarterTurn = rotation == .clockwise || rotation == .counterClockwise
         return quarterTurn
@@ -82,6 +87,9 @@ enum ScreenGeometry {
         displayScale: CGFloat
     ) -> CGSize {
         guard available.width > 0, available.height > 0 else { return .zero }
+        // A custom layout fills the whole game-view stage (the presenter draws
+        // the two screens at their user rectangles inside it).
+        if layout == .custom { return available }
         let contentAspect = contentAspect(layout: layout, rotation: rotation)
         guard contentAspect > 0 else { return .zero }
 
@@ -151,6 +159,7 @@ enum ScreenGeometry {
         case .largeTopRight: arrangement = CGSize(width: 543, height: 240)
         case .hybrid: arrangement = CGSize(width: 578, height: 240)
         case .topFullWidth: arrangement = CGSize(width: 400, height: 540)
+        case .custom: arrangement = CGSize(width: 400, height: 480)
         }
         let quarterTurn = rotation == .clockwise || rotation == .counterClockwise
         let total = quarterTurn
@@ -208,6 +217,10 @@ enum ScreenGeometry {
         case .topFullWidth:
             bottom = CGRect(x: 0, y: 240 * scale,
                             width: 400 * scale, height: 300 * scale)
+        case .custom:
+            // Custom GPU layouts do not use the preset mirror; the emergency
+            // fallback draws them through PresetScreenGeometry.readbackViewports.
+            bottom = nil
         }
 
         let canvasWidth = arrangement.width * scale

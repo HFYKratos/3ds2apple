@@ -42,6 +42,10 @@ struct VirtualControlsView: View {
     var isVisible: (ControlElement) -> Bool = { _ in true }
     /// Per-control size multiplier (pause menu "Adjust size", 1.0 = 100%).
     var sizeScale: (ControlElement) -> Double = { _ in 1.0 }
+    /// Round 0.1.6 app buttons: fast-forward held (true) / released (false).
+    var onFastForward: (Bool) -> Void = { _ in }
+    /// Round 0.1.6 app buttons: quick-save tapped.
+    var onQuickSave: () -> Void = {}
 
     var body: some View {
         GeometryReader { geometry in
@@ -104,9 +108,40 @@ struct VirtualControlsView: View {
                 onChange: element == .circlePad ? onCirclePad : onCStick
             )
             .position(frame.center)
+        } else if element == .fastForward {
+            OverlayButtonControl(
+                symbol: element.symbol,
+                systemImage: element.systemImage,
+                accessibilityLabel: element.accessibilityTitle,
+                identifier: "control-\(element.rawValue)",
+                width: frame.width,
+                height: frame.height,
+                cornerFactor: CGFloat(element.shapeCornerFactor),
+                opacity: opacity,
+                haptics: haptics
+            ) { pressed in
+                onFastForward(pressed)
+            }
+            .position(frame.center)
+        } else if element == .quickSave {
+            OverlayButtonControl(
+                symbol: element.symbol,
+                systemImage: element.systemImage,
+                accessibilityLabel: element.accessibilityTitle,
+                identifier: "control-\(element.rawValue)",
+                width: frame.width,
+                height: frame.height,
+                cornerFactor: CGFloat(element.shapeCornerFactor),
+                opacity: opacity,
+                haptics: haptics
+            ) { pressed in
+                if !pressed { onQuickSave() }
+            }
+            .position(frame.center)
         } else if let bit = element.buttonBit {
             OverlayButtonControl(
                 symbol: element.symbol,
+                systemImage: element.systemImage,
                 accessibilityLabel: element.accessibilityTitle,
                 identifier: "control-\(element.rawValue)",
                 width: frame.width,
@@ -130,6 +165,8 @@ struct VirtualControlsView: View {
 /// that has already ended) and the release is always reported.
 private struct OverlayButtonControl: View {
     let symbol: String
+    /// SF Symbol for the app-only buttons (nil for console controls).
+    let systemImage: String?
     let accessibilityLabel: String
     let identifier: String
     let width: CGFloat
@@ -143,11 +180,19 @@ private struct OverlayButtonControl: View {
     @State private var isPressed = false
 
     var body: some View {
-        Text(symbol)
-            .font(.system(size: fontSize, weight: .semibold, design: .rounded))
+        Group {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: max(min(height * 0.42, 20), 8),
+                                  weight: .semibold))
+            } else {
+                Text(symbol)
+                    .font(.system(size: fontSize, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            }
+        }
             .foregroundColor(.white.opacity(isPressed ? 1.0 : 0.92))
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
             .frame(width: width, height: height)
             .background(
                 RoundedRectangle(cornerRadius: min(width, height) * 0.42, style: .continuous)

@@ -570,6 +570,35 @@ enum CustomScreenGeometry {
         bottom = place(bottom)
         return (top, bottom)
     }
+
+    /// The custom GPU presenter's viewports: each native picture is aspect-fitted
+    /// and centred inside the user's rectangle, then normalised to the drawable
+    /// (0..1, top-left origin). Only used for the upright rotation; the custom
+    /// layout falls back to readback for any other rotation.
+    static func presenterNormalisedViewports(
+        available: CGSize,
+        placement: CustomScreenPlacement
+    ) -> (top: CGRect, bottom: CGRect) {
+        guard available.width >= 1, available.height >= 1 else { return (.zero, .zero) }
+        func fitted(_ source: ScreenRect, native: CGSize) -> CGRect {
+            let placed = source.cgRect(in: available)
+            guard placed.width > 0, placed.height > 0 else { return .zero }
+            let scale = min(placed.width / native.width, placed.height / native.height)
+            let size = CGSize(width: native.width * scale, height: native.height * scale)
+            return CGRect(x: placed.midX - size.width / 2,
+                          y: placed.midY - size.height / 2,
+                          width: size.width,
+                          height: size.height)
+        }
+        func normalised(_ rect: CGRect) -> CGRect {
+            CGRect(x: rect.minX / available.width,
+                   y: rect.minY / available.height,
+                   width: rect.width / available.width,
+                   height: rect.height / available.height)
+        }
+        return (normalised(fitted(placement.top, native: topNativeSize)),
+                normalised(fitted(placement.bottom, native: bottomNativeSize)))
+    }
 }
 
 /// The two 3DS screens, for code that needs to talk about one of them.

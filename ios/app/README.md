@@ -427,6 +427,15 @@ hint sits above it and the empty area stays inert) saves the current direction's
   - The D-pad is drawn and edited as **one cross**: dragging it moves all four
     directional placements together, snapping uses the cross centre, and the
     Toggle controls / Adjust size sheets keep their single D-pad row.
+  - Round 0.1.6 adds two app-only on-screen buttons: **Fast-forward** (hold to
+    raise the runtime to at least 2x, release restores the previous speed, drawn
+    with the SF Symbol forward.fill) and **Quick save** (tap to save to the
+    existing quick slot and show a brief "Quick saved" toast; no-op when saving
+    is unavailable). They appear in Toggle controls / Adjust size like every
+    other row and are visible by default in both orientations.
+  - Dragging a control (or the D-pad) uses a local preview inside the edit
+    overlay; the profile is committed once when the finger lifts, so the control
+    follows the finger without start/target jitter.
   The old Settings → Controls full-screen editor and its Default/Custom mode are
   no longer exposed: every change is stored immediately from the in-game editor
   (the profile archive and the per-row visibility/size scales are global). The
@@ -480,13 +489,16 @@ hint sits above it and the empty area stays inert) saves the current direction's
   **BOTTOM** screen in purple, with Top/Bottom labels, updating immediately as a
   percentage is typed. Opening or editing a page also selects that direction's
   Custom layout; the optional **Edit by dragging** button opens the full-screen
-  drag editor for the same direction. Round 4 reworked that editor's
-  interaction: drag a screen directly to move it, drag its large (≥44 pt) corner
-  handle or pinch to resize, and tap the one clear **Done** pill (centered on
-  the screen since round 8) to save and leave (edits are committed live while
-  dragging; there is no bottom toolbar, no Lock-ratio switch, no nested
-  scroll/zoom). The layout page has no "how it works" section and no reset
-  button.
+  drag editor for the same direction. Since round 0.1.6 a custom layout is a
+  normal GPU presenter arrangement: the app aspect-fits each screen inside the
+  user's rectangle and hands the two normalised viewports to the presenter
+  (layout id 8) and its touch map; only a non-upright screen rotation keeps the
+  readback fallback. The drag editor keeps a local preview while a finger moves
+  (one commit on release, no jitter), separates tap-to-select from drag, has no
+  corner resize dot (pinch or the numeric page resize), no grey top banner, and
+  forces the app into the direction being edited (landscape editing runs in
+  landscape). The one clear **Done** pill is centered on the screen (round 8).
+  The layout page has no "how it works" section and no reset button.
 - **Shipped default rectangles.** The custom-layout defaults are the placements
   measured from the reference screenshots, in percent of the game view:
   - landscape: upper {0, 0, 35, 47}, lower {4, 46, 27, 45};
@@ -1175,15 +1187,14 @@ Instant save states:
   editable; which key a control reports is fixed). Save states are not
   interchangeable between games or runtime versions, and only battery saves are
   exported and imported; instant states stay in the app container.
-- Only the two Custom layouts run on the readback presentation path (slower,
-  apply from the next game load); every preset, including landscape Large screen
-  / Hybrid and portrait Default, is a GPU presenter arrangement and applies
-  immediately. The three new arrangements need the round-3 presenter patch
-  (ABI 5–7, `ios/zakuro-ios/patches/0008-presenter-layouts.patch`) and a
-  matching `libzakuro_ios.a`; a shell built with an older library falls back to
-  the emergency readback mirror for those choices (no GPU zero-copy path).
-  Arbitrary per-screen placement inside the Metal presenter is still the
-  follow-up for a future presenter arrangement.
+- Custom layouts now use the GPU presenter too (layout id 8 with two arbitrary
+  normalised viewports, round 0.1.6): the app aspect-fits each screen inside the
+  user rectangle, and the presenter draws the textures there with the same touch
+  map. The only fallback is a non-upright screen rotation (the v1 custom
+  presenter ABI handles upright only) or a device where no presenter can be
+  made; those keep the older readback placement. The presenter side needs the
+  round-0.1.6 library/patch 0009; an older library falls back to readback.
+  The custom rectangles still apply from the next game load.
 - The shipped default controls come from the ModernCenteredX2 reference skin,
   with the round-6 device-feedback adjustments: the portrait shoulder row sits
   on one line at y=0.755 just below the picture and the main set at y=0.87, so

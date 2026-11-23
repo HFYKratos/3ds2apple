@@ -707,13 +707,21 @@ private struct EditableOverlayControl: View {
             RoundedRectangle(cornerRadius: min(width, diameter) * 0.42, style: .continuous)
                 .strokeBorder(isSelected ? Color.accentColor : Color.white.opacity(0.5),
                               lineWidth: isSelected ? 2 : 1)
-            Text(element.symbol)
-                .font(.system(size: max(min(diameter * 0.36, 12), 6),
-                              weight: .semibold, design: .rounded))
-                .foregroundColor(.white.opacity(0.92))
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-                .padding(.horizontal, 1)
+            Group {
+                if let systemImage = element.systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: max(min(diameter * 0.4, 13), 6),
+                                      weight: .semibold))
+                } else {
+                    Text(element.symbol)
+                        .font(.system(size: max(min(diameter * 0.36, 12), 6),
+                                      weight: .semibold, design: .rounded))
+                }
+            }
+            .foregroundColor(.white.opacity(0.92))
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .padding(.horizontal, 1)
         }
         .shadow(color: isSelected ? Color.accentColor.opacity(0.35) : .clear, radius: 4)
     }

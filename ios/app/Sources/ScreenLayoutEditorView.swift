@@ -51,6 +51,11 @@ struct ScreenLayoutEditorView: View {
     @State private var guideXs: [CGFloat] = []
     @State private var guideYs: [CGFloat] = []
 
+    // Round 0.1.6 local drag/pinch preview: the shared draft/settings are only
+    // written once, on gesture end, which removes the start/target jitter.
+    @State private var previewRect: ScreenRect?
+    @State private var previewKind: ScreenKind?
+
     /// `orientation` nil means "the direction the device is held in right now".
     /// The headless screenshot launch passes one explicitly.
     init(settings: AppSettings, orientation: ControlLayoutOrientation? = nil) {
@@ -91,18 +96,18 @@ struct ScreenLayoutEditorView: View {
             ZStack(alignment: .topLeading) {
                 Color.black
                 canvas(available: proxy.size)
-                VStack(spacing: 0) {
-                    topBar
-                    Spacer(minLength: 8)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
                 doneOverlay
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .background(Color.black.ignoresSafeArea())
-        .onAppear(perform: refresh)
+        .onAppear {
+            refresh()
+            AppOrientation.beginOverride(orientation == .landscape ? .landscape : .portrait)
+        }
+        .onDisappear {
+            AppOrientation.endOverride()
+        }
     }
 
     private func refresh() {
@@ -154,30 +159,35 @@ struct ScreenLayoutEditorView: View {
         return ZStack(alignment: .topLeading) {
             Color.clear
             ForEach(ControlElement.allCases) { element in
-                let frame = element.frame(for: profile.placement(for: element),
-                                         in: container.size)
-                let center = scaler.point(CGPoint(x: container.minX + frame.center.x,
-                                                  y: container.minY + frame.center.y))
-                let width = max(scaler.length(frame.width), 6)
-                let height = max(scaler.length(frame.height), 6)
-                RoundedRectangle(cornerRadius: min(width, height) * 0.42, style: .continuous)
-                    .fill(Color.white.opacity(0.10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: min(width, height) * 0.42,
-                                         style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.38), lineWidth: 0.7)
-                    )
-                    .overlay(
-                        Text(element.symbol)
-                            .font(.system(size: max(min(height * 0.36, 10), 5),
-                                          weight: .semibold, design: .rounded))
-                            .foregroundColor(.white.opacity(0.55))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.5)
-                    )
-                    .frame(width: width, height: height)
-                    .position(center)
+                if !element.isDpadDirection {
+                    referenceControl(element, container: container, scaler: scaler, profile: profile)
+                }
             }
+            let group = profile.dpadGroup(in: container.size)
+            let groupCenter = scaler.point(CGPoint(x: container.minX + group.center.x,
+                                                   y: container.minY + group.center.y))
+            let groupSpan = max(scaler.length(group.span), 6)
+            let groupDiameter = max(scaler.length(group.diameter), 3)
+            ZStack {
+                DpadCrossShape()
+                    .fill(Color.white.opacity(0.10))
+                DpadCrossShape()
+                    .stroke(Color.white.opacity(0.38), lineWidth: 0.7)
+                ForEach(ControlLayoutProfile.dpadDirections, id: \.self) { element in
+                    Text(element.symbol)
+                        .font(.system(size: max(min(groupDiameter * 0.24, 10), 5),
+                                      weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.55))
+                        .position(x: groupSpan / 2
+                                    + (element == .dpadLeft ? -groupDiameter * 0.52
+                                       : (element == .dpadRight ? groupDiameter * 0.52 : 0)),
+                                  y: groupSpan / 2
+                                    + (element == .dpadUp ? -groupDiameter * 0.52
+                                       : (element == .dpadDown ? groupDiameter * 0.52 : 0)))
+                }
+            }
+            .frame(width: groupSpan, height: groupSpan)
+            .position(groupCenter)
         }
         .allowsHitTesting(false)
     }
@@ -212,8 +222,12 @@ struct ScreenLayoutEditorView: View {
             Color.clear
             // Both screens are always shown in the simplified editor; the model
             // heals the old "only one screen" flags on read.
-            editableScreen(.upper, source: placement.top, canvas: canvas, scale: scale)
-            editableScreen(.lower, source: placement.bottom, canvas: canvas, scale: scale)
+            editableScreen(.upper,
+                           source: previewKind == .upper ? (previewRect ?? placement.top) : placement.top,
+                           canvas: canvas, scale: scale)
+            editableScreen(.lower,
+                           source: previewKind == .lower ? (previewRect ?? placement.bottom) : placement.bottom,
+                           canvas: canvas, scale: scale)
             guideLines(preview: preview, scale: scale)
         }
         .frame(width: preview.width, height: preview.height)
@@ -236,9 +250,6 @@ struct ScreenLayoutEditorView: View {
             onBeginMove: { beginMove(kind) },
             onMove: { translation in move(kind, translation: translation, scale: scale) },
             onEndMove: { endMove() },
-            onBeginResize: { beginResize(kind) },
-            onResize: { translation in resize(kind, translation: translation, scale: scale) },
-            onEndResize: { endResize() },
             onSelect: { selection = kind }
         )
         .position(x: rect.midX, y: rect.midY)
@@ -273,23 +284,44 @@ struct ScreenLayoutEditorView: View {
         }
     }
 
-    // MARK: - Bars
-
-    private var topBar: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(L10n.tr("Custom screen layout"))
-                    .font(.footnote.weight(.semibold))
-                Text(L10n.format("Editing the %@ layout", orientation.title))
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-            Spacer(minLength: 8)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: Capsule())
+    @ViewBuilder
+    private func referenceControl(_ element: ControlElement,
+                                  container: CGRect,
+                                  scaler: GameViewPreviewScaler,
+                                  profile: ControlLayoutProfile) -> some View {
+        let frame = element.frame(for: profile.placement(for: element),
+                                  in: container.size)
+        let center = scaler.point(CGPoint(x: container.minX + frame.center.x,
+                                          y: container.minY + frame.center.y))
+        let width = max(scaler.length(frame.width), 6)
+        let height = max(scaler.length(frame.height), 6)
+        RoundedRectangle(cornerRadius: min(width, height) * 0.42, style: .continuous)
+            .fill(Color.white.opacity(0.10))
+            .overlay(
+                RoundedRectangle(cornerRadius: min(width, height) * 0.42,
+                                 style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.38), lineWidth: 0.7)
+            )
+            .overlay(
+                Group {
+                    if let systemImage = element.systemImage {
+                        Image(systemName: systemImage)
+                            .font(.system(size: max(min(height * 0.4, 10), 5)))
+                    } else {
+                        Text(element.symbol)
+                            .font(.system(size: max(min(height * 0.36, 10), 5),
+                                          weight: .semibold, design: .rounded))
+                    }
+                }
+                .foregroundColor(.white.opacity(0.55))
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+            )
+            .frame(width: width, height: height)
+            .position(center)
     }
+
+    // MARK: - Bars
 
     /// The Done surface, centered on the screen (round-8 user request, matching
     /// the in-game control editor): one obvious pill with the interaction hint
@@ -418,14 +450,14 @@ struct ScreenLayoutEditorView: View {
         let snapped = ScreenLayoutSnapping.snap(rect: rect, canvas: canvas, other: other)
         guideXs = snapped.guidesX
         guideYs = snapped.guidesY
-        apply(kind, rect: ScreenRect.normalised(snapped.rect, in: canvas))
+        applyPreview(kind, rect: ScreenRect.normalised(snapped.rect, in: canvas))
     }
 
     private func endMove() {
         moveBase = nil
         guideXs = []
         guideYs = []
-        commit()
+        commitPreview()
     }
 
     private func beginResize(_ kind: ScreenKind) {
@@ -463,20 +495,32 @@ struct ScreenLayoutEditorView: View {
             height = min(height, maximumHeight)
         }
         let newRect = CGRect(x: rect.minX, y: rect.minY, width: width, height: height)
-        apply(kind, rect: ScreenRect.normalised(newRect, in: canvas))
+        applyPreview(kind, rect: ScreenRect.normalised(newRect, in: canvas))
     }
 
     private func endResize() {
         resizeBase = nil
-        commit()
+        commitPreview()
     }
 
-    private func apply(_ kind: ScreenKind, rect: ScreenRect) {
+    /// Live preview only: the draft and the settings are not touched while a
+    /// finger moves, so the box cannot oscillate between start and target.
+    private func applyPreview(_ kind: ScreenKind, rect: ScreenRect) {
+        previewKind = kind
+        previewRect = rect
+    }
+
+    /// Commits the previewed rectangle once (gesture end) and clears it.
+    private func commitPreview() {
+        guard let kind = previewKind, let rect = previewRect else { return }
         var layout = draft
         var placement = layout.placement(for: orientation)
         placement.setRect(rect, for: kind)
         layout.setPlacement(placement, for: orientation)
         draft = layout
+        previewKind = nil
+        previewRect = nil
+        commit()
     }
 
     /// Pinch over the canvas shrinks/enlarges the selected screen about its
@@ -509,12 +553,12 @@ struct ScreenLayoutEditorView: View {
                 x = min(max(x, 0), max(canvas.width - width, 0))
                 y = min(max(y, 0), max(canvas.height - height, 0))
                 let newRect = CGRect(x: x, y: y, width: width, height: height)
-                apply(selection, rect: ScreenRect.normalised(newRect, in: canvas))
+                applyPreview(selection, rect: ScreenRect.normalised(newRect, in: canvas))
             }
             .onEnded { _ in
                 guard pinchBase != nil else { return }
                 pinchBase = nil
-                commit()
+                commitPreview()
             }
     }
 
@@ -577,21 +621,13 @@ private struct EditableScreenBox: View {
     let onBeginMove: () -> Void
     let onMove: (CGSize) -> Void
     let onEndMove: () -> Void
-    let onBeginResize: () -> Void
-    let onResize: (CGSize) -> Void
-    let onEndResize: () -> Void
     let onSelect: () -> Void
 
     @State private var isMoving = false
-    @State private var isResizing = false
 
     private var size: CGSize {
         CGSize(width: max(rect.width, 24), height: max(rect.height, 24))
     }
-
-    /// Round-4 interaction: the corner handle is a >=44 pt touch target with a
-    /// visible knob, so a finger can grab it without zooming.
-    private var handleSize: CGFloat { 44 }
 
     var body: some View {
         ZStack {
@@ -613,46 +649,28 @@ private struct EditableScreenBox: View {
         }
         .frame(width: size.width, height: size.height)
         .contentShape(Rectangle())
+        .onTapGesture {
+            onSelect()
+        }
         .gesture(
-            DragGesture(minimumDistance: 0)
+            DragGesture(minimumDistance: 3)
                 .onChanged { value in
-                    if !isMoving {
-                        isMoving = true
-                        onSelect()
-                        onBeginMove()
+                    guard !isMoving else {
+                        onMove(value.translation)
+                        return
                     }
+                    isMoving = true
+                    onSelect()
+                    onBeginMove()
                     onMove(value.translation)
                 }
                 .onEnded { _ in
-                    isMoving = false
-                    onEndMove()
+                    if isMoving {
+                        isMoving = false
+                        onEndMove()
+                    }
                 }
         )
-        .overlay(alignment: .bottomTrailing) {
-            if isSelected {
-                Circle()
-                    .fill(Color.accentColor)
-                    .overlay(Circle().strokeBorder(Color.white.opacity(0.9), lineWidth: 1))
-                    .frame(width: 22, height: 22)
-                    .padding(11)
-                    .contentShape(Circle())
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { value in
-                                if !isResizing {
-                                    isResizing = true
-                                    onBeginResize()
-                                }
-                                onResize(value.translation)
-                            }
-                            .onEnded { _ in
-                                isResizing = false
-                                onEndResize()
-                            }
-                    )
-                    .accessibilityIdentifier("screen-resize-handle")
-            }
-        }
         .accessibilityIdentifier("editor-screen-\(kind == .upper ? "upper" : "lower")")
     }
 

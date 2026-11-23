@@ -21,21 +21,40 @@ enum AppOrientation {
         }
     }
 
+    /// A temporary mask set by an editor (for example a landscape custom
+    /// screen layout editor forcing landscape), or nil for the Settings mask.
+    private static var overrideMask: UIInterfaceOrientationMask?
+
     /// The mask the application delegate reports.
     static func currentMask() -> UIInterfaceOrientationMask {
-        mask(for: AppSettings.shared.orientation)
+        overrideMask ?? mask(for: AppSettings.shared.orientation)
+    }
+
+    /// Forces one mask while an editor is presented (round 0.1.6).
+    static func beginOverride(_ mask: UIInterfaceOrientationMask) {
+        overrideMask = mask
+        request(mask)
+    }
+
+    /// Drops the override and returns to the Settings orientation mask.
+    static func endOverride() {
+        overrideMask = nil
+        request(mask(for: AppSettings.shared.orientation))
     }
 
     /// Asks the active window scene to move to the preferred orientation and to
     /// re-evaluate the supported mask. Called when the setting changes.
     static func apply(_ lock: OrientationLock) {
         AppLog.log("[3ds2apple] orientation preference: %@", lock.rawValue)
+        request(mask(for: lock))
+    }
+
+    private static func request(_ preferred: UIInterfaceOrientationMask) {
         guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .first else {
             return
         }
-        let preferred = mask(for: lock)
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: preferred))
         scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
     }

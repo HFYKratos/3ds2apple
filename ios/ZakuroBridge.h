@@ -447,7 +447,11 @@ enum {
     ZK_LAYOUT_SIDE_BY_SIDE = 1, /**< Upper screen left, lower screen right. */
     ZK_LAYOUT_TOP_ONLY = 2,     /**< Upper screen only. */
     ZK_LAYOUT_BOTTOM_ONLY = 3,  /**< Lower screen only. */
-    ZK_LAYOUT_LARGE_TOP = 4     /**< Large upper screen, lower one small at its lower right. */
+    ZK_LAYOUT_LARGE_TOP = 4,    /**< Large upper screen, lower one small at its lower right. */
+    ZK_LAYOUT_LARGE_TOP_RIGHT = 5, /**< Large upper screen, lower one small at its upper right. */
+    ZK_LAYOUT_HYBRID = 6,       /**< Large upper screen left, the two small screens stacked on the right. */
+    ZK_LAYOUT_TOP_FULL_WIDTH = 7, /**< Upper screen across the top, lower one below at the same width. */
+    ZK_LAYOUT_CUSTOM = 8        /**< Two app-provided normalised rectangles; see zk_presenter_set_custom_viewports(). */
 };
 
 /**
@@ -475,6 +479,30 @@ enum {
  * starts. Returns 0, or -1 for a NULL presenter or an unknown layout.
  */
 int32_t zk_presenter_set_layout(zk_presenter_t presenter, uint32_t layout);
+
+/**
+ * Sets where the custom layout draws the two screens, from the next
+ * zk_present() on. Call it together with
+ * zk_presenter_set_layout(presenter, ZK_LAYOUT_CUSTOM).
+ *
+ * The rectangles are normalised drawable pixels, (left, top, width, height)
+ * from the layer's top left. The app has already aspect-fitted each screen's
+ * picture inside the user's rectangle (upper 400:240, lower 320:240); the
+ * presenter draws each screen into exactly its rectangle and leaves the rest
+ * black. The values persist for that presenter until replaced. The custom
+ * layout is for an upright picture only: a turned screen keeps the readback
+ * path and its rotated touch mapping.
+ *
+ * Call it like zk_presenter_set_layout(): on the runtime serial queue while a
+ * system is presenting, or on the main queue before a load starts.
+ * Returns 1, 0 for rectangles that are not real places inside the layer (the
+ * reason is in zk_last_error()), or -1 for a NULL presenter.
+ */
+int32_t zk_presenter_set_custom_viewports(zk_presenter_t presenter,
+                                          float top_x, float top_y,
+                                          float top_w, float top_h,
+                                          float bottom_x, float bottom_y,
+                                          float bottom_w, float bottom_h);
 
 /**
  * Sets which way the screens are turned on the layer, from the next
@@ -527,6 +555,26 @@ int32_t zk_present_touch_map(uint32_t width, uint32_t height,
                              uint32_t layout, uint32_t orientation,
                              float x, float y,
                              uint16_t *out_x, uint16_t *out_y);
+
+/**
+ * Maps a touch in the presented layer to lower-screen pixels when the presenter
+ * draws the custom layout.
+ *
+ * width and height are the layer's size in pixels; the rectangles use the same
+ * normalised drawable pixels as zk_presenter_set_custom_viewports() (and are
+ * checked the same way); x and y are normalised to 0.0 ... 1.0 from the layer's
+ * top left. Returns 1 and writes the lower-screen pixel coordinates (0...320,
+ * 0...240) when the point is inside the lower screen's rectangle, 0 when it is
+ * not, an argument is missing or a rectangle is not a real place. Upright only,
+ * like the custom GPU path itself.
+ */
+int32_t zk_present_custom_touch_map(uint32_t width, uint32_t height,
+                                    float top_x, float top_y,
+                                    float top_w, float top_h,
+                                    float bottom_x, float bottom_y,
+                                    float bottom_w, float bottom_h,
+                                    float x, float y,
+                                    uint16_t *out_x, uint16_t *out_y);
 
 /* --------------------------------------------------- hardware diagnostics -- */
 

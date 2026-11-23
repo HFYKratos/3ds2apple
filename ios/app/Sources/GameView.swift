@@ -66,6 +66,11 @@ struct GameView: View {
     @State private var isConfirmationPresented = false
     @State private var confirmationKind: ConfirmationKind = .reset
 
+    /// Round 0.1.6 app buttons: the speed to restore after a held fast-forward
+    /// and the brief quick-save confirmation toast.
+    @State private var fastForwardRestoreSpeed: Int?
+    @State private var quickSaveToast: String?
+
     private let topScreen = ZakuroScreen(which: 0)
     private let bottomScreen = ZakuroScreen(which: 1)
 
@@ -219,6 +224,21 @@ struct GameView: View {
             if !isEditingControls {
                 floatingHUD(isLandscape: isLandscape)
             }
+
+            // Round 0.1.6 quick-save confirmation toast (never intercepts input).
+            if let quickSaveToast, !isEditingControls {
+                Text(quickSaveToast)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Color.black.opacity(0.62)))
+                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 76)
+                    .allowsHitTesting(false)
+                    .accessibilityIdentifier("quick-save-toast")
+            }
         }
         .accessibilityIdentifier("screens")
     }
@@ -243,7 +263,9 @@ struct GameView: View {
             onCirclePad: { x, y in model.setOverlayStick(x: x, y: y) },
             onCStick: { x, y in model.setOverlayCStick(x: x, y: y) },
             isVisible: { settings.isControlVisible($0) },
-            sizeScale: { settings.controlSizeScale(for: $0) }
+            sizeScale: { settings.controlSizeScale(for: $0) },
+            onFastForward: { pressed in handleFastForwardButton(pressed) },
+            onQuickSave: { performQuickSave() }
         )
         .ignoresSafeArea()
         .opacity(showsTouchControls ? 1 : 0)
@@ -297,6 +319,11 @@ struct GameView: View {
         }
         model.setReadbackPresentationRequired(
             settings.usesReadbackPresentation(isLandscape: isLandscape)
+        )
+        // The GPU custom layout needs the current direction's rectangles; every
+        // other preset ignores this.
+        model.setCustomScreenPlacement(
+            settings.customScreenLayout.placement(for: isLandscape ? .landscape : .portrait)
         )
     }
 
@@ -365,6 +392,40 @@ struct GameView: View {
         isEditingControls = false
         if !isPreviewingGame {
             model.resumeFromMenu()
+        }
+    }
+
+    /// Round 0.1.6 Fast-forward button: press and hold temporarily raises the
+    /// runtime speed (at least 2x); release restores the previous request.
+    private func handleFastForwardButton(_ pressed: Bool) {
+        if pressed {
+            let current = model.requestedPlaybackSpeedValue
+            fastForwardRestoreSpeed = current
+            model.setPlaybackSpeed(max(2, current))
+            if settings.haptics {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+        } else if let restore = fastForwardRestoreSpeed {
+            fastForwardRestoreSpeed = nil
+            model.setPlaybackSpeed(restore)
+        }
+    }
+
+    /// Round 0.1.6 Quick-save button: save to the existing quick slot and show a
+    /// short toast; an unavailable save is a silent no-op.
+    private func performQuickSave() {
+        guard model.saveStates.canSave else { return }
+        model.saveStates.save(slot: SaveStateSupport.quickSlot)
+        if settings.haptics {
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        }
+        withAnimation(.easeOut(duration: 0.12)) {
+            quickSaveToast = L10n.tr("Quick saved")
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            withAnimation(.easeIn(duration: 0.18)) {
+                quickSaveToast = nil
+            }
         }
     }
 
@@ -463,17 +524,21 @@ struct GameView: View {
                 // A1: the presenter draws the chosen arrangement into the app's
                 // CAMetalLayer; SwiftUI centres the layer and CoreAnimation
                 // scales it into the box.
-                let box = contentSize(in: available,
-                                      layout: settings.effectiveScreenLayout(isLandscape: isLandscape))
+                let layout = settings.effectiveScreenLayout(isLandscape: isLandscape)
+                // A custom GPU layout fills the whole game-view stage (the
+                // presenter draws the two screens at their user rectangles); the
+                // arrangements keep their fitted box.
+                let box = layout == .custom ? available : contentSize(in: available, layout: layout)
                 ZStack {
                     presentedSurface(view: metalView, size: box)
                 }
                 // Portrait arrangements are top-aligned under the safe area (the
                 // original portrait layout shows the console stack at the top);
-                // landscape arrangements are centred.
+                // landscape arrangements and the full-stage custom layout are
+                // centred.
                 .frame(width: available.width,
                        height: available.height,
-                       alignment: isLandscape ? .center : .top)
+                       alignment: isLandscape || layout == .custom ? .center : .top)
             } else {
                 readbackArrangement(in: available, isLandscape: isLandscape)
             }

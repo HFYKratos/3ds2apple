@@ -665,3 +665,7 @@
 "Bottom" = "下屏";
 "Preview" = "预览";
 
+/* --- Round 0.1.6 app buttons --- */
+"Quick save" = "快速保存";
+"Quick saved" = "已快速保存";
+

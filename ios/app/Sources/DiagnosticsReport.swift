@@ -204,7 +204,15 @@ enum DiagnosticsExporter {
         // arrangement (or the readback choice) for existing readers.
         let layoutIsLandscape = GameViewDeviceMetrics.currentLayoutOrientation == .landscape
         let activeLayoutValue = settings.screenLayoutRawValue(isLandscape: layoutIsLandscape)
+        // A custom layout's GPU path can still fall back to readback at runtime
+        // (presenter unavailable); report that too, not just the rotation fallback.
+        let customActive = settings.usesCustomLayout(
+            for: layoutIsLandscape ? .landscape : .portrait
+        )
+        let presenterFallback = customActive && model.isRuntimeActive
+            && !model.displayPath.usesMetalLayer
         let layoutUsesReadback = settings.usesReadbackPresentation(isLandscape: layoutIsLandscape)
+            || presenterFallback
         let screenLayoutText = layoutUsesReadback
             ? "readback-\(activeLayoutValue)"
             : model.screenLayout.rawValue

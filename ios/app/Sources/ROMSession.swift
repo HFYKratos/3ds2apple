@@ -298,6 +298,12 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// frame shows it. Every layout goes through the CAMetalLayer presenter; the
     /// readback path is only used when no presenter can be made.
     private(set) var screenLayout: ScreenLayout = .stacked
+
+    /// The custom layout rectangles the presenter is configured with when the
+    /// active layout is `.custom` (round 0.1.6). Updated from the game view like
+    /// the layout preset; the presenter receives aspect-fitted normalised
+    /// viewports when a custom presenter is configured.
+    private var customScreenPlacement: CustomScreenPlacement?
     /// Turn of the screens inside their area (Settings → Display). Applied the
     /// same way as the layout.
     private(set) var screenRotation: ScreenRotation = .upright
@@ -882,6 +888,49 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         applyPresentedGeometry()
     }
 
+    /// Records the custom rectangles for the current device direction. Callers
+    /// set this before a load so a custom presenter gets its viewports, and on
+    /// every custom-layout edit/rotation change while running.
+    func setCustomScreenPlacement(_ placement: CustomScreenPlacement) {
+        guard placement != customScreenPlacement else { return }
+        customScreenPlacement = placement
+        applyPresentedGeometry()
+    }
+
+    /// The normalised viewports for a drawable of `size`, or nil while no custom
+    /// placement has been recorded.
+    private func customPresenterViewports(for size: CGSize) -> (top: CGRect, bottom: CGRect)? {
+        guard let placement = customScreenPlacement, size.width >= 1, size.height >= 1 else {
+            return nil
+        }
+        return CustomScreenGeometry.presenterNormalisedViewports(available: size,
+                                                                placement: placement)
+    }
+
+    /// Configures a presenter already set to layout 8 with the custom rects.
+    /// Returns false and logs when no placement/viewports are available.
+    @discardableResult
+    private func applyCustomPresenterGeometry(_ handle: UnsafeMutableRawPointer,
+                                              size: CGSize) -> Bool {
+        guard let viewports = customPresenterViewports(for: size) else {
+            AppLog.log("[3ds2apple] custom screen layout: no placement for the presenter")
+            return false
+        }
+        let result = zk_presenter_set_custom_viewports(
+            handle,
+            Float(viewports.top.minX), Float(viewports.top.minY),
+            Float(viewports.top.width), Float(viewports.top.height),
+            Float(viewports.bottom.minX), Float(viewports.bottom.minY),
+            Float(viewports.bottom.width), Float(viewports.bottom.height)
+        )
+        if result != 1 {
+            AppLog.log("[3ds2apple] zk_presenter_set_custom_viewports failed (result %d): %@",
+                       result, Self.currentRuntimeError())
+            return false
+        }
+        return true
+    }
+
     /// Records and applies which way the screens are turned. Safe while a game
     /// runs (same path as the layout change).
     func setScreenRotation(_ rotation: ScreenRotation) {
@@ -1042,6 +1091,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         let size = view.drawablePixelSize
         let width = UInt32(max(1, size.width.rounded()))
         let height = UInt32(max(1, size.height.rounded()))
+        let customViewports = layout == 8 ? customPresenterViewports(for: size) : nil
         runtimeQueue.async { [weak self] in
             // Only a system mid-presentation needs the live change; a load that
             // is about to start gets the layout from presenterForLoadOnMain.
@@ -1049,6 +1099,15 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             _ = zk_presenter_set_layout(presenter, layout)
             _ = zk_presenter_set_orientation(presenter, rotation)
             _ = zk_presenter_resize(presenter, width, height)
+            if let customViewports {
+                _ = zk_presenter_set_custom_viewports(
+                    presenter,
+                    Float(customViewports.top.minX), Float(customViewports.top.minY),
+                    Float(customViewports.top.width), Float(customViewports.top.height),
+                    Float(customViewports.bottom.minX), Float(customViewports.bottom.minY),
+                    Float(customViewports.bottom.width), Float(customViewports.bottom.height)
+                )
+            }
         }
     }
 
@@ -1553,6 +1612,14 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Pushes the layout, rotation, render scale and integer-scaling choice into
     /// the Metal view. Main queue only.
     private func configurePresentedGeometry(_ view: MetalScreenView) {
+        // The custom GPU layout fills the whole game-view stage at native device
+        // pixels; every arrangement keeps the presenter's own drawable size.
+        if screenLayout == .custom {
+            view.setCustomFill(true)
+            presentedDrawableSize = view.drawablePixelSize
+            return
+        }
+        view.setCustomFill(false)
         let native = ScreenGeometry.nativePixelSize(layout: screenLayout, rotation: screenRotation)
         view.setPresentedGeometry(
             nativePixelSize: native,
@@ -1572,6 +1639,19 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         let rotation = screenRotation.presenterValue
         _ = zk_presenter_set_layout(handle, layout)
         _ = zk_presenter_set_orientation(handle, rotation)
+
+        if layout == 8 {
+            // Custom GPU layout: the rects are normalised to the drawable and the
+            // presenter has no layout_size to compare (v1 ABI, upright only).
+            let size = presentedDrawableSize
+            let applied = applyCustomPresenterGeometry(handle, size: size)
+            AppLog.log("[3ds2apple] screen layout custom · %@ · drawable %ux%u · custom viewports %@",
+                       screenRotation.rawValue,
+                       UInt32(max(1, size.width.rounded())),
+                       UInt32(max(1, size.height.rounded())),
+                       applied ? "ok" : "missing")
+            return
+        }
 
         let native = ScreenGeometry.nativePixelSize(layout: screenLayout, rotation: screenRotation)
         var expectedWidth: UInt32 = 0
@@ -1621,16 +1701,36 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         guard size.width >= 1, size.height >= 1 else { return }
         var x: UInt16 = 0
         var y: UInt16 = 0
-        let onLowerScreen = zk_present_touch_map(
-            UInt32(size.width.rounded()),
-            UInt32(size.height.rounded()),
-            screenLayout.presenterValue,
-            screenRotation.presenterValue,
-            Float(min(max(normalisedX, 0), 1)),
-            Float(min(max(normalisedY, 0), 1)),
-            &x,
-            &y
-        )
+        let normX = Float(min(max(normalisedX, 0), 1))
+        let normY = Float(min(max(normalisedY, 0), 1))
+        let onLowerScreen: Int32
+        if screenLayout == .custom {
+            // The GPU custom path has no rotation in v1; a rotated custom layout
+            // keeps the readback path and its own touch mapping.
+            if let viewports = customPresenterViewports(for: size) {
+                onLowerScreen = zk_present_custom_touch_map(
+                    UInt32(size.width.rounded()), UInt32(size.height.rounded()),
+                    Float(viewports.top.minX), Float(viewports.top.minY),
+                    Float(viewports.top.width), Float(viewports.top.height),
+                    Float(viewports.bottom.minX), Float(viewports.bottom.minY),
+                    Float(viewports.bottom.width), Float(viewports.bottom.height),
+                    normX, normY, &x, &y
+                )
+            } else {
+                onLowerScreen = 0
+            }
+        } else {
+            onLowerScreen = zk_present_touch_map(
+                UInt32(size.width.rounded()),
+                UInt32(size.height.rounded()),
+                screenLayout.presenterValue,
+                screenRotation.presenterValue,
+                normX,
+                normY,
+                &x,
+                &y
+            )
+        }
         if onLowerScreen != 0 {
             setTouchPoint(x: x, y: y)
         } else {

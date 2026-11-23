@@ -175,20 +175,36 @@ struct ContentView: View {
             model.setFrameRateCap(cap.rawValue)
         }
         .onChange(of: settings.screenRotation) { rotation in
+            let isLandscape = GameViewDeviceMetrics.currentLayoutOrientation == .landscape
             model.setScreenRotation(rotation)
+            // The custom layout's GPU presenter path is upright-only in v1; a
+            // rotation change must re-select the readback fallback.
+            model.setReadbackPresentationRequired(
+                settings.usesReadbackPresentation(isLandscape: isLandscape)
+            )
         }
         .onChange(of: settings.landscapeScreenLayout) { _ in
+            let isLandscape = GameViewDeviceMetrics.currentLayoutOrientation == .landscape
             model.setReadbackPresentationRequired(
-                settings.usesReadbackPresentation(
-                    isLandscape: GameViewDeviceMetrics.currentLayoutOrientation == .landscape
-                )
+                settings.usesReadbackPresentation(isLandscape: isLandscape)
+            )
+            model.setCustomScreenPlacement(
+                settings.customScreenLayout.placement(for: isLandscape ? .landscape : .portrait)
             )
         }
         .onChange(of: settings.portraitScreenLayout) { _ in
+            let isLandscape = GameViewDeviceMetrics.currentLayoutOrientation == .landscape
             model.setReadbackPresentationRequired(
-                settings.usesReadbackPresentation(
-                    isLandscape: GameViewDeviceMetrics.currentLayoutOrientation == .landscape
-                )
+                settings.usesReadbackPresentation(isLandscape: isLandscape)
+            )
+            model.setCustomScreenPlacement(
+                settings.customScreenLayout.placement(for: isLandscape ? .landscape : .portrait)
+            )
+        }
+        .onChange(of: settings.customScreenLayout) { _ in
+            let isLandscape = GameViewDeviceMetrics.currentLayoutOrientation == .landscape
+            model.setCustomScreenPlacement(
+                settings.customScreenLayout.placement(for: isLandscape ? .landscape : .portrait)
             )
         }
         .onChange(of: settings.integerScale) { enabled in
@@ -226,6 +242,12 @@ struct ContentView: View {
         model.setAudioBufferDuration(settings.audioBuffer.duration)
         model.setFrameRateCap(settings.frameCap.rawValue)
         model.setScreenLayout(settings.effectiveScreenLayout(isLandscape: false))
+        model.setCustomScreenPlacement(
+            settings.customScreenLayout.placement(
+                for: GameViewDeviceMetrics.currentLayoutOrientation == .landscape
+                    ? .landscape : .portrait
+            )
+        )
         model.setScreenRotation(settings.screenRotation)
         model.setIntegerScaling(settings.integerScale)
         model.applyRenderScale(CGFloat(settings.renderScale))

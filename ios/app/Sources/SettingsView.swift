@@ -154,7 +154,6 @@ struct SettingsView: View {
                     .monospacedDigit()
             }
             Toggle("Haptic feedback on button press", isOn: persistedBinding(settings, \.haptics))
-            hintText(L10n.tr("Virtual control visibility, size and layout are edited in the in-game pause menu under Virtual controls."))
             infoRow("Controller", model.controllerName ?? L10n.tr("Not connected"))
         } header: {
             Text("Controls")

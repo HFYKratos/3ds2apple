@@ -65,6 +65,10 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
     case buttonSelect
     case circlePad
     case cStick
+    /// Round 0.1.6 app-only buttons: press-and-hold temporary fast-forward and
+    /// tap quick save. They report no 3DS button bit.
+    case fastForward
+    case quickSave
 
     var id: String { rawValue }
 
@@ -86,7 +90,7 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
         case .buttonZR: return ZKButton.zr
         case .buttonStart: return ZKButton.start
         case .buttonSelect: return ZKButton.select
-        case .circlePad, .cStick: return nil
+        case .circlePad, .cStick, .fastForward, .quickSave: return nil
         }
     }
 
@@ -136,6 +140,18 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
         case .buttonSelect: return "Select"
         case .circlePad: return "◉"
         case .cStick: return "◍"
+        case .fastForward: return "⏩"
+        case .quickSave: return "⤓"
+        }
+    }
+
+    /// The SF Symbol the app-only buttons draw with (nil for every console
+    /// control, which uses `symbol`).
+    var systemImage: String? {
+        switch self {
+        case .fastForward: return "forward.fill"
+        case .quickSave: return "square.and.arrow.down"
+        default: return nil
         }
     }
 
@@ -157,6 +173,8 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
         case .buttonSelect: return L10n.tr("Select button")
         case .circlePad: return L10n.tr("Circle Pad")
         case .cStick: return L10n.tr("C-stick")
+        case .fastForward: return L10n.tr("Fast-forward")
+        case .quickSave: return L10n.tr("Quick save")
         }
     }
 
@@ -181,6 +199,8 @@ enum ControlOptionItem: String, CaseIterable, Identifiable {
     case dpad
     case circlePad
     case cStick
+    case fastForward
+    case quickSave
 
     var id: String { rawValue }
 
@@ -201,6 +221,8 @@ enum ControlOptionItem: String, CaseIterable, Identifiable {
         case .dpad: return [.dpadUp, .dpadDown, .dpadLeft, .dpadRight]
         case .circlePad: return [.circlePad]
         case .cStick: return [.cStick]
+        case .fastForward: return [.fastForward]
+        case .quickSave: return [.quickSave]
         }
     }
 
@@ -220,6 +242,8 @@ enum ControlOptionItem: String, CaseIterable, Identifiable {
         case .buttonSelect: return .buttonSelect
         case .circlePad: return .circlePad
         case .cStick: return .cStick
+        case .fastForward: return .fastForward
+        case .quickSave: return .quickSave
         }
     }
 
@@ -238,6 +262,8 @@ enum ControlOptionItem: String, CaseIterable, Identifiable {
         case .dpad: return L10n.tr("D-pad")
         case .circlePad: return L10n.tr("Circle Pad")
         case .cStick: return L10n.tr("C-stick")
+        case .fastForward: return L10n.tr("Fast-forward")
+        case .quickSave: return L10n.tr("Quick save")
         }
     }
 }
@@ -408,7 +434,10 @@ struct ControlLayoutProfile: Codable, Equatable {
                 (.buttonStart, ControlPlacement(x: 0.54688, y: 0.90097, size: 0.08213, opacity: 0.85)),
                 (.buttonSelect, ControlPlacement(x: 0.45201, y: 0.90097, size: 0.08213, opacity: 0.85)),
                 // Not in the skin: above/right of the A-B-X-Y cluster.
-                (.cStick, ControlPlacement(x: 0.84821, y: 0.48309, size: 0.10, opacity: 0.85))
+                (.cStick, ControlPlacement(x: 0.84821, y: 0.48309, size: 0.10, opacity: 0.85)),
+                // Round 0.1.6 app buttons, in the free centre area.
+                (.fastForward, ControlPlacement(x: 0.50, y: 0.70, size: 0.08, opacity: 0.85)),
+                (.quickSave, ControlPlacement(x: 0.50, y: 0.82, size: 0.08, opacity: 0.85))
             ]
         case .portrait:
             // mappingSize 414 x 896 pt. Round-6 screenshot revision: the shoulder
@@ -436,7 +465,11 @@ struct ControlLayoutProfile: Codable, Equatable {
                 (.buttonSelect, ControlPlacement(x: 0.40, y: 0.755, size: 0.07971, opacity: 0.85)),
                 // Moved to the free bottom-right corner (round-6 screenshot
                 // revision: further clear of A/B and smaller).
-                (.cStick, ControlPlacement(x: 0.92, y: 0.935, size: 0.08, opacity: 0.85))
+                (.cStick, ControlPlacement(x: 0.92, y: 0.935, size: 0.08, opacity: 0.85)),
+                // Round 0.1.6 app buttons: the free band between the shoulder row
+                // and the main set (the D-pad cross starts around y=0.84).
+                (.fastForward, ControlPlacement(x: 0.50, y: 0.80, size: 0.07, opacity: 0.85)),
+                (.quickSave, ControlPlacement(x: 0.62, y: 0.80, size: 0.07, opacity: 0.85))
             ]
         }
     }
