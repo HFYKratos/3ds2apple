@@ -1,0 +1,5 @@
+# 3ds2apple docs site — static, no cookies, no analytics, no trackers.
+User-agent: *
+Allow: /
+
+Sitemap: https://hfykratos.github.io/3ds2apple/sitemap.xml

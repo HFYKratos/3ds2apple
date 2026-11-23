@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="3ds2apple icon">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2f9bff"/><stop offset="1" stop-color="#5cc8ff"/></linearGradient></defs>
+  <rect width="64" height="64" rx="14" fill="url(#g)"/>
+  <rect x="12" y="15" width="40" height="23" rx="5" fill="#eaf7ff" opacity=".96"/>
+  <path d="M16 44h32l4 8H12z" fill="#efe2ff" opacity=".92"/>
+</svg>
