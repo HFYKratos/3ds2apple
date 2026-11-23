@@ -51,8 +51,8 @@ enum ShellRuntime {
     static let pinnedTemplateRelativePath = "out/shell/3ds2apple-shell.ipa"
     /// Rebuilt 0.1.6-beta1 build 1 ROM-free shell IPA from current main (0.1.6-beta1
     /// local pre-release; the shell's CFBundleShortVersionString is the numeric 0.1.6-beta1).
-    static let pinnedTemplateBytes: Int64 = 6_275_873
-    static let pinnedTemplateSHA256 = "92b4c63bff8bfef4f8767355ca98725f6814f195403dc589d4037832059a534c"
+    static let pinnedTemplateBytes: Int64 = 6_275_872
+    static let pinnedTemplateSHA256 = "be6119b8c0f69a103b6a44d4544dcbe65e29e3368eee17f633495be5da462d76"
     /// The rebuilt shell identity the launcher is built against. The pinned
     /// template must report exactly these values; another shell build is refused.
     static let expectedShellVersion = "0.1.6"
