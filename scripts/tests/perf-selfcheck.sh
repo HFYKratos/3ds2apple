@@ -315,6 +315,12 @@ check "custom rotations/swap use the presenter ABIs and no readback rotation fal
   bash -c 'grep -q "zk_presenter_set_custom_rotation" ios/app/Sources/ROMSession.swift && grep -q "zk_presenter_set_screen_swap" ios/app/Sources/ROMSession.swift && grep -q "swapScreens" ios/app/Sources/AppSettings.swift && ! grep -q "custom && screenRotation != .upright" ios/app/Sources/AppSettings.swift'
 check "the Starting Zakuro text and both editor hints are gone" \
   bash -c '! grep -q "Starting Zakuro" ios/app/Sources/GameView.swift && ! grep -q "Drag the controls to move them" ios/app/Sources/InGameControlEditOverlay.swift && ! grep -q "Drag a screen to move it" ios/app/Sources/ScreenLayoutEditorView.swift'
+check "the system Metal HUD defaults off with a one-time migration" \
+  bash -c 'grep -q "systemMetalHUDDefaultOffMigrated" ios/app/Sources/AppSettings.swift && grep -q "systemMetalHUD = false" ios/app/Sources/AppSettings.swift'
+check "the screen editor decorative screens do not block the canvas gesture" \
+  bash -c 'grep -q "screenBox(.upper, available: available)" ios/app/Sources/ScreenLayoutEditorView.swift && test "$(grep -c "allowsHitTesting(false)" ios/app/Sources/ScreenLayoutEditorView.swift)" -ge 3'
+check "GameView draws no waiting-for-first-frame text" \
+  bash -c '! grep -q "Waiting for first frame" ios/app/Sources/GameView.swift'
 check "control editor is full screen and edits the current direction" contains ios/app/Sources/ControlLayoutEditorView.swift 'currentLayoutOrientation'
 check "control editor overlays the current screen layout" contains ios/app/Sources/ControlLayoutEditorView.swift 'screenViewports'
 check "GameView floats the editable control overlay and draws the hybrid small top screen" \

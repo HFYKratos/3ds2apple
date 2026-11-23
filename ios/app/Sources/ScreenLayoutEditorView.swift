@@ -94,8 +94,12 @@ struct ScreenLayoutEditorView: View {
                 .simultaneousGesture(pinchGesture(available: available))
             controlOverlay(available: available)
                 .allowsHitTesting(false)
+            // Visuals must not hit-test: the stationary canvas gesture below
+            // needs every touch (0.1.6-beta3 fix).
             screenBox(.upper, available: available)
+                .allowsHitTesting(false)
             screenBox(.lower, available: available)
+                .allowsHitTesting(false)
             guideLines(available: available)
                 .allowsHitTesting(false)
         }

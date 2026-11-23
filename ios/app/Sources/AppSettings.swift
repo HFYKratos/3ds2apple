@@ -688,21 +688,19 @@ final class AppSettings: ObservableObject {
         // speed control, so an old stored 30 fps value is ignored on purpose.
         frameCap = .sixty
 
-        // System Metal HUD: ON for every new install and for an install that
-        // predates the migration marker. Before 0.1.0 the fallback was off, and
-        // any Settings change wrote that false to disk, so an old install cannot
-        // be told apart from a user who deliberately chose off. The migration
-        // below enables it exactly once per install; after the marker exists the
-        // stored choice (including an explicit off) wins.
-        if defaults.object(forKey: Keys.systemMetalHUDDefaultMigrated) == nil {
-            systemMetalHUD = true
-            defaults.set(true, forKey: Keys.systemMetalHUD)
-            defaults.set(true, forKey: Keys.systemMetalHUDDefaultMigrated)
-            AppLog.log("[3ds2apple] system Metal HUD: enabled by the 0.1.0 default migration")
+        // System Metal HUD: OFF by default since 0.1.6-beta3, including a
+        // one-time migration that turns it off for every existing install. The
+        // migration marker makes it run exactly once; afterwards the user's
+        // Settings toggle (on or off) is the stored value and wins.
+        if defaults.object(forKey: Keys.systemMetalHUDDefaultOffMigrated) == nil {
+            systemMetalHUD = false
+            defaults.set(false, forKey: Keys.systemMetalHUD)
+            defaults.set(true, forKey: Keys.systemMetalHUDDefaultOffMigrated)
+            AppLog.log("[3ds2apple] system Metal HUD: disabled by the 0.1.6 default migration")
         } else if defaults.object(forKey: Keys.systemMetalHUD) != nil {
             systemMetalHUD = defaults.bool(forKey: Keys.systemMetalHUD)
         } else {
-            systemMetalHUD = true
+            systemMetalHUD = false
         }
         showFPS = Self.bool(defaults, Keys.showFPS, fallback: true)
         playbackSpeed = PlaybackSpeed(
@@ -938,6 +936,8 @@ final class AppSettings: ObservableObject {
         static let systemMetalHUD = "UI.systemMetalHUD"
         /// One-time marker: the 0.1.0 default switched the Metal HUD to on.
         static let systemMetalHUDDefaultMigrated = "UI.systemMetalHUDDefaultMigrated"
+        /// One-time 0.1.6-beta3 migration that turns the HUD off everywhere.
+        static let systemMetalHUDDefaultOffMigrated = "UI.systemMetalHUDDefaultOffMigrated"
         /// The removed first-load graphics warm-up wrote
         /// "UI.graphicsWarmUpEnabled"; old values are ignored on purpose.
         static let showFPS = "UI.showFPS"

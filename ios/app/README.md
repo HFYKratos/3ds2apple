@@ -92,10 +92,11 @@ on-screen controls, so no input or audio advances behind it.
   MoltenVK over Metal; the launcher's shell template embeds
   `Frameworks/MoltenVK.framework`. When a presenter cannot be made the app falls
   back to the `zk_read_screen` + `CGImage` path and logs a performance warning.
-- System Metal Performance HUD (FPS / GPU time / memory): **on by default since
-  0.1.0**; a Settings switch shows or hides it on the presented layer
-  (`CAMetalLayer.developerHUDProperties`, iOS 16) and old installs are migrated
-  to on once. See "System Metal HUD" below.
+- System Metal Performance HUD (FPS / GPU time / memory): **off by default**
+  since 0.1.6-beta3; a Settings switch shows or hides it on the presented layer
+  (`CAMetalLayer.developerHUDProperties`, iOS 16) and existing installs are
+  migrated to off once (the marker makes the migration run only once, so a
+  manual switch afterwards wins). See "System Metal HUD" below.
 - Optional in-game FPS counter, **on by default**: the only performance readout
   the game view draws. The switch lives in Settings → Performance; the counter is
   a translucent pill floating in the top-trailing safe-area corner over the
@@ -552,7 +553,7 @@ hint sits above it and the empty area stays inert) saves the current direction's
 |---|---|---|
 | Frame cap | 60 / 30 fps | Immediately; the free-run loop never starts presented frames closer than 1/60 s (or 1/30 s). It is a cap, not a target. |
 | Fast-forward | 1× / 2× / 4× | Immediately (also from the in-game menu); the next presented frame uses the new value. |
-| System Metal HUD | On / off, **default on** | Immediately on the presented `CAMetalLayer`; remembered across launches and also written as `MTL_HUD_ENABLED` / `MetalHUDForceEnabled` for the next Metal device. The 0.1.0 build migrates a pre-0.1.0 install to on once. |
+| System Metal HUD | On / off, **default off** | Immediately on the presented `CAMetalLayer`; remembered across launches and also written as `MTL_HUD_ENABLED` / `MetalHUDForceEnabled` for the next Metal device. 0.1.6-beta3 turns it off for every install once (`UI.systemMetalHUDDefaultOffMigrated`); after that the stored switch value wins. |
 | Show FPS counter | On / off, **default on** | The in-game FPS readout: a translucent floating pill in the top-trailing safe-area corner in both orientations; also toggled from the pause menu's Virtual controls card (Show performance stats). No other performance text is drawn over the game; the rest stays in the log and diagnostics. |
 
 ## Fast-forward
@@ -609,10 +610,11 @@ re-applied whenever the layer is reused, so it survives page navigation and ROM
 reloads. The app keeps the system HUD's device logging off; the app log and the
 diagnostics report carry the frame timings instead.
 
-**On by default since 0.1.0.** The switch default was off before 0.1.0 and any
-Settings change persisted that false, so the app enables the HUD once for an
-install that predates the migration marker
-(`UI.systemMetalHUDDefaultMigrated`) and respects the stored choice afterwards.
+**Off by default since 0.1.6-beta3.** New installs start with the HUD off, and a
+one-time migration turns it off for existing installs as well (marker
+`UI.systemMetalHUDDefaultOffMigrated`). The migration runs exactly once; after
+that the Settings switch is the stored value and is respected, whether the user
+turns the HUD on or off.
 `App.init` applies the choice before the first Metal device is created:
 `MetalHUD.apply` sets `MTL_HUD_ENABLED=1` in the environment and the documented
 `MetalHUDForceEnabled` default, and `MetalScreenView.applySystemMetalHUD` sets
@@ -628,7 +630,7 @@ The HUD can only appear when all of these hold:
 - the screens go through the presented `CAMetalLayer` — the GPU path, which
   needs `Frameworks/MoltenVK.framework` embedded by the launcher's shell
   template. On the CPU readback path there is no Metal layer to attach to;
-- the Metal HUD preference is on (the default).
+- the Metal HUD preference is on (off by default since 0.1.6-beta3).
 
 The Settings row explains the exact reason when the HUD cannot appear (build gate
 missing, or the running game is on the CPU readback path); the diagnostics report
@@ -1231,10 +1233,11 @@ Instant save states:
   fallback gives up extra frames when a scene is too slow (see
   "Fast-forward"). It cannot make a game that already runs below 20 fps
   faster.
-- The system Metal HUD is on by default, but it only works when the build
-  enables it (`MetalHudEnabled`), and only on the presented `CAMetalLayer` path
-  (so not on a software/readback load). The Settings page shows the reason when
-  the switch cannot work, and the diagnostics report records it.
+- The system Metal HUD is off by default since 0.1.6-beta3, and it only works
+  when the build enables it (`MetalHudEnabled`), and only on the presented
+  `CAMetalLayer` path (so not on a software/readback load). The Settings page
+  shows the reason when the switch cannot work, and the diagnostics report
+  records it.
 - Only English and Simplified Chinese are included. Traditional Chinese and
   other languages use English.
 - iOS 16+ only; the app is not distributed through the App Store.

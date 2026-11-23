@@ -301,7 +301,6 @@
 "Version" = "Version";
 "Version %@ · build %@" = "Version %@ · build %@";
 "Volume" = "Volume";
-"Waiting for first frame…" = "Waiting for first frame…";
 "Writing slot %ld…" = "Writing slot %ld…";
 "ZIP64 archives are not supported." = "ZIP64 archives are not supported.";
 "Zakuro (MIT): 3DS runtime, services, GPU and interpreter fallback." = "Zakuro (MIT): 3DS runtime, services, GPU and interpreter fallback.";

@@ -717,10 +717,6 @@ struct GameView: View {
             Color.black
             if let image {
                 rotatedScreenImage(image, rotation: rotation)
-            } else if !isRuntimeStarting {
-                Text(L10n.tr("Waiting for first frame…"))
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.65))
             }
             if isTouchscreen {
                 bottomTouchOverlay(rotation: rotation)
@@ -755,15 +751,10 @@ struct GameView: View {
         }
     }
 
-    @ViewBuilder
+    /// No placeholder text is drawn while the first frame is pending
+    /// (0.1.6-beta3 removed the last startup placeholder label).
     private var metalFirstFramePlaceholder: some View {
-        if model.frameStats.frames == 0 {
-            if !isRuntimeStarting {
-                Text(L10n.tr("Waiting for first frame…"))
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.65))
-            }
-        }
+        EmptyView()
     }
 
     // MARK: - Screen geometry
