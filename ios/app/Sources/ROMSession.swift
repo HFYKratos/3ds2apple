@@ -208,7 +208,7 @@ enum Presentation: Equatable {
 
 /// Owns the Zakuro runtime handle, the AOT game launch pipeline and the frame loop.
 final class ROMSession: ObservableObject, SaveStateRuntime {
-    enum Phase {
+    enum Phase: Equatable {
         /// Nothing loaded yet.
         case idle
         /// zk_create() is running on the runtime queue.
