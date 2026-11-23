@@ -1734,7 +1734,8 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
                     Float(viewports.top.width), Float(viewports.top.height),
                     Float(viewports.bottom.minX), Float(viewports.bottom.minY),
                     Float(viewports.bottom.width), Float(viewports.bottom.height),
-                    normX, normY, UInt32(screenRotation.presenterValue), &x, &y
+                    normX, normY, UInt32(screenRotation.presenterValue),
+                    screenSwapped ? 1 : 0, &x, &y
                 )
             } else {
                 onLowerScreen = 0
@@ -1745,6 +1746,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
                 UInt32(size.height.rounded()),
                 screenLayout.presenterValue,
                 screenRotation.presenterValue,
+                screenSwapped ? 1 : 0,
                 normX,
                 normY,
                 &x,

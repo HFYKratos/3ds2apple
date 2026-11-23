@@ -1198,8 +1198,11 @@ Instant save states:
   user rectangle. 0.1.6-beta2 also sends the screen-rotation value
   (zk_presenter_set_custom_rotation) so all four custom rotations render on the
   GPU, and zk_presenter_set_screen_swap applies the Swap screens button to any
-  layout immediately. Only a device where no presenter can be made keeps the
-  older readback fallback. The presenter side needs the
+  layout immediately. Since 0.1.6-beta4 the Swift touch maps also send the
+  swap flag (and the rotation for custom layouts) to the presenter touch
+  helpers, so touches land on the screen that is actually shown after a swap.
+  Only a device where no presenter can be made keeps the older readback
+  fallback. The presenter side needs the
   round-0.1.6 library/patch 0009; an older library falls back to readback.
   The custom rectangles still apply from the next game load.
 - The shipped default controls come from the ModernCenteredX2 reference skin,

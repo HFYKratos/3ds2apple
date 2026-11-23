@@ -570,7 +570,7 @@ int32_t zk_present_layout_size(uint32_t layout, uint32_t orientation,
  * orientation is not north.
  */
 int32_t zk_present_touch_map(uint32_t width, uint32_t height,
-                             uint32_t layout, uint32_t orientation,
+                             uint32_t layout, uint32_t orientation, uint32_t swap,
                              float x, float y,
                              uint16_t *out_x, uint16_t *out_y);
 
@@ -594,7 +594,7 @@ int32_t zk_present_custom_touch_map(uint32_t width, uint32_t height,
                                     float top_w, float top_h,
                                     float bottom_x, float bottom_y,
                                     float bottom_w, float bottom_h,
-                                    float x, float y, uint32_t rotation,
+                                    float x, float y, uint32_t rotation, uint32_t swap,
                                     uint16_t *out_x, uint16_t *out_y);
 
 /* --------------------------------------------------- hardware diagnostics -- */

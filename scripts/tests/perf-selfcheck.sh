@@ -321,6 +321,10 @@ check "the screen editor decorative screens do not block the canvas gesture" \
   bash -c 'grep -q "screenBox(.upper, available: available)" ios/app/Sources/ScreenLayoutEditorView.swift && test "$(grep -c "allowsHitTesting(false)" ios/app/Sources/ScreenLayoutEditorView.swift)" -ge 3'
 check "GameView draws no waiting-for-first-frame text" \
   bash -c '! grep -q "Waiting for first frame" ios/app/Sources/GameView.swift'
+check "screen editor pinch owns the canvas and clears stale drag state" \
+  bash -c 'grep -q "pinching" ios/app/Sources/ScreenLayoutEditorView.swift && grep -q "guard !pinching" ios/app/Sources/ScreenLayoutEditorView.swift && grep -q "resetDragState" ios/app/Sources/ScreenLayoutEditorView.swift'
+check "Swift touch maps pass the screen-swap flag to both presenter ABIs" \
+  bash -c 'test "$(grep -c "screenSwapped ? 1 : 0" ios/app/Sources/ROMSession.swift)" -ge 2 && grep -q "UInt32(screenRotation.presenterValue)" ios/app/Sources/ROMSession.swift'
 check "control editor is full screen and edits the current direction" contains ios/app/Sources/ControlLayoutEditorView.swift 'currentLayoutOrientation'
 check "control editor overlays the current screen layout" contains ios/app/Sources/ControlLayoutEditorView.swift 'screenViewports'
 check "GameView floats the editable control overlay and draws the hybrid small top screen" \

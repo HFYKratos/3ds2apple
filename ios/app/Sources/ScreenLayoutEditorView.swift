@@ -34,6 +34,12 @@ struct ScreenLayoutEditorView: View {
     @State private var dragBase: ScreenRect?
     @State private var dragStart: CGPoint?
     @State private var dragMoved = false
+    /// True while a two-finger pinch owns the canvas. A DragGesture that was
+    /// already tracking a one-finger pan is cancelled without onEnded when the
+    /// pinch starts, so its captured base/start must be cleared on pinch start —
+    /// otherwise the next tap reuses the stale base and the screen jumps/shrinks
+    /// (the 0.1.6-beta4 user video).
+    @State private var pinching = false
     @State private var previewRect: ScreenRect?
     @State private var previewKind: ScreenKind?
 
@@ -195,6 +201,8 @@ struct ScreenLayoutEditorView: View {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 if dragKind == nil {
+                    // A pinch, once recognised, owns the canvas: no new pan.
+                    guard !pinching else { return }
                     guard let hit = hitTest(value.startLocation, available: available) else {
                         return
                     }
@@ -224,18 +232,19 @@ struct ScreenLayoutEditorView: View {
             }
             .onEnded { _ in
                 if dragMoved { commitPreview() }
-                dragKind = nil
-                dragBase = nil
-                dragStart = nil
-                dragMoved = false
-                guideXs = []
-                guideYs = []
+                resetDragState()
             }
     }
 
     private func pinchGesture(available: CGSize) -> some Gesture {
         MagnificationGesture()
             .onChanged { factor in
+                if !pinching {
+                    pinching = true
+                    // The simultaneous DragGesture is cancelled by the pinch and
+                    // never gets onEnded: drop its state, keep the preview.
+                    resetDragState()
+                }
                 if pinchBase == nil {
                     pinchBase = draft.placement(for: orientation).rect(for: selection)
                 }
@@ -262,10 +271,23 @@ struct ScreenLayoutEditorView: View {
                     CGRect(x: x, y: y, width: width, height: height), in: available)
             }
             .onEnded { _ in
+                pinching = false
+                resetDragState()
                 guard pinchBase != nil else { return }
                 pinchBase = nil
                 commitPreview()
             }
+    }
+
+    /// Clears the one-finger pan bookkeeping (also called when a pinch starts
+    /// or ends, because a cancelled DragGesture does not call onEnded).
+    private func resetDragState() {
+        dragKind = nil
+        dragBase = nil
+        dragStart = nil
+        dragMoved = false
+        guideXs = []
+        guideYs = []
     }
 
     private func hitTest(_ point: CGPoint, available: CGSize) -> ScreenKind? {
