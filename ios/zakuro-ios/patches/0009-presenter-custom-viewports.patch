@@ -1,0 +1,188 @@
+diff --git a/crates/zakuro-gpu/src/backend/mod.rs b/crates/zakuro-gpu/src/backend/mod.rs
+index de74e72..1a4770e 100644
+--- a/crates/zakuro-gpu/src/backend/mod.rs
++++ b/crates/zakuro-gpu/src/backend/mod.rs
+@@ -104,6 +104,8 @@ pub enum ScreenLayout {
+     Hybrid,
+     /// the top screen across the top, the bottom one below it at the same width
+     TopFullWidth,
++    /// the app's own two places, for its custom screen layout
++    Custom,
+ }
+ 
+ /// the orientation of both screens, north is up
+@@ -172,6 +174,8 @@ impl ScreenLayout {
+             ScreenLayout::LargeTopRight => (top_width + 320.0 / LARGE_TOP_RIGHT_BOTTOM_SCALE, 240.0),
+             ScreenLayout::Hybrid => (top_width + 320.0 / HYBRID_COLUMN_SCALE, 240.0),
+             ScreenLayout::TopFullWidth => (top_width, 240.0 + 240.0 * top_width / 320.0),
++            // the app's own places, so no fixed size
++            ScreenLayout::Custom => (0.0, 0.0),
+         }
+     }
+ }
+@@ -199,6 +203,10 @@ pub fn layout(window_width: u32, window_height: u32, arrangement: ScreenLayout,
+ 
+ /// [`layout`], and the hybrid layout's small top screen beside the big one as a third place
+ fn layout_screens(window_width: u32, window_height: u32, arrangement: ScreenLayout, orientation: ScreenOrientation, top_w: f32, integer: bool) -> (Option<Viewport>, Option<Viewport>, Option<Viewport>) {
++    // the custom layout's places come from the app, not from the arrangement
++    if arrangement == ScreenLayout::Custom {
++        return (None, None, None);
++    }
+     let (layout_width, layout_height) = arrangement.size_f(top_w);
+     let (total_width, total_height) = if matches!(orientation, ScreenOrientation::East | ScreenOrientation::West) {
+         (layout_height, layout_width)
+@@ -287,6 +295,7 @@ fn layout_screens(window_width: u32, window_height: u32, arrangement: ScreenLayo
+             width: 320.0 * scale,
+             height: 240.0 * scale,
+         }),
++        ScreenLayout::Custom => None,
+     };
+     // the rest of the hybrid right column is the small top screen
+     let above = (arrangement == ScreenLayout::Hybrid).then(|| {
+@@ -406,6 +415,29 @@ pub fn place(window_width: u32, window_height: u32, arrangement: ScreenLayout, o
+     }
+ }
+ 
++/// where the custom layout puts the two screens: rectangles in normalised
++/// drawable pixels, `[left, top, width, height]` from the top left corner
++#[derive(Debug, Clone, Copy, PartialEq, Default)]
++pub struct CustomViewports {
++    /// the upper screen's rectangle
++    pub top: [f32; 4],
++    /// the lower screen's rectangle
++    pub bottom: [f32; 4],
++}
++
++/// places the two screens of the custom layout, the app's normalised rectangles
++/// scaled to the window; a rectangle w/ no size has no place
++pub fn place_custom(window_width: u32, window_height: u32, custom: CustomViewports) -> Vec<(Viewport, Shown)> {
++    let (window_width, window_height) = (window_width as f32, window_height as f32);
++    let place = |rect: [f32; 4], shown: Shown| {
++        let [x, y, width, height] = rect;
++        (width > 0.0 && height > 0.0).then(|| {
++            (Viewport { x: x * window_width, y: y * window_height, width: width * window_width, height: height * window_height }, shown)
++        })
++    };
++    place(custom.top, Shown::Top).into_iter().chain(place(custom.bottom, Shown::Bottom)).collect()
++}
++
+ #[derive(Debug, thiserror::Error)]
+ pub enum PresentError {
+     #[error("{0}")]
+@@ -433,6 +465,10 @@ pub trait Presenter {
+     /// how the screens are arranged from the next frame on
+     fn set_layout(&mut self, arrangement: ScreenLayout);
+ 
++    /// the custom layout's two places, from the next frame on; a backend w/o
++    /// custom places keeps the arrangement's own
++    fn set_custom_viewports(&mut self, _custom: CustomViewports) {}
++
+     /// sets the orientation of both screens
+     fn set_orientation(&mut self, orientation: ScreenOrientation);
+ 
+@@ -596,6 +632,37 @@ mod tests {
+         assert_eq!(places.iter().map(|(_, shown)| *shown).collect::<Vec<_>>(), [Shown::Top, Shown::Bottom]);
+     }
+ 
++    /// the custom layout has no fixed places: the app's rectangles make them
++    #[test]
++    fn the_custom_layout_takes_its_places_from_the_app() {
++        assert_eq!(ScreenLayout::Custom.size(TOP_WIDTH), (0, 0));
++        let (top, bottom) = layout(800, 480, ScreenLayout::Custom, ScreenOrientation::North, TOP_WIDTH, false);
++        assert!(top.is_none() && bottom.is_none());
++        let places = place(800, 480, ScreenLayout::Custom, ScreenOrientation::North, TOP_WIDTH, false, Stereo { mode: StereoMode::Off, swap: false }, false);
++        assert!(places.is_empty());
++    }
++
++    /// the app's two rectangles, scaled to the window, the upper one first
++    #[test]
++    fn the_custom_layout_places_the_apps_rectangles() {
++        let custom = CustomViewports {
++            top: [0.0, 0.0, 0.5, 1.0],
++            bottom: [0.5, 0.25, 0.25, 0.5],
++        };
++        let places = place_custom(800, 480, custom);
++        let shown: Vec<_> = places.iter().map(|(_, shown)| *shown).collect();
++        assert_eq!(shown, [Shown::Top, Shown::Bottom]);
++        assert_eq!(bounds(places[0].0), (0.0, 0.0, 400.0, 480.0));
++        assert_eq!(bounds(places[1].0), (400.0, 120.0, 200.0, 240.0));
++
++        // a rectangle w/ no size has no place, like a screen that doesn't show
++        let places = place_custom(800, 480, CustomViewports { top: [0.0, 0.0, 0.0, 1.0], bottom: [0.0, 0.0, 1.0, 1.0] });
++        assert_eq!(places.len(), 1);
++        assert_eq!(places[0].1, Shown::Bottom);
++        // nothing shows until the app sets them
++        assert!(place_custom(800, 480, CustomViewports::default()).is_empty());
++    }
++
+     #[test]
+     fn the_large_top_screen_takes_most_of_the_window() {
+         // the bottom screen at half size sits at the top one's lower right
+diff --git a/crates/zakuro-gpu/src/backend/vulkan.rs b/crates/zakuro-gpu/src/backend/vulkan.rs
+index 2fac461..d006312 100644
+--- a/crates/zakuro-gpu/src/backend/vulkan.rs
++++ b/crates/zakuro-gpu/src/backend/vulkan.rs
+@@ -8,7 +8,7 @@ use ash::vk;
+ use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+ 
+ use super::vulkan_overlay::OverlayPainter;
+-use super::{place, GpuScreen, Overlay, PresentError, Presenter, ScreenFilter, ScreenImage, ScreenLayout, ScreenOrientation, Shown, Stereo, StereoMode, Viewport};
++use super::{place, place_custom, CustomViewports, GpuScreen, Overlay, PresentError, Presenter, ScreenFilter, ScreenImage, ScreenLayout, ScreenOrientation, Shown, Stereo, StereoMode, Viewport};
+ use crate::raster::hardware::{can_render, render_device};
+ use crate::SharedDevice;
+ 
+@@ -123,6 +123,8 @@ pub struct VulkanPresenter {
+     overlay: Option<OverlayPainter>,
+     window: (u32, u32),
+     arrangement: ScreenLayout,
++    /// the custom layout's two places, until the app gives them again
++    custom: CustomViewports,
+     orientation: ScreenOrientation,
+     top_width: f32,
+     filter: ScreenFilter,
+@@ -402,6 +404,7 @@ impl VulkanPresenter {
+             overlay: Some(overlay),
+             window: size,
+             arrangement: ScreenLayout::default(),
++            custom: CustomViewports::default(),
+             orientation: ScreenOrientation::default(),
+             top_width: super::TOP_WIDTH,
+             filter: ScreenFilter::default(),
+@@ -763,7 +766,12 @@ impl VulkanPresenter {
+                     Some((self.gpu_sets[self.frame][index], [x, y, width, height, left, top, right, bottom]))
+                 }
+             };
+-            let places = place(self.extent.width, self.extent.height, self.arrangement, self.orientation, self.top_width, self.integer, self.stereo, right);
++            let places = if self.arrangement == ScreenLayout::Custom {
++                // the app gives the custom layout both places itself, in window pixels already
++                place_custom(self.extent.width, self.extent.height, self.custom)
++            } else {
++                place(self.extent.width, self.extent.height, self.arrangement, self.orientation, self.top_width, self.integer, self.stereo, right)
++            };
+             for (viewport, shown) in places {
+                 let index = match shown {
+                     Shown::Top | Shown::Both => 0,
+@@ -946,6 +954,10 @@ impl Presenter for VulkanPresenter {
+         self.arrangement = arrangement;
+     }
+ 
++    fn set_custom_viewports(&mut self, custom: CustomViewports) {
++        self.custom = custom;
++    }
++
+     fn set_orientation(&mut self, orientation: ScreenOrientation) {
+         self.orientation = orientation;
+     }
+diff --git a/crates/zakuro-gpu/src/lib.rs b/crates/zakuro-gpu/src/lib.rs
+index 04d34b2..fb2bbdc 100644
+--- a/crates/zakuro-gpu/src/lib.rs
++++ b/crates/zakuro-gpu/src/lib.rs
+@@ -24,7 +24,7 @@ pub mod texture;
+ use format::ColorFormat;
+ pub use interpolation::Matches;
+ use registers::*;
+-pub use backend::{layout, place, GpuScreen, Overlay, OverlayMesh, OverlayTexture, OverlayVertex, PresentError, Presenter, ScreenFilter, ScreenImage, ScreenLayout, ScreenOrientation, Shown, Stereo, StereoMode, Viewport};
++pub use backend::{layout, place, place_custom, CustomViewports, GpuScreen, Overlay, OverlayMesh, OverlayTexture, OverlayVertex, PresentError, Presenter, ScreenFilter, ScreenImage, ScreenLayout, ScreenOrientation, Shown, Stereo, StereoMode, Viewport};
+ pub use renderer::{DrawCall, Renderer, RendererKind, SoftwareRenderer};
+ #[cfg(feature = "vulkan")]
+ pub use device::SharedDevice;

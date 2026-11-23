@@ -32,7 +32,10 @@
 //! arrangement turned a quarter turn all present through the same swapchain.
 //! [`zk_present_layout_size`] reports the pixels the chosen arrangement takes at
 //! its native size, which is the drawable size the app should give the layer;
-//! [`zk_present_touch_map`] applies the same layout when mapping a touch.
+//! [`zk_present_touch_map`] applies the same layout when mapping a touch. A
+//! custom layout instead lets the app give both screens' places itself
+//! ([`zk_presenter_set_custom_viewports`]) and maps touches with
+//! [`zk_present_custom_touch_map`].
 //!
 //! Threading follows the rest of the C ABI: a presenter is not thread-safe.
 //! Create, resize and destroy it on the app's main queue (the `UIView` is a
@@ -55,7 +58,8 @@ use zakuro_core::System;
 use zakuro_gpu::backend::vulkan::VulkanPresenter;
 use zakuro_gpu::backend::TOP_WIDTH;
 use zakuro_gpu::{
-    layout, Overlay, PresentError, Presenter, ScreenImage, ScreenLayout, ScreenOrientation,
+    layout, CustomViewports, Overlay, PresentError, Presenter, ScreenImage, ScreenLayout,
+    ScreenOrientation,
 };
 
 use crate::{perf, set_last_error};
@@ -120,6 +124,7 @@ impl BackendMode {
 /// | 5 | large upper screen with the lower one small at its upper right |
 /// | 6 | large upper screen on the left, the two screens small and stacked on the right, upper above lower |
 /// | 7 | upper screen across the top, lower screen below it at the same width |
+/// | 8 | custom: the app gives both screens' places itself |
 pub const ZK_LAYOUT_STACKED: u32 = 0;
 pub const ZK_LAYOUT_SIDE_BY_SIDE: u32 = 1;
 pub const ZK_LAYOUT_TOP_ONLY: u32 = 2;
@@ -128,6 +133,7 @@ pub const ZK_LAYOUT_LARGE_TOP: u32 = 4;
 pub const ZK_LAYOUT_LARGE_TOP_RIGHT: u32 = 5;
 pub const ZK_LAYOUT_HYBRID: u32 = 6;
 pub const ZK_LAYOUT_TOP_FULL_WIDTH: u32 = 7;
+pub const ZK_LAYOUT_CUSTOM: u32 = 8;
 
 /// Which way the screens are turned inside the layer: north is the console's
 /// own upright orientation, the other numbers rotate the picture clockwise.
@@ -147,6 +153,7 @@ fn screen_layout(value: u32) -> Option<ScreenLayout> {
         ZK_LAYOUT_LARGE_TOP_RIGHT => Some(ScreenLayout::LargeTopRight),
         ZK_LAYOUT_HYBRID => Some(ScreenLayout::Hybrid),
         ZK_LAYOUT_TOP_FULL_WIDTH => Some(ScreenLayout::TopFullWidth),
+        ZK_LAYOUT_CUSTOM => Some(ScreenLayout::Custom),
         _ => None,
     }
 }
@@ -366,8 +373,10 @@ pub extern "C" fn zk_presenter_resize(presenter: *mut c_void, width: u32, height
 ///
 /// The layout is one of [`ZK_LAYOUT_STACKED`], [`ZK_LAYOUT_SIDE_BY_SIDE`],
 /// [`ZK_LAYOUT_TOP_ONLY`], [`ZK_LAYOUT_BOTTOM_ONLY`], [`ZK_LAYOUT_LARGE_TOP`],
-/// [`ZK_LAYOUT_LARGE_TOP_RIGHT`], [`ZK_LAYOUT_HYBRID`] or
-/// [`ZK_LAYOUT_TOP_FULL_WIDTH`]. The app normally picks the layer's drawable size with
+/// [`ZK_LAYOUT_LARGE_TOP_RIGHT`], [`ZK_LAYOUT_HYBRID`],
+/// [`ZK_LAYOUT_TOP_FULL_WIDTH`] or [`ZK_LAYOUT_CUSTOM`]; a custom layout takes
+/// its two places from [`zk_presenter_set_custom_viewports`]. The app normally
+/// picks the layer's drawable size with
 /// [`zk_present_layout_size`] for the same layout, so the screens fill the layer
 /// instead of being letterboxed; a different drawable still presents, scaled to
 /// fit and centred. The layout is a presenter call like [`zk_present`], so
@@ -413,6 +422,84 @@ pub extern "C" fn zk_presenter_set_orientation(presenter: *mut c_void, orientati
     0
 }
 
+/// One rectangle in normalised drawable pixels, `[left, top, width, height]`, if
+/// it is a real place inside the layer: finite, w/ a size, inside 0..1.
+fn normalised_rect(rect: [f32; 4]) -> Option<[f32; 4]> {
+    let [left, top, width, height] = rect;
+    if ![left, top, width, height].iter().all(|value| value.is_finite()) {
+        return None;
+    }
+    // the app's own arithmetic can land a hair over 1.0 at the layer's edges
+    const EDGE: f32 = 0.001;
+    if left < 0.0 || top < 0.0 || width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+    if left + width > 1.0 + EDGE || top + height > 1.0 + EDGE {
+        return None;
+    }
+    Some(rect)
+}
+
+/// The custom layout's two rectangles, if the app gave two real ones inside the
+/// layer.
+fn custom_viewports(top: [f32; 4], bottom: [f32; 4]) -> Option<CustomViewports> {
+    Some(CustomViewports {
+        top: normalised_rect(top)?,
+        bottom: normalised_rect(bottom)?,
+    })
+}
+
+/// Sets where the custom layout draws the two screens, from the next
+/// [`zk_present`] on. Call it together with
+/// [`zk_presenter_set_layout`]`(presenter, ZK_LAYOUT_CUSTOM)`.
+///
+/// The rectangles are normalised drawable pixels, `(left, top, width, height)`
+/// from the layer's top left; the app has already aspect-fitted each screen's
+/// picture inside the user's rectangle (upper 400:240, lower 320:240), so the
+/// presenter draws each screen into exactly its rectangle and leaves the rest
+/// black. They persist for that presenter until replaced. The custom layout is
+/// for an upright picture only: a turned screen keeps the readback path. Returns
+/// 1, 0 for rectangles that are not real places inside the layer (the reason is
+/// in [`crate::zk_last_error`]), or -1 for a `NULL` presenter.
+#[no_mangle]
+pub extern "C" fn zk_presenter_set_custom_viewports(
+    presenter: *mut c_void,
+    top_x: f32,
+    top_y: f32,
+    top_w: f32,
+    top_h: f32,
+    bottom_x: f32,
+    bottom_y: f32,
+    bottom_w: f32,
+    bottom_h: f32,
+) -> i32 {
+    if presenter.is_null() {
+        return -1;
+    }
+    let Some(custom) = custom_viewports(
+        [top_x, top_y, top_w, top_h],
+        [bottom_x, bottom_y, bottom_w, bottom_h],
+    ) else {
+        let message = format!(
+            "zk_presenter_set_custom_viewports: the places must be two rectangles inside the \
+             layer: top ({top_x}, {top_y}, {top_w}, {top_h}), bottom ({bottom_x}, {bottom_y}, \
+             {bottom_w}, {bottom_h})"
+        );
+        eprintln!("{message}");
+        set_last_error(message);
+        return 0;
+    };
+    // SAFETY: the pointer is non-NULL and, like every presenter call, a live
+    // handle on the calling queue.
+    let presenter = unsafe { &mut *(presenter as *mut PresenterHandle) };
+    eprintln!(
+        "zk_presenter_set_custom_viewports: top {:?}, bottom {:?}",
+        custom.top, custom.bottom
+    );
+    presenter.presenter.set_custom_viewports(custom);
+    1
+}
+
 /// Reports the drawable size, in pixels, that shows a layout without
 /// letterboxing: the two 3DS screens at their own resolution, arranged and
 /// turned as asked.
@@ -421,7 +508,8 @@ pub extern "C" fn zk_presenter_set_orientation(presenter: *mut c_void, orientati
 /// [`zk_presenter_set_layout`] and [`zk_presenter_set_orientation`]. The app
 /// gives its `CAMetalLayer` this size and passes the same layout/orientation to
 /// the presenter, so every screen pixel maps to the layer. Returns 1 and writes
-/// both outputs, or 0 for an unknown layout/orientation or a `NULL` output.
+/// both outputs, or 0 for an unknown layout/orientation, the custom layout (no
+/// fixed size: the app gives the layer its own) or a `NULL` output.
 ///
 /// # Safety
 ///
@@ -442,6 +530,10 @@ pub extern "C" fn zk_present_layout_size(
     else {
         return 0;
     };
+    // the custom layout has no fixed size: the app gives the layer its own
+    if arrangement == ScreenLayout::Custom {
+        return 0;
+    }
     let (width, height) = layout_pixel_size(arrangement, turned);
     // SAFETY: both pointers were checked non-NULL and the caller guarantees they
     // are writable.
@@ -698,18 +790,87 @@ pub extern "C" fn zk_present_touch_map(
     1
 }
 
+/// Maps a touch in the presented layer to lower-screen pixels when the presenter
+/// draws the custom layout.
+///
+/// `drawable_w` and `drawable_h` are the layer's size in pixels; the rectangles
+/// are the same normalised drawable pixels as
+/// [`zk_presenter_set_custom_viewports`] (they are checked the same way); `x` and
+/// `y` are the touch normalised to `0.0 ... 1.0` from the layer's top left.
+/// Returns 1 and writes the lower-screen pixel coordinates (`0...320`,
+/// `0...240`) when the point is inside the lower screen's rectangle, 0 when it
+/// is not, an argument is missing or a rectangle is not a real place. The custom
+/// GPU path is upright only: a turned screen keeps the readback path and its
+/// rotated touch mapping.
+///
+/// # Safety
+///
+/// `out_x` and `out_y` must be `NULL` or point to writable `uint16_t`s; they are
+/// only written when the function returns 1.
+#[no_mangle]
+pub extern "C" fn zk_present_custom_touch_map(
+    drawable_w: u32,
+    drawable_h: u32,
+    top_x: f32,
+    top_y: f32,
+    top_w: f32,
+    top_h: f32,
+    bottom_x: f32,
+    bottom_y: f32,
+    bottom_w: f32,
+    bottom_h: f32,
+    x: f32,
+    y: f32,
+    out_x: *mut u16,
+    out_y: *mut u16,
+) -> i32 {
+    if drawable_w == 0 || drawable_h == 0 || out_x.is_null() || out_y.is_null() {
+        return 0;
+    }
+    // the touch lands on the lower screen only, but a bad upper rectangle is a
+    // caller bug like a bad lower one, so both are checked
+    if normalised_rect([top_x, top_y, top_w, top_h]).is_none() {
+        return 0;
+    }
+    let Some(bottom) = normalised_rect([bottom_x, bottom_y, bottom_w, bottom_h]) else {
+        return 0;
+    };
+    let (drawable_w, drawable_h) = (drawable_w as f32, drawable_h as f32);
+    let left = bottom[0] * drawable_w;
+    let top = bottom[1] * drawable_h;
+    let width = bottom[2] * drawable_w;
+    let height = bottom[3] * drawable_h;
+    let u = (x * drawable_w - left) / width;
+    let v = (y * drawable_h - top) / height;
+    if !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
+        return 0;
+    }
+    // the app's rectangle is the lower screen's whole 320x240 picture, so its own
+    // coordinates are the touch panel's
+    let touch_x = (u * 320.0).round().clamp(0.0, 320.0) as u16;
+    let touch_y = (v * 240.0).round().clamp(0.0, 240.0) as u16;
+    // SAFETY: both pointers were checked non-NULL and the caller guarantees they
+    // are writable.
+    unsafe {
+        *out_x = touch_x;
+        *out_y = touch_y;
+    }
+    1
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::c_void;
     use std::ptr;
 
     use super::{
-        zk_create_presented, zk_present, zk_present_layout_size, zk_present_mode,
-        zk_present_touch_map, zk_presenter_create, zk_presenter_destroy, zk_presenter_resize,
-        zk_presenter_set_layout, zk_presenter_set_orientation, zk_presenter_shared_device,
-        ZK_LAYOUT_BOTTOM_ONLY, ZK_LAYOUT_HYBRID, ZK_LAYOUT_LARGE_TOP_RIGHT, ZK_LAYOUT_SIDE_BY_SIDE,
-        ZK_LAYOUT_STACKED, ZK_LAYOUT_TOP_FULL_WIDTH, ZK_LAYOUT_TOP_ONLY,
-        ZK_ORIENTATION_EAST, ZK_ORIENTATION_NORTH, ZK_ORIENTATION_SOUTH, ZK_ORIENTATION_WEST,
+        zk_create_presented, zk_present, zk_present_custom_touch_map, zk_present_layout_size,
+        zk_present_mode, zk_present_touch_map, zk_presenter_create, zk_presenter_destroy,
+        zk_presenter_resize, zk_presenter_set_custom_viewports, zk_presenter_set_layout,
+        zk_presenter_set_orientation, zk_presenter_shared_device, ZK_LAYOUT_BOTTOM_ONLY,
+        ZK_LAYOUT_CUSTOM, ZK_LAYOUT_HYBRID, ZK_LAYOUT_LARGE_TOP_RIGHT, ZK_LAYOUT_SIDE_BY_SIDE,
+        ZK_LAYOUT_STACKED, ZK_LAYOUT_TOP_FULL_WIDTH, ZK_LAYOUT_TOP_ONLY, ZK_ORIENTATION_EAST,
+        ZK_ORIENTATION_NORTH, ZK_ORIENTATION_SOUTH, ZK_ORIENTATION_WEST,
     };
 
     /// Copies the calling thread's last error, if any.
@@ -756,6 +917,20 @@ mod tests {
     fn presenter_calls_need_a_presenter() {
         assert_eq!(zk_presenter_resize(ptr::null_mut(), 400, 480), -1);
         assert_eq!(zk_presenter_shared_device(ptr::null_mut()), -1);
+        assert_eq!(
+            zk_presenter_set_custom_viewports(
+                ptr::null_mut(),
+                0.0,
+                0.0,
+                1.0,
+                1.0,
+                0.0,
+                0.0,
+                1.0,
+                1.0
+            ),
+            -1
+        );
         assert_eq!(
             zk_presenter_set_layout(ptr::null_mut(), ZK_LAYOUT_STACKED),
             -1
@@ -833,6 +1008,24 @@ mod tests {
                 "layout {layout} orientation {orientation}"
             );
         }
+    }
+
+    #[test]
+    fn the_custom_layout_has_no_layout_size() {
+        // the app gives the custom layer its own full size, so there is no
+        // arrangement size to report
+        let mut width = 99u32;
+        let mut height = 99u32;
+        assert_eq!(
+            zk_present_layout_size(
+                ZK_LAYOUT_CUSTOM,
+                ZK_ORIENTATION_NORTH,
+                &mut width,
+                &mut height
+            ),
+            0
+        );
+        assert_eq!((width, height), (99, 99), "the outputs stay untouched");
     }
 
     #[test]
@@ -1200,6 +1393,136 @@ mod tests {
             1
         );
         assert_eq!((x, y), (160, 120), "the middle of the full width lower screen");
+    }
+
+    #[test]
+    fn custom_touch_map_follows_the_lower_rectangle() {
+        let mut x = 0u16;
+        let mut y = 0u16;
+
+        // an upper screen across the top half and a lower one at the bottom
+        // right; the black area beside them is not a touch surface
+        fn map(drawable_w: u32, drawable_h: u32, x: f32, y: f32, out: (&mut u16, &mut u16)) -> i32 {
+            zk_present_custom_touch_map(
+                drawable_w,
+                drawable_h,
+                0.0,
+                0.0,
+                1.0,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                x,
+                y,
+                out.0,
+                out.1,
+            )
+        }
+        assert_eq!(map(1000, 500, 0.75, 0.75, (&mut x, &mut y)), 1);
+        assert_eq!((x, y), (160, 120), "the middle of the lower screen");
+        // the upper screen and the black area beside the lower one are not
+        assert_eq!(map(1000, 500, 0.5, 0.25, (&mut x, &mut y)), 0);
+        assert_eq!(map(1000, 500, 0.25, 0.75, (&mut x, &mut y)), 0);
+        // the lower rectangle's corners map to the touch panel's
+        assert_eq!(map(1000, 500, 0.5, 0.5, (&mut x, &mut y)), 1);
+        assert_eq!((x, y), (0, 0));
+        assert_eq!(map(1000, 500, 1.0, 1.0, (&mut x, &mut y)), 1);
+        assert_eq!((x, y), (320, 240));
+        // a differently sized drawable maps the same normalised point the same
+        assert_eq!(map(500, 250, 0.75, 0.75, (&mut x, &mut y)), 1);
+        assert_eq!((x, y), (160, 120));
+        // the preset touch map leaves the custom layout to its own helper
+        assert_eq!(
+            zk_present_touch_map(
+                1000,
+                500,
+                ZK_LAYOUT_CUSTOM,
+                ZK_ORIENTATION_NORTH,
+                0.75,
+                0.75,
+                &mut x,
+                &mut y
+            ),
+            0
+        );
+    }
+
+    #[test]
+    fn custom_touch_map_and_viewports_reject_bad_arguments() {
+        let mut x = 0u16;
+        let mut y = 0u16;
+
+        // no layer, no place to map into
+        assert_eq!(
+            zk_present_custom_touch_map(
+                0, 500, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.25, 0.25, &mut x, &mut y
+            ),
+            0
+        );
+        assert_eq!(
+            zk_present_custom_touch_map(
+                1000, 0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.25, 0.25, &mut x, &mut y
+            ),
+            0
+        );
+        // missing outputs
+        assert_eq!(
+            zk_present_custom_touch_map(
+                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.25, 0.25, ptr::null_mut(),
+                &mut y
+            ),
+            0
+        );
+        assert_eq!(
+            zk_present_custom_touch_map(
+                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.5, 0.25, 0.25, &mut x,
+                ptr::null_mut()
+            ),
+            0
+        );
+        // a rectangle w/ no size, or off the layer, is not a place
+        assert_eq!(
+            zk_present_custom_touch_map(
+                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.5, 0.25, 0.25, &mut x, &mut y
+            ),
+            0
+        );
+        assert_eq!(
+            zk_present_custom_touch_map(
+                1000, 500, 0.0, 0.0, 1.0, 1.0, 0.5, 0.0, 0.6, 0.5, 0.25, 0.25, &mut x, &mut y
+            ),
+            0
+        );
+
+        // the viewport setter takes the same rectangles, and a NULL presenter
+        // is the error before they are looked at
+        assert_eq!(
+            zk_presenter_set_custom_viewports(ptr::null_mut(), 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0),
+            -1
+        );
+        // the checks come before the presenter is touched, so a dangling
+        // pointer is safe to pass here
+        crate::clear_last_error();
+        assert_eq!(
+            zk_presenter_set_custom_viewports(dangling_view(), 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0),
+            0
+        );
+        let message = last_error_text().expect("bad viewports must set an error");
+        assert!(message.contains("two rectangles"), "unexpected: {message}");
+        assert_eq!(
+            zk_presenter_set_custom_viewports(dangling_view(), 0.0, 0.0, 1.0, 1.0, 0.5, 0.0, 0.6, 1.0),
+            0
+        );
+        assert_eq!(
+            zk_presenter_set_custom_viewports(dangling_view(), 0.0, 0.0, f32::NAN, 1.0, 0.0, 0.0, 1.0, 1.0),
+            0
+        );
+        assert_eq!(
+            zk_presenter_set_custom_viewports(dangling_view(), 0.0, 0.0, 1.0, 1.0, -0.1, 0.0, 1.0, 1.0),
+            0
+        );
     }
 
     #[test]

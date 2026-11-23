@@ -151,13 +151,15 @@ The app-side thresholds, log lines and diagnostics fields are documented in
 | `zk_presenter_resize(presenter, width, height)` | New drawable size in pixels (layout/rotation/render scale); the swapchain rebuilds on the next present |
 | `zk_presenter_destroy(presenter)` | Release the presenter; destroy its systems first |
 | `zk_presenter_shared_device(presenter)` | 1 when the renderer can draw on the presenter's device (no readback), 0 for upload presentation, -1 for NULL |
-| `zk_presenter_set_layout(presenter, layout)` | Arrange the screens (`ZK_LAYOUT_*`: stacked, side by side, upper only, lower only, large upper, large upper with a small lower one at its upper right, hybrid — large upper left with the two small screens stacked on the right, top full width — portrait); 0, or -1 for NULL/unknown |
+| `zk_presenter_set_layout(presenter, layout)` | Arrange the screens (`ZK_LAYOUT_*`: stacked, side by side, upper only, lower only, large upper, large upper with a small lower one at its upper right, hybrid — large upper left with the two small screens stacked on the right, top full width — portrait, custom — the app's own places); 0, or -1 for NULL/unknown |
+| `zk_presenter_set_custom_viewports(presenter, top_x, top_y, top_w, top_h, bottom_x, bottom_y, bottom_w, bottom_h)` | The custom layout's two places as normalised layer pixels (the app aspect-fits each picture); they persist until replaced; 1, 0 for bad rectangles, -1 for NULL |
 | `zk_presenter_set_orientation(presenter, orientation)` | Turn the screens clockwise (`ZK_ORIENTATION_*`: north/east/south/west); 0, or -1 for NULL/unknown |
-| `zk_present_layout_size(layout, orientation, out_w, out_h)` | Drawable pixels that show a layout without letterboxing (stacked 400×480 north / 480×400 east-west, side by side 720×240, large top 560×240, large top right 543×240, hybrid 578×240, top full width 400×540, …); 1, or 0 for unknown/NULL |
+| `zk_present_layout_size(layout, orientation, out_w, out_h)` | Drawable pixels that show a layout without letterboxing (stacked 400×480 north / 480×400 east-west, side by side 720×240, large top 560×240, large top right 543×240, hybrid 578×240, top full width 400×540, …); 1, or 0 for unknown/NULL, or for custom (the app gives that layer its own size) |
 | `zk_create_presented(rom, data_dir, presenter)` | `zk_create` on the presenter's device: GPU renderer requested, screens presented through the layer |
 | `zk_present(system, presenter)` | Present the frame `zk_run_frame` just drew; 0 ok, 1 swapchain out of date (continue), -1 bad handle, -2 failed |
 | `zk_present_mode(system, presenter)` | Presentation path of a loaded system: 0 readback, 1 GPU direct, 2 uploaded |
 | `zk_present_touch_map(width, height, layout, orientation, x, y, out_x, out_y)` | Normalised touch on the presented layer → lower-screen pixels (1) or not on it (0), for the presenter's layout and rotation |
+| `zk_present_custom_touch_map(drawable_w, drawable_h, top_x, top_y, top_w, top_h, bottom_x, bottom_y, bottom_w, bottom_h, x, y, out_x, out_y)` | Normalised touch in the custom layout's layer → lower-screen pixels (1) or not on the lower rectangle (0); upright only |
 | `zk_linked_code()` | 1 if this build contains linked AOT code |
 | `zk_linked_program_id()` | Title ID the linked code was built for |
 | `zk_recompiled(system)` | 1 if the running title is executing linked code |
