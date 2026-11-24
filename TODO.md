@@ -10,6 +10,9 @@ text is copied, and no game assets are stored in the repository.
       one fixed skin; the reference app can import Delta-style skins.
 - [ ] Cheat code manager (the reference app's "金手指" page) - not implemented.
 - [ ] Game manual viewer - not implemented.
+- [ ] Amiibo loading/simulation in the in-game menu - not shown as a fake row.
+- [ ] Cheat manager in the in-game menu - the Debug page has no cheat UI.
+- [ ] Multiplayer / online play - not implemented (no network features).
 - [ ] Screen-rotation quick toggle inside the in-game menu (Settings -> Graphics
       -> Screen rotation exists instead).
 - [ ] Dead-zone configuration UI, controller remapping and per-game controller

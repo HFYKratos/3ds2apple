@@ -363,6 +363,16 @@ enum PlaybackSpeed: Int, CaseIterable, Identifiable {
     var isFastForward: Bool { rawValue > 1 }
 }
 
+/// Per-game presentation overrides keyed by title ID (0.2.0 MVP). Every field is
+/// optional: nil means "use the global setting". Stored as raw values so the
+/// archive stays stable if an enum name changes.
+struct PerGameOverrides: Codable, Equatable {
+    var screenRotationRaw: String?
+    var swapScreens: Bool?
+    var integerScale: Bool?
+    var screenAspectRaw: String?
+}
+
 /// The app-wide appearance choice on the System page. ContentView maps it to a
 /// SwiftUI ColorScheme; the default follows the system exactly like before.
 enum AppAppearance: String, CaseIterable, Identifiable {
@@ -570,6 +580,8 @@ final class AppSettings: ObservableObject {
     /// Check GitHub for a newer release when the General page appears (the
     /// switch does not run a background poller; the page does the lookup).
     @Published var checkForUpdates: Bool
+    /// Per-game presentation overrides by upper-case title ID (0.2.0 MVP).
+    @Published var perGameOverrides: [String: PerGameOverrides]
 
     // MARK: Experimental renderer options (Debug page; next app launch)
 
@@ -760,6 +772,12 @@ final class AppSettings: ObservableObject {
             rawValue: defaults.string(forKey: Keys.appearance) ?? ""
         ) ?? .system
         checkForUpdates = Self.bool(defaults, Keys.checkForUpdates, fallback: true)
+        if let data = defaults.data(forKey: Keys.perGameOverrides),
+           let decoded = try? JSONDecoder().decode([String: PerGameOverrides].self, from: data) {
+            perGameOverrides = decoded
+        } else {
+            perGameOverrides = [:]
+        }
         // Debug page's experimental renderer options, both OFF by default: the
         // values are read by App.init and only take effect on the next app launch.
         gpuVertexShaders = Self.bool(defaults, Keys.gpuVertexShaders, fallback: false)
@@ -791,6 +809,9 @@ final class AppSettings: ObservableObject {
         defaults.set(turboLimit, forKey: Keys.turboLimit)
         defaults.set(appearance.rawValue, forKey: Keys.appearance)
         defaults.set(checkForUpdates, forKey: Keys.checkForUpdates)
+        if let data = try? JSONEncoder().encode(perGameOverrides) {
+            defaults.set(data, forKey: Keys.perGameOverrides)
+        }
         // Experimental renderer options: App.init reads them on the next launch.
         defaults.set(gpuVertexShaders, forKey: Keys.gpuVertexShaders)
         defaults.set(preciseShading, forKey: Keys.preciseShading)
@@ -985,6 +1006,49 @@ final class AppSettings: ObservableObject {
     /// Turbo speed as a plain number for the on-screen Turbo button.
     var turboSpeedValue: Int { turboSpeed.rawValue }
 
+    // MARK: - Per-game presentation overrides (0.2.0 MVP)
+
+    /// The overrides stored for a game, or nil when it follows the globals.
+    func overrides(for titleID: String?) -> PerGameOverrides? {
+        guard let titleID, !titleID.isEmpty else { return nil }
+        return perGameOverrides[titleID.uppercased()]
+    }
+
+    func effectiveScreenRotation(titleID: String?) -> ScreenRotation {
+        if let raw = overrides(for: titleID)?.screenRotationRaw,
+           let value = ScreenRotation(rawValue: raw) {
+            return value
+        }
+        return screenRotation
+    }
+
+    func effectiveSwapScreens(titleID: String?) -> Bool {
+        overrides(for: titleID)?.swapScreens ?? swapScreens
+    }
+
+    func effectiveIntegerScale(titleID: String?) -> Bool {
+        overrides(for: titleID)?.integerScale ?? integerScale
+    }
+
+    func effectiveScreenAspect(titleID: String?) -> ScreenAspect {
+        if let raw = overrides(for: titleID)?.screenAspectRaw,
+           let value = ScreenAspect(rawValue: raw) {
+            return value
+        }
+        return screenAspect
+    }
+
+    /// Replaces (or clears, with nil) one game's overrides and persists.
+    func setPerGameOverrides(_ overrides: PerGameOverrides?, for titleID: String) {
+        let key = titleID.uppercased()
+        if let overrides {
+            perGameOverrides[key] = overrides
+        } else {
+            perGameOverrides.removeValue(forKey: key)
+        }
+        persist()
+    }
+
     // MARK: - Keys
 
     private enum Keys {
@@ -1014,6 +1078,7 @@ final class AppSettings: ObservableObject {
         static let turboLimit = "UI.turboLimit"
         static let appearance = "UI.appearance"
         static let checkForUpdates = "UI.checkForUpdates"
+        static let perGameOverrides = "UI.perGameOverrides"
         /// Debug page's experimental renderer options: read once by App.init,
         /// applied on the next app launch.
         static let gpuVertexShaders = "UI.experimental.gpuVertexShaders"

@@ -2,44 +2,43 @@
 //  InGameMenuView.swift
 //  3ds2apple
 //
-//  In-game menu (0.1.7-beta3 redesign). A light card slides up from the bottom
-//  in portrait; in landscape the same card is centred with all corners rounded.
-//  The header carries the MENU title, a white capsule with the power / restart /
-//  quick-save / quick-load actions and a white X that resumes the game. Rows are
-//  grouped white cards with a leading SF Symbol; rows that open a sub-menu push a
-//  secondary page inside the sheet instead of expanding sideways. Every feature
-//  of the old menu is kept: save/load state, virtual controls, display settings,
-//  the Settings sheet, Save Manager, Export logs, Reset and Exit are still
-//  reachable (power = Exit, restart = Reset, X = resume, save/load = quick slot).
+//  In-game menu (0.2.0). iOS-grouped light/dark card, bottom sheet in portrait
+//  and centred card in landscape; tapping the dimmed area resumes the game.
+//  Header: game cover + title; top-right power / restart / quick-save /
+//  quick-load and X. Rows follow the reference emulator's in-game menu: Save
+//  state, Virtual controls, Screen layout, Swap screens, Rotate screen
+//  clockwise, Global Settings, Per-Application Settings (per-game overrides
+//  keyed by title ID) and Close game. Save Manager / Export / Fast-forward /
+//  Sound intentionally stay in Settings/Debug instead of this menu; Amiibo,
+//  Cheats and Multiplayer are recorded in TODO.md, not shown as fake rows.
 //
-//  The design follows reference screenshots of another emulator's menu for its
-//  layout only; all strings and code here are our own and no GPL code/text is
-//  copied.
+//  Layout ideas only were taken from reference screenshots; all text/code here
+//  is ours and no GPL code/text is copied.
 //
 
 import SwiftUI
+import UIKit
 
 struct InGameMenuView: View {
     let romName: String
-    /// The device direction the menu opened in (per-direction control visibility).
+    /// The running game's title ID (per-application overrides).
+    let titleID: String?
     let orientation: ControlLayoutOrientation
     @ObservedObject var settings: AppSettings
     @ObservedObject var saveStates: SaveStateSupport
     let onResume: () -> Void
     let onEditControls: () -> Void
     let onReset: () -> Void
-    let onDisplaySettings: () -> Void
     let onSettings: () -> Void
-    let onSaveManager: () -> Void
-    let onDiagnostics: () -> Void
     let onExit: () -> Void
     let onLoadStateCompleted: () -> Void
-    var diagnosticsHint: String? = nil
 
     private enum MenuPage: Hashable {
         case root
         case virtualControls
         case saveState
+        case screenLayout
+        case perApplication
     }
 
     @State private var page: MenuPage = .root
@@ -47,8 +46,6 @@ struct InGameMenuView: View {
     @State private var isResetControlsConfirmationPresented = false
     @State private var didHandleDebugOptions = false
 
-    // iOS grouped palette: system semantic colours, so the menu follows the
-    // system light/dark appearance like the rest of the app (0.1.7-beta4).
     private var sheetBackground: Color { Color(.systemGroupedBackground) }
     private var rowBackground: Color { Color(.secondarySystemGroupedBackground) }
     private var primaryText: Color { Color.primary }
@@ -58,8 +55,6 @@ struct InGameMenuView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Tapping the dimmed area above/beside the card resumes the game
-                // (0.1.7-beta4); the card itself stays interactive.
                 Color.black.opacity(0.32)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
@@ -116,7 +111,7 @@ struct InGameMenuView: View {
         .accessibilityIdentifier("in-game-menu-overlay")
     }
 
-    // MARK: - Sheet shell
+    // MARK: - Sheet
 
     private func sheet(height: CGFloat, width: CGFloat, topCornersOnly: Bool) -> some View {
         VStack(spacing: 0) {
@@ -128,7 +123,7 @@ struct InGameMenuView: View {
                     .padding(.bottom, 24)
             }
         }
-        .frame(width: width, height: max(height, 320))
+        .frame(width: width, height: max(height, 340))
         .background(sheetBackground)
         .clipShape(MenuSheetShape(radius: 28, topCornersOnly: topCornersOnly))
         .shadow(color: .black.opacity(0.16), radius: 24, y: 8)
@@ -143,7 +138,11 @@ struct InGameMenuView: View {
                     .padding(.top, 8)
             }
             HStack(spacing: 10) {
-                if page != .root {
+                if page == .root {
+                    Text(L10n.tr("MENU"))
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(primaryText)
+                } else {
                     Button {
                         withAnimation(.easeInOut(duration: 0.18)) { page = .root }
                     } label: {
@@ -155,10 +154,10 @@ struct InGameMenuView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("menu-back")
+                    Text(pageTitle)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(primaryText)
                 }
-                Text(pageTitle)
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(primaryText)
                 Spacer(minLength: 8)
                 topButtons
             }
@@ -173,6 +172,8 @@ struct InGameMenuView: View {
         case .root: return L10n.tr("MENU")
         case .virtualControls: return L10n.tr("Virtual controls")
         case .saveState: return L10n.tr("Save state")
+        case .screenLayout: return L10n.tr("Screen layout")
+        case .perApplication: return L10n.tr("Per-Application Settings")
         }
     }
 
@@ -235,82 +236,63 @@ struct InGameMenuView: View {
         case .root: rootContent
         case .virtualControls: virtualControlsContent
         case .saveState: saveStateContent
+        case .screenLayout: screenLayoutContent
+        case .perApplication: perApplicationContent
         }
     }
 
     private var rootContent: some View {
         VStack(spacing: 14) {
-            singleRowCard(title: L10n.tr("Virtual controls"),
-                          systemImage: "gamecontroller",
-                          identifier: "menu-virtual-controls") {
-                withAnimation(.easeInOut(duration: 0.18)) { page = .virtualControls }
-            }
-            singleRowCard(title: L10n.tr("Save state"),
+            rowGroup {
+                actionRow(L10n.tr("Save state"),
                           systemImage: "archivebox",
                           identifier: "menu-save-state-page") {
-                withAnimation(.easeInOut(duration: 0.18)) { page = .saveState }
+                    withAnimation(.easeInOut(duration: 0.18)) { page = .saveState }
+                }
+                rowDivider
+                actionRow(L10n.tr("Virtual controls"),
+                          systemImage: "gamecontroller",
+                          identifier: "menu-virtual-controls") {
+                    withAnimation(.easeInOut(duration: 0.18)) { page = .virtualControls }
+                }
             }
             rowGroup {
-                actionRow(L10n.tr("Display settings"),
-                          systemImage: "display",
-                          identifier: "menu-display-settings",
-                          action: onDisplaySettings)
+                actionRow(L10n.tr("Screen layout"),
+                          systemImage: "rectangle.split.2x1",
+                          identifier: "menu-screen-layout") {
+                    withAnimation(.easeInOut(duration: 0.18)) { page = .screenLayout }
+                }
                 rowDivider
-                actionRow(L10n.tr("Settings"),
+                valueRow(title: L10n.tr("Swap screens"),
+                         systemImage: "arrow.left.arrow.right",
+                         identifier: "menu-swap-screens") {
+                    Toggle("", isOn: swapScreensBinding)
+                        .labelsHidden()
+                        .tint(.accentColor)
+                }
+                rowDivider
+                actionRow(L10n.tr("Rotate screen clockwise"),
+                          systemImage: "rotate.right",
+                          identifier: "menu-rotate-screen") {
+                    rotateScreenClockwise()
+                }
+            }
+            rowGroup {
+                actionRow(L10n.tr("Global Settings"),
                           systemImage: "gearshape",
-                          identifier: "menu-settings",
+                          identifier: "menu-global-settings",
                           action: onSettings)
                 rowDivider
-                actionRow(L10n.tr("Save Manager"),
-                          systemImage: "folder",
-                          identifier: "menu-save-manager",
-                          action: onSaveManager)
-                rowDivider
-                actionRow(L10n.tr("Export logs"),
-                          systemImage: "doc.text",
-                          identifier: "menu-diagnostics",
-                          action: onDiagnostics)
-            }
-            rowGroup {
-                valueRow(title: L10n.tr("Fast-forward"),
-                         systemImage: "forward.fill",
-                         identifier: "menu-fast-forward") {
-                    Picker("Fast-forward", selection: persistedBinding(settings, \.playbackSpeed)) {
-                        ForEach(PlaybackSpeed.allCases) { speed in
-                            Text(speed.title).tag(speed)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .tint(accentRed)
-                }
-                rowDivider
-                valueRow(title: L10n.tr("Sound"),
-                         systemImage: "speaker.wave.2",
-                         identifier: "menu-mute") {
-                    Toggle("", isOn: persistedBinding(settings, \.audioMuted))
-                        .labelsHidden()
-                        .tint(accentRed)
+                actionRow(L10n.tr("Per-Application Settings"),
+                          systemImage: "app.badge",
+                          identifier: "menu-per-application") {
+                    withAnimation(.easeInOut(duration: 0.18)) { page = .perApplication }
                 }
             }
-            if let diagnosticsHint {
-                Text(diagnosticsHint)
-                    .font(.caption2)
-                    .foregroundColor(secondaryText)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 4)
-            }
             rowGroup {
-                actionRow(L10n.tr("Reset game"),
-                          systemImage: "arrow.counterclockwise",
-                          identifier: "menu-reset-row",
-                          destructive: true,
-                          action: onReset)
-                rowDivider
-                actionRow(L10n.tr("Exit to home"),
+                actionRow(L10n.tr("Close game"),
                           systemImage: "power",
-                          identifier: "menu-exit-row",
+                          identifier: "menu-close-game",
                           destructive: true,
                           action: onExit)
             }
@@ -325,7 +307,7 @@ struct InGameMenuView: View {
                          identifier: "menu-show-controls") {
                     Toggle("", isOn: persistedBinding(settings, \.showTouchControls))
                         .labelsHidden()
-                        .tint(accentRed)
+                        .tint(.accentColor)
                 }
                 rowDivider
                 valueRow(title: L10n.tr("Show performance stats"),
@@ -333,7 +315,7 @@ struct InGameMenuView: View {
                          identifier: "menu-show-fps") {
                     Toggle("", isOn: persistedBinding(settings, \.showFPS))
                         .labelsHidden()
-                        .tint(accentRed)
+                        .tint(.accentColor)
                 }
                 rowDivider
                 valueRow(title: L10n.tr("Haptic feedback"),
@@ -341,7 +323,7 @@ struct InGameMenuView: View {
                          identifier: "menu-haptics") {
                     Toggle("", isOn: persistedBinding(settings, \.haptics))
                         .labelsHidden()
-                        .tint(accentRed)
+                        .tint(.accentColor)
                 }
             }
             rowGroup {
@@ -352,21 +334,15 @@ struct InGameMenuView: View {
                 rowDivider
                 actionRow(L10n.tr("Toggle controls"),
                           systemImage: "checkmark.circle",
-                          identifier: "menu-toggle-controls") {
-                    controlOptionsSheet = .visibility
-                }
+                          identifier: "menu-toggle-controls") { controlOptionsSheet = .visibility }
                 rowDivider
                 actionRow(L10n.tr("Adjust size"),
                           systemImage: "arrow.up.left.and.arrow.down.right",
-                          identifier: "menu-adjust-size") {
-                    controlOptionsSheet = .size
-                }
+                          identifier: "menu-adjust-size") { controlOptionsSheet = .size }
                 rowDivider
                 actionRow(L10n.tr("Adjust opacity"),
                           systemImage: "circle.lefthalf.filled",
-                          identifier: "menu-adjust-opacity") {
-                    controlOptionsSheet = .opacity
-                }
+                          identifier: "menu-adjust-opacity") { controlOptionsSheet = .opacity }
                 rowDivider
                 actionRow(L10n.tr("Reset virtual controls"),
                           systemImage: "arrow.counterclockwise",
@@ -400,6 +376,245 @@ struct InGameMenuView: View {
             }
         }
     }
+
+    private var screenLayoutContent: some View {
+        VStack(spacing: 14) {
+            rowGroup {
+                pickerRow(title: L10n.tr("Landscape screen layout"),
+                          systemImage: "rectangle.split.2x1",
+                          identifier: "menu-landscape-layout") {
+                    Picker("Landscape screen layout",
+                           selection: persistedBinding(settings, \.landscapeScreenLayout)) {
+                        ForEach(LandscapeScreenLayout.allCases) { layout in
+                            Text(layout.title).tag(layout)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                }
+                rowDivider
+                pickerRow(title: L10n.tr("Portrait screen layout"),
+                          systemImage: "rectangle.portrait",
+                          identifier: "menu-portrait-layout") {
+                    Picker("Portrait screen layout",
+                           selection: persistedBinding(settings, \.portraitScreenLayout)) {
+                        ForEach(PortraitScreenLayout.allCases) { layout in
+                            Text(layout.title).tag(layout)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                }
+                rowDivider
+                pickerRow(title: L10n.tr("Screen rotation"),
+                          systemImage: "rotate.right",
+                          identifier: "menu-screen-rotation") {
+                    Picker("Screen rotation",
+                           selection: persistedBinding(settings, \.screenRotation)) {
+                        ForEach(ScreenRotation.allCases) { rotation in
+                            Text(rotation.title).tag(rotation)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                }
+                rowDivider
+                pickerRow(title: L10n.tr("Resolution"),
+                          systemImage: "square.resize",
+                          identifier: "menu-resolution") {
+                    Picker("Resolution", selection: persistedBinding(settings, \.renderScale)) {
+                        Text("1x").tag(1)
+                        Text("2x").tag(2)
+                        Text("3x").tag(3)
+                        Text("4x").tag(4)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                }
+            }
+        }
+    }
+
+    private var perApplicationContent: some View {
+        VStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(romName)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(primaryText)
+                Text(titleID.map { L10n.format("Title ID %@", $0) }
+                     ?? L10n.tr("No running game data"))
+                    .font(.system(size: 13))
+                    .foregroundColor(secondaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+
+            if let titleID {
+                rowGroup {
+                    pickerRow(title: L10n.tr("Screen rotation"),
+                              systemImage: "rotate.right",
+                              identifier: "per-app-rotation") {
+                        Picker("Screen rotation", selection: rotationOverrideBinding) {
+                            Text(L10n.tr("Use global")).tag("")
+                            ForEach(ScreenRotation.allCases) { rotation in
+                                Text(rotation.title).tag(rotation.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                    }
+                    rowDivider
+                    pickerRow(title: L10n.tr("Swap screens"),
+                              systemImage: "arrow.left.arrow.right",
+                              identifier: "per-app-swap") {
+                        Picker("Swap screens", selection: swapOverrideBinding) {
+                            Text(L10n.tr("Use global")).tag("")
+                            Text(L10n.tr("On")).tag("on")
+                            Text(L10n.tr("Off")).tag("off")
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                    }
+                    rowDivider
+                    pickerRow(title: L10n.tr("Integer scaling"),
+                              systemImage: "square.grid.2x2",
+                              identifier: "per-app-integer-scaling") {
+                        Picker("Integer scaling", selection: integerOverrideBinding) {
+                            Text(L10n.tr("Use global")).tag("")
+                            Text(L10n.tr("On")).tag("on")
+                            Text(L10n.tr("Off")).tag("off")
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                    }
+                    rowDivider
+                    pickerRow(title: L10n.tr("Screen aspect"),
+                              systemImage: "aspectratio",
+                              identifier: "per-app-screen-aspect") {
+                        Picker("Screen aspect", selection: aspectOverrideBinding) {
+                            Text(L10n.tr("Use global")).tag("")
+                            ForEach(ScreenAspect.allCases) { aspect in
+                                Text(aspect.title).tag(aspect.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                    }
+                }
+                rowGroup {
+                    actionRow(L10n.tr("Clear per-application overrides"),
+                              systemImage: "arrow.counterclockwise",
+                              identifier: "per-app-clear",
+                              destructive: true) {
+                        settings.setPerGameOverrides(nil, for: titleID)
+                    }
+                }
+                Text(L10n.tr("These overrides apply only to this game and fall back to the global settings for anything left on Use global."))
+                    .font(.caption)
+                    .foregroundColor(secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+            } else {
+                Text(L10n.tr("Per-application settings are available while a game is running."))
+                    .font(.caption)
+                    .foregroundColor(secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 14).fill(rowBackground))
+            }
+        }
+    }
+
+    // MARK: - Per-application override bindings
+
+    private var currentOverrides: PerGameOverrides {
+        settings.overrides(for: titleID) ?? PerGameOverrides(
+            screenRotationRaw: nil, swapScreens: nil,
+            integerScale: nil, screenAspectRaw: nil
+        )
+    }
+
+    private func mutateOverrides(_ mutate: (inout PerGameOverrides) -> Void) {
+        guard let titleID else { return }
+        var overrides = currentOverrides
+        mutate(&overrides)
+        let empty = overrides.screenRotationRaw == nil && overrides.swapScreens == nil
+            && overrides.integerScale == nil && overrides.screenAspectRaw == nil
+        settings.setPerGameOverrides(empty ? nil : overrides, for: titleID)
+    }
+
+    private var rotationOverrideBinding: Binding<String> {
+        Binding(get: { currentOverrides.screenRotationRaw ?? "" },
+                set: { newValue in
+                    mutateOverrides {
+                        $0.screenRotationRaw = newValue.isEmpty ? nil : newValue
+                    }
+                })
+    }
+
+    private var swapOverrideBinding: Binding<String> {
+        Binding(get: {
+            guard let value = currentOverrides.swapScreens else { return "" }
+            return value ? "on" : "off"
+        }, set: { newValue in
+            mutateOverrides {
+                $0.swapScreens = newValue.isEmpty ? nil : (newValue == "on")
+            }
+        })
+    }
+
+    private var integerOverrideBinding: Binding<String> {
+        Binding(get: {
+            guard let value = currentOverrides.integerScale else { return "" }
+            return value ? "on" : "off"
+        }, set: { newValue in
+            mutateOverrides {
+                $0.integerScale = newValue.isEmpty ? nil : (newValue == "on")
+            }
+        })
+    }
+
+    private var aspectOverrideBinding: Binding<String> {
+        Binding(get: { currentOverrides.screenAspectRaw ?? "" },
+                set: { newValue in
+                    mutateOverrides { $0.screenAspectRaw = newValue.isEmpty ? nil : newValue }
+                })
+    }
+
+    private var swapScreensBinding: Binding<Bool> {
+        Binding(
+            get: { settings.effectiveSwapScreens(titleID: titleID) },
+            set: { newValue in
+                if let titleID, var overrides = settings.overrides(for: titleID) {
+                    overrides.swapScreens = newValue
+                    settings.setPerGameOverrides(overrides, for: titleID)
+                } else {
+                    settings.swapScreens = newValue
+                    settings.persist()
+                }
+            }
+        )
+    }
+
+    private func rotateScreenClockwise() {
+        let current = settings.effectiveScreenRotation(titleID: titleID)
+        let next: ScreenRotation
+        switch current {
+        case .upright: next = .clockwise
+        case .clockwise: next = .upsideDown
+        case .upsideDown: next = .counterClockwise
+        case .counterClockwise: next = .upright
+        }
+        if let titleID, var overrides = settings.overrides(for: titleID) {
+            overrides.screenRotationRaw = next.rawValue
+            settings.setPerGameOverrides(overrides, for: titleID)
+        } else {
+            settings.screenRotation = next
+            settings.persist()
+        }
+    }
+
+    // MARK: - Save state status
 
     @ViewBuilder
     private var saveStateStatus: some View {
@@ -442,18 +657,6 @@ struct InGameMenuView: View {
     }
 
     // MARK: - Row pieces
-
-    private func singleRowCard(title: String,
-                               systemImage: String,
-                               identifier: String,
-                               action: @escaping () -> Void) -> some View {
-        rowGroup {
-            actionRow(title,
-                      systemImage: systemImage,
-                      identifier: identifier,
-                      action: action)
-        }
-    }
 
     private func rowGroup<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         VStack(spacing: 0, content: content)
@@ -521,10 +724,17 @@ struct InGameMenuView: View {
         .frame(maxWidth: .infinity)
         .accessibilityIdentifier(identifier)
     }
+
+    private func pickerRow<Trailing: View>(title: String,
+                                           systemImage: String,
+                                           identifier: String,
+                                           @ViewBuilder trailing: () -> Trailing) -> some View {
+        valueRow(title: title, systemImage: systemImage, identifier: identifier, trailing: trailing)
+    }
 }
 
 /// The light menu sheet's card shape: all corners, or only the top two for the
-/// portrait bottom sheet (its bottom edge sits on the screen edge).
+/// portrait bottom sheet.
 private struct MenuSheetShape: Shape {
     let radius: CGFloat
     let topCornersOnly: Bool

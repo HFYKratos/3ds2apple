@@ -119,19 +119,16 @@ struct GameView: View {
                 if isMenuPresented {
                     InGameMenuView(
                         romName: romName,
+                        titleID: model.currentGame?.titleID,
                         orientation: isLandscape ? .landscape : .portrait,
                         settings: settings,
                         saveStates: model.saveStates,
                         onResume: resumeGame,
                         onEditControls: { beginControlEditing(isLandscape: isLandscape) },
                         onReset: { requestConfirmation(.reset) },
-                        onDisplaySettings: { sheet = .quickDisplaySettings },
                         onSettings: { sheet = .settings },
-                        onSaveManager: { sheet = .saveManager },
-                        onDiagnostics: exportDiagnostics,
                         onExit: { requestConfirmation(.exit) },
-                        onLoadStateCompleted: resumeAfterStateLoad,
-                        diagnosticsHint: diagnosticsHint
+                        onLoadStateCompleted: resumeAfterStateLoad
                     )
                     .transition(isLandscape
                                 ? .scale(scale: 0.96).combined(with: .opacity)
@@ -171,6 +168,9 @@ struct GameView: View {
             }
             .onChange(of: isLandscape) { newValue in
                 syncPresentedLayout(newValue)
+            }
+            .onChange(of: model.currentGame?.titleID) { _ in
+                syncPresentedLayout(isLandscape)
             }
             .onChange(of: settings.landscapeScreenLayout) { _ in
                 syncPresentedLayout(isLandscape)
@@ -353,6 +353,22 @@ struct GameView: View {
     /// Records the arrangement of this device direction in the session: the
     /// presenter arrangement, or the requirement to skip the presenter and draw
     /// the picture through the readback path.
+    /// The running game's title ID and its effective (per-game override or
+    /// global) presentation values. 0.2.0 MVP overrides are keyed by title ID.
+    private var presentationTitleID: String? { model.currentGame?.titleID }
+    private var presentedScreenRotation: ScreenRotation {
+        settings.effectiveScreenRotation(titleID: presentationTitleID)
+    }
+    private var presentedIntegerScale: Bool {
+        settings.effectiveIntegerScale(titleID: presentationTitleID)
+    }
+    private var presentedSwapScreens: Bool {
+        settings.effectiveSwapScreens(titleID: presentationTitleID)
+    }
+    private var presentedScreenAspect: ScreenAspect {
+        settings.effectiveScreenAspect(titleID: presentationTitleID)
+    }
+
     private func syncPresentedLayout(_ isLandscape: Bool) {
         let layout = settings.effectiveScreenLayout(isLandscape: isLandscape)
         if model.screenLayout != layout {
@@ -361,7 +377,9 @@ struct GameView: View {
         model.setReadbackPresentationRequired(
             settings.usesReadbackPresentation(isLandscape: isLandscape)
         )
-        model.setScreenSwap(settings.swapScreens)
+        model.setScreenSwap(presentedSwapScreens)
+        model.setScreenRotation(presentedScreenRotation)
+        model.setIntegerScaling(presentedIntegerScale)
         // The GPU custom layout needs the current direction's rectangles; every
         // other preset ignores this.
         model.setCustomScreenPlacement(
@@ -472,9 +490,15 @@ struct GameView: View {
     /// Swap screens: toggles the persisted setting; the session applies it to
     /// the GPU presenter immediately (the readback fallback swaps the images).
     private func performSwapScreens() {
-        settings.swapScreens.toggle()
-        settings.persist()
-        model.setScreenSwap(settings.swapScreens)
+        let current = settings.effectiveSwapScreens(titleID: presentationTitleID)
+        if var overrides = settings.overrides(for: presentationTitleID) {
+            overrides.swapScreens = !current
+            settings.setPerGameOverrides(overrides, for: presentationTitleID ?? "")
+        } else {
+            settings.swapScreens = !current
+            settings.persist()
+        }
+        model.setScreenSwap(!current)
         if settings.haptics {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
@@ -646,18 +670,18 @@ struct GameView: View {
             settings: settings,
             orientation: orientation,
             stage: area,
-            rotation: settings.screenRotation,
+            rotation: presentedScreenRotation,
             displayScale: displayScale,
-            integerScale: settings.integerScale
+            integerScale: presentedIntegerScale
         ) {
             readbackScreens(viewports, layoutBox: area, area: area,
                             stretches: false, alignTop: false)
         } else {
             let layout = settings.effectiveScreenLayout(isLandscape: isLandscape)
-            let stretch = settings.screenAspect == .stretch
+            let stretch = presentedScreenAspect == .stretch
             let arrangementAspect = ScreenGeometry.contentAspect(
                 layout: layout,
-                rotation: settings.screenRotation
+                rotation: presentedScreenRotation
             )
             // Fit/4:3 and integer scaling: the content box from the settings,
             // which keeps the arrangement's aspect and may be snapped to whole
@@ -669,7 +693,7 @@ struct GameView: View {
             let viewports = ScreenGeometry.layoutViewports(
                 available: layoutBox,
                 layout: layout,
-                rotation: settings.screenRotation
+                rotation: presentedScreenRotation
             )
             // Portrait arrangements are top-aligned under the safe area, like
             // the presented layer; a stretched arrangement always fills the area.
@@ -694,7 +718,7 @@ struct GameView: View {
         let stretchY = stretches && layoutBox.height > 0 ? area.height / layoutBox.height : 1
         return ZStack(alignment: .topLeading) {
             Color.clear
-            let swapped = settings.swapScreens
+            let swapped = presentedSwapScreens
             if let top = viewports.top {
                 readbackScreen(
                     image: screenImage(isUpper: !swapped),
@@ -751,7 +775,7 @@ struct GameView: View {
         identifier: String,
         isTouchscreen: Bool
     ) -> some View {
-        let rotation = settings.screenRotation
+        let rotation = presentedScreenRotation
         return ZStack {
             Color.black
             if let image {
@@ -805,9 +829,9 @@ struct GameView: View {
         ScreenGeometry.contentSize(
             available: available,
             layout: layout,
-            rotation: settings.screenRotation,
-            aspect: settings.screenAspect,
-            integerScale: settings.integerScale,
+            rotation: presentedScreenRotation,
+            aspect: presentedScreenAspect,
+            integerScale: presentedIntegerScale,
             displayScale: displayScale
         )
     }

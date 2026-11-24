@@ -186,8 +186,8 @@ struct ContentView: View {
         .onChange(of: settings.frameCap) { cap in
             model.setFrameRateCap(cap.rawValue)
         }
-        .onChange(of: settings.screenRotation) { rotation in
-            model.setScreenRotation(rotation)
+        .onChange(of: settings.screenRotation) { _ in
+            model.setScreenRotation(settings.effectiveScreenRotation(titleID: model.currentGame?.titleID))
         }
         .onChange(of: settings.landscapeScreenLayout) { _ in
             let isLandscape = GameViewDeviceMetrics.currentLayoutOrientation == .landscape
@@ -213,8 +213,8 @@ struct ContentView: View {
                 settings.customScreenLayout.placement(for: isLandscape ? .landscape : .portrait)
             )
         }
-        .onChange(of: settings.integerScale) { enabled in
-            model.setIntegerScaling(enabled)
+        .onChange(of: settings.integerScale) { _ in
+            model.setIntegerScaling(settings.effectiveIntegerScale(titleID: model.currentGame?.titleID))
         }
         .onChange(of: settings.orientation) { orientation in
             AppOrientation.apply(orientation)
@@ -222,8 +222,20 @@ struct ContentView: View {
         .onChange(of: settings.playbackSpeed) { speed in
             model.setPlaybackSpeed(speed.rawValue)
         }
-        .onChange(of: settings.swapScreens) { swapped in
-            model.setScreenSwap(swapped)
+        .onChange(of: settings.swapScreens) { _ in
+            model.setScreenSwap(settings.effectiveSwapScreens(titleID: model.currentGame?.titleID))
+        }
+        .onChange(of: settings.perGameOverrides) { _ in
+            let titleID = model.currentGame?.titleID
+            model.setScreenRotation(settings.effectiveScreenRotation(titleID: titleID))
+            model.setIntegerScaling(settings.effectiveIntegerScale(titleID: titleID))
+            model.setScreenSwap(settings.effectiveSwapScreens(titleID: titleID))
+        }
+        .onChange(of: model.currentGame?.titleID) { _ in
+            let titleID = model.currentGame?.titleID
+            model.setScreenRotation(settings.effectiveScreenRotation(titleID: titleID))
+            model.setIntegerScaling(settings.effectiveIntegerScale(titleID: titleID))
+            model.setScreenSwap(settings.effectiveSwapScreens(titleID: titleID))
         }
         .onChange(of: settings.systemMetalHUD) { enabled in
             model.setSystemMetalHUD(enabled)
@@ -261,9 +273,10 @@ struct ContentView: View {
                     ? .landscape : .portrait
             )
         )
-        model.setScreenRotation(settings.screenRotation)
-        model.setScreenSwap(settings.swapScreens)
-        model.setIntegerScaling(settings.integerScale)
+        let titleID = model.currentGame?.titleID
+        model.setScreenRotation(settings.effectiveScreenRotation(titleID: titleID))
+        model.setScreenSwap(settings.effectiveSwapScreens(titleID: titleID))
+        model.setIntegerScaling(settings.effectiveIntegerScale(titleID: titleID))
         model.applyRenderScale(CGFloat(settings.renderScale))
         model.setPlaybackSpeed(settings.playbackSpeed.rawValue)
         model.setSystemMetalHUD(settings.systemMetalHUD)

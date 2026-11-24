@@ -783,3 +783,17 @@
 "App version" = "App 版本";
 "Package" = "包版本";
 "Unknown" = "未知";
+
+/* --- 0.2.0 游戏内菜单：按游戏覆盖 --- */
+"Per-Application Settings" = "按游戏设置";
+"Global Settings" = "全局设置";
+"Rotate screen clockwise" = "顺时针旋转屏幕";
+"Close game" = "关闭游戏";
+"Use global" = "使用全局";
+"On" = "开";
+"Off" = "关";
+"Clear per-application overrides" = "清除此游戏的覆盖";
+"These overrides apply only to this game and fall back to the global settings for anything left on Use global." = "这些覆盖仅对本游戏生效；选择“使用全局”的项会回退到全局设置。";
+"Title ID %@" = "Title ID %@";
+"No running game data" = "当前无运行中的游戏数据";
+"Per-application settings are available while a game is running." = "游戏运行时才能修改按游戏设置。";

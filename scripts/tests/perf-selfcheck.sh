@@ -409,6 +409,14 @@ check "in-game menu uses the iOS grouped style and tap-outside resume" \
   bash -c 'grep -q "systemGroupedBackground" ios/app/Sources/InGameMenuView.swift && grep -q "secondarySystemGroupedBackground" ios/app/Sources/InGameMenuView.swift && grep -q "onTapGesture { onResume() }" ios/app/Sources/InGameMenuView.swift && grep -q "transition(.move(edge: .bottom))" ios/app/Sources/InGameMenuView.swift'
 check "in-game menu keeps the sheet header, secondary pages and gear button" \
   bash -c 'grep -q "MenuSheetShape" ios/app/Sources/InGameMenuView.swift && grep -q "MenuPage" ios/app/Sources/InGameMenuView.swift && grep -q "menu-virtual-controls" ios/app/Sources/InGameMenuView.swift && grep -q "topIcon" ios/app/Sources/InGameMenuView.swift && grep -q "gearshape.fill" ios/app/Sources/GameView.swift'
+check "in-game menu follows the reference option set" \
+  bash -c 'for id in menu-save-state-page menu-virtual-controls menu-screen-layout menu-swap-screens menu-rotate-screen menu-global-settings menu-per-application menu-close-game; do grep -q "$id" ios/app/Sources/InGameMenuView.swift || exit 1; done'
+check "in-game menu omits Save Manager/Export/Fast-forward/Sound rows" \
+  bash -c '! grep -q "menu-save-manager\|menu-diagnostics\|menu-mute\|menu-fast-forward" ios/app/Sources/InGameMenuView.swift'
+check "per-application overrides are stored by title ID and applied effectively" \
+  bash -c 'grep -q "struct PerGameOverrides" ios/app/Sources/AppSettings.swift && grep -q "UI.perGameOverrides" ios/app/Sources/AppSettings.swift && grep -q "effectiveScreenRotation(titleID" ios/app/Sources/AppSettings.swift && grep -q "effectiveSwapScreens" ios/app/Sources/GameView.swift && grep -q "perGameOverrides" ios/app/Sources/ContentView.swift'
+check "in-game menu header keeps MENU without a cover/title header" \
+  bash -c '! grep -q "menu-game-cover" ios/app/Sources/InGameMenuView.swift && ! grep -q "coverURL" ios/app/Sources/InGameMenuView.swift'
 check "Graphics settings expose Integer scaling and Screen aspect" \
   bash -c 'grep -q "settings-integer-scaling" ios/app/Sources/SettingsPages.swift && grep -q "settings-screen-aspect" ios/app/Sources/SettingsPages.swift && grep -q "integerScale" ios/app/Sources/SettingsPages.swift && grep -q "screenAspect" ios/app/Sources/SettingsPages.swift'
 check "TODO.md records the unsupported reference-emulator items" \

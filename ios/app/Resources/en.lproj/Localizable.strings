@@ -781,3 +781,17 @@
 "App version" = "App version";
 "Package" = "Package";
 "Unknown" = "Unknown";
+
+/* --- 0.2.0 in-game menu: per-application overrides --- */
+"Per-Application Settings" = "Per-Application Settings";
+"Global Settings" = "Global Settings";
+"Rotate screen clockwise" = "Rotate screen clockwise";
+"Close game" = "Close game";
+"Use global" = "Use global";
+"On" = "On";
+"Off" = "Off";
+"Clear per-application overrides" = "Clear per-application overrides";
+"These overrides apply only to this game and fall back to the global settings for anything left on Use global." = "These overrides apply only to this game and fall back to the global settings for anything left on Use global.";
+"Title ID %@" = "Title ID %@";
+"No running game data" = "No running game data";
+"Per-application settings are available while a game is running." = "Per-application settings are available while a game is running.";
