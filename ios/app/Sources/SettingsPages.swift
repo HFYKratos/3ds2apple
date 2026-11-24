@@ -3,17 +3,19 @@
 //  3ds2apple
 //
 //  The category pages of the 0.1.7 settings redesign. The main page (see
-//  SettingsView.swift) is a flat dark list of large category rows; each
-//  category opens one page with a large title and rows that show a title, a
-//  one-line explanation and a trailing control. There are no grouped cards,
-//  no separators and no chevrons on the main page.
+//  SettingsView.swift) is a flat dark list of large category rows plus a
+//  Reset All Settings action; each category opens one page with a large title
+//  and rows that show a title, a one-line explanation and a trailing control.
+//  There are no grouped cards, no separators and no chevrons on the main page.
 //
-//  Pages: General (fast-forward, screen rotation, orientation lock, haptics,
-//  FPS counter, system Metal HUD and the two experimental GPU switches), System
-//  (storage, version, language, About), Gamepad (on-screen controls, overlay
-//  opacity, controller), Graphics (resolution, screen layout), Layout (the
-//  screen layout page), Sound (volume, mute, buffer), Debug (Save Manager, CPU
-//  profiler, diagnostics export) and About (the product page).
+//  0.1.7-beta2 page layout: General (fast-forward speed and the read-only frame
+//  limiter), Layout (screen layout entry, screen rotation, orientation lock,
+//  swap screens, and the Performance monitoring group with the FPS counter and
+//  the system Metal HUD), Gamepad (on-screen controls, overlay opacity,
+//  haptics, controller), Graphics (resolution, the two experimental GPU
+//  switches and read-only renderer information), Sound (volume, mute, buffer),
+//  System (storage, version, language, About), Debug (AOT verification, Save
+//  Manager, CPU profiler and the diagnostics export) and About.
 //
 //  The design was sketched after reference screenshots of another emulator's
 //  settings app. Only the layout idea was used: every string below is our own
@@ -105,9 +107,9 @@ struct SettingsCategoryPage: View {
             case .gamepad:
                 GamepadSettingsPage(settings: settings, model: model)
             case .graphics:
-                GraphicsSettingsPage(settings: settings)
+                GraphicsSettingsPage(settings: settings, model: model)
             case .layout:
-                ScreenLayoutSettingsView(settings: settings)
+                LayoutSettingsPage(settings: settings, model: model)
             case .sound:
                 SoundSettingsPage(settings: settings)
             case .debug:
@@ -492,6 +494,21 @@ struct SettingsRestartBadge: View {
     }
 }
 
+/// A flat group caption inside a category page (for example the Layout page's
+/// Performance monitoring group). It keeps the flat style: no card, just a
+/// small secondary label above its rows.
+struct SettingsSectionCaption: View {
+    let title: LocalizedStringKey
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 12, weight: .semibold))
+            .textCase(.uppercase)
+            .foregroundStyle(.secondary)
+            .padding(.top, 4)
+    }
+}
+
 // MARK: - General
 
 struct GeneralSettingsPage: View {
@@ -509,6 +526,43 @@ struct GeneralSettingsPage: View {
                 label: { $0.title }
             )
             .accessibilityIdentifier("settings-fast-forward")
+
+            // Read-only: the frame cap is fixed to the 3DS's own 60 Hz timeline
+            // (the performance page no longer offers a 30 fps cap); fast-forward
+            // is the only speed control.
+            SettingsInfoRow(
+                title: "Frame limiter",
+                value: L10n.tr("Automatic 60 Hz"),
+                description: "The runtime follows the 3DS's native 60 Hz timeline. Fast-forward is the only speed control."
+            )
+            .accessibilityIdentifier("settings-frame-limiter")
+        }
+    }
+
+    /// Fast-forward state when the automatic fallback lowered the speed.
+    private var autoReducedText: String {
+        L10n.format(
+            "Lowered automatically from %@ because frames stayed below 20 fps.",
+            L10n.speedLabel(settings.playbackSpeed.rawValue)
+        )
+    }
+}
+
+// MARK: - Layout
+
+struct LayoutSettingsPage: View {
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var model: ROMSession
+
+    var body: some View {
+        SettingsPageScaffold(title: "Layout") {
+            SettingsNavigationRow(
+                title: "Screen layout",
+                description: "Landscape and portrait arrangements, plus the two custom layouts.",
+                identifier: "settings-screen-layout"
+            ) {
+                ScreenLayoutSettingsView(settings: settings)
+            }
 
             SettingsChoiceRow(
                 title: "Screen rotation",
@@ -529,12 +583,13 @@ struct GeneralSettingsPage: View {
             .accessibilityIdentifier("settings-orientation-lock")
 
             SettingsToggleRow(
-                title: "Haptics",
-                description: "A light vibration when an on-screen button is pressed or a control is picked up.",
-                isOn: persistedBinding(settings, \.haptics)
+                title: "Swap screens",
+                description: "Swap which screen is shown in the top and bottom positions. The Metal presenter and the software path both follow it.",
+                isOn: persistedBinding(settings, \.swapScreens)
             )
-            .accessibilityIdentifier("settings-haptics")
+            .accessibilityIdentifier("settings-swap-screens")
 
+            SettingsSectionCaption(title: "Performance monitoring")
             SettingsToggleRow(
                 title: "FPS counter",
                 description: "Show a small frames-per-second pill over the game.",
@@ -549,31 +604,7 @@ struct GeneralSettingsPage: View {
                 isOn: persistedBinding(settings, \.systemMetalHUD)
             )
             .accessibilityIdentifier("settings-system-metal-hud")
-
-            SettingsToggleRow(
-                title: "GPU vertex shading",
-                description: "Experimental: run the 3D vertex stage on the GPU. Rendering and performance can change. Takes effect after restarting the app.",
-                restartRequired: true,
-                isOn: persistedBinding(settings, \.gpuVertexShaders)
-            )
-            .accessibilityIdentifier("settings-gpu-vertex-shaders")
-
-            SettingsToggleRow(
-                title: "Precise shading",
-                description: "Experimental: use precise math in the 3D fragment stage instead of the fast approximation. Takes effect after restarting the app.",
-                restartRequired: true,
-                isOn: persistedBinding(settings, \.preciseShading)
-            )
-            .accessibilityIdentifier("settings-precise-shading")
         }
-    }
-
-    /// Fast-forward state when the automatic fallback lowered the speed.
-    private var autoReducedText: String {
-        L10n.format(
-            "Lowered automatically from %@ because frames stayed below 20 fps.",
-            L10n.speedLabel(settings.playbackSpeed.rawValue)
-        )
     }
 
     /// Why the system Metal HUD switch cannot work right now, if it cannot.
@@ -711,6 +742,13 @@ struct GamepadSettingsPage: View {
             )
             .accessibilityIdentifier("settings-controls-opacity")
 
+            SettingsToggleRow(
+                title: "Haptics",
+                description: "A light vibration when an on-screen button is pressed or a control is picked up.",
+                isOn: persistedBinding(settings, \.haptics)
+            )
+            .accessibilityIdentifier("settings-haptics")
+
             SettingsInfoRow(
                 title: "Controller",
                 value: model.controllerName ?? L10n.tr("Not connected"),
@@ -725,6 +763,7 @@ struct GamepadSettingsPage: View {
 
 struct GraphicsSettingsPage: View {
     @ObservedObject var settings: AppSettings
+    @ObservedObject var model: ROMSession
 
     var body: some View {
         SettingsPageScaffold(title: "Graphics") {
@@ -738,12 +777,39 @@ struct GraphicsSettingsPage: View {
             )
             .accessibilityIdentifier("settings-resolution")
 
-            SettingsNavigationRow(
-                title: "Screen layout",
-                description: "Landscape and portrait arrangements, plus the two custom layouts.",
-                identifier: "settings-screen-layout"
-            ) {
-                ScreenLayoutSettingsView(settings: settings)
+            SettingsToggleRow(
+                title: "GPU vertex shading",
+                description: "Experimental: run the 3D vertex stage on the GPU. Rendering and performance can change. Takes effect after restarting the app.",
+                restartRequired: true,
+                isOn: persistedBinding(settings, \.gpuVertexShaders)
+            )
+            .accessibilityIdentifier("settings-gpu-vertex-shaders")
+
+            SettingsToggleRow(
+                title: "Precise shading",
+                description: "Experimental: use precise math in the 3D fragment stage instead of the fast approximation. Takes effect after restarting the app.",
+                restartRequired: true,
+                isOn: persistedBinding(settings, \.preciseShading)
+            )
+            .accessibilityIdentifier("settings-precise-shading")
+
+            // Read-only backend facts: whether this build carries the MoltenVK
+            // framework the presenter needs, and which path the running game uses.
+            SettingsInfoRow(
+                title: "Renderer",
+                value: MetalBackend.isMoltenVKEmbedded
+                    ? L10n.tr("Metal via MoltenVK")
+                    : L10n.tr("CPU readback (MoltenVK not bundled)"),
+                description: "The GPU backend this build ships. The presented screens draw through Metal; without the embedded framework the runtime falls back to its software renderer."
+            )
+            .accessibilityIdentifier("settings-renderer")
+
+            if model.isRuntimeLoaded {
+                SettingsInfoRow(
+                    title: "Active path",
+                    value: model.displayPath.title
+                )
+                .accessibilityIdentifier("settings-active-path")
             }
         }
     }
@@ -797,6 +863,33 @@ struct DebugSettingsPage: View {
 
     var body: some View {
         SettingsPageScaffold(title: "Debug") {
+            // Read-only proof that the loaded game really executes AOT code: the
+            // build's linked-code state, the runtime's recompiled flag and the
+            // interpreted percentage it reports (see AOTDiagnostics).
+            SettingsSectionCaption(title: "AOT verification")
+            SettingsInfoRow(
+                title: "AOT status",
+                value: model.aotStatus.title
+            )
+            .accessibilityIdentifier("settings-aot-status")
+            SettingsInfoRow(
+                title: "AOT coverage",
+                value: settingsAOTPercentText(model.aotDiagnostics.aotPercent)
+            )
+            .accessibilityIdentifier("settings-aot-coverage")
+            SettingsInfoRow(
+                title: "Interpreted code",
+                value: settingsAOTPercentText(model.aotDiagnostics.interpretedPercent)
+            )
+            .accessibilityIdentifier("settings-aot-interpreted")
+            if let fallbacks = model.aotDiagnostics.instructionFallbacks {
+                SettingsInfoRow(
+                    title: "Instruction fallbacks",
+                    value: L10n.format("%ld", fallbacks)
+                )
+                .accessibilityIdentifier("settings-aot-fallbacks")
+            }
+
             SettingsNavigationRow(
                 title: "Save Manager",
                 description: "Battery saves and instant save states for each game.",
@@ -839,6 +932,13 @@ struct DebugSettingsPage: View {
         guard let export = DiagnosticsExporter.write(model: model, settings: settings) else { return }
         diagnosticsHint = export.documentsPath.map { L10n.format("Saved to Documents/%@", $0) }
         shareItem = SettingsShareItem(url: export.shareURL)
+    }
+
+    /// "99.79%" for an AOT percentage, or "Not measured" when the runtime did
+    /// not report it (no game loaded, or its status text has no figure).
+    private func settingsAOTPercentText(_ value: Double?) -> String {
+        guard let value else { return L10n.tr("Not measured") }
+        return L10n.format("%.2f%%", value)
     }
 }
 

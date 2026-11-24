@@ -722,3 +722,27 @@
 "The runtime never names guest functions: hot spots are raw guest PCs (thread 0xPC hits). Match an address against the symbol map of the game's libgame.a (the AOT GamePack build); addresses from a different build of that pack will not match." = "The runtime never names guest functions: hot spots are raw guest PCs (thread 0xPC hits). Match an address against the symbol map of the game's libgame.a (the AOT GamePack build); addresses from a different build of that pack will not match.";
 "The profiler stays on for the current game load and adds a small cost per guest step; it is for diagnosis only. Unload the game or relaunch the app to stop it." = "The profiler stays on for the current game load and adds a small cost per guest step; it is for diagnosis only. Unload the game or relaunch the app to stop it.";
 "Sampling is on. Reopen Settings later: the counts keep accumulating for this load." = "Sampling is on. Reopen Settings later: the counts keep accumulating for this load.";
+
+/* --- 0.1.7-beta2 settings layout (task-45) -------------------------------- */
+"Performance monitoring" = "Performance monitoring";
+"Frame limiter" = "Frame limiter";
+"Automatic 60 Hz" = "Automatic 60 Hz";
+"The runtime follows the 3DS's native 60 Hz timeline. Fast-forward is the only speed control." = "The runtime follows the 3DS's native 60 Hz timeline. Fast-forward is the only speed control.";
+"Swap which screen is shown in the top and bottom positions. The Metal presenter and the software path both follow it." = "Swap which screen is shown in the top and bottom positions. The Metal presenter and the software path both follow it.";
+"Renderer" = "Renderer";
+"Metal via MoltenVK" = "Metal via MoltenVK";
+"CPU readback (MoltenVK not bundled)" = "CPU readback (MoltenVK not bundled)";
+"The GPU backend this build ships. The presented screens draw through Metal; without the embedded framework the runtime falls back to its software renderer." = "The GPU backend this build ships. The presented screens draw through Metal; without the embedded framework the runtime falls back to its software renderer.";
+"Active path" = "Active path";
+"AOT verification" = "AOT verification";
+"AOT status" = "AOT status";
+"AOT coverage" = "AOT coverage";
+"Interpreted code" = "Interpreted code";
+"Instruction fallbacks" = "Instruction fallbacks";
+"Not measured" = "Not measured";
+"%.2f%%" = "%.2f%%";
+"Reset All Settings" = "Reset All Settings";
+"Reset all settings?" = "Reset all settings?";
+"Every app setting returns to its default. Save data, games and the diagnostics export are not touched. Quit and reopen 3ds2apple to apply the reset." = "Every app setting returns to its default. Save data, games and the diagnostics export are not touched. Quit and reopen 3ds2apple to apply the reset.";
+"Settings reset" = "Settings reset";
+"Quit and reopen 3ds2apple for the default settings to take effect." = "Quit and reopen 3ds2apple for the default settings to take effect.";

@@ -5,12 +5,13 @@
 //  Settings main page and the in-game quick display sheet.
 //
 //  0.1.7 reorganises Settings into a flat main menu and one page per category:
-//  General, System, Gamepad, Graphics, Layout, Sound, Debug and About. The main
-//  page is a plain dark list with a large SF Symbol and a label per category
-//  (no grouped cards, no separators, no chevrons); the category pages live in
-//  SettingsPages.swift. The design follows reference screenshots of another
-//  emulator's settings app for its layout only - all strings and code here are
-//  our own, and that project's GPL code/text is not copied.
+//  General, System, Gamepad, Graphics, Layout, Sound, Debug and About, plus a
+//  real Reset All Settings action at the bottom. The main page is a plain dark
+//  list with a large SF Symbol and a label per row (no grouped cards, no
+//  separators, no chevrons); the category pages live in SettingsPages.swift.
+//  The design follows reference screenshots of another emulator's settings app
+//  for its layout only - all strings and code here are our own, and that
+//  project's GPL code/text is not copied.
 //
 //  The settings live in AppSettings; every control writes through a binding that
 //  also stores the new value in UserDefaults. The in-game quick display sheet
@@ -46,16 +47,35 @@ struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var model: ROMSession
 
+    /// Two-step destructive flow: confirm the reset, then tell the user to
+    /// relaunch (the live AppSettings object keeps its values until then).
+    @State private var isResetConfirmationPresented = false
+    @State private var isResetDonePresented = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(SettingsCategory.allCases) { category in
                     NavigationLink(value: category) {
-                        SettingsMainRow(category: category)
+                        SettingsMainRow(systemImage: category.systemImage,
+                                        title: category.title)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("settings-category-\(category.rawValue)")
                 }
+
+                // Real reset: removes the app's whole UserDefaults domain and
+                // then asks for a relaunch. Game files, saves and diagnostics are
+                // stored in Documents, not in UserDefaults, so they stay.
+                Button {
+                    isResetConfirmationPresented = true
+                } label: {
+                    SettingsMainRow(systemImage: "arrow.counterclockwise",
+                                    title: L10n.tr("Reset All Settings"))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings-reset-all")
+                .padding(.top, 10)
             }
             .padding(.horizontal, 14)
             .padding(.top, 6)
@@ -73,21 +93,50 @@ struct SettingsView: View {
         .navigationDestination(for: SettingsCategory.self) { category in
             SettingsCategoryPage(category: category, settings: settings, model: model)
         }
+        .confirmationDialog(
+            "Reset all settings?",
+            isPresented: $isResetConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Reset", role: .destructive) {
+                resetAllSettings()
+                isResetDonePresented = true
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every app setting returns to its default. Save data, games and the diagnostics export are not touched. Quit and reopen 3ds2apple to apply the reset.")
+        }
+        .alert("Settings reset", isPresented: $isResetDonePresented) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Quit and reopen 3ds2apple for the default settings to take effect.")
+        }
+    }
+
+    /// Removes the app's persisted preference domain. AppSettings keeps its
+    /// in-memory values until the next launch, so the flow ends by asking the
+    /// user to quit and reopen the app; Documents data (games, saves, logs) is
+    /// not part of UserDefaults and is not touched.
+    private func resetAllSettings() {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return }
+        UserDefaults.standard.removePersistentDomain(forName: bundleIdentifier)
+        AppLog.log("[3ds2apple] settings reset: removed the app defaults domain; relaunch to apply")
     }
 }
 
-/// One row of the main page: a large SF Symbol and the category name. The whole
-/// row is the NavigationLink label, so there is no disclosure chevron.
+/// One row of the main page: a large SF Symbol and a label. The whole row is the
+/// NavigationLink/Button label, so there is no disclosure chevron.
 private struct SettingsMainRow: View {
-    let category: SettingsCategory
+    let systemImage: String
+    let title: String
 
     var body: some View {
         HStack(spacing: 22) {
-            Image(systemName: category.systemImage)
+            Image(systemName: systemImage)
                 .font(.system(size: 24, weight: .regular))
                 .foregroundStyle(.primary)
                 .frame(width: 38, alignment: .center)
-            Text(category.title)
+            Text(title)
                 .font(.system(size: 20, weight: .regular))
                 .foregroundStyle(.primary)
             Spacer(minLength: 0)

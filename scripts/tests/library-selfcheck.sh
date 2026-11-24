@@ -165,6 +165,16 @@ check "the Debug page keeps the Save Manager link" contains "${SETTINGS_PAGES}" 
 check "the Debug page keeps the diagnostics export" contains "${SETTINGS_PAGES}" 'DiagnosticsExporter.write(model: model, settings: settings)'
 check "the settings main page has no disclosure chevrons" bash -c '! sed -n "/private struct SettingsMainRow/,/^}/p" ios/app/Sources/SettingsView.swift | grep -Fq -- "chevron"'
 
+section '0.1.7-beta2 settings layout (task-45)'
+check "Layout page replaced the direct screen-layout jump" contains "${SETTINGS_PAGES}" 'LayoutSettingsPage(settings: settings, model: model)'
+check "Layout page has the Performance monitoring group" contains "${SETTINGS_PAGES}" 'SettingsSectionCaption(title: "Performance monitoring")'
+check "Layout page binds the swap screens setting" contains "${SETTINGS_PAGES}" 'swapScreens'
+check "Gamepad page has the haptics row" contains "${SETTINGS_PAGES}" 'settings-haptics'
+check "Graphics page reports the MoltenVK renderer" contains "${SETTINGS_PAGES}" 'MetalBackend.isMoltenVKEmbedded'
+check "Debug page reports the AOT coverage" contains "${SETTINGS_PAGES}" 'model.aotDiagnostics.aotPercent'
+check "Reset All Settings removes the app defaults domain" contains "${SETTINGS}" 'removePersistentDomain(forName: bundleIdentifier)'
+check "Reset All Settings asks the user to relaunch" contains "${SETTINGS}" 'Quit and reopen 3ds2apple for the default settings to take effect.'
+
 section 'Docs describe the delete semantics'
 check "README documents Deleting a game" contains "${README}" '### Deleting a game'
 check "README documents the long-press context menu" contains "${README}" 'Long-press a game'

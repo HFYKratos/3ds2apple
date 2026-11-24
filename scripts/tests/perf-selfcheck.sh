@@ -93,7 +93,7 @@ else
   pass "the old multi-segment runtime badge is gone"
 fi
 
-section '0.1.7 settings redesign (task-42)'
+section '0.1.7 settings redesign (task-42 + task-45)'
 # Main page: a flat dark category list, not a Form, without grouped Section
 # cards and without a disclosure chevron; every category has its own page in
 # SettingsPages.swift.
@@ -113,17 +113,15 @@ done
 for symbol in 'gearshape' 'iphone' 'gamecontroller' 'square.grid.2x2' 'rectangle.split.2x1' 'return "speaker"' 'chevron.left.forwardslash.chevron.right' 'info.circle'; do
   check "category symbol ${symbol} is present" contains ios/app/Sources/SettingsPages.swift "${symbol}"
 done
-# General page: large title plus every requested row, in the flat style.
+# General (task-45): only the fast-forward speed plus the read-only frame
+# limiter; rotation, haptics, FPS, HUD and the GPU switches moved out.
 check "General page uses the large title" contains ios/app/Sources/SettingsPages.swift '.navigationBarTitleDisplayMode(.large)'
 check "General page has the fast-forward row" contains ios/app/Sources/SettingsPages.swift 'settings-fast-forward'
-check "General page has the screen rotation row" contains ios/app/Sources/SettingsPages.swift 'settings-screen-rotation'
-check "General page has the orientation lock row" contains ios/app/Sources/SettingsPages.swift 'settings-orientation-lock'
-check "General page has the haptics row" contains ios/app/Sources/SettingsPages.swift 'settings-haptics'
-check "General page has the FPS counter row" contains ios/app/Sources/SettingsPages.swift 'settings-fps-hud'
-check "General page has the system Metal HUD row" contains ios/app/Sources/SettingsPages.swift 'settings-system-metal-hud'
-check "General page binds the GPU vertex shading setting" contains ios/app/Sources/SettingsPages.swift '\.gpuVertexShaders'
-check "General page binds the precise shading setting" contains ios/app/Sources/SettingsPages.swift '\.preciseShading'
-check "both experimental GPU rows say a restart is required" \
+check "General page has the read-only frame limiter" \
+  bash -c 'sed -n "/^struct GeneralSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "settings-frame-limiter"'
+check "General page no longer holds rotation/haptics/FPS/HUD/GPU rows" \
+  bash -c '! sed -n "/^struct GeneralSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Eq -- "settings-screen-rotation|settings-haptics|settings-fps-hud|settings-system-metal-hud|gpuVertexShaders|preciseShading"'
+check "Graphics page has both restart-required GPU rows" \
   bash -c 'test "$(grep -c "restartRequired: true" ios/app/Sources/SettingsPages.swift)" -ge 2'
 check "en table has the restart badge" grep -Fq -- '"Restart required"' ios/app/Resources/en.lproj/Localizable.strings
 check "zh table has the restart badge" grep -Fq -- '"Restart required" = "需要重启 App"' ios/app/Resources/zh-Hans.lproj/Localizable.strings
@@ -136,7 +134,11 @@ check "System page keeps the version/build row" contains ios/app/Sources/Setting
 check "Gamepad page keeps the overlay opacity setting" contains ios/app/Sources/SettingsPages.swift 'controlsOpacity'
 check "Gamepad page keeps the controller row" contains ios/app/Sources/SettingsPages.swift 'controllerName'
 check "Graphics page keeps the resolution setting" contains ios/app/Sources/SettingsPages.swift 'renderScale'
-check "Graphics page links the screen layout page" contains ios/app/Sources/SettingsPages.swift 'ScreenLayoutSettingsView(settings: settings)'
+check "Graphics page reports the MoltenVK renderer" contains ios/app/Sources/SettingsPages.swift 'MetalBackend.isMoltenVKEmbedded'
+check "Graphics page no longer links the screen layout page" \
+  bash -c '! sed -n "/^struct GraphicsSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "ScreenLayoutSettingsView"'
+check "Layout page links the screen layout page" \
+  bash -c 'sed -n "/^struct LayoutSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "ScreenLayoutSettingsView(settings: settings)"'
 check "Sound page keeps the audio buffer setting" contains ios/app/Sources/SettingsPages.swift 'audioBuffer'
 check "Debug page keeps the Save Manager link" contains ios/app/Sources/SettingsPages.swift 'SaveManagerView(model: model, saveStates: model.saveStates)'
 check "Debug page keeps its Save Manager identifier" contains ios/app/Sources/SettingsPages.swift 'settings-save-manager'
@@ -153,13 +155,60 @@ for key in '"General"' '"System"' '"Gamepad"' '"Graphics"' '"Layout"' '"Sound"' 
 done
 check "the app README documents the new settings categories" \
   contains ios/app/README.md 'General / System / Gamepad / Graphics / Layout / Sound / Debug / About'
-check "the app README documents the CPU profiler page" contains ios/app/README.md '**Debug**: Save Manager, the CPU profiler page'
+check "the app README documents the AOT verification rows" contains ios/app/README.md 'AOT verification rows'
+check "the app README documents the Layout performance monitoring group" contains ios/app/README.md 'Performance monitoring'
+check "the app README documents the Reset All Settings action" contains ios/app/README.md 'Reset All Settings'
 # This redesign is original work: it must not carry the reference project's text.
 if grep -riE "azahar|citra" ios/app/Sources/SettingsView.swift ios/app/Sources/SettingsPages.swift >/dev/null 2>&1; then
   fail "the settings sources mention the GPL reference project"
 else
   pass "the settings sources contain no reference-project code or text"
 fi
+
+section '0.1.7-beta2 settings layout (task-45)'
+# Layout replaces the direct screen-layout jump: screen layout entry, rotation,
+# orientation lock, swap screens and the Performance monitoring group.
+check "Layout page replaced the direct screen-layout jump" contains ios/app/Sources/SettingsPages.swift 'LayoutSettingsPage(settings: settings, model: model)'
+check "Layout page has the screen rotation row" \
+  bash -c 'sed -n "/^struct LayoutSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "settings-screen-rotation"'
+check "Layout page has the orientation lock row" \
+  bash -c 'sed -n "/^struct LayoutSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "settings-orientation-lock"'
+check "Layout page binds the swap screens setting" \
+  bash -c 'sed -n "/^struct LayoutSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "swapScreens"'
+check "Layout page has a Performance monitoring group" contains ios/app/Sources/SettingsPages.swift 'SettingsSectionCaption(title: "Performance monitoring")'
+check "Layout page has the FPS counter row" \
+  bash -c 'sed -n "/^struct LayoutSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "settings-fps-hud"'
+check "Layout page has the system Metal HUD row" \
+  bash -c 'sed -n "/^struct LayoutSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "settings-system-metal-hud"'
+check "Layout page keeps the HUD unavailable hint" \
+  bash -c 'sed -n "/^struct LayoutSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "hudUnavailableText"'
+# Gamepad gets haptics back.
+check "Gamepad page has the haptics row" \
+  bash -c 'sed -n "/^struct GamepadSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "settings-haptics"'
+# Debug adds the AOT verification rows.
+check "Debug page reports the AOT status" contains ios/app/Sources/SettingsPages.swift 'model.aotStatus.title'
+check "Debug page reports the AOT coverage" contains ios/app/Sources/SettingsPages.swift 'model.aotDiagnostics.aotPercent'
+check "Debug page reports the interpreted percentage" contains ios/app/Sources/SettingsPages.swift 'model.aotDiagnostics.interpretedPercent'
+check "Debug page reports instruction fallbacks when available" contains ios/app/Sources/SettingsPages.swift 'model.aotDiagnostics.instructionFallbacks'
+# Reset All Settings: real UserDefaults reset plus relaunch prompt.
+check "main page has the Reset All Settings row" contains ios/app/Sources/SettingsView.swift 'settings-reset-all'
+check "Reset row uses the counter-clockwise symbol" contains ios/app/Sources/SettingsView.swift '"arrow.counterclockwise"'
+check "Reset removes the app's defaults domain" contains ios/app/Sources/SettingsView.swift 'removePersistentDomain(forName: bundleIdentifier)'
+check "Reset asks for confirmation first" contains ios/app/Sources/SettingsView.swift '"Reset all settings?"'
+check "Reset tells the user to relaunch" contains ios/app/Sources/SettingsView.swift 'Quit and reopen 3ds2apple for the default settings to take effect.'
+check "Reset does not touch Documents data" contains ios/app/README.md 'Game data, battery saves and the diagnostics'
+# Every existing settings function keeps its accessibility identifier.
+for id in settings-fast-forward settings-frame-limiter settings-screen-rotation settings-orientation-lock settings-swap-screens settings-fps-hud settings-system-metal-hud settings-haptics settings-show-touch-controls settings-controls-opacity settings-controller settings-resolution settings-screen-layout settings-gpu-vertex-shaders settings-precise-shading settings-renderer settings-aot-status settings-save-manager settings-cpu-profiler settings-export-logs settings-diagnostics-hint settings-clear-cache settings-about; do
+  check "settings identifier ${id} is preserved" grep -Fq -- "\"${id}\"" ios/app/Sources/SettingsPages.swift
+done
+# Localization tables and docs.
+for key in '"Performance monitoring"' '"Frame limiter"' '"Swap screens"' '"Renderer"' '"AOT status"' '"Not measured"' '"Reset All Settings"'; do
+  check "en Localizable.strings has ${key}" grep -Fq -- "${key} =" ios/app/Resources/en.lproj/Localizable.strings
+  check "zh-Hans Localizable.strings has ${key}" grep -Fq -- "${key} =" ios/app/Resources/zh-Hans.lproj/Localizable.strings
+done
+# Camera / Network categories are intentionally skipped for this round.
+check "no Camera settings category was invented" bash -c '! grep -Fq -- "case camera" ios/app/Sources/SettingsPages.swift'
+check "no Network settings category was invented" bash -c '! grep -Fq -- "case network" ios/app/Sources/SettingsPages.swift'
 
 section 'MoltenVK tuning hook (default off)'
 check "MoltenVKTuning exists" test -f ios/app/Sources/MoltenVKTuning.swift

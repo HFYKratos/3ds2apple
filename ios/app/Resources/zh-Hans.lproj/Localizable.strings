@@ -724,3 +724,27 @@
 "The runtime never names guest functions: hot spots are raw guest PCs (thread 0xPC hits). Match an address against the symbol map of the game's libgame.a (the AOT GamePack build); addresses from a different build of that pack will not match." = "运行时不提供 guest 函数名：热点是原始 guest PC（线程 0xPC 命中次数）。请把地址与游戏 libgame.a（AOT GamePack 构建产物）的符号表对应；不同构建的地址无法匹配。";
 "The profiler stays on for the current game load and adds a small cost per guest step; it is for diagnosis only. Unload the game or relaunch the app to stop it." = "分析器在当前这次游戏载入期间保持开启，每个 guest 指令步会有少量开销；仅用于诊断。卸载游戏或重启 App 即可停止。";
 "Sampling is on. Reopen Settings later: the counts keep accumulating for this load." = "采样已开启。稍后重新打开设置：本次载入期间计数会持续累计。";
+
+/* --- 0.1.7-beta2 设置分类扩展（task-45） --------------------------------- */
+"Performance monitoring" = "性能监控";
+"Frame limiter" = "帧率限制";
+"Automatic 60 Hz" = "自动 60 Hz";
+"The runtime follows the 3DS's native 60 Hz timeline. Fast-forward is the only speed control." = "运行时按 3DS 原生 60 Hz 时间轴运行；快进是唯一的速度控制。";
+"Swap which screen is shown in the top and bottom positions. The Metal presenter and the software path both follow it." = "交换上下两个屏幕显示的内容。Metal presenter 与软件回读路径都会跟随。";
+"Renderer" = "渲染器";
+"Metal via MoltenVK" = "Metal（MoltenVK）";
+"CPU readback (MoltenVK not bundled)" = "CPU 回读（未内置 MoltenVK）";
+"The GPU backend this build ships. The presented screens draw through Metal; without the embedded framework the runtime falls back to its software renderer." = "当前构建的 GPU 后端。呈现的画面通过 Metal 绘制；未内置框架时运行时会退回软件渲染器。";
+"Active path" = "当前呈现路径";
+"AOT verification" = "AOT 校验";
+"AOT status" = "AOT 状态";
+"AOT coverage" = "AOT 覆盖率";
+"Interpreted code" = "解释执行比例";
+"Instruction fallbacks" = "指令回退次数";
+"Not measured" = "尚未测量";
+"%.2f%%" = "%.2f%%";
+"Reset All Settings" = "重置所有设置";
+"Reset all settings?" = "重置所有设置？";
+"Every app setting returns to its default. Save data, games and the diagnostics export are not touched. Quit and reopen 3ds2apple to apply the reset." = "所有 App 设置将恢复默认。存档、游戏数据与诊断导出不受影响。请退出并重新打开 3ds2apple 使重置生效。";
+"Settings reset" = "设置已重置";
+"Quit and reopen 3ds2apple for the default settings to take effect." = "请退出并重新打开 3ds2apple，默认设置才会生效。";

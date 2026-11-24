@@ -24,7 +24,7 @@ views do not carry duplicated strings.
 |---|---|
 | **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`. Each card has a square art area at the icon's native 1:1 aspect: the game's own SMDH cover art (launcher-pushed `cover.png`, else the build's bundled cover, else the gradient placeholder) fills the square edge to edge with no inset frame (the gradient is only the placeholder when no cover is available), and a corner badge appears only when a game needs attention (**Checking** / **Data missing** / **Error**; a ready game has no AOT badge, since the app only runs AOT code and the AOT state stays in the log and the diagnostics export). Under the art the card is deliberately compact: the title for the app language (up to two lines, truncated), the publisher, then the pushed game size · last-played state. There is **no explanatory paragraph under the grid**. iPhone shows two columns, iPad three. Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Pull-to-refresh rescans Documents, and the library also rescans at launch and when the app returns to the foreground; there is no refresh button. Long-pressing a card opens its context menu; **Delete Game** asks a second confirmation and then deletes the game (see "Deleting a game" below). The empty state explains the desktop launcher. No on-phone import. Settings entry. |
 | **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback) arranged by the split landscape / portrait screen layout choices, filling the whole screen, with the on-screen controls floating over the picture, a floating FPS pill and pause button and the in-game menu. There is no title bar or reserved control pad any more. When a title starts the 3DS software keyboard, a full-screen keyboard overlay collects the text and the applet's buttons while the frame loop is stopped; answering resumes the game. |
-| **Settings** | A flat dark main menu of eight categories (0.1.7): General, System, Gamepad, Graphics, Layout, Sound, Debug and About. Each category is one page of title + explanation + trailing-control rows; see "Settings screens (0.1.7)" below. |
+| **Settings** | A flat dark main menu of eight categories (0.1.7-beta2): General, System, Gamepad, Graphics, Layout, Sound, Debug and About, plus a real **Reset All Settings** action. Each category is one page of title + explanation + trailing-control rows; see "Settings screens (0.1.7)" below. |
 | **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. The page re-reads the selected game's files when it opens, when the library changes and after every action; there is no refresh button. |
 | **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the FPS appears only while a game is loaded; everything else stays in the log and the diagnostics. |
 | **In-game menu** | Opened from the pause button over the game: pause/resume, save-state shortcuts, a **Virtual controls** card (Show virtual controls / Show performance stats / Haptic feedback, then Edit layout / Toggle controls / Adjust size / Adjust opacity / Reset virtual controls), quick toggles (mute, 1×/2×/4× fast-forward), Display settings, Save Manager, Diagnostics, Reset and Exit. Round 5 gives every option row one unified icon-free style (title plus a trailing toggle/chevron/value) with the same height and padding. |
@@ -98,7 +98,7 @@ on-screen controls, so no input or audio advances behind it.
   migrated to off once (the marker makes the migration run only once, so a
   manual switch afterwards wins). See "System Metal HUD" below.
 - Optional in-game FPS counter, **on by default**: the only performance readout
-  the game view draws. The switch lives in Settings → General → FPS counter; the counter is
+  the game view draws. The switch lives in Settings → Layout → Performance monitoring; the counter is
   a translucent pill floating in the top-trailing safe-area corner over the
   picture in both orientations (the pause button sits next to it in portrait and
   at the bottom centre in landscape). Everything else (AOT state, renderer path,
@@ -326,51 +326,67 @@ data: never commit them, and remove the fixture from the container when done.
 ## Settings screens (0.1.7)
 
 Settings is a flat, dark menu rather than a `Form`: one row per category with a
-large SF Symbol and the category name, no grouped cards and no disclosure
-chevrons. The navigation title is the localized **Settings**, and every category
-page has a large title and rows made of a title, a one-line explanation and a
-trailing control (switch, value menu, slider or navigation arrow). The layout was
-sketched from reference screenshots of another emulator's settings app; no code
-or text from that project is used (it is GPL and reference-only for this repo).
+large SF Symbol and the category name, plus a **Reset All Settings** row at the
+bottom. There are no grouped cards and no disclosure chevrons. The navigation
+title is the localized **Settings**, and every category page has a large title
+and rows made of a title, a one-line explanation and a trailing control (switch,
+value menu, slider or navigation arrow). The layout was sketched from reference
+screenshots of another emulator's settings app; no code or text from that
+project is used (it is GPL and reference-only for this repo).
 
 **General / System / Gamepad / Graphics / Layout / Sound / Debug / About:**
 
-- **General**: fast-forward speed, screen rotation, orientation lock, haptics,
-  FPS counter, System Metal HUD and the two experimental GPU switches
-  (`settings.gpuVertexShaders` / `UI.experimental.gpuVertexShaders`,
-  `settings.preciseShading` / `UI.experimental.preciseShading`). Fast-forward,
-  rotation, orientation, haptics, the FPS counter and the Metal HUD apply
-  immediately (the next frame or layer); the two experimental switches are read
-  once in `App.init` before the renderer's first device, so their rows carry a
-  **Restart required** badge and only take effect after force-quitting and
-  relaunching the app. `gpuVertexShaders` forces the GPU vertex-shading path
-  (`ZAKURO_GPU_SHADERS=1`); `preciseShading` turns off the release fast-math
-  fragment build (`ZAKURO_FRAG_FAST_MATH=0`). Both default to off.
+- **General**: fast-forward speed (`settings.playbackSpeed`) and a read-only
+  **Frame limiter** row: the runtime follows the 3DS's native 60 Hz timeline and
+  fast-forward is the only speed control.
+- **Layout**: the screen layout page entry (landscape/portrait preset rows and
+  the two numeric custom pages), **Screen rotation**, **Orientation lock**
+  (`settings.orientation`), the **Swap screens** switch (`settings.swapScreens`)
+  and a **Performance monitoring** group with the **FPS counter**
+  (`settings.showFPS`) and the **System Metal HUD** (`settings.systemMetalHUD`,
+  with the exact reason hint when the HUD cannot appear).
+- **Gamepad**: on-screen controls on/off, overlay opacity, haptics and the
+  connected controller name; control positions are still edited in-game from the
+  pause menu (see "Editable layouts").
+- **Graphics**: render resolution 1×–4× with the exact pixel caption, the two
+  experimental GPU switches (`settings.gpuVertexShaders` /
+  `UI.experimental.gpuVertexShaders`, `settings.preciseShading` /
+  `UI.experimental.preciseShading`) and read-only **Renderer** information
+  (Metal via MoltenVK, or the CPU readback fallback when the shell does not
+  embed the framework; the active path appears while a game is loaded). Both
+  experimental switches are read once in `App.init` before the renderer's first
+  device, so their rows carry a **Restart required** badge and only take effect
+  after force-quitting and relaunching the app. `gpuVertexShaders` forces the
+  GPU vertex-shading path (`ZAKURO_GPU_SHADERS=1`); `preciseShading` turns off
+  the release fast-math fragment build (`ZAKURO_FRAG_FAST_MATH=0`). Both default
+  to off.
 - **System**: the storage snapshot (installed games, save data, legacy files,
   app logs, graphics pipeline cache), the pipeline-cache clear action with its
   confirmation and "available when no game is running" gate, version/build, the
   active language and a shortcut to About. The snapshot refreshes when the page
   opens, as before.
-- **Gamepad**: on-screen controls on/off, overlay opacity and the connected
-  controller name; control positions are still edited in-game from the pause
-  menu (see "Editable layouts").
-- **Graphics**: render resolution 1×–4× with the exact pixel caption, and the
-  screen layout page.
-- **Layout**: the screen layout page itself - landscape/portrait preset rows and
-  the two numeric custom pages.
 - **Sound**: volume, mute and the audio buffer size.
-- **Debug**: Save Manager, the CPU profiler page and the diagnostics/log export
-  with its kept-file hint (same `Documents/Diagnostics` copy and share sheet as
-  before). The profiler samples raw guest PCs while a game runs and adds a small
-  per-step cost; it is for diagnosis only and stays on for the current game
-  load.
+- **Debug**: AOT verification rows (localized AOT state, AOT coverage and the
+  interpreted percentage parsed from the runtime's `AOTDiagnostics` status text,
+  plus the instruction-fallback count when reported), the Save Manager, the CPU
+  profiler page and the diagnostics/log export with its kept-file hint (same
+  `Documents/Diagnostics` copy and share sheet as before). The profiler samples
+  raw guest PCs while a game runs and adds a small per-step cost; it is for
+  diagnosis only and stays on for the current game load.
 - **About**: the product page (icon, version/build, links, acknowledgements,
   legal notice).
 
+**Reset All Settings** (bottom of the main page) asks for confirmation and then
+removes the app's whole `UserDefaults` domain
+(`removePersistentDomain(forName: Bundle.main.bundleIdentifier!)`); it shows a
+"relaunch to apply" alert because the live settings object keeps its in-memory
+values until the next launch. Game data, battery saves and the diagnostics
+export live in Documents and are **not** reset.
+
 Settings is still opened from the home page. It is not reachable while a game is
 running (the game view replaces the home page), so the CPU profiler's "Start
-sampling" control can only be used once Settings has an in-game entry point; the
-Debug row documents the page and it says when no game is running.
+sampling" control and the Debug page's AOT rows can only be used once Settings
+has an in-game entry point; the Debug page says when no game is running.
 
 ## Display settings
 
@@ -409,8 +425,8 @@ once. Fast-forward is silent: see "Fast-forward" below.
 ## Controls settings
 
 Settings → Gamepad keeps the on-screen-controls switch, the global overlay
-opacity and the connected `GCController` name (haptics moved to Settings →
-General in 0.1.7). There is **no full-screen editor link** any more: all control layout editing happens in the
+opacity, haptics and the connected `GCController` name. There is **no
+full-screen editor link** any more: all control layout editing happens in the
 game through the pause menu's **Virtual controls** card (round 4) — Edit layout,
 Toggle controls, Adjust size, Adjust opacity and Reset virtual controls. See
 "Editable layouts" below.
@@ -605,6 +621,11 @@ hint sits above it and the empty area stays inert) saves the current direction's
 | System Metal HUD | On / off, **default off** | Immediately on the presented `CAMetalLayer`; remembered across launches and also written as `MTL_HUD_ENABLED` / `MetalHUDForceEnabled` for the next Metal device. 0.1.6-beta3 turns it off for every install once (`UI.systemMetalHUDDefaultOffMigrated`); after that the stored switch value wins. |
 | Show FPS counter | On / off, **default on** | The in-game FPS readout: a translucent floating pill in the top-trailing safe-area corner in both orientations; also toggled from the pause menu's Virtual controls card (Show performance stats). No other performance text is drawn over the game; the rest stays in the log and diagnostics. |
 
+In 0.1.7-beta2 the rows above live on **Settings → Layout → Performance
+monitoring**; the experimental GPU switches are under **Graphics**, AOT
+verification is under **Debug**, and **Reset All Settings** clears the app's
+UserDefaults domain (Documents data is kept).
+
 ## Fast-forward
 
 `1×` is normal speed. At `2×` or `4×` the frame loop runs the extra console
@@ -633,7 +654,7 @@ frames with `zk_run_frame` before the frame that is presented:
 
 ## In-game FPS counter
 
-Settings → General → **FPS counter** (on by default) is the only
+Settings → Layout → Performance monitoring → **FPS counter** (on by default) is the only
 performance readout the game view draws. It is a small translucent pill floating
 in the top-trailing safe-area corner over the picture in both orientations; the
 pause button sits next to it in portrait and at the bottom centre in landscape
@@ -652,8 +673,8 @@ cache still warms later loads by itself.
 ## System Metal HUD
 
 The system Metal Performance HUD (FPS, GPU time, memory) attaches to the
-`CAMetalLayer` the presented screens draw into. Settings → General → System
-Metal HUD sets `CAMetalLayer.developerHUDProperties["mode"]` to `"default"` or
+`CAMetalLayer` the presented screens draw into. Settings → Layout → Performance
+monitoring → System Metal HUD sets `CAMetalLayer.developerHUDProperties["mode"]` to `"default"` or
 `"disabled"` at run time (iOS 16 API), and the preference is persisted and
 re-applied whenever the layer is reused, so it survives page navigation and ROM
 reloads. The app keeps the system HUD's device logging off; the app log and the
@@ -919,8 +940,8 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `GameView.swift` | Running game: full-bleed picture from the split landscape / portrait screen layout choices, the floating full-screen on-screen controls (per-row visibility and size scale), the optional floating FPS pill and pause button, in-game menu, round-4 in-game control edit mode and the 3DS software-keyboard overlay; also the ROM-free `-previewGameView` path. |
 | `GameViewPreview.swift` | Synthetic TOP / BOTTOM test images (gradient, 1 px grid, 400×240 and 320×240) for the ROM-free `-previewGameView` screenshots. |
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, the round-4 Virtual controls card with Edit layout / Toggle controls / Adjust size / Adjust opacity / Reset, mute and fast-forward quick toggles, display settings, save manager, diagnostics, reset, exit) and its option sheets. |
-| `SettingsView.swift` | Settings main page: the flat dark category menu (large SF Symbol + label rows, no cards or chevrons), the persisted-setting binding and the in-game quick display sheet. The category pages themselves live in `SettingsPages.swift`. |
-| `SettingsPages.swift` | The eight settings category pages (General, System, Gamepad, Graphics, Layout, Sound, Debug, About) and their shared flat rows. Keeps the storage snapshot/refresh, the pipeline-cache clear, the resolution/layout/audio/gamepad rows, the Save Manager and the diagnostics export, and links the CPU profiler page. |
+| `SettingsView.swift` | Settings main page: the flat dark category menu (large SF Symbol + label rows, no cards or chevrons), the real **Reset All Settings** action (confirmation, `removePersistentDomain` for the app bundle and a relaunch prompt), the persisted-setting binding and the in-game quick display sheet. The category pages themselves live in `SettingsPages.swift`. |
+| `SettingsPages.swift` | The eight settings category pages and their shared flat rows/captions. 0.1.7-beta2 layout: General (fast-forward + read-only frame limiter), Layout (screen layout entry, rotation, orientation lock, swap screens and the Performance monitoring group with the FPS counter and Metal HUD), Gamepad (controls, opacity, haptics, controller), Graphics (resolution, the two experimental GPU switches, renderer info), System (storage/version/language/About), Sound and Debug (AOT verification, Save Manager, CPU profiler, diagnostics export). |
 | `CPUProfilerView.swift` | The debug CPU profiler page: starts guest-PC sampling while a game runs and lists hot spots. Diagnosis only. |
 | `SaveManagerView.swift` | Game picker over the library, the selected game's battery save list (export as ZIP, import, delete) and its instant save-state slots (delete offline; save/load while that game runs), with progress and errors; re-reads the selected game's files on open, on library changes and after actions (no refresh button). |
 | `AboutView.swift` | Product page: app icon, name, version/build, project links, acknowledgements and legal notice; a compact runtime status card only while a game is loaded. |
@@ -1007,7 +1028,7 @@ The app has one presentation path and one fallback:
   a system loads, so an already loaded game keeps its internal scale until it is
   reloaded or restarted.
 - Because there is a real Metal layer, the system Metal Performance HUD can
-  attach to it: Settings → General → System Metal HUD sets
+  attach to it: Settings → Layout → Performance monitoring → System Metal HUD sets
   `developerHUDProperties` on the layer (`mode: "default"` / `"disabled"`) at run
   time; it is on by default and the build's `MetalHudEnabled` (or the device's
   Developer settings) also has to enable it. On the readback path there is no
