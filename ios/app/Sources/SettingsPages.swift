@@ -527,7 +527,7 @@ struct GeneralSettingsPage: View {
             SettingsInfoRow(
                 title: "Update status",
                 value: updateStatusText,
-                description: updateStatusDescription
+                description: LocalizedStringKey(updateStatusDescription)
             )
             .accessibilityIdentifier("settings-update-status")
 
