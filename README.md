@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6"><img src="https://img.shields.io/badge/release-v0.1.6-brightgreen" alt="Latest release: v0.1.6"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.2.0"><img src="https://img.shields.io/badge/release-v0.2.0-brightgreen" alt="Latest release: v0.2.0"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/platforms-iOS%2016%2B%20%C2%B7%20Windows%2010%2F11%20%C2%B7%20macOS%2013%2B-blue" alt="Platforms: iOS 16+, Windows 10/11, macOS 13+"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/github/downloads/HFYKratos/3ds2apple/total?label=downloads" alt="GitHub downloads"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/HFYKratos/3ds2apple/ci.yml?branch=main&label=CI" alt="CI status"></a>
@@ -28,8 +28,8 @@
 ## Download
 
 <p align="center">
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download the Windows launcher"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download the macOS launcher"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.0/3ds2apple-0.2.0-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download the Windows launcher"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.0/3ds2apple-0.2.0-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download the macOS launcher"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="All releases on GitHub"></a>
 </p>
 
@@ -54,14 +54,15 @@
 
 <p align="center"><sub>Synthetic preview, no game data: portrait controls → landscape controls → pause-menu Virtual controls → screen-layout settings.</sub></p>
 
-## What's new in 0.1.6
+## What's new in 0.2.0 (2026-11-25)
 
-- **Custom screen layouts on the GPU.** Arbitrary rectangles, four-way screen rotation and top/bottom screen swap are drawn by the GPU presenter with no screen readback — the slower readback path from 0.1.5 is gone.
-- **More on-screen buttons.** A Fast-forward toggle (2x on/off) plus editable Quick save, Quick load and Swap screens buttons, next to the existing pad.
-- **Per-orientation control visibility.** Toggle controls now edits each orientation separately; C-stick, ZL and ZR start hidden in both, and the D-pad starts hidden in portrait. Size and opacity stay global.
-- **A full-screen layout editor that doesn't fight you.** Drag to move and pinch to resize, with a local preview that commits when the gesture ends, so the layout no longer jitters; editing a landscape layout forces landscape.
-- **Metal HUD off by default.** The system GPU/FPS overlay starts off in 0.1.6 (existing installs migrate once); turn it on in Settings → Performance.
-- **A smarter Windows deploy.** The launcher reads the phone's installed app and games first: already up to date → skip; an overwrite update keeps game data, saves and ROMs; phone games missing from the local library are listed and confirmed before an update — and never deleted.
+- **A redesigned iOS experience.** Settings use the iOS 26/27 grouped style, and the in-game menu is rebuilt: native push/pop subpages, the running game's name in the header, only power / restart / close buttons, and options grouped in sheets.
+- **Readable settings at a glance.** Every settings row is a concise two-line explanation with an inline title, split into General / System / Gamepad / Graphics / Layout / Sound / Debug / Other.
+- **More graphics control.** New Screen aspect (Fit / 4:3 / Stretch) and Integer scaling; the Renderer row is gone.
+- **Real speed control.** Run speed limit and Turbo limit are now real constraints (limiting off = genuinely unlimited), and Default / Turbo speed are selectable from 1x to 4x.
+- **Updates and controllers.** GitHub update channel (Stable / Beta) with a daily background check and a local notification; Gamepad adds stick deadzone, full physical button remapping, 2–4 button hotkeys, Standard / High contrast controls and per-app Gamepad profiles.
+- **Per-Application Settings.** Override a small set of settings for one title without changing the global defaults.
+- **Still not included:** Delta skin import, cheats, a manual, amiibo, microphone, camera, network/online play and JIT.
 
 ## Features at a glance
 
@@ -205,7 +206,7 @@ No longer. Since 0.1.6 the GPU presenter draws custom layouts too — arbitrary 
 
 | Platform | Support |
 |---|---|
-| **iPhone / iPad** | iOS 16 and later. One app holds the library, in-game menu, the full New 3DS control set with in-game layout editing, six landscape and three portrait screen layouts, save states and the FPS readout. |
+| **iPhone / iPad** | iOS 16 and later. One app holds the library, the redesigned in-game menu, the full New 3DS control set with in-game layout editing, six landscape and three portrait screen layouts, save states, the FPS readout and per-app settings. |
 | **Windows** | Windows 10/11 x64. One self-contained launcher executable; builds, signs, installs and pushes without a Mac. **Verified path.** |
 | **macOS** | macOS 13+ (Intel + Apple silicon). SwiftUI launcher using Xcode signing; the package is not self-contained yet and device install is not verified by the maintainers. **Developer preview.** |
 | **Build host** | Windows (bundled LLVM/LLD) or macOS (Apple clang + Xcode). |

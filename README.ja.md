@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="ライセンス: Apache-2.0"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6"><img src="https://img.shields.io/badge/release-v0.1.6-brightgreen" alt="最新リリース: v0.1.6"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.2.0"><img src="https://img.shields.io/badge/release-v0.2.0-brightgreen" alt="最新リリース: v0.2.0"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/platforms-iOS%2016%2B%20%C2%B7%20Windows%2010%2F11%20%C2%B7%20macOS%2013%2B-blue" alt="対応プラットフォーム: iOS 16+、Windows 10/11、macOS 13+"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/github/downloads/HFYKratos/3ds2apple/total?label=downloads" alt="GitHub ダウンロード数"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/HFYKratos/3ds2apple/ci.yml?branch=main&label=CI" alt="CI の状態"></a>
@@ -31,8 +31,8 @@
 ## ダウンロード
 
 <p align="center">
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows ランチャーをダウンロード"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS ランチャーをダウンロード"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.0/3ds2apple-0.2.0-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows ランチャーをダウンロード"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.0/3ds2apple-0.2.0-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS ランチャーをダウンロード"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="GitHub で全リリースを見る"></a>
 </p>
 
@@ -57,14 +57,15 @@
 
 <p align="center"><sub>合成プレビュー、ゲームデータなし：縦画面コントロール → 横画面コントロール → ポーズメニューのバーチャルコントローラー → 画面レイアウト設定。</sub></p>
 
-## 0.1.6 の新機能
+## 0.2.0 の新機能（2026-11-25）
 
-- **カスタム画面レイアウトが GPU に。** 任意の矩形、四方向の画面回転、上下画面の入れ替えを GPU プレゼンターが描画し、画面リードバックは不要です。0.1.5 の低速なリードバック経路はなくなりました。
-- **オンスクリーンボタンの追加。** 早送りトグル（2x オン/オフ）と、編集可能なクイックセーブ、クイックロード、画面入れ替えボタンが既存のパッドに加わります。
-- **向きごとのコントロール表示。** 「コントロールの切り替え」は縦横それぞれを個別に編集します。C スティック、ZL、ZR は両方向でデフォルト非表示、D-pad は縦画面でデフォルト非表示です。サイズと透明度はグローバルのままです。
-- **揺れない全画面レイアウトエディター。** ドラッグで移動、ピンチでサイズ変更し、ローカルプレビューをジェスチャー終了時に一度だけ確定するため、レイアウトが揺れません。横画面レイアウトの編集中は横画面に固定されます。
-- **Metal HUD はデフォルトでオフ。** システム GPU/FPS オーバーレイは 0.1.6 からデフォルトでオフです（既存インストールは一度だけ移行）。設定 → パフォーマンス でオンにできます。
-- **賢くなった Windows デプロイ。** ランチャーはスマートフォンのインストール済みアプリとゲームを先に読み取ります。最新ならスキップ、上書き更新ではゲームデータ・セーブ・ROM を保持し、ローカルライブラリにないゲームは更新前に一覧を示して確認します。削除は一切しません。
+- **刷新された iOS 体験。** 設定は iOS 26/27 のグループ表示になり、ゲーム内メニューは刷新されました：ネイティブの push/pop サブページ、ヘッダーに実行中のゲーム名、電源 / 再起動 / 閉じるボタンのみ、オプションはグループ化して表示。
+- **ひと目で読める設定説明。** 各設定の説明は 2 行の平易な文に整理され、タイトルは中央寄せの inline に。分類は General / System / Gamepad / Graphics / Layout / Sound / Debug / Other。
+- **グラフィック設定の追加。** 「Screen aspect」（Fit / 4:3 / Stretch）と「Integer scaling」を追加、「Renderer」行は削除。
+- **本物の速度制御。** 「Run speed limit」と「Turbo limit」が実際の制限として機能（制限オフで本当に無制限）。「Default speed」/「Turbo speed」は 1x〜4x から選択可能。
+- **更新とコントローラー。** GitHub 更新チャンネル（Stable / Beta）と毎日のバックグラウンド確認＋ローカル通知。Gamepad にスティックのデッドゾーン、物理ボタンの完全な再マッピング、2〜4 ボタンのホットキー、Standard / High contrast のコントロール表示、アプリ別 Gamepad プロファイルを追加。
+- **アプリ別設定（Per-Application Settings）。** グローバルの既定値を変えずに、タイトルごとに一部の設定だけを上書きできます。
+- **未対応：** Delta スキンのインポート、チート、マニュアル、amiibo、マイク、カメラ、ネットワーク/オンラインプレイ、JIT。
 
 ## 機能一覧
 
@@ -208,7 +209,7 @@ macOS のセットアップと署名の制限を含む詳細な手順は[セッ�
 
 | プラットフォーム | サポート |
 |---|---|
-| **iPhone / iPad** | iOS 16 以降。1 つのアプリにライブラリ、ゲーム内メニュー、ゲーム内レイアウト編集付きの New 3DS フルコントロール、横 6 種/縦 3 種の画面レイアウト、セーブステート、FPS 表示が入ります。 |
+| **iPhone / iPad** | iOS 16 以降。1 つのアプリにライブラリ、刷新されたゲーム内メニュー、ゲーム内レイアウト編集付きの New 3DS フルコントロール、横 6 種/縦 3 種の画面レイアウト、セーブステート、FPS 表示、アプリ別設定が入ります。 |
 | **Windows** | Windows 10/11 x64。自己完結の単一ファイルランチャー。Mac なしでビルド、署名、インストール、プッシュができます。**検証済みの経路。** |
 | **macOS** | macOS 13+（Intel + Apple シリコン）。Xcode 署名を使う SwiftUI ランチャー。パッケージはまだ自己完結しておらず、実機へのインストールはメンテナーによって検証されていません。**開発者プレビュー。** |
 | **ビルドホスト** | Windows（同梱の LLVM/LLD）または macOS（Apple clang + Xcode）。 |

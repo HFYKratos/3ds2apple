@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="라이선스: Apache-2.0"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6"><img src="https://img.shields.io/badge/release-v0.1.6-brightgreen" alt="최신 릴리스: v0.1.6"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.2.0"><img src="https://img.shields.io/badge/release-v0.2.0-brightgreen" alt="최신 릴리스: v0.2.0"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/platforms-iOS%2016%2B%20%C2%B7%20Windows%2010%2F11%20%C2%B7%20macOS%2013%2B-blue" alt="지원 플랫폼: iOS 16+, Windows 10/11, macOS 13+"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/github/downloads/HFYKratos/3ds2apple/total?label=downloads" alt="GitHub 다운로드 수"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/HFYKratos/3ds2apple/ci.yml?branch=main&label=CI" alt="CI 상태"></a>
@@ -31,8 +31,8 @@
 ## 다운로드
 
 <p align="center">
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows 런처 다운로드"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS 런처 다운로드"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.0/3ds2apple-0.2.0-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows 런처 다운로드"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.0/3ds2apple-0.2.0-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS 런처 다운로드"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="GitHub에서 모든 릴리스 보기"></a>
 </p>
 
@@ -57,14 +57,15 @@
 
 <p align="center"><sub>합성 프리뷰, 게임 데이터 없음: 세로 화면 컨트롤 → 가로 화면 컨트롤 → 일시정지 메뉴의 가상 컨트롤 → 화면 레이아웃 설정.</sub></p>
 
-## 0.1.6 새로운 기능
+## 0.2.0 새로운 기능(2026-11-25)
 
-- **사용자 지정 화면 레이아웃이 GPU로.** 임의 사각형, 네 방향 화면 회전, 상하 화면 교체를 GPU 프레젠터가 그리며 화면 리드백이 필요 없습니다. 0.1.5의 느린 리드백 경로는 사라졌습니다.
-- **화면 버튼 추가.** 빨리 감기 토글(2x 켜기/끄기)과 편집 가능한 빠른 저장, 빠른 불러오기, 화면 교체 버튼이 기존 패드에 더해집니다.
-- **방향별 컨트롤 표시.** '컨트롤 전환'이 이제 가로/세로를 각각 편집합니다. C 스틱, ZL, ZR은 두 방향 모두 기본 숨김이고 D-pad는 세로에서 기본 숨김입니다. 크기와 불투명도는 전역 설정입니다.
-- **떨리지 않는 전체 화면 레이아웃 편집기.** 드래그로 이동하고 핀치로 크기를 조절하며, 로컬 미리보기를 제스처가 끝날 때 한 번 커밋해 레이아웃이 더 이상 떨리지 않습니다. 가로 레이아웃을 편집하는 동안은 가로 화면으로 고정됩니다.
-- **Metal HUD 기본 꺼짐.** 시스템 GPU/FPS 오버레이는 0.1.6부터 기본으로 꺼져 있습니다(기존 설치은 한 번 마이그레이션). 설정 → 성능에서 켤 수 있습니다.
-- **더 똑똑해진 Windows 배포.** 런처가 휴대폰의 설치된 앱과 게임을 먼저 읽습니다. 최신이면 건너뛰고, 덮어쓰기 업데이트는 게임 데이터·세이브·ROM을 보존하며, 로컬 라이브러리에 없는 게임은 업데이트 전에 목록과 확인을 거칩니다. 삭제는 절대 하지 않습니다.
+- **새로워진 iOS 경험.** 설정은 iOS 26/27 그룹 스타일을 따르고, 인게임 메뉴는 네이티브 push/pop 하위 페이지, 헤더의 실행 중인 게임 이름, 전원 / 재시작 / 닫기 버튼만 남긴 채 옵션을 그룹화해 보여 주도록 재설계되었습니다.
+- **한눈에 읽히는 설정 설명.** 모든 설정 설명이 두 줄의 쉬운 문장으로 정리되고 제목은 중앙 inline으로 표시됩니다. 분류는 General / System / Gamepad / Graphics / Layout / Sound / Debug / Other입니다.
+- **그래픽 설정 추가.** 'Screen aspect'(Fit / 4:3 / Stretch)와 'Integer scaling'이 추가되고 'Renderer' 행은 제거되었습니다.
+- **진짜 속도 제어.** 'Run speed limit'과 'Turbo limit'이 실제 제한으로 동작하며(제한 해제 시 진짜 무제한), 'Default speed' / 'Turbo speed'를 1x–4x에서 선택할 수 있습니다.
+- **업데이트와 컨트롤러.** GitHub 업데이트 채널(Stable / Beta)과 매일 백그라운드 확인 + 로컬 알림. Gamepad에 스틱 데드존, 물리 버튼 전체 재매핑, 2–4 버튼 핫키, Standard / High contrast 컨트롤 스타일, 앱별 Gamepad 프로필이 추가되었습니다.
+- **앱별 설정(Per-Application Settings).** 전역 기본값을 바꾸지 않고 타이틀별로 일부 설정을 덮어쓸 수 있습니다.
+- **아직 미지원:** Delta 스킨 가져오기, 치트, 매뉴얼, amiibo, 마이크, 카메라, 네트워크/온라인 플레이, JIT.
 
 ## 기능 한눈에 보기
 
@@ -208,7 +209,7 @@ macOS 설정과 서명 제한을 포함한 자세한 절차는 [시작하기](#�
 
 | 플랫폼 | 지원 |
 |---|---|
-| **iPhone / iPad** | iOS 16 이상. 앱 하나에 라이브러리, 게임 내 메뉴, 게임 내 레이아웃 편집이 가능한 New 3DS 전체 컨트롤, 가로 6종/세로 3종 화면 레이아웃, 세이브 스테이트, FPS 표시가 들어갑니다. |
+| **iPhone / iPad** | iOS 16 이상. 앱 하나에 라이브러리, 새로워진 인게임 메뉴, 게임 내 레이아웃 편집이 가능한 New 3DS 전체 컨트롤, 가로 6종/세로 3종 화면 레이아웃, 세이브 스테이트, FPS 표시, 앱별 설정이 들어갑니다. |
 | **Windows** | Windows 10/11 x64. 자체 완결형 단일 파일 런처. Mac 없이 빌드, 서명, 설치, 푸시가 가능합니다. **검증된 경로.** |
 | **macOS** | macOS 13+(Intel + Apple 실리콘). Xcode 서명을 쓰는 SwiftUI 런처. 패키지가 아직 자체 완결적이지 않고 실제 기기 설치가 메인테이너에 의해 검증되지 않았습니다. **개발자 프리뷰.** |
 | **빌드 호스트** | Windows(내장 LLVM/LLD) 또는 macOS(Apple clang + Xcode). |

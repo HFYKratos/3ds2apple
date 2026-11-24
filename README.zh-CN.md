@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="许可证：Apache-2.0"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6"><img src="https://img.shields.io/badge/release-v0.1.6-brightgreen" alt="最新版本：v0.1.6"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.2.0"><img src="https://img.shields.io/badge/release-v0.2.0-brightgreen" alt="最新版本：v0.2.0"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/platforms-iOS%2016%2B%20%C2%B7%20Windows%2010%2F11%20%C2%B7%20macOS%2013%2B-blue" alt="平台：iOS 16+、Windows 10/11、macOS 13+"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/github/downloads/HFYKratos/3ds2apple/total?label=downloads" alt="GitHub 下载量"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/HFYKratos/3ds2apple/ci.yml?branch=main&label=CI" alt="CI 状态"></a>
@@ -28,8 +28,8 @@
 ## 下载
 
 <p align="center">
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="下载 Windows 启动器"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="下载 macOS 启动器"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.0/3ds2apple-0.2.0-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="下载 Windows 启动器"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.0/3ds2apple-0.2.0-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="下载 macOS 启动器"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="在 GitHub 查看全部版本"></a>
 </p>
 
@@ -54,14 +54,15 @@
 
 <p align="center"><sub>合成预览，不含游戏数据：竖屏按键 → 横屏按键 → 暂停菜单虚拟按键选项 → 屏幕布局设置。</sub></p>
 
-## 0.1.6 新特性
+## 0.2.0 新特性（2026-11-25）
 
-- **自定义屏幕布局进 GPU。** 任意矩形、四向屏幕旋转与上下屏交换都由 GPU presenter 绘制，无需屏幕回读——0.1.5 的较慢回读路径已成为历史。
-- **更多屏幕按键。** 快进切换按钮（2x 开/关），以及可编辑的快速存档、快速读档与交换屏幕按钮，与现有虚拟按键并列。
-- **按键显隐按横竖方向。** 「切换控制」现在按当前方向分别编辑；C 杆、ZL、ZR 在横竖两个方向都默认隐藏，竖屏还默认隐藏十字键。大小与透明度仍是全局设置。
-- **全屏布局编辑器不再抖。** 拖动移动、双指缩放，本地预览在松手时一次提交，布局不再抖动；编辑横向布局时强制横屏。
-- **Metal HUD 默认关闭。** 系统 GPU/FPS 浮层从 0.1.6 起默认关闭（已有安装一次性迁移）；可在 设置 → 性能 里打开。
-- **更聪明的 Windows 部署。** 启动器先读取手机已安装的 App 与游戏：已是最新则跳过；覆盖更新保留游戏数据、存档与 ROM；手机上有本机库缺失的游戏时先列出并确认，且绝不会删除。
+- **全新的 iOS 体验。** 设置采用 iOS 26/27 分组样式，游戏内菜单重做：原生 push/pop 子页面、标题显示当前游戏名、仅保留电源 / 重启 / 关闭按钮，选项按功能分组呈现。
+- **设置说明一眼读完。** 每条设置说明都精简为两行白话，标题改为居中 inline；分类为 General / System / Gamepad / Graphics / Layout / Sound / Debug / Other。
+- **更多图形控制。** 新增「Screen aspect」（Fit / 4:3 / Stretch）与「Integer scaling」；移除「Renderer」行。
+- **真正的速度控制。** 「Run speed limit」与「Turbo limit」成为真正的限制（关闭限制即为真正不限速），「Default speed」/「Turbo speed」可在 1x–4x 间选择。
+- **更新与手柄。** GitHub 更新通道（Stable / Beta），每天后台检查并发送本地通知；手柄新增摇杆死区、完整物理按键重映射、2–4 键组合热键、Standard / High contrast 控件样式与按游戏的手柄配置。
+- **按游戏设置（Per-Application Settings）。** 可为单款游戏覆盖一小部分设置，而不影响全局默认值。
+- **仍不支持：** Delta 皮肤导入、金手指、说明书、amiibo、麦克风、摄像头、网络/联机，以及 JIT。
 
 ## 功能一览
 
@@ -205,7 +206,7 @@
 
 | 平台 | 支持情况 |
 |---|---|
-| **iPhone / iPad** | iOS 16 及以上。一个 App 承载游戏库、游戏内菜单、完整 New 3DS 虚拟按键与游戏内布局编辑、横屏 6 种/竖屏 3 种屏幕布局、即时存档与帧率显示。 |
+| **iPhone / iPad** | iOS 16 及以上。一个 App 承载游戏库、重做的游戏内菜单、完整 New 3DS 虚拟按键与游戏内布局编辑、横屏 6 种/竖屏 3 种屏幕布局、即时存档、帧率显示与按游戏设置。 |
 | **Windows** | Windows 10/11 x64。单文件自包含启动器；无需 Mac 即可编译、签名、安装、推送。**已验证路径。** |
 | **macOS** | macOS 13+（Intel + Apple 芯片）。SwiftUI 启动器，使用 Xcode 签名；分发包尚不自包含，真机安装尚未由维护者验证。**开发者预览。** |
 | **构建主机** | Windows（内置 LLVM/LLD）或 macOS（Apple clang + Xcode）。 |

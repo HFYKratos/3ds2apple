@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>3ds2apple — 在 iPhone 与 iPad 上原生运行你自有的 Nintendo 3DS 游戏</title>
-<meta name="description" content="3ds2apple 把你自有的 Nintendo 3DS 游戏提前重编译为原生 ARM64，直接跑在 iPhone 与 iPad 上：图形经 MoltenVK 走 Metal，没有 CPU JIT，也没有解释器兜底。Windows 与 macOS 启动器，Apache-2.0，当前版本 0.1.6。">
+<meta name="description" content="3ds2apple 把你自有的 Nintendo 3DS 游戏提前重编译为原生 ARM64，直接跑在 iPhone 与 iPad 上：图形经 MoltenVK 走 Metal，没有 CPU JIT，也没有解释器兜底。Windows 与 macOS 启动器，Apache-2.0，当前版本 0.2.0。">
 <meta name="keywords" content="3ds2apple, iPhone 运行 3DS, iPad 运行 3DS, 3DS 原生移植, AOT 重编译, ARM64, Metal, MoltenVK, 无 JIT, iOS 16, 开源, Apache-2.0, 自备游戏">
 <meta name="author" content="HFYKratos">
 <meta name="robots" content="index, follow">
@@ -20,7 +20,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="3ds2apple">
 <meta property="og:title" content="3ds2apple — 自有 3DS 游戏，原生运行在 iPhone 与 iPad">
-<meta property="og:description" content="把你自有的 Nintendo 3DS 游戏重编译为原生 ARM64，经 MoltenVK 走 Metal：没有 CPU JIT，也没有解释器兜底。自备游戏，v0.1.6，Apache-2.0。">
+<meta property="og:description" content="把你自有的 Nintendo 3DS 游戏重编译为原生 ARM64，经 MoltenVK 走 Metal：没有 CPU JIT，也没有解释器兜底。自备游戏，v0.2.0，Apache-2.0。">
 <meta property="og:url" content="https://hfykratos.github.io/3ds2apple/zh/">
 <meta property="og:image" content="https://hfykratos.github.io/3ds2apple/assets/og.png">
 <meta property="og:image:type" content="image/png">
@@ -29,7 +29,7 @@
 <meta property="og:image:alt" content="3ds2apple：深色网格背景上的合成纵向预览与横向预览。">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="3ds2apple — 在 iPhone 与 iPad 上原生运行自有 3DS 游戏">
-<meta name="twitter:description" content="AOT ARM64 重编译，经 MoltenVK 走 Metal，没有 CPU JIT。自备游戏。版本 0.1.6，Apache-2.0。">
+<meta name="twitter:description" content="AOT ARM64 重编译，经 MoltenVK 走 Metal，没有 CPU JIT。自备游戏。版本 0.2.0，Apache-2.0。">
 <meta name="twitter:image" content="https://hfykratos.github.io/3ds2apple/assets/og.png">
 <script type="application/ld+json">
 {
@@ -41,8 +41,8 @@
   "description": "把你自有的 Nintendo 3DS 游戏提前重编译为原生 ARM64，并在 iPhone 与 iPad 上通过 Metal（MoltenVK）运行，没有 CPU JIT，也没有解释器兜底。",
   "url": "https://hfykratos.github.io/3ds2apple/zh/",
   "downloadUrl": "https://github.com/HFYKratos/3ds2apple/releases",
-  "softwareVersion": "0.1.6",
-  "datePublished": "2026-11-23",
+  "softwareVersion": "0.2.0",
+  "datePublished": "2026-11-25",
   "license": "https://www.apache.org/licenses/LICENSE-2.0",
   "isAccessibleForFree": true,
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -63,11 +63,11 @@
         <path d="M16 44h32l4 8H12z" fill="#efe2ff" opacity=".92"/>
       </svg>
       <span class="brand-name">3ds2apple</span>
-      <span class="brand-ver">v0.1.6</span>
+      <span class="brand-ver">v0.2.0</span>
     </a>
     <nav class="site-nav" aria-label="主导航">
       <a href="#why">为何原生</a>
-      <a href="#whats-new">0.1.6 新功能</a>
+      <a href="#whats-new">0.2.0 新功能</a>
       <a href="#features">功能</a>
       <a href="#layouts">屏幕布局</a>
       <a href="#controls">虚拟按键</a>
@@ -89,16 +89,16 @@
         <h1>你自有的 <span class="nb">3DS 游戏</span>，<span class="accent">原生</span>运行在 <span class="nb">iPhone 与 iPad 上</span>。</h1>
         <p class="lede">游戏代码会在电脑上被提前重编译为原生 ARM64，再直接运行在手机处理器上——图形经 MoltenVK 走 Metal，没有 CPU JIT，也没有解释器兜底。Windows 或 macOS 启动器负责编译、签名、安装与推送；一个 App 装下整个游戏库。</p>
         <div class="cta-row">
-          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-windows-x64.zip">
+          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.0/3ds2apple-0.2.0-windows-x64.zip">
             <svg class="os" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 4.55 11 3.4v8.05H3V4.55Zm9-1.3 9-1.25v9.45h-9V3.25ZM3 12.45h8v8.05L3 19.4v-6.95Zm9 0h9v9.45l-9-1.25v-8.2Z"/></svg>
-            下载 Windows 版 <span class="meta">zip</span>
+            下载 Windows 版 <span class="meta">157.8 MB · zip</span>
           </a>
-          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-macos-universal.zip">
+          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.0/3ds2apple-0.2.0-macos-universal.zip">
             <svg class="os" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M2 19h20"/></svg>
-            下载 macOS 版 <span class="meta">zip</span>
+            下载 macOS 版 <span class="meta">5.53 MB · zip</span>
           </a>
         </div>
-        <p class="cta-note">v0.1.6 · 发布于 2026-11-23 · Apache-2.0 · <a href="https://github.com/HFYKratos/3ds2apple/releases" rel="noopener">全部版本</a> · <a href="#download">文件大小与 SHA-256</a></p>
+        <p class="cta-note">v0.2.0 · 发布于 2026-11-25 · Apache-2.0 · <a href="https://github.com/HFYKratos/3ds2apple/releases" rel="noopener">全部版本</a> · <a href="#download">文件大小与 SHA-256</a></p>
         <ul class="hero-facts">
           <li>iOS 16 及以上</li>
           <li>Windows 10/11</li>
@@ -118,7 +118,7 @@
   <section class="section dl-section" id="download">
     <div class="wrap">
       <div class="section-head">
-        <p class="eyebrow">下载 · v0.1.6</p>
+        <p class="eyebrow">下载 · v0.2.0</p>
         <h2>两个平台包，发布在 GitHub Releases。</h2>
         <p>每个 zip 根目录都带 <code>LICENSE</code>、<code>NOTICE</code> 与 <code>THIRD_PARTY.md</code>；Release 从不附带游戏数据。</p>
       </div>
@@ -129,14 +129,14 @@
             <h3>Windows 启动器</h3>
             <span class="tag tag-gpu">已验证路径</span>
           </div>
-          <p class="dl-file">3ds2apple-0.1.6-windows-x64.zip</p>
-          <p class="dl-meta"><span>版本 <b>0.1.6</b></span><span>Windows 10/11 x64</span><span>大小与 SHA-256 见 Release 页面</span></p>
-          <p class="fine" style="margin:0">单个自包含的 <code>3ds2apple-launcher.exe</code>，无需 Mac 即可编译、签名、安装并推送。exe 未做代码签名：请先按 Release 页面的摘要核对，再选择「更多信息 → 仍要运行」。</p>
+          <p class="dl-file">3ds2apple-0.2.0-windows-x64.zip</p>
+          <p class="dl-meta"><span>版本 <b>0.2.0</b></span><span>大小 <b>157,818,182 B</b>（157.8 MB）</span><span>Windows 10/11 x64</span></p>
+          <p class="fine" style="margin:0">单个自包含的 <code>3ds2apple-launcher.exe</code>，无需 Mac 即可编译、签名、安装并推送。exe 未做代码签名：请先核对下方摘要，再选择「更多信息 → 仍要运行」。</p>
           <details>
             <summary>SHA-256 摘要</summary>
-            <p class="fine" style="margin:10px 0 0">摘要发布在 <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6" rel="noopener">v0.1.6 Release 页面</a>；可用下方命令计算本地哈希后比对。</p>
+            <code>2da0c693e44ddd64d9e6dfaabf24ae880c1011eb768c717c2b360b0e5f833c41</code>
           </details>
-          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-windows-x64.zip">下载 Windows 版</a>
+          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.0/3ds2apple-0.2.0-windows-x64.zip">下载 Windows 版</a>
         </article>
         <article class="dl-card">
           <div class="dl-head">
@@ -144,24 +144,24 @@
             <h3>macOS 启动器</h3>
             <span class="tag tag-readback">开发者预览</span>
           </div>
-          <p class="dl-file">3ds2apple-0.1.6-macos-universal.zip</p>
-          <p class="dl-meta"><span>版本 <b>0.1.6</b></span><span>macOS 13+，Intel + Apple 芯片</span><span>大小与 SHA-256 见 Release 页面</span></p>
+          <p class="dl-file">3ds2apple-0.2.0-macos-universal.zip</p>
+          <p class="dl-meta"><span>版本 <b>0.2.0</b></span><span>大小 <b>5,532,780 B</b>（5.53 MB）</span><span>macOS 13+，Intel + Apple 芯片</span></p>
           <p class="fine" style="margin:0">未公证：首次启动请右键 →「打开」。安装包<strong>尚未自包含</strong>（需要 Xcode、仓库检出与已构建工具），真机安装也尚未经维护者验证——见 <a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a>。</p>
           <details>
             <summary>SHA-256 摘要</summary>
-            <p class="fine" style="margin:10px 0 0">摘要发布在 <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6" rel="noopener">v0.1.6 Release 页面</a>；可用下方命令计算本地哈希后比对。</p>
+            <code>6a5e6a2cfc9f0e34ad926e2c23e30a14a95f81c19c9b92ec6b5aac7c2c11b76f</code>
           </details>
-          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.1.6/3ds2apple-0.1.6-macos-universal.zip">下载 macOS 版</a>
+          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.0/3ds2apple-0.2.0-macos-universal.zip">下载 macOS 版</a>
         </article>
       </div>
       <details class="verify">
         <summary>核对下载文件的 SHA-256</summary>
         <p class="muted">GitHub 也会在 Release 页面显示每个资产的 SHA-256。可在本地计算后比对：</p>
         <pre class="code-block"><code># Windows（PowerShell）
-Get-FileHash .\3ds2apple-0.1.6-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\3ds2apple-0.2.0-windows-x64.zip -Algorithm SHA256
 
 # macOS
-shasum -a 256 3ds2apple-0.1.6-macos-universal.zip</code></pre>
+shasum -a 256 3ds2apple-0.2.0-macos-universal.zip</code></pre>
       </details>
     </div>
   </section>
@@ -169,50 +169,50 @@ shasum -a 256 3ds2apple-0.1.6-macos-universal.zip</code></pre>
   <section class="section" id="whats-new">
     <div class="wrap">
       <div class="section-head">
-        <p class="eyebrow">0.1.6 新功能</p>
-        <h2>自定义布局进 GPU，控制更快。</h2>
-        <p>0.1.6 把任意矩形的自定义屏幕布局变成 GPU presenter 排列，新增可编辑的「快进 / 快速保存 / 快速读取 / 交换屏幕」按钮，并让 Windows 部署变成增量更新。</p>
+        <p class="eyebrow">0.2.0 新功能</p>
+        <h2>设置与游戏内体验大版本。</h2>
+        <p>0.2.0 重做设置页与游戏内菜单，加入真正无限制速度、更新通道、完整手柄层与按游戏设置，并把 Integer scaling 与 Screen aspect 带回图形设置。</p>
       </div>
       <div class="features">
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M3 13h18M8 20h8M12 17v3"/></svg>
-          <h3>自定义布局进 GPU</h3>
-          <p>任意矩形现在由 presenter 绘制（layout id 8），每帧零屏幕回读，并支持四种屏幕旋转与屏幕交换。</p>
+          <h3>分组式设置</h3>
+          <p>设置页回归 iOS 26/27 的 inset-grouped 风格：跟随系统浅/深色、inline 标题，说明统一精简为两行内。</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5h9v14H4z"/><path d="M16 12h5M21 12l-4-4M21 12l-4 4"/></svg>
-          <h3>快进切换</h3>
-          <p>屏幕上的 2× 切换按钮；再次点击回到菜单设定的速度。它和其他控件一样可编辑。</p>
+          <h3>游戏内菜单重做</h3>
+          <p>子页使用原生 push/pop：存档状态、虚拟按键、屏幕布局、交换屏幕、旋转屏幕、全局设置、按游戏设置与关闭游戏。标题显示当前游戏名，顶部只保留退出/重置/关闭。</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 13h8M8 17h5M8 4v5h8"/></svg>
-          <h3>快速保存 / 快速读取</h3>
-          <p>两个屏幕按钮直接写入/读取快速存档槽并显示提示，无需打开暂停菜单。</p>
+          <h3>真正无限制速度</h3>
+          <p>关闭 Run speed limit 或 Turbo limit 后不再受 4× 限制：帧循环按呈现预算跑到硬件极限，并提示高功耗、发热与音频静音。</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="6" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M12 3v3M12 20v1"/></svg>
-          <h3>交换屏幕</h3>
-          <p>一键交换上下屏显示，走 GPU 路径，触摸映射跟随交换。</p>
+          <h3>更新通道</h3>
+          <p>GitHub 更新通道可选 Stable / Beta；启动或回前台时每天最多检查一次，有新版本时发本地通知。</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 4v16"/><path d="m13 13 3 3-3 3"/></svg>
-          <h3>全屏编辑器</h3>
-          <p>屏幕编辑器改为无边框并强制横屏；两个编辑器都使用单一静止画布，拖动时本地预览，松手时一次性提交。</p>
+          <h3>完整手柄配置</h3>
+          <p>模拟死区、物理按键重映射、2–4 键 hotkey 录制、Standard / High contrast 屏幕控件外观，以及按游戏 Gamepad profile。</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 4v4M16 10v4M10 16v4"/></svg>
-          <h3>按方向显隐</h3>
-          <p>按键显隐改为按设备方向独立：两个方向默认隐藏 C 杆、ZL、ZR，竖屏还隐藏十字键；已有配置自动迁移一次。</p>
+          <h3>按游戏设置</h3>
+          <p>按 title ID 覆盖屏幕旋转、交换、Integer scaling、Screen aspect、死区、控件外观与按键映射；每一项都可跟随全局设置。</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="5" width="19" height="12" rx="2"/><path d="M8 21h8M4 9h16"/></svg>
-          <h3>Metal HUD 默认关</h3>
-          <p>系统 Metal 性能 HUD 对新装与已有安装默认关闭；开关仍在 设置 → 性能。</p>
+          <h3>图形选项</h3>
+          <p>设置 → 图形 新增 Integer scaling 与 Screen aspect（适应 / 4:3 / 拉伸），并保留分辨率；只读的 Renderer 行已移除。</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 17v3h16v-3"/></svg>
-          <h3>Windows 增量部署</h3>
-          <p>启动器先读取手机状态：覆盖更新保留 Documents 与存档，只推送缺失数据，手机独有数据永不删除。</p>
+          <h3>设置结构</h3>
+          <p>General / System / Gamepad / Graphics / Layout / Sound / Debug / Other——System 与 Other 拆分为独立页面，所有说明精简到两行。</p>
         </article>
       </div>
     </div>
@@ -260,7 +260,7 @@ shasum -a 256 3ds2apple-0.1.6-macos-universal.zip</code></pre>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="7" width="19" height="11" rx="4"/><path d="M8 10.5v4M6 12.5h4M16 11.5h.01M18.5 13.5h.01"/></svg>
           <h3>完整 New 3DS 键位</h3>
-          <p>十字键、A/B/X/Y、L/R、ZL/ZR、Start/Select、真模拟量 Circle Pad 与 New 3DS C 杆，并支持手柄映射。0.1.6 新增快进、快速保存、快速读取、交换屏幕四个可编辑屏幕按钮。</p>
+          <p>十字键、A/B/X/Y、L/R、ZL/ZR、Start/Select、真模拟量 Circle Pad 与 New 3DS C 杆，并支持手柄映射。0.2.0 新增模拟死区、物理按键重映射、2–4 键 hotkey、Standard / High contrast 控件外观与按游戏 Gamepad profile。</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
@@ -348,7 +348,7 @@ shasum -a 256 3ds2apple-0.1.6-macos-universal.zip</code></pre>
           </figure>
         </div>
       </div>
-      <p class="fine">屏幕旋转与方向保留，自定义布局现在也随 GPU presenter 旋转与交换；若无法创建 GPU presenter，会回退到屏幕回读路径。渲染分辨率（1x–4x）仍在下次加载游戏时生效；旧的画面比例与整数缩放开关已在 0.1.5 移除。</p>
+      <p class="fine">屏幕旋转与方向保留，自定义布局现在也随 GPU presenter 旋转与交换；若无法创建 GPU presenter，会回退到屏幕回读路径。渲染分辨率（1x–4x）仍在下次加载游戏时生效；0.2.0 在 设置 → 图形 重新加入 Integer scaling 与 Screen aspect（适应 / 4:3 / 拉伸），并移除只读的 Renderer 行。</p>
     </div>
   </section>
 
@@ -376,7 +376,7 @@ shasum -a 256 3ds2apple-0.1.6-macos-universal.zip</code></pre>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg><div><b>真模拟量 Circle Pad</b><span>每轴输出 −1…1，带小死区，手指静止时精确为 0——不是第二套十字键。</span></div></li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg><div><b>New 3DS C 杆</b><span>与 Circle Pad 同理；需要游戏本身读取 New 3DS 摇杆，且壳必须用当前运行库构建。0.1.6 起默认隐藏——在「切换控制」里为读取摇杆的游戏开启。</span></div></li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 4v16M4 12h16M12 4l-3 3M12 4l3 3M12 20l-3-3M12 20l3-3M4 12l3-3M4 12l3 3M20 12l-3-3M20 12l-3 3"/></svg><div><b>单个十字键</b><span>一个十字形控件：四个方向按压区，按住可滑动换向，按下时有触感反馈。</span></div></li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="4"/><path d="M7 11v2M6 12h2M15 11.5h.01M17.5 13.5h.01"/></svg><div><b>全部按键</b><span>A/B/X/Y、L/R、ZL/ZR、Start/Select。手柄左摇杆映射 Circle Pad、右摇杆映射 C 杆，L2/R2 映射 ZL/ZR。</span></div></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="4"/><path d="M7 11v2M6 12h2M15 11.5h.01M17.5 13.5h.01"/></svg><div><b>全部按键</b><span>A/B/X/Y、L/R、ZL/ZR、Start/Select。手柄左摇杆映射 Circle Pad、右摇杆映射 C 杆，L2/R2 映射 ZL/ZR；0.2.0 新增模拟死区、物理按键重映射、2–4 键 hotkey、Standard / High contrast 屏幕控件外观与按游戏 Gamepad profile。</span></div></li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3"/><rect x="4" y="11" width="16" height="10" rx="2"/></svg><div><b>多点触控 + 触感</b><span>多根手指可同时按按键、拖摇杆；触感反馈可开关。</span></div></li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><div><b>动作按钮（0.1.6）</b><span>快进（2× 切换）、快速保存、快速读取与交换屏幕，都会出现在「切换控制」与「调整大小」里。</span></div></li>
           </ul>
@@ -503,7 +503,7 @@ shasum -a 256 3ds2apple-0.1.6-macos-universal.zip</code></pre>
         </details>
         <details>
           <summary>如何从旧版本升级？</summary>
-          <div class="a"><p>用 0.1.6 启动器重新部署即可。Windows 启动器会先读取手机上的 App 与游戏状态并做增量更新——不会卸载 App，因此 Documents 与存档都会保留，手机独有的游戏数据也不会被删除。macOS 仍按原来的 导入 → 部署 流程操作。</p></div>
+          <div class="a"><p>用 0.2.0 启动器重新部署即可。Windows 启动器会先读取手机上的 App 与游戏状态并做增量更新——不会卸载 App，因此 Documents 与存档都会保留，手机独有的游戏数据也不会被删除。macOS 仍按原来的 导入 → 部署 流程操作。</p></div>
         </details>
         <details>
           <summary>我能帮什么忙？</summary>
@@ -523,9 +523,9 @@ shasum -a 256 3ds2apple-0.1.6-macos-universal.zip</code></pre>
       <div class="limits">
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>部分菜单可能渲染异常</h3><p>个别游戏的某些菜单上屏可能出现花屏。诊断路径已检查，但修复仍在排查中——<a href="https://github.com/HFYKratos/3ds2apple/issues/2" rel="noopener">issue #2</a>。</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>macOS 仍是开发者预览</h3><p>macOS 启动器尚未自包含，真机安装尚未验证——<a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a>。Windows 路径才是已验证的。</p></div></article>
-        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>C 杆取决于游戏</h3><p>它通过 New 3DS 摇杆 API 上报；不读取该 API 的游戏会忽略它，用旧运行库构建的壳也不提供。0.1.6 起默认隐藏——游戏读取摇杆时在「切换控制」里开启。</p></div></article>
+        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>C 杆取决于游戏</h3><p>它通过 New 3DS 摇杆 API 上报；不读取该 API 的游戏会忽略它，用旧运行库构建的壳也不提供。默认隐藏——游戏读取摇杆时在「切换控制」里开启。</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>不承诺兼容性与性能</h3><p>部分游戏可能无法启动或运行较慢。README 里的参考数据来自维护者对特定游戏的实测，不构成保证。</p></div></article>
-        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>两项行为尚未实现</h3><p>Azahar 风格的按键滑行与相对摇杆中心选项尚未实现。横向虚拟按键按皮肤几何叠在画面上。</p></div></article>
+        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>0.2.0 未包含</h3><p>Delta 风格皮肤导入、金手指管理器、游戏说明书查看器、amiibo、麦克风、摄像头与网络/在线功能不在 0.2.0 内——这些需要模拟器核心工作。CPU JIT、着色器 JIT、RPC 与 LLE 模块设置不适用于纯 AOT 架构。</p></div></article>
         <article class="limit legal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 4 7v5c0 5 3.5 8 8 9 4.5-1 8-4 8-9V7l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg><div><h3>法律边界</h3><p>不提供 ROM、密钥、BIOS、系统文件或游戏资源，也不提供盗版支持。请只使用你合法拥有并自行导出的游戏。3ds2apple 与 Nintendo 无任何隶属关系。</p></div></article>
       </div>
     </div>
@@ -536,10 +536,10 @@ shasum -a 256 3ds2apple-0.1.6-macos-universal.zip</code></pre>
       <div class="panel">
         <div>
           <h2>自备游戏，开始游玩。</h2>
-          <p>v0.1.6 现已提供 Windows 与 macOS 版本。完整指南、诊断流程与全部已知限制都在 README 里。</p>
+          <p>v0.2.0 现已提供 Windows 与 macOS 版本。完整指南、诊断流程与全部已知限制都在 README 里。</p>
         </div>
         <div class="cta-row">
-          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.1.6" rel="noopener">获取 v0.1.6</a>
+          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.2.0" rel="noopener">获取 v0.2.0</a>
           <a class="btn btn-ghost" href="https://github.com/HFYKratos/3ds2apple/blob/main/README.zh-CN.md" rel="noopener">阅读 README</a>
           <a class="btn btn-ghost" href="../press/">媒体资料</a>
         </div>
@@ -593,7 +593,7 @@ shasum -a 256 3ds2apple-0.1.6-macos-universal.zip</code></pre>
     </div>
     <div class="footer-bottom">
       <span>© 2026 3ds2apple contributors · 维护者 HFYKratos</span>
-      <span>v0.1.6 · 2026-11-23 · <a href="https://github.com/HFYKratos/3ds2apple" rel="noopener">GitHub</a></span>
+      <span>v0.2.0 · 2026-11-25 · <a href="https://github.com/HFYKratos/3ds2apple" rel="noopener">GitHub</a></span>
     </div>
   </div>
 </footer>
