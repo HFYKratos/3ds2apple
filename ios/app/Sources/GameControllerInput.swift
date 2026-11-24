@@ -195,7 +195,7 @@ final class GameControllerManager {
 
         // Fire the longest matching 2–4 button combination once per hold.
         if activeHotkeyButtons.isEmpty {
-            let pressedRaw = Set(pressed.map(.rawValue))
+            let pressedRaw = Set(pressed.map { $0.rawValue })
             let matches = hotkeyMap
                 .compactMap { action, buttons -> (HotkeyAction, [String])? in
                     guard let action = HotkeyAction(rawValue: action),
