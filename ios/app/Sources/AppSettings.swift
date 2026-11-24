@@ -1290,7 +1290,7 @@ final class AppSettings: ObservableObject {
 
     /// Replaces one hotkey's 2–4 button combination; an empty list disables it.
     func setHotkey(_ buttons: [PhysicalControllerButton], for action: HotkeyAction) {
-        let unique = Array(Set(buttons.map(.rawValue))).sorted()
+        let unique = Array(Set(buttons.map { $0.rawValue })).sorted()
         if unique.count >= 2 && unique.count <= 4 {
             hotkeys[action.rawValue] = unique
         } else {
