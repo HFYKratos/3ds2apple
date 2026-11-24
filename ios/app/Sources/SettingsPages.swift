@@ -34,11 +34,11 @@ import UIKit
 
 // MARK: - Theme
 
-/// Colours and metrics shared by the settings pages. The redesign is a flat,
-/// near-black list, so the settings surface forces its own dark palette; the
-/// home page and the game keep following the system appearance.
+/// Colours and metrics shared by the settings pages. Since 0.1.7-beta4 the
+/// settings use the system grouped style and semantic colours, so light/dark
+/// follows the system appearance like the rest of the app.
 enum SettingsTheme {
-    static let background = Color(red: 0.055, green: 0.055, blue: 0.062)
+    static let background = Color(.systemGroupedBackground)
     static let horizontalPadding: CGFloat = 20
     /// Vertical gap between two settings rows (the reference has no dividers).
     static let rowSpacing: CGFloat = 28
@@ -118,37 +118,27 @@ struct SettingsCategoryPage: View {
                 AboutView(model: model)
             }
         }
-        // The settings pages keep the dark flat look in either system
-        // appearance; this preference only covers the settings presentation.
-        .preferredColorScheme(.dark)
+
     }
 }
 
 // MARK: - Page scaffolding
 
-/// Shared page body: a dark scroll surface, a large navigation title and the
-/// flat row stack.
+/// Shared page body: an iOS inset-grouped list with a large navigation title.
 struct SettingsPageScaffold<Content: View>: View {
     let title: LocalizedStringKey
-    private let content: Content
+    private let content: () -> Content
 
-    init(title: LocalizedStringKey, @ViewBuilder content: () -> Content) {
+    init(title: LocalizedStringKey, @ViewBuilder content: @escaping () -> Content) {
         self.title = title
-        self.content = content()
+        self.content = content
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SettingsTheme.rowSpacing) {
-                content
-            }
-            .padding(.horizontal, SettingsTheme.horizontalPadding)
-            .padding(.top, 8)
-            .padding(.bottom, 40)
-            .frame(maxWidth: SettingsTheme.contentMaxWidth, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .center)
+        List {
+            content()
         }
-        .background(SettingsTheme.background.ignoresSafeArea())
+        .listStyle(.insetGrouped)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.large)
     }

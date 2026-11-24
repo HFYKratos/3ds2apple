@@ -23,6 +23,8 @@ text is copied, and no game assets are stored in the repository.
 
 ## Already supported
 
+- iOS 26/27 grouped Settings and in-game menu style (inset-grouped cards, system
+  semantic colours, light/dark follows the system, tap-outside-to-resume).
 - Custom screen layouts, screen rotation, swap screens, integer scaling,
   screen aspect, resolution, fast-forward, quick save/load, save manager,
   diagnostics export, on-screen control layout editing.

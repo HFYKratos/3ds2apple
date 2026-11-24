@@ -53,43 +53,36 @@ struct SettingsView: View {
     @State private var isResetDonePresented = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+        List {
+            Section {
                 ForEach(SettingsCategory.allCases) { category in
                     NavigationLink(value: category) {
-                        SettingsMainRow(systemImage: category.systemImage,
-                                        title: category.title)
+                        Label {
+                            Text(category.title)
+                        } icon: {
+                            Image(systemName: category.systemImage)
+                                .foregroundStyle(.tint)
+                        }
                     }
-                    .buttonStyle(.plain)
                     .accessibilityIdentifier("settings-category-\(category.rawValue)")
                 }
-
+            }
+            Section {
                 // Real reset: removes the app's whole UserDefaults domain and
                 // then asks for a relaunch. Game files, saves and diagnostics are
                 // stored in Documents, not in UserDefaults, so they stay.
-                Button {
+                Button(role: .destructive) {
                     isResetConfirmationPresented = true
                 } label: {
-                    SettingsMainRow(systemImage: "arrow.counterclockwise",
-                                    title: L10n.tr("Reset All Settings"))
+                    Label(L10n.tr("Reset All Settings"),
+                          systemImage: "arrow.counterclockwise")
                 }
-                .buttonStyle(.plain)
                 .accessibilityIdentifier("settings-reset-all")
-                .padding(.top, 10)
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 6)
-            .padding(.bottom, 36)
-            .frame(maxWidth: SettingsTheme.contentMaxWidth, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .center)
         }
-        .background(SettingsTheme.background.ignoresSafeArea())
+        .listStyle(.insetGrouped)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.large)
-        // The settings redesign is a dark, flat list; this applies to the
-        // settings stack only, the home page and the game keep the system
-        // appearance.
-        .preferredColorScheme(.dark)
         .navigationDestination(for: SettingsCategory.self) { category in
             SettingsCategoryPage(category: category, settings: settings, model: model)
         }

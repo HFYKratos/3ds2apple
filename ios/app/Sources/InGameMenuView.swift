@@ -47,18 +47,24 @@ struct InGameMenuView: View {
     @State private var isResetControlsConfirmationPresented = false
     @State private var didHandleDebugOptions = false
 
-    // Light sheet palette (independent of the app's dark settings appearance).
-    private let sheetBackground = Color(red: 0.949, green: 0.945, blue: 0.973)
-    private let rowBackground = Color.white
-    private let primaryText = Color(red: 0.10, green: 0.10, blue: 0.12)
-    private let secondaryText = Color(red: 0.45, green: 0.45, blue: 0.50)
-    private let accentRed = Color(red: 0.94, green: 0.22, blue: 0.25)
+    // iOS grouped palette: system semantic colours, so the menu follows the
+    // system light/dark appearance like the rest of the app (0.1.7-beta4).
+    private var sheetBackground: Color { Color(.systemGroupedBackground) }
+    private var rowBackground: Color { Color(.secondarySystemGroupedBackground) }
+    private var primaryText: Color { Color.primary }
+    private var secondaryText: Color { Color.secondary }
+    private var accentRed: Color { Color(.systemRed) }
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                Color.black.opacity(0.55)
+                // Tapping the dimmed area above/beside the card resumes the game
+                // (0.1.7-beta4); the card itself stays interactive.
+                Color.black.opacity(0.32)
                     .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { onResume() }
+                    .transition(.opacity)
                 if orientation == .portrait {
                     VStack(spacing: 0) {
                         Spacer(minLength: 24)
@@ -66,12 +72,14 @@ struct InGameMenuView: View {
                                             geometry.size.height - 60),
                               width: geometry.size.width,
                               topCornersOnly: true)
+                            .transition(.move(edge: .bottom))
                     }
                     .ignoresSafeArea(edges: .bottom)
                 } else {
                     sheet(height: min(geometry.size.height * 0.88, 820),
                           width: min(560, geometry.size.width * 0.62),
                           topCornersOnly: false)
+                        .transition(.scale(scale: 0.96).combined(with: .opacity))
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
@@ -123,14 +131,14 @@ struct InGameMenuView: View {
         .frame(width: width, height: max(height, 320))
         .background(sheetBackground)
         .clipShape(MenuSheetShape(radius: 28, topCornersOnly: topCornersOnly))
-        .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
+        .shadow(color: .black.opacity(0.16), radius: 24, y: 8)
     }
 
     private var header: some View {
         VStack(spacing: 8) {
             if orientation == .portrait {
                 Capsule()
-                    .fill(Color.black.opacity(0.16))
+                    .fill(Color.secondary.opacity(0.35))
                     .frame(width: 38, height: 5)
                     .padding(.top, 8)
             }
@@ -455,7 +463,7 @@ struct InGameMenuView: View {
 
     private var rowDivider: some View {
         Rectangle()
-            .fill(Color.black.opacity(0.07))
+            .fill(Color(.separator))
             .frame(height: 0.7)
             .padding(.leading, 56)
     }

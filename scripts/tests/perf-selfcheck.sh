@@ -94,19 +94,22 @@ else
 fi
 
 section '0.1.7 settings redesign (task-42 + task-45)'
-# Main page: a flat dark category list, not a Form, without grouped Section
-# cards and without a disclosure chevron; every category has its own page in
-# SettingsPages.swift.
+# Main page: an iOS inset-grouped List of category rows (SF Symbols + labels)
+# with the Reset All Settings action in its own Section; every category has its
+# own page in SettingsPages.swift. Since 0.1.7-beta4 the settings follow the
+# system light/dark appearance (no forced dark scheme).
 check "settings main page lists every category" contains ios/app/Sources/SettingsView.swift 'SettingsCategory.allCases'
-check "settings main page is not a Form" \
-  bash -c '! sed -n "/^struct SettingsView: View/,/^}/p" ios/app/Sources/SettingsView.swift | grep -Fq -- "Form {"'
-check "settings main page has no grouped Section cards" \
-  bash -c '! sed -n "/^struct SettingsView: View/,/^}/p" ios/app/Sources/SettingsView.swift | grep -Fq -- "Section {"'
-check "settings main page rows have no disclosure chevron" \
-  bash -c '! sed -n "/private struct SettingsMainRow/,/^}/p" ios/app/Sources/SettingsView.swift | grep -Fq -- "chevron"'
+check "settings main page is an inset-grouped List" \
+  bash -c 'grep -Fq -- "List {" ios/app/Sources/SettingsView.swift && grep -Fq -- "listStyle(.insetGrouped)" ios/app/Sources/SettingsView.swift'
+check "settings main page groups categories and the reset action in Sections" \
+  bash -c 'test "$(grep -c "Section {" ios/app/Sources/SettingsView.swift)" -ge 2 && grep -Fq -- "Reset All Settings" ios/app/Sources/SettingsView.swift'
+check "settings main page rows use NavigationLink with category icons" \
+  bash -c 'grep -Fq -- "NavigationLink(value: category)" ios/app/Sources/SettingsView.swift && grep -Fq -- "category.systemImage" ios/app/Sources/SettingsView.swift'
 check "settings main page keeps a localized Settings title" contains ios/app/Sources/SettingsView.swift '.navigationTitle("Settings")'
+check "settings main page uses the large-title iOS style" contains ios/app/Sources/SettingsView.swift '.navigationBarTitleDisplayMode(.large)'
 check "settings pages register the category destination" contains ios/app/Sources/SettingsView.swift '.navigationDestination(for: SettingsCategory.self)'
-check "settings main page uses the shared flat theme" contains ios/app/Sources/SettingsView.swift 'SettingsTheme.background'
+check "settings use the iOS inset-grouped style with system colours" \
+  bash -c 'grep -Fq -- "listStyle(.insetGrouped)" ios/app/Sources/SettingsPages.swift && ! grep -rq "preferredColorScheme(.dark)" ios/app/Sources'
 for title in General System Gamepad Graphics Layout Sound Debug; do
   check "category ${title} title is localized" contains ios/app/Sources/SettingsPages.swift "return L10n.tr(\"${title}\")"
 done
@@ -391,7 +394,9 @@ check "default control layout uses the final round-6 values (shoulder row below 
   bash -c 'grep -q "x: 0.18583, y: 0.80797, size: 0.27778" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.16546, y: 0.87, size: 0.24396" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.10, y: 0.755, size: 0.065" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.24, y: 0.755, size: 0.07729" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.44565, y: 0.84126, size: 0.12440" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.92, y: 0.935, size: 0.08" ios/app/Sources/ControlLayout.swift'
 check "D-pad renders as one cross control with direction hit testing" \
   bash -c 'grep -q "struct DpadCrossShape" ios/app/Sources/VirtualControlsView.swift && grep -q "dpad-cross" ios/app/Sources/VirtualControlsView.swift && grep -q "func dpadGroup" ios/app/Sources/GameViewGeometry.swift && grep -q "control-edit-dpad" ios/app/Sources/InGameControlEditOverlay.swift'
-check "in-game menu is the light sheet with top icon actions and secondary pages" \
+check "in-game menu uses the iOS grouped style and tap-outside resume" \
+  bash -c 'grep -q "systemGroupedBackground" ios/app/Sources/InGameMenuView.swift && grep -q "secondarySystemGroupedBackground" ios/app/Sources/InGameMenuView.swift && grep -q "onTapGesture { onResume() }" ios/app/Sources/InGameMenuView.swift && grep -q "transition(.move(edge: .bottom))" ios/app/Sources/InGameMenuView.swift'
+check "in-game menu keeps the sheet header, secondary pages and gear button" \
   bash -c 'grep -q "MenuSheetShape" ios/app/Sources/InGameMenuView.swift && grep -q "MenuPage" ios/app/Sources/InGameMenuView.swift && grep -q "menu-virtual-controls" ios/app/Sources/InGameMenuView.swift && grep -q "topIcon" ios/app/Sources/InGameMenuView.swift && grep -q "gearshape.fill" ios/app/Sources/GameView.swift'
 check "Graphics settings expose Integer scaling and Screen aspect" \
   bash -c 'grep -q "settings-integer-scaling" ios/app/Sources/SettingsPages.swift && grep -q "settings-screen-aspect" ios/app/Sources/SettingsPages.swift && grep -q "integerScale" ios/app/Sources/SettingsPages.swift && grep -q "screenAspect" ios/app/Sources/SettingsPages.swift'

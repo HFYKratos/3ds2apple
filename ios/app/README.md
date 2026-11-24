@@ -24,10 +24,10 @@ views do not carry duplicated strings.
 |---|---|
 | **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`. Each card has a square art area at the icon's native 1:1 aspect: the game's own SMDH cover art (launcher-pushed `cover.png`, else the build's bundled cover, else the gradient placeholder) fills the square edge to edge with no inset frame (the gradient is only the placeholder when no cover is available), and a corner badge appears only when a game needs attention (**Checking** / **Data missing** / **Error**; a ready game has no AOT badge, since the app only runs AOT code and the AOT state stays in the log and the diagnostics export). Under the art the card is deliberately compact: the title for the app language (up to two lines, truncated), the publisher, then the pushed game size · last-played state. There is **no explanatory paragraph under the grid**. iPhone shows two columns, iPad three. Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Pull-to-refresh rescans Documents, and the library also rescans at launch and when the app returns to the foreground; there is no refresh button. Long-pressing a card opens its context menu; **Delete Game** asks a second confirmation and then deletes the game (see "Deleting a game" below). The empty state explains the desktop launcher. No on-phone import. Settings entry. |
 | **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback) arranged by the split landscape / portrait screen layout choices, filling the whole screen, with the on-screen controls floating over the picture, a floating FPS pill and pause button and the in-game menu. There is no title bar or reserved control pad any more. When a title starts the 3DS software keyboard, a full-screen keyboard overlay collects the text and the applet's buttons while the frame loop is stopped; answering resumes the game. |
-| **Settings** | A flat dark main menu of eight categories (0.1.7-beta2): General, System, Gamepad, Graphics, Layout, Sound, Debug and About, plus a real **Reset All Settings** action. Each category is one page of title + explanation + trailing-control rows; see "Settings screens (0.1.7)" below. |
+| **Settings** | An iOS inset-grouped List of eight category rows with SF Symbol icons (0.1.7-beta4): General, System, Gamepad, Graphics, Layout, Sound, Debug and About, plus a real **Reset All Settings** action in its own section. Each category is a large-titled grouped page of rows with an explanation and a trailing control; the system semantic colours follow the light/dark appearance because the settings stack no longer forces dark. See "Settings screens (0.1.7)" below. |
 | **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. The page re-reads the selected game's files when it opens, when the library changes and after every action; there is no refresh button. |
 | **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the FPS appears only while a game is loaded; everything else stays in the log and the diagnostics. |
-| **In-game menu** | Opened from the floating gear button over the game: a **light card** that slides up from the bottom in portrait and is centred with all corners rounded in landscape. The header shows **MENU**, a white capsule with power / restart / quick-save / quick-load icon buttons and a white **X** that resumes; below it are grouped white cards with a leading SF Symbol. Rows (Virtual controls, Save state, Display settings, Settings, Save Manager, Export logs, Fast-forward, Sound, Reset game, Exit to home) either open a secondary page inside the sheet (Virtual controls, Save state) or a sheet. It still pauses the frame loop and the audio engine, and every old action (save/load, virtual controls, display settings, save manager, export, reset, exit) is still reachable; the top icons are Exit / Reset / quick save / quick load. |
+| **In-game menu** | Opened from the floating gear button over the game: an **iOS-style card** that slides up from the bottom in portrait and is centred (scaled in) in landscape, using the system grouped background/card colours so it follows the light/dark appearance. The header shows **MENU**, a capsule with power / restart / quick-save / quick-load icon buttons and an **X** that resumes; below it are grouped rows with a leading SF Symbol. Rows (Virtual controls, Save state, Display settings, Settings, Save Manager, Export logs, Fast-forward, Sound, Reset game, Exit to home) either push a secondary page inside the sheet (Virtual controls, Save state) or open a sheet. Tapping the dimmed area above (portrait) or outside (landscape) the card resumes the game, and X / the gear-less header keep the same actions. It still pauses the frame loop and the audio engine and keeps every old action reachable. |
 
 Opening the in-game menu pauses emulation: the frame loop and the audio engine
 are stopped, the runtime handle and the last frame stay, and Resume continues the
@@ -277,8 +277,8 @@ The shell can be driven headlessly without tapping:
 - `-previewLandscape` forces the landscape appearance for headless screenshots
   (the app asks its window scene to rotate and the game view uses the landscape
   arrangement even before the rotation lands).
-- `-previewPauseMenu` opens the redesigned in-game light menu over the preview
-  picture, for headless screenshots (portrait bottom sheet or landscape card).
+- `-previewPauseMenu` opens the iOS-style in-game menu over the preview picture,
+  for headless screenshots (portrait bottom sheet or landscape card).
 - `-previewControlEdit` enters the in-game control edit mode over the preview
   picture (draggable controls + Done pill), for headless screenshots.
 - `-openControlOptions visibility|size|opacity` opens one virtual-control options
@@ -325,12 +325,15 @@ data: never commit them, and remove the fixture from the container when done.
 
 ## Settings screens (0.1.7)
 
-Settings is a flat, dark menu rather than a `Form`: one row per category with a
-large SF Symbol and the category name, plus a **Reset All Settings** row at the
-bottom. There are no grouped cards and no disclosure chevrons. The navigation
-title is the localized **Settings**, and every category page has a large title
-and rows made of a title, a one-line explanation and a trailing control (switch,
-value menu, slider or navigation arrow). The layout was sketched from reference
+Settings is an iOS **inset-grouped List** (0.1.7-beta4): one section of category
+rows with an SF Symbol and the category name, plus a separate section with the
+destructive **Reset All Settings** action. There is no forced dark appearance any
+more: the system semantic background, card, label and separator colours follow
+the light/dark appearance exactly like the rest of iOS. The navigation title is
+the localized **Settings** with the large-title style, and every category page is
+a large-titled inset-grouped list whose rows have a title, a one-line explanation
+and a trailing control (switch, value menu, slider or navigation arrow). The
+layout was sketched from reference
 screenshots of another emulator's settings app; no code or text from that
 project is used (it is GPL and reference-only for this repo).
 
@@ -475,7 +478,7 @@ round-4 drag editor described below.
   D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, the Circle Pad and the C-stick. It is
   a full-screen floating layer over the picture in both orientations and takes no
   layout space, so hiding it never moves the image. The pause menu's **Virtual
-  controls** page (opened from the light menu's first card) has: **Show virtual controls**, **Show performance
+  controls** page (opened from the in-game menu's first row) has: **Show virtual controls**, **Show performance
   stats** (the FPS pill), **Haptic feedback**, **Edit layout**, **Toggle
   controls**, **Adjust size**, **Adjust opacity** and **Reset virtual controls**.
   - **Edit layout** closes the menu, keeps the runtime paused, hides the pause/FPS
@@ -516,10 +519,14 @@ hint sits above it and the empty area stays inert) saves the current direction's
   (the profile archive and the per-row visibility/size scales are global). The
   reference layout app's behaviour rows (slide buttons, relative stick centre,
   D-pad slide, Combo Button) are not implemented; they are noted as future work.
-  0.1.7-beta3 redesigns the whole in-game menu as a light bottom card (portrait)
-  / centred large card (landscape) with a MENU header, power / restart / quick
-  save / quick load / X icon buttons and grouped white rows with SF Symbols;
-  secondary items push a sub-page inside the sheet instead of expanding
+  0.1.7-beta3 redesigned the whole in-game menu as a bottom card (portrait) /
+  centred card (landscape) with a MENU header, power / restart / quick save /
+  quick load / X icon buttons and grouped rows with SF Symbols; 0.1.7-beta4
+  moves it to the iOS grouped style: system semantic card/background/label
+  colours (light or dark follows the system), the card slides up from the bottom
+  in portrait and scales in over a dimmed background in landscape, and tapping
+  the dimmed area above/outside the card resumes the game (X still does too).
+  Secondary items push a sub-page inside the sheet instead of expanding
   sideways. The old feature set is unchanged (virtual controls and all its
   sheets, save states, display/Settings, Save Manager, Export logs, Reset, Exit).
 - **Analog sticks.** The Circle Pad is a real analog stick: dragging inside it
@@ -947,9 +954,9 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `HomeView.swift` | Home page: the Documents/Games library grid (two columns on iPhone, three on iPad; square 1:1 SMDH cover art that fills the card edge to edge with no icon frame, an attention-state badge in the corner (no AOT badge on a ready game); compact title/publisher/size/last-played text; no explanatory paragraph under the grid), last-played dates, the exact per-game validation error on tap, the launcher empty state, a long-press context menu with the Delete Game action, its second confirmation and result banner, pull-to-refresh, settings entry. |
 | `GameView.swift` | Running game: full-bleed picture from the split landscape / portrait screen layout choices, the floating full-screen on-screen controls (per-row visibility and size scale), the optional floating FPS pill and pause button, in-game menu, round-4 in-game control edit mode and the 3DS software-keyboard overlay; also the ROM-free `-previewGameView` path. |
 | `GameViewPreview.swift` | Synthetic TOP / BOTTOM test images (gradient, 1 px grid, 400×240 and 320×240) for the ROM-free `-previewGameView` screenshots. |
-| `InGameMenuView.swift` | The 0.1.7-beta3 light in-game menu: bottom sheet in portrait / centred card in landscape, MENU header with white power / restart / quick-save / quick-load / X icon buttons, grouped white SF-Symbol rows and secondary pages (Virtual controls, Save state) inside the sheet; every old action is still reachable and the option sheets/alert are attached here. |
-| `SettingsView.swift` | Settings main page: the flat dark category menu (large SF Symbol + label rows, no cards or chevrons), the real **Reset All Settings** action (confirmation, `removePersistentDomain` for the app bundle and a relaunch prompt), the persisted-setting binding and the in-game quick display sheet. The category pages themselves live in `SettingsPages.swift`. |
-| `SettingsPages.swift` | The eight settings category pages and their shared flat rows/captions. 0.1.7-beta2 layout: General (fast-forward + read-only frame limiter), Layout (screen layout entry, rotation, orientation lock, swap screens and the Performance monitoring group with the FPS counter and Metal HUD), Gamepad (controls, opacity, haptics, controller), Graphics (resolution, Screen aspect, Integer scaling, the two experimental GPU switches, renderer info), System (storage/version/language/About), Sound and Debug (AOT verification, Save Manager, CPU profiler, diagnostics export). |
+| `InGameMenuView.swift` | The iOS-grouped in-game menu (0.1.7-beta4): bottom sheet in portrait / centred card in landscape over a dimmed backdrop, system semantic colours (light/dark follows the system), MENU header with power / restart / quick-save / quick-load / X icon buttons, grouped SF-Symbol rows, tap-outside-to-resume, spring transitions and secondary pages (Virtual controls, Save state) inside the sheet; every old action is still reachable and the option sheets/alert are attached here. |
+| `SettingsView.swift` | Settings main page: an iOS inset-grouped List of the eight category rows (SF Symbol + label) in one section and the destructive **Reset All Settings** action in another, with the real reset (confirmation, `removePersistentDomain` for the app bundle and a relaunch prompt), the persisted-setting binding and the in-game quick display sheet. The category pages themselves live in `SettingsPages.swift`. |
+| `SettingsPages.swift` | The eight settings category pages and their shared iOS inset-grouped rows/captions (system semantic colours, light/dark follows the system). 0.1.7-beta2 layout: General (fast-forward + read-only frame limiter), Layout (screen layout entry, rotation, orientation lock, swap screens and the Performance monitoring group with the FPS counter and Metal HUD), Gamepad (controls, opacity, haptics, controller), Graphics (resolution, Screen aspect, Integer scaling, the two experimental GPU switches, renderer info), System (storage/version/language/About), Sound and Debug (AOT verification, Save Manager, CPU profiler, diagnostics export). |
 | `CPUProfilerView.swift` | The debug CPU profiler page: starts guest-PC sampling while a game runs and lists hot spots. Diagnosis only. |
 | `SaveManagerView.swift` | Game picker over the library, the selected game's battery save list (export as ZIP, import, delete) and its instant save-state slots (delete offline; save/load while that game runs), with progress and errors; re-reads the selected game's files on open, on library changes and after actions (no refresh button). |
 | `AboutView.swift` | Product page: app icon, name, version/build, project links, acknowledgements and legal notice; a compact runtime status card only while a game is loaded. |

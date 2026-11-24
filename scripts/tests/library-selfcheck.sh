@@ -160,7 +160,7 @@ check "Save Manager row identifier" contains "${SETTINGS_PAGES}" '"settings-save
 check "Export logs row identifier" contains "${SETTINGS_PAGES}" '"settings-export-logs"'
 check "About row identifier" contains "${SETTINGS_PAGES}" '"settings-about"'
 check "the settings main page has the category menu" contains "${SETTINGS}" 'SettingsCategory.allCases'
-check "the settings main page forces the dark flat look" contains "${SETTINGS}" 'preferredColorScheme(.dark)'
+check "the settings main page uses the iOS grouped style" bash -c '! grep -Fq -- "preferredColorScheme(.dark)" ios/app/Sources/SettingsView.swift && grep -Fq -- "listStyle(.insetGrouped)" ios/app/Sources/SettingsView.swift'
 check "the Debug page keeps the Save Manager link" contains "${SETTINGS_PAGES}" 'SaveManagerView(model: model, saveStates: model.saveStates)'
 check "the Debug page keeps the diagnostics export" contains "${SETTINGS_PAGES}" 'DiagnosticsExporter.write(model: model, settings: settings)'
 check "the settings main page has no disclosure chevrons" bash -c '! sed -n "/private struct SettingsMainRow/,/^}/p" ios/app/Sources/SettingsView.swift | grep -Fq -- "chevron"'

@@ -133,6 +133,10 @@ struct GameView: View {
                         onLoadStateCompleted: resumeAfterStateLoad,
                         diagnosticsHint: diagnosticsHint
                     )
+                    .transition(isLandscape
+                                ? .scale(scale: 0.96).combined(with: .opacity)
+                                : .move(edge: .bottom))
+                    .zIndex(1)
                 }
 
                 // The 3DS software keyboard: the title waits on the applet and
@@ -185,7 +189,6 @@ struct GameView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
         .sheet(item: $sheet) { presentedSheet in
             switch presentedSheet {
             case .quickDisplaySettings:
@@ -363,7 +366,9 @@ struct GameView: View {
     /// Glass pause button; opens the in-game menu and pauses the runtime.
     private func pauseButton(size: CGFloat) -> some View {
         Button {
-            isMenuPresented = true
+            withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) {
+                isMenuPresented = true
+            }
             // The preview has no runtime to pause.
             if !isPreviewingGame {
                 model.pauseForMenu()
@@ -387,7 +392,9 @@ struct GameView: View {
         let orientation: ControlLayoutOrientation = isLandscape ? .landscape : .portrait
         editingOrientation = orientation
         controlDraft = settings.controlLayout(for: orientation)
-        isMenuPresented = false
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.88)) {
+            isMenuPresented = false
+        }
         isEditingControls = true
     }
 
@@ -485,7 +492,9 @@ struct GameView: View {
         // A save or load is mid-serialization on the runtime queue; let it
         // finish (the menu disables Resume meanwhile, this is the guard).
         guard !model.saveStates.busy else { return }
-        isMenuPresented = false
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.88)) {
+            isMenuPresented = false
+        }
         model.resumeFromMenu()
     }
 
@@ -495,7 +504,9 @@ struct GameView: View {
     /// before the load.
     private func resumeAfterStateLoad() {
         sheet = nil
-        isMenuPresented = false
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.88)) {
+            isMenuPresented = false
+        }
         model.resumeFromMenu()
     }
 
@@ -506,7 +517,9 @@ struct GameView: View {
 
     private func performConfirmedAction() {
         guard !model.saveStates.busy else { return }
-        isMenuPresented = false
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.88)) {
+            isMenuPresented = false
+        }
         switch confirmationKind {
         case .reset:
             model.resetRuntime()
