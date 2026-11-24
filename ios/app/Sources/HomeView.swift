@@ -56,8 +56,12 @@ struct HomeView: View {
     @State private var deletionStatus: String?
     @State private var deletionError: String?
 
+    /// Headless screenshot path for the new Settings pages; a normal launch
+    /// leaves it empty (the links below still drive navigation).
+    @State private var debugSettingsPath = NavigationPath()
+
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $debugSettingsPath) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     header
@@ -77,6 +81,15 @@ struct HomeView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: HomeRoute.self) { _ in
                 SettingsView(settings: settings, model: model)
+            }
+            .onAppear {
+                guard DebugLaunch.openSettings, debugSettingsPath.isEmpty else { return }
+                debugSettingsPath.append(HomeRoute.settings)
+                guard let category = DebugLaunch.openSettingsCategory else { return }
+                Task {
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    debugSettingsPath.append(category)
+                }
             }
             .alert(deleteConfirmationTitle, isPresented: $isDeleteConfirmationPresented) {
                 Button(L10n.tr("Delete"), role: .destructive) {

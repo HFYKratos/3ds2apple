@@ -90,6 +90,11 @@ enum DebugLaunch {
     /// Launch argument: `-gamesRoot <path>` (relative to Documents, or an
     /// absolute path inside the app container).
     static let gamesRootArgument = "-gamesRoot"
+    /// Launch argument: `-openSettings` opens the new Settings main page, and
+    /// `-openSettingsCategory <rawValue>` pushes one category (e.g. `general`),
+    /// for headless screenshots of the redesigned settings.
+    static let openSettingsArgument = "-openSettings"
+    static let openSettingsCategoryArgument = "-openSettingsCategory"
     /// Launch argument: `-openLayoutPage` opens the screen layout page
     /// (Settings -> Display -> Landscape screen layout) straight away, for headless
     /// screenshots.
@@ -97,6 +102,17 @@ enum DebugLaunch {
     /// Launch argument: `-openLayoutEditor screen|control` opens one of the
     /// full-screen layout editors directly, for headless screenshots.
     static let layoutEditorArgument = "-openLayoutEditor"
+    /// True when the launch asks for the Settings pages (screenshots only).
+    static var openSettings: Bool {
+        ProcessInfo.processInfo.arguments.contains(openSettingsArgument)
+    }
+
+    /// The optional Settings category raw value from `-openSettingsCategory`.
+    static var openSettingsCategory: SettingsCategory? {
+        guard let raw = argumentValue(for: openSettingsCategoryArgument) else { return nil }
+        return SettingsCategory(rawValue: raw)
+    }
+
     /// Launch argument: `-previewGameView` shows the running-game view without a
     /// ROM, for headless screenshots of the full-bleed layout.
     static let previewGameViewArgument = "-previewGameView"
