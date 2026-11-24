@@ -124,7 +124,7 @@ struct SettingsCategoryPage: View {
 
 // MARK: - Page scaffolding
 
-/// Shared page body: an iOS inset-grouped list with a large navigation title.
+/// Shared page body: an iOS inset-grouped list with an inline navigation title.
 struct SettingsPageScaffold<Content: View>: View {
     let title: LocalizedStringKey
     private let content: () -> Content
@@ -146,7 +146,7 @@ struct SettingsPageScaffold<Content: View>: View {
 
 // MARK: - Rows
 
-/// One settings row: a title, a one-line explanation and a trailing control.
+/// One settings row: a title, a two-line explanation and a trailing control.
 /// A row sits directly on the page background, without a card or a divider.
 struct SettingsRowShell<Control: View>: View {
     let title: LocalizedStringKey
@@ -363,7 +363,7 @@ struct SettingsSliderRow: View {
 }
 
 /// A read-only facts row: title on the left, value on the right, optionally
-/// with a one-line explanation.
+/// with a two-line explanation.
 struct SettingsInfoRow: View {
     let title: LocalizedStringKey
     let value: String
@@ -420,6 +420,8 @@ struct SettingsWarningRow: View {
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -538,7 +540,7 @@ struct GeneralSettingsPage: View {
         SettingsPageScaffold(title: "General") {
             SettingsToggleRow(
                 title: "Run speed limit",
-                description: "On: the game runs at the Default speed (or the Turbo speed while Turbo is active), capped at 4×. Off: every presented frame advances guest frames until the hardware time budget is used — this can heat the device and drain the battery fast, and audio is muted.",
+                description: "On: capped speed. Off: uncapped — hot, fast drain, muted.",
                 isOn: persistedBinding(settings, \.runSpeedLimit)
             )
             .accessibilityIdentifier("settings-run-speed-limit")
@@ -547,22 +549,22 @@ struct GeneralSettingsPage: View {
                 SettingsWarningRow(
                     title: "High power use",
                     message: !settings.runSpeedLimit
-                        ? "Unlimited speed is enabled. The device can get hot and the battery drains much faster; audio is muted."
-                        : "Turbo limit is off. Holding Turbo runs the game without a speed cap: the device can get hot and the battery drains faster; audio is muted."
+                        ? "Unlimited speed: device heats up, battery drains fast, audio muted."
+                        : "Turbo limit off: holding Turbo is uncapped — hot, fast drain, muted."
                 )
                 .accessibilityIdentifier("settings-unlimited-warning")
             }
 
             SettingsToggleRow(
                 title: "Check for updates",
-                description: "Check GitHub for a newer release when this page opens, and at most once a day in the background. If a newer build is available, a local notification is posted (notification permission is requested then).",
+                description: "Check GitHub on open and daily; notify on a new release.",
                 isOn: persistedBinding(settings, \.checkForUpdates)
             )
             .accessibilityIdentifier("settings-check-for-updates")
 
             SettingsChoiceRow(
                 title: "Update channel",
-                description: "Stable only looks at full releases; Beta also looks at pre-release builds.",
+                description: "Stable: full releases only. Beta: pre-releases too.",
                 choices: UpdateChannel.allCases,
                 selection: persistedBinding(settings, \.updateChannel),
                 label: { $0.title }
@@ -578,14 +580,14 @@ struct GeneralSettingsPage: View {
 
             SettingsToggleRow(
                 title: "Turbo limit",
-                description: "On: the on-screen Turbo button uses the selected Turbo speed and the runtime may lower it when frames stay below 20 fps. Off: holding Turbo runs unlimited guest frames instead (no automatic slowdown) — the device can get hot, the battery drains faster and audio is muted.",
+                description: "On: Turbo speed, auto-lowered under 20 fps. Off: uncapped.",
                 isOn: persistedBinding(settings, \.turboLimit)
             )
             .accessibilityIdentifier("settings-turbo-limit")
 
             SettingsChoiceRow(
                 title: "Turbo speed",
-                description: "The speed the on-screen Turbo button uses while Turbo limit is on.",
+                description: "Turbo button speed while Turbo limit is on.",
                 choices: [PlaybackSpeed.double, .triple, .quadruple],
                 selection: persistedBinding(settings, \.turboSpeed),
                 label: { $0.title }
@@ -594,7 +596,7 @@ struct GeneralSettingsPage: View {
 
             SettingsChoiceRow(
                 title: "Default speed",
-                description: "The normal game speed. 1× is the 3DS's own speed; higher values advance extra frames per presented frame.",
+                description: "Normal speed; 1× is native, higher adds frames.",
                 hint: model.playbackSpeedAutoReduced ? autoReducedText : nil,
                 choices: PlaybackSpeed.allCases,
                 selection: persistedBinding(settings, \.playbackSpeed),
@@ -626,19 +628,19 @@ struct GeneralSettingsPage: View {
 
     private var updateStatusDescription: String {
         guard settings.checkForUpdates else {
-            return L10n.tr("Enable Check for updates to look up the latest GitHub release.")
+            return L10n.tr("Enable Check for updates to look up releases.")
         }
         switch updateChecker.status {
         case .idle:
-            return L10n.tr("Enable Check for updates to look up the latest GitHub release.")
+            return L10n.tr("Enable Check for updates to look up releases.")
         case .checking:
             return L10n.tr("Contacting GitHub…")
         case .upToDate:
-            return L10n.tr("This build is the latest release the repository reports.")
+            return L10n.tr("This build is the latest release.")
         case .available:
             return L10n.tr("A newer release is available on GitHub.")
         case .failed:
-            return L10n.tr("The update check could not reach GitHub. Try again later.")
+            return L10n.tr("Could not reach GitHub. Try again later.")
         }
     }
 
@@ -673,7 +675,7 @@ struct LayoutSettingsPage: View {
 
             SettingsChoiceRow(
                 title: "Screen rotation",
-                description: "Turn the pictures inside their area for a console held sideways.",
+                description: "Rotate the picture for a sideways-held console.",
                 choices: ScreenRotation.allCases,
                 selection: persistedBinding(settings, \.screenRotation),
                 label: { $0.title }
@@ -682,7 +684,7 @@ struct LayoutSettingsPage: View {
 
             SettingsChoiceRow(
                 title: "Orientation lock",
-                description: "Which interface orientations the app allows. iOS can still override it, for example during a call.",
+                description: "Allowed orientations; iOS can still override.",
                 choices: OrientationLock.allCases,
                 selection: persistedBinding(settings, \.orientation),
                 label: { $0.title }
@@ -691,7 +693,7 @@ struct LayoutSettingsPage: View {
 
             SettingsToggleRow(
                 title: "Swap screens",
-                description: "Swap which screen is shown in the top and bottom positions. The Metal presenter and the software path both follow it.",
+                description: "Swap top/bottom pictures; both render paths follow.",
                 isOn: persistedBinding(settings, \.swapScreens)
             )
             .accessibilityIdentifier("settings-swap-screens")
@@ -738,7 +740,7 @@ struct SystemSettingsPage: View {
         SettingsPageScaffold(title: "System") {
             SettingsChoiceRow(
                 title: "Appearance",
-                description: "Use the system light/dark appearance, or force light or dark for the whole app.",
+                description: "Follow the system, or force light/dark.",
                 choices: AppAppearance.allCases,
                 selection: persistedBinding(settings, \.appearance),
                 label: { $0.title }
@@ -823,7 +825,7 @@ struct OtherSettingsPage: View {
             )
             SettingsActionRow(
                 title: "Clear graphics pipeline cache",
-                description: "The cache is rebuilt on the next load, so that first load is slower. Save data is not touched.",
+                description: "Rebuilt next load (one slow load); saves untouched.",
                 systemImage: "trash",
                 identifier: "settings-clear-cache",
                 isEnabled: !model.isRuntimeActive
@@ -854,7 +856,7 @@ struct OtherSettingsPage: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The cache is rebuilt on the next load, so that first load is slower. Save data is not touched.")
+            Text("Rebuilt next load (one slow load); saves untouched.")
         }
     }
 
@@ -912,14 +914,14 @@ struct GamepadSettingsPage: View {
 
             SettingsToggleRow(
                 title: "Haptics",
-                description: "A light vibration when an on-screen button is pressed or a control is picked up.",
+                description: "Vibrate on button press and control pickup.",
                 isOn: persistedBinding(settings, \.haptics)
             )
             .accessibilityIdentifier("settings-haptics")
 
             SettingsSliderRow(
                 title: "Deadzone",
-                description: "How far a stick must move before it reports input. Applied to the on-screen Circle Pad/C-stick and to a physical controller's thumbsticks.",
+                description: "Stick travel before input; on-screen and controller.",
                 valueText: "\(Int((settings.analogDeadzone * 100).rounded()))%",
                 value: persistedBinding(settings, \.analogDeadzone),
                 range: 0...0.30,
@@ -929,7 +931,7 @@ struct GamepadSettingsPage: View {
 
             SettingsSegmentedRow(
                 title: "Control appearance",
-                description: "Standard is the translucent shipped style; High contrast uses opaque black/white edges and thicker strokes. Built-in styles only: Delta skin import is not implemented.",
+                description: "Standard: translucent; High contrast: opaque. Built-in only.",
                 choices: ControlAppearance.allCases,
                 selection: persistedBinding(settings, \.controlAppearance),
                 label: { $0.title }
@@ -938,7 +940,7 @@ struct GamepadSettingsPage: View {
 
             SettingsNavigationRow(
                 title: "Button mapping",
-                description: "Map every physical controller button to a 3DS button. The reset action restores the stock mapping.",
+                description: "Map controller buttons to 3DS buttons; reset restores stock.",
                 identifier: "settings-controller-button-mapping"
             ) {
                 ControllerButtonMappingView(settings: settings)
@@ -946,7 +948,7 @@ struct GamepadSettingsPage: View {
 
             SettingsNavigationRow(
                 title: "Hotkeys",
-                description: "Physical controller button combinations (2–4 buttons) for Turbo, quick save/load, screen swap/rotation and opening the menu.",
+                description: "Controller combos (2–4 buttons) for Turbo, save/load, screens, menu.",
                 identifier: "settings-hotkeys"
             ) {
                 HotkeySettingsView(settings: settings, model: model)
@@ -983,7 +985,7 @@ struct ControllerButtonMappingView: View {
             }
             SettingsActionRow(
                 title: "Reset button mapping",
-                description: "Restores the stock physical-controller mapping (every button maps to the same 3DS button).",
+                description: "Restores the stock controller mapping.",
                 systemImage: "arrow.counterclockwise",
                 identifier: "settings-controller-map-reset"
             ) {
@@ -1174,7 +1176,7 @@ struct GraphicsSettingsPage: View {
         SettingsPageScaffold(title: "Graphics") {
             SettingsSegmentedRow(
                 title: "Resolution",
-                description: "The presenter drawable and the internal 3D render scale. The internal scale changes on the next game load.",
+                description: "Drawable and internal 3D scale; internal applies next load.",
                 hint: resolutionCaption(for: settings.renderScale),
                 choices: [1, 2, 3, 4],
                 selection: persistedBinding(settings, \.renderScale),
@@ -1184,7 +1186,7 @@ struct GraphicsSettingsPage: View {
 
             SettingsSegmentedRow(
                 title: "Screen aspect",
-                description: "How the preset screen layouts fill the game view: Fit keeps the picture shape, 4:3 fits it into a 4:3 box with black bars, Stretch fills the view and distorts the picture. The custom layouts place each screen explicitly and ignore this.",
+                description: "Fit/4:3/Stretch fill presets; custom ignores this.",
                 choices: ScreenAspect.allCases,
                 selection: persistedBinding(settings, \.screenAspect),
                 label: { $0.title }
@@ -1193,14 +1195,14 @@ struct GraphicsSettingsPage: View {
 
             SettingsToggleRow(
                 title: "Integer scaling",
-                description: "With Fit and 4:3, snap each 3DS pixel to a whole number of screen pixels (nearest-pixel magnification). Applies immediately to the preset screen layouts; the custom layouts keep their own placement.",
+                description: "Fit/4:3: whole-pixel scaling; presets only.",
                 isOn: persistedBinding(settings, \.integerScale)
             )
             .accessibilityIdentifier("settings-integer-scaling")
 
             SettingsToggleRow(
                 title: "GPU vertex shading",
-                description: "Experimental: run the 3D vertex stage on the GPU. Rendering and performance can change. Takes effect after restarting the app.",
+                description: "Experimental: vertex stage on GPU; needs restart.",
                 restartRequired: true,
                 isOn: persistedBinding(settings, \.gpuVertexShaders)
             )
@@ -1208,7 +1210,7 @@ struct GraphicsSettingsPage: View {
 
             SettingsToggleRow(
                 title: "Precise shading",
-                description: "Experimental: use precise math in the 3D fragment stage instead of the fast approximation. Takes effect after restarting the app.",
+                description: "Experimental: precise fragment math; needs restart.",
                 restartRequired: true,
                 isOn: persistedBinding(settings, \.preciseShading)
             )
@@ -1251,7 +1253,7 @@ struct SoundSettingsPage: View {
 
             SettingsChoiceRow(
                 title: "Buffer size",
-                description: "Audio latency and dropout trade-off. A change restarts the audio engine once while a game runs.",
+                description: "Latency vs dropouts; change restarts audio once.",
                 choices: AudioBufferSize.allCases,
                 selection: persistedBinding(settings, \.audioBuffer),
                 label: { $0.title }

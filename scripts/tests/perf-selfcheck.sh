@@ -106,7 +106,8 @@ check "settings main page groups categories and the reset action in Sections" \
 check "settings main page rows use NavigationLink with category icons" \
   bash -c 'grep -Fq -- "NavigationLink(value: category)" ios/app/Sources/SettingsView.swift && grep -Fq -- "category.systemImage" ios/app/Sources/SettingsView.swift'
 check "settings main page keeps a localized Settings title" contains ios/app/Sources/SettingsView.swift '.navigationTitle("Settings")'
-check "settings main page uses the large-title iOS style" contains ios/app/Sources/SettingsView.swift '.navigationBarTitleDisplayMode(.large)'
+check "settings main page uses the inline title style" contains ios/app/Sources/SettingsView.swift '.navigationBarTitleDisplayMode(.inline)'
+check "settings main page no longer uses the large title style" bash -c '! grep -Fq -- ".navigationBarTitleDisplayMode(.large)" ios/app/Sources/SettingsView.swift'
 check "settings pages register the category destination" contains ios/app/Sources/SettingsView.swift '.navigationDestination(for: SettingsCategory.self)'
 check "settings use the iOS inset-grouped style with system colours" \
   bash -c 'grep -Fq -- "listStyle(.insetGrouped)" ios/app/Sources/SettingsPages.swift && ! grep -rq "preferredColorScheme(.dark)" ios/app/Sources'
@@ -254,6 +255,41 @@ check "storage/About rows moved from System to Other" \
   bash -c 'grep -q "struct OtherSettingsPage" ios/app/Sources/SettingsPages.swift && grep -q "settings-clear-cache" ios/app/Sources/SettingsPages.swift && grep -q "settings-about" ios/app/Sources/SettingsPages.swift'
 check "navigation rows do not add their own disclosure chevron" \
   bash -c '! sed -n "/struct SettingsNavigationRow/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "chevron.right"'
+
+section '0.2.0 settings copy fits two lines (task-62)'
+# Every settings row description is written to be readable in two lines; the
+# lineLimit(2) in the row shells stays as a safeguard, not as the normal state.
+check "every settings row shell keeps the two-line limit" \
+  bash -c '[ "$(grep -c "lineLimit(2)" ios/app/Sources/SettingsPages.swift)" -ge 3 ]'
+check "warning rows cap their message at two lines" \
+  bash -c 'sed -n "/struct SettingsWarningRow/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- ".lineLimit(2)"'
+long_desc="$(grep -o 'description: "[^"]*"' ios/app/Sources/SettingsPages.swift \
+  | sed 's/^description: "//; s/"$//' | awk 'length($0) > 96')"
+if [ -z "$long_desc" ]; then
+  pass "every static settings description is 96 characters or fewer"
+else
+  fail "settings description longer than two lines: $long_desc"
+fi
+missing_desc=""
+while IFS= read -r desc; do
+  grep -Fq -- "\"$desc\" =" ios/app/Resources/en.lproj/Localizable.strings || missing_desc="$missing_desc$desc"$'\n'
+  grep -Fq -- "\"$desc\" =" ios/app/Resources/zh-Hans.lproj/Localizable.strings || missing_desc="$missing_desc$desc"$'\n'
+done < <(grep -o 'description: "[^"]*"' ios/app/Sources/SettingsPages.swift \
+  | sed 's/^description: "//; s/"$//')
+if [ -z "$missing_desc" ]; then
+  pass "every static settings description is in the en and zh tables"
+else
+  fail "settings description missing from Localizable.strings: $missing_desc"
+fi
+for stale in \
+  'the game runs at the Default speed (or the Turbo speed' \
+  'Holding Turbo runs the game without a speed cap' \
+  'How the preset screen layouts fill the game view' \
+  'Delta skin import is not implemented' \
+  'notification permission is requested then'; do
+  check "over-long settings description replaced: $stale" \
+    bash -c '! grep -Fq -- "$1" ios/app/Sources/SettingsPages.swift' _ "$stale"
+done
 
 section 'MoltenVK tuning hook (default off)'
 check "MoltenVKTuning exists" test -f ios/app/Sources/MoltenVKTuning.swift
@@ -446,8 +482,12 @@ check "in-game menu omits Save Manager/Export/Fast-forward/Sound rows" \
   bash -c '! grep -q "menu-save-manager\|menu-diagnostics\|menu-mute\|menu-fast-forward" ios/app/Sources/InGameMenuView.swift'
 check "per-application overrides are stored by title ID and applied effectively" \
   bash -c 'grep -q "struct PerGameOverrides" ios/app/Sources/AppSettings.swift && grep -q "UI.perGameOverrides" ios/app/Sources/AppSettings.swift && grep -q "effectiveScreenRotation(titleID" ios/app/Sources/AppSettings.swift && grep -q "effectiveSwapScreens" ios/app/Sources/GameView.swift && grep -q "perGameOverrides" ios/app/Sources/ContentView.swift'
-check "in-game menu header keeps MENU without a cover/title header" \
-  bash -c '! grep -q "menu-game-cover" ios/app/Sources/InGameMenuView.swift && ! grep -q "coverURL" ios/app/Sources/InGameMenuView.swift'
+check "in-game menu header shows the running game name without cover art" \
+  bash -c 'grep -q "Text(romName)" ios/app/Sources/InGameMenuView.swift && ! grep -q "L10n.tr(\"MENU\")" ios/app/Sources/InGameMenuView.swift && ! grep -q "menu-game-cover" ios/app/Sources/InGameMenuView.swift && ! grep -q "coverURL" ios/app/Sources/InGameMenuView.swift'
+check "in-game menu top bar has only exit, restart and resume" \
+  bash -c 'grep -q "identifier: \"menu-exit\"" ios/app/Sources/InGameMenuView.swift && grep -q "identifier: \"menu-reset\"" ios/app/Sources/InGameMenuView.swift && grep -q "accessibilityIdentifier(\"menu-resume\")" ios/app/Sources/InGameMenuView.swift && ! grep -q "identifier: \"menu-save-state\"" ios/app/Sources/InGameMenuView.swift && ! grep -q "identifier: \"menu-load-state\"" ios/app/Sources/InGameMenuView.swift'
+check "in-game menu sub-page changes have a visible transition" \
+  bash -c 'grep -q "\\.id(page)" ios/app/Sources/InGameMenuView.swift && grep -q "\\.transition(" ios/app/Sources/InGameMenuView.swift && grep -q "\\.animation(.easeInOut(duration: 0.22), value: page)" ios/app/Sources/InGameMenuView.swift'
 check "Graphics settings expose Integer scaling and Screen aspect" \
   bash -c 'grep -q "settings-integer-scaling" ios/app/Sources/SettingsPages.swift && grep -q "settings-screen-aspect" ios/app/Sources/SettingsPages.swift && grep -q "integerScale" ios/app/Sources/SettingsPages.swift && grep -q "screenAspect" ios/app/Sources/SettingsPages.swift'
 check "TODO.md records the unsupported reference-emulator items" \

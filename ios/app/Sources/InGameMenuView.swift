@@ -118,10 +118,20 @@ struct InGameMenuView: View {
             header
             ScrollView(showsIndicators: false) {
                 content
+                    // A new page gets a fresh identity so the push/pop
+                    // transition below is actually visible (0.2.0 final).
+                    .id(page)
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        )
+                    )
                     .padding(.horizontal, 18)
                     .padding(.top, 6)
                     .padding(.bottom, 24)
             }
+            .animation(.easeInOut(duration: 0.22), value: page)
         }
         .frame(width: width, height: max(height, 340))
         .background(sheetBackground)
@@ -139,9 +149,12 @@ struct InGameMenuView: View {
             }
             HStack(spacing: 10) {
                 if page == .root {
-                    Text(L10n.tr("MENU"))
-                        .font(.system(size: 22, weight: .bold))
+                    Text(romName)
+                        .font(.system(size: 20, weight: .bold))
                         .foregroundColor(primaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .layoutPriority(1)
                 } else {
                     Button {
                         withAnimation(.easeInOut(duration: 0.18)) { page = .root }
@@ -169,7 +182,7 @@ struct InGameMenuView: View {
 
     private var pageTitle: String {
         switch page {
-        case .root: return L10n.tr("MENU")
+        case .root: return romName
         case .virtualControls: return L10n.tr("Virtual controls")
         case .saveState: return L10n.tr("Save state")
         case .screenLayout: return L10n.tr("Screen layout")
@@ -177,27 +190,12 @@ struct InGameMenuView: View {
         }
     }
 
+    /// Only power (exit), restart (reset) and X (resume) live in the header;
+    /// quick save/load are in the Save state sub-page.
     private var topButtons: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 0) {
-                topIcon("power", color: accentRed, identifier: "menu-exit", action: onExit)
-                topIcon("arrow.clockwise", identifier: "menu-reset", action: onReset)
-                topIcon("square.and.arrow.down",
-                        identifier: "menu-save-state",
-                        enabled: saveStates.canSave) {
-                    saveStates.save(slot: SaveStateSupport.quickSlot)
-                }
-                topIcon("arrow.down.doc",
-                        identifier: "menu-load-state",
-                        enabled: saveStates.canLoad) {
-                    saveStates.load(slot: SaveStateSupport.quickSlot) { result in
-                        if case .success = result { onLoadStateCompleted() }
-                    }
-                }
-            }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 3)
-            .background(Capsule().fill(rowBackground))
+        HStack(spacing: 6) {
+            topIcon("power", color: accentRed, identifier: "menu-exit", action: onExit)
+            topIcon("arrow.clockwise", identifier: "menu-reset", action: onReset)
             Button(action: onResume) {
                 Image(systemName: "xmark")
                     .font(.system(size: 15, weight: .bold))

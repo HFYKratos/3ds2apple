@@ -82,7 +82,7 @@ struct SettingsView: View {
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: SettingsCategory.self) { category in
             SettingsCategoryPage(category: category, settings: settings, model: model)
         }
