@@ -486,8 +486,8 @@ check "in-game menu header shows the running game name without cover art" \
   bash -c 'grep -q "Text(romName)" ios/app/Sources/InGameMenuView.swift && ! grep -q "L10n.tr(\"MENU\")" ios/app/Sources/InGameMenuView.swift && ! grep -q "menu-game-cover" ios/app/Sources/InGameMenuView.swift && ! grep -q "coverURL" ios/app/Sources/InGameMenuView.swift'
 check "in-game menu top bar has only exit, restart and resume" \
   bash -c 'grep -q "identifier: \"menu-exit\"" ios/app/Sources/InGameMenuView.swift && grep -q "identifier: \"menu-reset\"" ios/app/Sources/InGameMenuView.swift && grep -q "accessibilityIdentifier(\"menu-resume\")" ios/app/Sources/InGameMenuView.swift && ! grep -q "identifier: \"menu-save-state\"" ios/app/Sources/InGameMenuView.swift && ! grep -q "identifier: \"menu-load-state\"" ios/app/Sources/InGameMenuView.swift'
-check "in-game menu sub-page changes have a visible transition" \
-  bash -c 'grep -q "\\.id(page)" ios/app/Sources/InGameMenuView.swift && grep -q "\\.transition(" ios/app/Sources/InGameMenuView.swift && grep -q "\\.animation(.easeInOut(duration: 0.22), value: page)" ios/app/Sources/InGameMenuView.swift'
+check "in-game menu sub-pages use a NavigationStack push/pop" \
+  bash -c 'grep -q "NavigationStack(path: \$pagePath)" ios/app/Sources/InGameMenuView.swift && grep -q "navigationDestination(for: MenuPage.self)" ios/app/Sources/InGameMenuView.swift && grep -q "pushPage(.saveState)" ios/app/Sources/InGameMenuView.swift && grep -q "popPage()" ios/app/Sources/InGameMenuView.swift && ! grep -q "\.id(page)" ios/app/Sources/InGameMenuView.swift'
 check "Graphics settings expose Integer scaling and Screen aspect" \
   bash -c 'grep -q "settings-integer-scaling" ios/app/Sources/SettingsPages.swift && grep -q "settings-screen-aspect" ios/app/Sources/SettingsPages.swift && grep -q "integerScale" ios/app/Sources/SettingsPages.swift && grep -q "screenAspect" ios/app/Sources/SettingsPages.swift'
 check "TODO.md records the unsupported reference-emulator items" \

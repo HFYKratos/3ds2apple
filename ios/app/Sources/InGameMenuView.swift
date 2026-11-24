@@ -41,7 +41,11 @@ struct InGameMenuView: View {
         case perApplication
     }
 
-    @State private var page: MenuPage = .root
+    /// NavigationStack path: [] = root, one element = a sub-page. Native
+    /// push/pop animations replace the old ScrollView transition.
+    @State private var pagePath: [MenuPage] = []
+
+    private var currentPage: MenuPage { pagePath.last ?? .root }
     @State private var controlOptionsSheet: ControlOptionsPage?
     @State private var isResetControlsConfirmationPresented = false
     @State private var didHandleDebugOptions = false
@@ -116,22 +120,16 @@ struct InGameMenuView: View {
     private func sheet(height: CGFloat, width: CGFloat, topCornersOnly: Bool) -> some View {
         VStack(spacing: 0) {
             header
-            ScrollView(showsIndicators: false) {
-                content
-                    // A new page gets a fresh identity so the push/pop
-                    // transition below is actually visible (0.2.0 final).
-                    .id(page)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: .trailing).combined(with: .opacity),
-                            removal: .move(edge: .leading).combined(with: .opacity)
-                        )
-                    )
-                    .padding(.horizontal, 18)
-                    .padding(.top, 6)
-                    .padding(.bottom, 24)
+            NavigationStack(path: $pagePath) {
+                scrollable(rootContent)
+                    .navigationDestination(for: MenuPage.self) { destination in
+                        scrollable(content(for: destination))
+                            .navigationBarBackButtonHidden(true)
+                            .toolbar(.hidden, for: .navigationBar)
+                    }
             }
-            .animation(.easeInOut(duration: 0.22), value: page)
+            .background(sheetBackground)
+            .toolbar(.hidden, for: .navigationBar)
         }
         .frame(width: width, height: max(height, 340))
         .background(sheetBackground)
@@ -148,7 +146,7 @@ struct InGameMenuView: View {
                     .padding(.top, 8)
             }
             HStack(spacing: 10) {
-                if page == .root {
+                if currentPage == .root {
                     Text(romName)
                         .font(.system(size: 20, weight: .bold))
                         .foregroundColor(primaryText)
@@ -157,7 +155,7 @@ struct InGameMenuView: View {
                         .layoutPriority(1)
                 } else {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.18)) { page = .root }
+                        popPage()
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 15, weight: .semibold))
@@ -167,9 +165,10 @@ struct InGameMenuView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("menu-back")
-                    Text(pageTitle)
+                    Text(pageTitle(for: currentPage))
                         .font(.system(size: 22, weight: .bold))
                         .foregroundColor(primaryText)
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 topButtons
@@ -180,13 +179,35 @@ struct InGameMenuView: View {
         }
     }
 
-    private var pageTitle: String {
+    private func pageTitle(for page: MenuPage) -> String {
         switch page {
         case .root: return romName
         case .virtualControls: return L10n.tr("Virtual controls")
         case .saveState: return L10n.tr("Save state")
         case .screenLayout: return L10n.tr("Screen layout")
         case .perApplication: return L10n.tr("Per-Application Settings")
+        }
+    }
+
+    private func pushPage(_ page: MenuPage) {
+        withAnimation(.easeInOut(duration: 0.28)) {
+            pagePath.append(page)
+        }
+    }
+
+    private func popPage() {
+        guard !pagePath.isEmpty else { return }
+        withAnimation(.easeInOut(duration: 0.28)) {
+            pagePath.removeLast()
+        }
+    }
+
+    private func scrollable<Content: View>(_ content: Content) -> some View {
+        ScrollView(showsIndicators: false) {
+            content
+                .padding(.horizontal, 18)
+                .padding(.top, 6)
+                .padding(.bottom, 24)
         }
     }
 
@@ -229,7 +250,7 @@ struct InGameMenuView: View {
     // MARK: - Pages
 
     @ViewBuilder
-    private var content: some View {
+    private func content(for page: MenuPage) -> some View {
         switch page {
         case .root: rootContent
         case .virtualControls: virtualControlsContent
@@ -245,20 +266,20 @@ struct InGameMenuView: View {
                 actionRow(L10n.tr("Save state"),
                           systemImage: "archivebox",
                           identifier: "menu-save-state-page") {
-                    withAnimation(.easeInOut(duration: 0.18)) { page = .saveState }
+                    pushPage(.saveState)
                 }
                 rowDivider
                 actionRow(L10n.tr("Virtual controls"),
                           systemImage: "gamecontroller",
                           identifier: "menu-virtual-controls") {
-                    withAnimation(.easeInOut(duration: 0.18)) { page = .virtualControls }
+                    pushPage(.virtualControls)
                 }
             }
             rowGroup {
                 actionRow(L10n.tr("Screen layout"),
                           systemImage: "rectangle.split.2x1",
                           identifier: "menu-screen-layout") {
-                    withAnimation(.easeInOut(duration: 0.18)) { page = .screenLayout }
+                    pushPage(.screenLayout)
                 }
                 rowDivider
                 valueRow(title: L10n.tr("Swap screens"),
@@ -284,7 +305,7 @@ struct InGameMenuView: View {
                 actionRow(L10n.tr("Per-Application Settings"),
                           systemImage: "app.badge",
                           identifier: "menu-per-application") {
-                    withAnimation(.easeInOut(duration: 0.18)) { page = .perApplication }
+                    pushPage(.perApplication)
                 }
             }
             rowGroup {
