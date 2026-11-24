@@ -7,7 +7,7 @@
 # tools/devpush/README.md and THIRD_PARTY.md.
 [package]
 name = "devpush"
-version = "0.1.7-beta3"
+version = "0.1.7-beta4"
 edition = "2021"
 license = "Apache-2.0"
 description = "3ds2apple device bridge: devices, install/uninstall, app-attr, put/get/ls/put-tar over usbmuxd"
