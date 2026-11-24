@@ -243,7 +243,13 @@ struct ContentView: View {
         .onChange(of: settings.turboLimit) { enabled in
             model.setTurboLimitEnabled(enabled)
         }
+        .onChange(of: settings.runSpeedLimit) { enabled in
+            model.setRunSpeedLimitEnabled(enabled)
+        }
         .preferredColorScheme(settings.appearance.colorScheme)
+        .task {
+            await UpdateChecker.shared.backgroundCheckIfDue(settings: settings)
+        }
     }
 
     // MARK: - State
@@ -281,6 +287,8 @@ struct ContentView: View {
         model.setPlaybackSpeed(settings.playbackSpeed.rawValue)
         model.setSystemMetalHUD(settings.systemMetalHUD)
         model.setTurboLimitEnabled(settings.turboLimit)
+        model.setRunSpeedLimitEnabled(settings.runSpeedLimit)
+        model.setTurboUnlimited(false)
         model.setReadbackPresentationRequired(
             settings.usesReadbackPresentation(
                 isLandscape: GameViewDeviceMetrics.currentLayoutOrientation == .landscape

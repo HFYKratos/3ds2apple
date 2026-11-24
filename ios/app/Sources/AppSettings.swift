@@ -373,6 +373,22 @@ struct PerGameOverrides: Codable, Equatable {
     var screenAspectRaw: String?
 }
 
+/// The GitHub update channel on the General page: Stable ignores pre-releases,
+/// Beta also looks at pre-release builds.
+enum UpdateChannel: String, CaseIterable, Identifiable {
+    case stable
+    case beta
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .stable: return L10n.tr("Stable")
+        case .beta: return L10n.tr("Beta")
+        }
+    }
+}
+
 /// The app-wide appearance choice on the System page. ContentView maps it to a
 /// SwiftUI ColorScheme; the default follows the system exactly like before.
 enum AppAppearance: String, CaseIterable, Identifiable {
@@ -575,11 +591,17 @@ final class AppSettings: ObservableObject {
     /// When on, the runtime may lower a Turbo speed automatically if the
     /// presented frame rate stays below the minimum (the "turbo limit").
     @Published var turboLimit: Bool
+    /// When off, every presented frame advances guest frames until the hardware
+    /// time budget is used, instead of stopping at the 4× speed clamp. Off also
+    /// mutes audio and warns about heat/battery in Settings.
+    @Published var runSpeedLimit: Bool
     /// Light/dark/system appearance for the whole app (System page).
     @Published var appearance: AppAppearance
     /// Check GitHub for a newer release when the General page appears (the
     /// switch does not run a background poller; the page does the lookup).
     @Published var checkForUpdates: Bool
+    /// Stable or Beta GitHub release channel for the update check.
+    @Published var updateChannel: UpdateChannel
     /// Per-game presentation overrides by upper-case title ID (0.2.0 MVP).
     @Published var perGameOverrides: [String: PerGameOverrides]
 
@@ -768,6 +790,10 @@ final class AppSettings: ObservableObject {
             ? (PlaybackSpeed(rawValue: storedTurbo) ?? .double)
             : .double
         turboLimit = Self.bool(defaults, Keys.turboLimit, fallback: true)
+        runSpeedLimit = Self.bool(defaults, Keys.runSpeedLimit, fallback: true)
+        updateChannel = UpdateChannel(
+            rawValue: defaults.string(forKey: Keys.updateChannel) ?? ""
+        ) ?? .stable
         appearance = AppAppearance(
             rawValue: defaults.string(forKey: Keys.appearance) ?? ""
         ) ?? .system
@@ -807,6 +833,8 @@ final class AppSettings: ObservableObject {
         defaults.set(playbackSpeed.rawValue, forKey: Keys.playbackSpeed)
         defaults.set(turboSpeed.rawValue, forKey: Keys.turboSpeed)
         defaults.set(turboLimit, forKey: Keys.turboLimit)
+        defaults.set(runSpeedLimit, forKey: Keys.runSpeedLimit)
+        defaults.set(updateChannel.rawValue, forKey: Keys.updateChannel)
         defaults.set(appearance.rawValue, forKey: Keys.appearance)
         defaults.set(checkForUpdates, forKey: Keys.checkForUpdates)
         if let data = try? JSONEncoder().encode(perGameOverrides) {
@@ -1076,6 +1104,8 @@ final class AppSettings: ObservableObject {
         static let playbackSpeed = "UI.playbackSpeed"
         static let turboSpeed = "UI.turboSpeed"
         static let turboLimit = "UI.turboLimit"
+        static let runSpeedLimit = "UI.runSpeedLimit"
+        static let updateChannel = "UI.updateChannel"
         static let appearance = "UI.appearance"
         static let checkForUpdates = "UI.checkForUpdates"
         static let perGameOverrides = "UI.perGameOverrides"

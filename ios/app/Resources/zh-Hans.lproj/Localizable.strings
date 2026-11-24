@@ -797,3 +797,19 @@
 "Title ID %@" = "Title ID %@";
 "No running game data" = "当前无运行中的游戏数据";
 "Per-application settings are available while a game is running." = "游戏运行时才能修改按游戏设置。";
+
+/* --- 0.2.0-B 运行速度限制 / 更新通道 / 通知 --- */
+"Run speed limit" = "运行速度限制";
+"On: the game runs at the Default speed (or the Turbo speed while Turbo is active), capped at 4×. Off: every presented frame advances guest frames until the hardware time budget is used — this can heat the device and drain the battery fast, and audio is muted." = "开启：游戏按默认速度运行（Turbo 激活时按 Turbo 速度），最高 4×。关闭：每个呈现帧都会持续推进模拟帧，直到用完硬件时间预算——设备会发热、耗电明显加快，音频静音。";
+"High power use" = "高功耗提示";
+"Unlimited speed is enabled. The device can get hot and the battery drains much faster; audio is muted." = "已启用无限制速度：设备可能发热，电量消耗明显加快；音频静音。";
+"Turbo limit is off. Holding Turbo runs the game without a speed cap: the device can get hot and the battery drains faster; audio is muted." = "Turbo 限制已关闭：按住 Turbo 时游戏速度不受限制，设备可能发热、耗电加快；音频静音。";
+"Check GitHub for a newer release when this page opens, and at most once a day in the background. If a newer build is available, a local notification is posted (notification permission is requested then)." = "打开此页面时检查 GitHub 新版本，并在后台每天最多检查一次。发现新版本时会发送本地通知（届时申请通知权限）。";
+"Update channel" = "更新通道";
+"Stable" = "稳定版";
+"Beta" = "测试版";
+"Stable only looks at full releases; Beta also looks at pre-release builds." = "稳定版只查正式 Release；测试版也会查预发布构建。";
+"On: the on-screen Turbo button uses the selected Turbo speed and the runtime may lower it when frames stay below 20 fps. Off: holding Turbo runs unlimited guest frames instead (no automatic slowdown) — the device can get hot, the battery drains faster and audio is muted." = "开启：屏幕 Turbo 按钮使用所选 Turbo 速度，帧率持续低于 20 fps 时运行时可自动降速。关闭：按住 Turbo 时无限制推进模拟帧（不会自动降速）——设备可能发热、耗电加快，音频静音。";
+"The speed the on-screen Turbo button uses while Turbo limit is on." = "Turbo 限制开启时，屏幕 Turbo 按钮使用的速度。";
+"Update available" = "有可用更新";
+"3ds2apple %@ is available on GitHub." = "GitHub 上已有 3ds2apple %@。";

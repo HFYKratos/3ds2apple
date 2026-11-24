@@ -398,6 +398,30 @@ struct SettingsInfoRow: View {
     }
 }
 
+/// A warning row for settings that can heat the device or drain the battery.
+struct SettingsWarningRow: View {
+    let title: LocalizedStringKey
+    let message: LocalizedStringKey
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.orange)
+                .frame(width: 26)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 17, weight: .semibold))
+                Text(message)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 /// A row that opens another page.
 struct SettingsNavigationRow<Destination: View>: View {
     let title: LocalizedStringKey
@@ -504,25 +528,42 @@ struct SettingsSectionCaption: View {
 struct GeneralSettingsPage: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var model: ROMSession
-
-    private enum UpdateStatus {
-        case idle
-        case checking
-        case upToDate(String)
-        case available(String)
-        case failed
-    }
-
-    @State private var updateStatus: UpdateStatus = .idle
+    @ObservedObject private var updateChecker = UpdateChecker.shared
 
     var body: some View {
         SettingsPageScaffold(title: "General") {
             SettingsToggleRow(
+                title: "Run speed limit",
+                description: "On: the game runs at the Default speed (or the Turbo speed while Turbo is active), capped at 4×. Off: every presented frame advances guest frames until the hardware time budget is used — this can heat the device and drain the battery fast, and audio is muted.",
+                isOn: persistedBinding(settings, \.runSpeedLimit)
+            )
+            .accessibilityIdentifier("settings-run-speed-limit")
+
+            if !settings.runSpeedLimit || !settings.turboLimit {
+                SettingsWarningRow(
+                    title: "High power use",
+                    message: !settings.runSpeedLimit
+                        ? "Unlimited speed is enabled. The device can get hot and the battery drains much faster; audio is muted."
+                        : "Turbo limit is off. Holding Turbo runs the game without a speed cap: the device can get hot and the battery drains faster; audio is muted."
+                )
+                .accessibilityIdentifier("settings-unlimited-warning")
+            }
+
+            SettingsToggleRow(
                 title: "Check for updates",
-                description: "When this page opens, look up the latest GitHub release and show whether this build is current. The check is a single request; nothing runs in the background.",
+                description: "Check GitHub for a newer release when this page opens, and at most once a day in the background. If a newer build is available, a local notification is posted (notification permission is requested then).",
                 isOn: persistedBinding(settings, \.checkForUpdates)
             )
             .accessibilityIdentifier("settings-check-for-updates")
+
+            SettingsChoiceRow(
+                title: "Update channel",
+                description: "Stable only looks at full releases; Beta also looks at pre-release builds.",
+                choices: UpdateChannel.allCases,
+                selection: persistedBinding(settings, \.updateChannel),
+                label: { $0.title }
+            )
+            .accessibilityIdentifier("settings-update-channel")
 
             SettingsInfoRow(
                 title: "Update status",
@@ -533,14 +574,14 @@ struct GeneralSettingsPage: View {
 
             SettingsToggleRow(
                 title: "Turbo limit",
-                description: "Limit the on-screen Turbo button to the selected Turbo speed. Off uses the fastest available speed (4×).",
+                description: "On: the on-screen Turbo button uses the selected Turbo speed and the runtime may lower it when frames stay below 20 fps. Off: holding Turbo runs unlimited guest frames instead (no automatic slowdown) — the device can get hot, the battery drains faster and audio is muted.",
                 isOn: persistedBinding(settings, \.turboLimit)
             )
             .accessibilityIdentifier("settings-turbo-limit")
 
             SettingsChoiceRow(
                 title: "Turbo speed",
-                description: "The speed the on-screen Turbo button uses while it is active.",
+                description: "The speed the on-screen Turbo button uses while Turbo limit is on.",
                 choices: [PlaybackSpeed.double, .triple, .quadruple],
                 selection: persistedBinding(settings, \.turboSpeed),
                 label: { $0.title }
@@ -560,15 +601,17 @@ struct GeneralSettingsPage: View {
         .task { await refreshUpdateStatus() }
         .onChange(of: settings.checkForUpdates) { enabled in
             if enabled {
-                Task { await checkForUpdates() }
-            } else {
-                updateStatus = .idle
+                Task { await refreshUpdateStatus() }
             }
+        }
+        .onChange(of: settings.updateChannel) { _ in
+            Task { await refreshUpdateStatus() }
         }
     }
 
     private var updateStatusText: String {
-        switch updateStatus {
+        guard settings.checkForUpdates else { return L10n.tr("Not checked yet") }
+        switch updateChecker.status {
         case .idle: return L10n.tr("Not checked yet")
         case .checking: return L10n.tr("Checking…")
         case .upToDate(let version): return L10n.format("Up to date (%@)", version)
@@ -578,7 +621,10 @@ struct GeneralSettingsPage: View {
     }
 
     private var updateStatusDescription: String {
-        switch updateStatus {
+        guard settings.checkForUpdates else {
+            return L10n.tr("Enable Check for updates to look up the latest GitHub release.")
+        }
+        switch updateChecker.status {
         case .idle:
             return L10n.tr("Enable Check for updates to look up the latest GitHub release.")
         case .checking:
@@ -593,62 +639,8 @@ struct GeneralSettingsPage: View {
     }
 
     private func refreshUpdateStatus() async {
-        guard settings.checkForUpdates else {
-            updateStatus = .idle
-            return
-        }
-        await checkForUpdates()
-    }
-
-    /// Real update check: the latest GitHub release tag compared with this
-    /// app's CFBundleShortVersionString. No fake switch state.
-    private func checkForUpdates() async {
-        updateStatus = .checking
-        guard let url = URL(string: "https://api.github.com/repos/HFYKratos/3ds2apple/releases/latest") else {
-            updateStatus = .failed
-            return
-        }
-        var request = URLRequest(url: url)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.timeoutInterval = 15
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                updateStatus = .failed
-                return
-            }
-            struct GitHubRelease: Decodable { let tag_name: String }
-            let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
-            let latest = release.tag_name.hasPrefix("v")
-                ? String(release.tag_name.dropFirst())
-                : release.tag_name
-            let current = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
-            updateStatus = Self.versionIsNewer(latest, than: current)
-                ? .available(latest)
-                : .upToDate(latest)
-        } catch {
-            updateStatus = .failed
-        }
-    }
-
-    /// Default-speed state when the automatic fallback lowered the speed.
-    /// Numeric dotted-version comparison; "0.1.7" is newer than "0.1.6" and
-    /// a missing component counts as zero. Pre-release suffixes are ignored for
-    /// this user-facing check.
-    private static func versionIsNewer(_ candidate: String, than current: String) -> Bool {
-        func parts(_ raw: String) -> [Int] {
-            raw.split(separator: ".").map { part in
-                Int(part.prefix(while: { $0.isNumber })) ?? 0
-            }
-        }
-        let a = parts(candidate)
-        let b = parts(current)
-        for index in 0..<max(a.count, b.count) {
-            let lhs = index < a.count ? a[index] : 0
-            let rhs = index < b.count ? b[index] : 0
-            if lhs != rhs { return lhs > rhs }
-        }
-        return false
+        guard settings.checkForUpdates else { return }
+        await updateChecker.refresh(channel: settings.updateChannel)
     }
 
     private var autoReducedText: String {

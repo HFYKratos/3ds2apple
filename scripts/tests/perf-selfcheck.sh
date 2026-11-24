@@ -124,7 +124,20 @@ check "General page has the update status row" contains ios/app/Sources/Settings
 check "General page has the Turbo limit row" contains ios/app/Sources/SettingsPages.swift 'settings-turbo-limit'
 check "General page has the Turbo speed row" contains ios/app/Sources/SettingsPages.swift 'settings-turbo-speed'
 check "General page has the Default speed row" contains ios/app/Sources/SettingsPages.swift 'settings-default-speed'
-check "General update check talks to the GitHub latest release API" contains ios/app/Sources/SettingsPages.swift 'api.github.com/repos/HFYKratos/3ds2apple/releases/latest'
+check "UpdateChecker talks to the GitHub releases API" \
+  bash -c 'grep -q "api.github.com/repos/HFYKratos/3ds2apple/releases" ios/app/Sources/UpdateChecker.swift && grep -q "UserNotifications" ios/app/Sources/UpdateChecker.swift'
+check "background update checks are limited to once a day" \
+  bash -c 'grep -q "backgroundInterval" ios/app/Sources/UpdateChecker.swift && grep -q "backgroundCheckIfDue" ios/app/Sources/ContentView.swift'
+check "update channel supports Stable and Beta" \
+  bash -c 'grep -q "enum UpdateChannel" ios/app/Sources/AppSettings.swift && grep -q "case beta" ios/app/Sources/AppSettings.swift && grep -q "settings-update-channel" ios/app/Sources/SettingsPages.swift'
+check "run speed limit and unlimited Turbo are real settings" \
+  bash -c 'grep -q "settings-run-speed-limit" ios/app/Sources/SettingsPages.swift && grep -q "runSpeedLimit" ios/app/Sources/AppSettings.swift && grep -q "setRunSpeedLimitEnabled" ios/app/Sources/GameView.swift && grep -q "setTurboUnlimited" ios/app/Sources/GameView.swift'
+check "unlimited speed runs guest frames to a time budget and mutes audio" \
+  bash -c 'grep -q "func runUnlimitedFrames" ios/app/Sources/ROMSession.swift && grep -q "isUnlimitedSpeed" ios/app/Sources/ROMSession.swift && grep -q "userAudioMuted" ios/app/Sources/ROMSession.swift'
+check "update notification asks for permission and posts a local notification" \
+  bash -c 'grep -q "requestAuthorization" ios/app/Sources/UpdateChecker.swift && grep -q "UNNotificationRequest" ios/app/Sources/UpdateChecker.swift'
+check "settings explain the unlimited-speed heat/battery warning" \
+  bash -c 'grep -q "settings-unlimited-warning" ios/app/Sources/SettingsPages.swift && grep -q "High power use" ios/app/Sources/SettingsPages.swift'
 check "General page no longer has the frame limiter row" \
   bash -c '! sed -n "/^struct GeneralSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "settings-frame-limiter"'
 check "General page no longer holds rotation/haptics/FPS/HUD/GPU rows" \
@@ -161,6 +174,8 @@ for key in '"Performance monitoring"' '"Swap screens"' '"Check for updates"' '"T
   check "en Localizable.strings has ${key}" grep -Fq -- "${key} =" ios/app/Resources/en.lproj/Localizable.strings
   check "zh-Hans Localizable.strings has ${key}" grep -Fq -- "${key} =" ios/app/Resources/zh-Hans.lproj/Localizable.strings
 done
+check "en/zh tables have the run-speed and update-channel keys" \
+  bash -c 'for key in "Run speed limit" "Update channel" "Stable" "Beta" "High power use" "Update available"; do grep -Fq -- "\"$key\" =" ios/app/Resources/en.lproj/Localizable.strings && grep -Fq -- "\"$key\" =" ios/app/Resources/zh-Hans.lproj/Localizable.strings || exit 1; done'
 check "the app README documents the new settings categories" \
   contains ios/app/README.md 'General / System / Gamepad / Graphics / Layout / Sound / Debug / Other'
 check "the app README documents the AOT verification rows" contains ios/app/README.md 'AOT verification rows'
@@ -206,7 +221,7 @@ check "Reset asks for confirmation first" contains ios/app/Sources/SettingsView.
 check "Reset tells the user to relaunch" contains ios/app/Sources/SettingsView.swift 'Quit and reopen 3ds2apple for the default settings to take effect.'
 check "Reset does not touch Documents data" contains ios/app/README.md 'Game data, battery saves and the diagnostics'
 # Every existing settings function keeps its accessibility identifier.
-for id in settings-check-for-updates settings-update-status settings-turbo-limit settings-turbo-speed settings-default-speed settings-screen-rotation settings-orientation-lock settings-swap-screens settings-fps-hud settings-system-metal-hud settings-haptics settings-show-touch-controls settings-controls-opacity settings-controller settings-resolution settings-screen-layout settings-gpu-vertex-shaders settings-precise-shading settings-appearance settings-device settings-system-version settings-app-version settings-aot-status settings-save-manager settings-cpu-profiler settings-export-logs settings-diagnostics-hint settings-clear-cache settings-about; do
+for id in settings-run-speed-limit settings-check-for-updates settings-update-channel settings-update-status settings-turbo-limit settings-turbo-speed settings-default-speed settings-screen-rotation settings-orientation-lock settings-swap-screens settings-fps-hud settings-system-metal-hud settings-haptics settings-show-touch-controls settings-controls-opacity settings-controller settings-resolution settings-screen-layout settings-gpu-vertex-shaders settings-precise-shading settings-appearance settings-device settings-system-version settings-app-version settings-aot-status settings-save-manager settings-cpu-profiler settings-export-logs settings-diagnostics-hint settings-clear-cache settings-about; do
   check "settings identifier ${id} is preserved" grep -Fq -- "\"${id}\"" ios/app/Sources/SettingsPages.swift
 done
 # Localization tables and docs.

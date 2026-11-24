@@ -181,14 +181,34 @@ struct GameView: View {
             .onChange(of: settings.playbackSpeed) { _ in
                 // The menu's default speed overrides an active Turbo toggle.
                 fastForwardToggled = false
+                model.setTurboUnlimited(false)
+                model.setPlaybackSpeed(settings.playbackSpeedValue)
             }
             .onChange(of: settings.turboSpeed) { _ in
                 if fastForwardToggled {
-                    let target = settings.turboLimit
-                        ? settings.turboSpeedValue
-                        : PlaybackSpeed.quadruple.rawValue
-                    model.setPlaybackSpeed(target)
+                    if settings.turboLimit {
+                        model.setTurboUnlimited(false)
+                        model.setPlaybackSpeed(settings.turboSpeedValue)
+                    } else {
+                        model.setTurboUnlimited(true)
+                    }
                 }
+            }
+            .onChange(of: settings.turboLimit) { enabled in
+                guard fastForwardToggled else { return }
+                if enabled {
+                    model.setTurboUnlimited(false)
+                    model.setPlaybackSpeed(settings.turboSpeedValue)
+                } else {
+                    model.setTurboUnlimited(true)
+                }
+            }
+            .onChange(of: settings.runSpeedLimit) { enabled in
+                if !enabled {
+                    fastForwardToggled = false
+                    model.setTurboUnlimited(false)
+                }
+                model.setRunSpeedLimitEnabled(enabled)
             }
             .onChange(of: model.phase) { phase in
                 switch phase {
@@ -459,17 +479,24 @@ struct GameView: View {
         }
     }
 
-    /// Round 0.1.6-beta2 Fast-forward button: one tap switches the runtime to
-    /// 2x, the next tap restores the menu's playback speed.
+    /// Round 0.1.6-beta2 Turbo button: one tap switches the runtime to the
+    /// configured Turbo speed (or unlimited guest frames when Turbo limit is
+    /// off), the next tap restores the menu's Default speed. With Run speed
+    /// limit off the runtime is already unlimited, so the button does nothing.
     private func toggleFastForward() {
+        guard settings.runSpeedLimit else { return }
         fastForwardToggled.toggle()
-        // On: cap the Turbo button at the chosen speed. Off: use the fastest
-        // available step. The limit is only about the Turbo button, not about
-        // when the runtime may fall back for performance.
-        let turboTarget = settings.turboLimit
-            ? settings.turboSpeedValue
-            : PlaybackSpeed.quadruple.rawValue
-        model.setPlaybackSpeed(fastForwardToggled ? turboTarget : settings.playbackSpeedValue)
+        if fastForwardToggled {
+            if settings.turboLimit {
+                model.setTurboUnlimited(false)
+                model.setPlaybackSpeed(settings.turboSpeedValue)
+            } else {
+                model.setTurboUnlimited(true)
+            }
+        } else {
+            model.setTurboUnlimited(false)
+            model.setPlaybackSpeed(settings.playbackSpeedValue)
+        }
         if settings.haptics {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }

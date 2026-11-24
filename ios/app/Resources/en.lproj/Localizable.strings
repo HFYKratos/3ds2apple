@@ -795,3 +795,19 @@
 "Title ID %@" = "Title ID %@";
 "No running game data" = "No running game data";
 "Per-application settings are available while a game is running." = "Per-application settings are available while a game is running.";
+
+/* --- 0.2.0-B run speed limit / update channel / notifications --- */
+"Run speed limit" = "Run speed limit";
+"On: the game runs at the Default speed (or the Turbo speed while Turbo is active), capped at 4×. Off: every presented frame advances guest frames until the hardware time budget is used — this can heat the device and drain the battery fast, and audio is muted." = "On: the game runs at the Default speed (or the Turbo speed while Turbo is active), capped at 4×. Off: every presented frame advances guest frames until the hardware time budget is used — this can heat the device and drain the battery fast, and audio is muted.";
+"High power use" = "High power use";
+"Unlimited speed is enabled. The device can get hot and the battery drains much faster; audio is muted." = "Unlimited speed is enabled. The device can get hot and the battery drains much faster; audio is muted.";
+"Turbo limit is off. Holding Turbo runs the game without a speed cap: the device can get hot and the battery drains faster; audio is muted." = "Turbo limit is off. Holding Turbo runs the game without a speed cap: the device can get hot and the battery drains faster; audio is muted.";
+"Check GitHub for a newer release when this page opens, and at most once a day in the background. If a newer build is available, a local notification is posted (notification permission is requested then)." = "Check GitHub for a newer release when this page opens, and at most once a day in the background. If a newer build is available, a local notification is posted (notification permission is requested then).";
+"Update channel" = "Update channel";
+"Stable" = "Stable";
+"Beta" = "Beta";
+"Stable only looks at full releases; Beta also looks at pre-release builds." = "Stable only looks at full releases; Beta also looks at pre-release builds.";
+"On: the on-screen Turbo button uses the selected Turbo speed and the runtime may lower it when frames stay below 20 fps. Off: holding Turbo runs unlimited guest frames instead (no automatic slowdown) — the device can get hot, the battery drains faster and audio is muted." = "On: the on-screen Turbo button uses the selected Turbo speed and the runtime may lower it when frames stay below 20 fps. Off: holding Turbo runs unlimited guest frames instead (no automatic slowdown) — the device can get hot, the battery drains faster and audio is muted.";
+"The speed the on-screen Turbo button uses while Turbo limit is on." = "The speed the on-screen Turbo button uses while Turbo limit is on.";
+"Update available" = "Update available";
+"3ds2apple %@ is available on GitHub." = "3ds2apple %@ is available on GitHub.";

@@ -339,14 +339,24 @@ project is used (it is GPL and reference-only for this repo).
 
 **General / System / Gamepad / Graphics / Layout / Sound / Debug / Other:**
 
-- **General** (0.1.7-beta5): **Check for updates** (`settings.checkForUpdates`,
-  a real single request to the GitHub latest-release API with an Update status
-  row showing up-to-date / update-available / check-failed), **Turbo limit**
-  (`settings.turboLimit`, lets the runtime lower a Turbo speed automatically
-  when the presented frame rate stays below 20 fps for two windows), **Turbo
-  speed** (2× / 3× / 4×, `settings.turboSpeed`, used by the on-screen Turbo
-  button) and **Default speed** (1× / 2× / 3× / 4×, `settings.playbackSpeed`).
-  The old Fast-forward and read-only Frame limiter rows are gone.
+- **General** (0.2.0): **Run speed limit** (`settings.runSpeedLimit`, on by
+  default). On, the game runs at the Default speed (or Turbo speed while Turbo
+  is active) and is capped at 4×. Off, every presented frame advances guest
+  frames until the 60 Hz hardware time budget is used — no 4× clamp — the
+  Turbo button has no extra effect, audio is muted and the page shows an orange
+  **High power use** warning about heat and battery drain. **Check for updates**
+  (`settings.checkForUpdates`, `UpdateChecker`) checks GitHub when the page
+  opens and at most once per 24 hours in the background; **Update channel**
+  (`settings.updateChannel`, Stable / Beta) selects full releases only or
+  pre-releases too; an available update posts a local notification
+  (`UNUserNotificationCenter`, permission requested when first needed) and the
+  Update status row shows up-to-date / update-available / check-failed.
+  **Turbo limit** (`settings.turboLimit`): on, the on-screen Turbo button uses
+  **Turbo speed** (2× / 3× / 4×, `settings.turboSpeed`) and the runtime may
+  lower it automatically below 20 fps; off, holding Turbo runs unlimited guest
+  frames (no auto slowdown, audio muted, same heat/battery warning). **Default
+  speed** is 1× / 2× / 3× / 4× (`settings.playbackSpeed`). The old
+  Fast-forward and read-only Frame limiter rows are gone.
 - **Layout**: the screen layout page entry (landscape/portrait preset rows and
   the two numeric custom pages), **Screen rotation**, **Orientation lock**
   (`settings.orientation`), the **Swap screens** switch (`settings.swapScreens`)
@@ -668,10 +678,17 @@ frames with `zk_run_frame` before the frame that is presented:
   drops anything buffered and starts feeding audio again from the next frame.
 - **Automatic fallback**: if the presented frame rate stays below 20 fps for two
   consecutive half-second windows, the app lowers the effective speed one step
-  (4× → 2× → 1×) for the rest of the session, so a heavy scene cannot make the
-  menu or input unresponsive. The Settings page and the status line show the
+  (4× → 3× → 2× → 1×) for the rest of the session, so a heavy scene cannot make
+  the menu or input unresponsive. The Settings page and the status line show the
   effective speed (`fast-forward: 2× (auto)`), and choosing a speed again
-  clears the fallback.
+  clears the fallback. The fallback is disabled while unlimited speed is active.
+- **Unlimited speed** (0.2.0): with **Run speed limit** off, or with **Turbo
+  limit** off while the Turbo button is held, the frame loop runs
+  `zk_run_frame` in a loop until one 60 Hz presentation interval is used
+  instead of stopping at the 4× clamp. Only the final frame is presented, audio
+  is muted (the unlimited mute is separate from the player's Save-audio switch
+  and is restored when limited speed returns), and the page warns about heat and
+  battery drain. A 4096-frame guard keeps a faulty runtime from spinning.
 - The status line shows the effective speed (`fast-forward: 2×`), and the
   exported diagnostics records both the requested and the effective speed.
 - Pause, Save State / Load State, Reset, Unload and moving to the background all
@@ -971,7 +988,8 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `CPUProfilerView.swift` | The debug CPU profiler page: starts guest-PC sampling while a game runs and lists hot spots. Diagnosis only. |
 | `SaveManagerView.swift` | Game picker over the library, the selected game's battery save list (export as ZIP, import, delete) and its instant save-state slots (delete offline; save/load while that game runs), with progress and errors; re-reads the selected game's files on open, on library changes and after actions (no refresh button). |
 | `AboutView.swift` | Product page: app icon, name, version/build, project links, acknowledgements and legal notice; a compact runtime status card only while a game is loaded. |
-| `AppSettings.swift` | Persisted settings model (separate landscape and portrait screen layout enums, screen rotation, interface orientation, appearance, buffer size, frame cap, default/turbo playback speeds, Turbo limit, Check for updates, Metal HUD and FPS-counter switches, the two next-launch experimental GPU switches, the round-4 hidden-control rows and per-row size scales) and the UserDefaults keys, including the round-1 single-choice migration (`migratedScreenLayouts`) and the render scale (1×–4×). |
+| `AppSettings.swift` | Persisted settings model (separate landscape and portrait screen layout enums, screen rotation, interface orientation, appearance, buffer size, frame cap, run speed limit, default/turbo playback speeds, Turbo limit, Check for updates, update channel, Metal HUD and FPS-counter switches, the two next-launch experimental GPU switches, the round-4 hidden-control rows, per-row size scales and the per-title-ID presentation overrides) and the UserDefaults keys, including the round-1 single-choice migration (`migratedScreenLayouts`) and the render scale (1×–4×). |
+| `UpdateChecker.swift` | GitHub release checker for the General page and the daily background update notification: /releases request, Stable/Beta channel filtering, semver comparison with CFBundleShortVersionString, a 24-hour background throttle and a local notification via UNUserNotificationCenter (permission requested on first use, one notification per version). |
 | `DiagnosticsReport.swift` | Diagnostics report text, the shared diagnostics file type and screen geometry helpers. |
 | `StorageInspector.swift` | Container folder sizes, save-data file list, pipeline-cache clearing, and `AtomicFileWriter` for temporary-file-then-rename writes. |
 | `SaveStateSupport.swift` | Instant save states: three slots per game, the runtime's size → copy → load protocol on the serial runtime queue, the pause/audio-drop around save and load, and the slot list. |

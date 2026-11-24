@@ -252,6 +252,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Settings, possibly reduced by the automatic fallback when frames take
     /// too long (`playbackSpeedAutoReduced`).
     @Published private(set) var effectivePlaybackSpeed: Int = 1
+    /// True while the runtime ignores the 1×–4× clamp and runs guest frames
+    /// until the per-present time budget is used (Run speed limit off, or
+    /// Turbo limit off while the Turbo button is active).
+    @Published private(set) var isUnlimitedSpeedActive = false
     /// True when the automatic fallback lowered `effectivePlaybackSpeed` below
     /// the value requested in Settings during this session.
     @Published private(set) var playbackSpeedAutoReduced = false
@@ -329,6 +333,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// from the settings page on the main queue, read before every frame on the
     /// runtime queue; the automatic fallback lowers it from the runtime queue.
     private let playbackSpeedState = LockedIntState(initialValue: 1)
+    /// 1 = Run speed limit on (1×–4×), 0 = unlimited guest frames.
+    private let runSpeedLimitState = LockedIntState(initialValue: 1)
+    /// 1 = Turbo is running without a speed cap (Turbo limit off).
+    private let turboUnlimitedState = LockedIntState(initialValue: 0)
     /// A1: drawable size of `metalScreenView` in pixels. Main queue only.
     private(set) var presentedDrawableSize = CGSize.zero
     /// A1: presenter handle (`zk_presenter_*`). Created and destroyed on the
@@ -381,6 +389,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// the effective speed after an automatic fallback.
     private var requestedPlaybackSpeed = 1
     private var turboLimitEnabled = true
+    /// The player's Save-audio mute choice, kept apart from the temporary mute
+    /// used while unlimited speed is active.
+    private var userAudioMuted = false
     /// Consecutive 0.5 s windows in which fast-forward kept missing the speed
     /// floor; two in a row lower the speed one step. runtimeQueue only.
     private var slowPlaybackSpeedWindows = 0
@@ -998,6 +1009,52 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Safe while playing: the next scheduled frame uses the new value. `1×`
     /// restores normal speed (and sound). A change also clears an automatic
     /// fallback, so the requested speed is tried again.
+    /// The General page's Run speed limit switch. Off runs guest frames until
+    /// the 60 Hz presentation budget is spent instead of clamping at 4×; the
+    /// Turbo button has no extra effect in that mode (matching the reference
+    /// emulator) and audio stays muted.
+    func setRunSpeedLimitEnabled(_ enabled: Bool) {
+        runSpeedLimitState.set(enabled ? 1 : 0)
+        slowPlaybackSpeedWindows = 0
+        if !enabled {
+            turboUnlimitedState.set(0)
+            audioOutput.resetBuffer()
+        }
+        refreshUnlimitedState()
+        if enabled {
+            // Restore the requested speed from Settings after the unlimited run.
+            playbackSpeedState.set(requestedPlaybackSpeed)
+            effectivePlaybackSpeed = requestedPlaybackSpeed
+        }
+        AppLog.log("[3ds2apple] run speed limit: %@", enabled ? "on" : "off (unlimited)")
+    }
+
+    /// Turbo limit off: while the Turbo button is active, run unlimited guest
+    /// frames instead of the configured Turbo speed.
+    func setTurboUnlimited(_ unlimited: Bool) {
+        turboUnlimitedState.set(unlimited ? 1 : 0)
+        if unlimited {
+            audioOutput.resetBuffer()
+        } else {
+            playbackSpeedState.set(requestedPlaybackSpeed)
+            effectivePlaybackSpeed = requestedPlaybackSpeed
+        }
+        refreshUnlimitedState()
+        AppLog.log("[3ds2apple] turbo limit: %@", unlimited ? "off (unlimited turbo)" : "on")
+    }
+
+    private func refreshUnlimitedState() {
+        let active = isUnlimitedSpeed
+        playbackSpeedAutoReduced = false
+        slowPlaybackSpeedWindows = 0
+        isUnlimitedSpeedActive = active
+        applyEffectiveAudioMute()
+    }
+
+    private var isUnlimitedSpeed: Bool {
+        runSpeedLimitState.current == 0 || turboUnlimitedState.current != 0
+    }
+
     func setPlaybackSpeed(_ speed: Int) {
         let clamped = speed >= 4 ? 4 : (speed >= 3 ? 3 : (speed >= 2 ? 2 : 1))
         requestedPlaybackSpeed = clamped
@@ -2381,7 +2438,8 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         if intervalTicks > 0 {
             timingWindow.record(.frameInterval, ticks: intervalTicks)
         }
-        let speed = playbackSpeedState.current
+        let unlimited = isUnlimitedSpeed
+        let speed = unlimited ? 1 : playbackSpeedState.current
 
         // The only place that pushes input: same serial queue, immediately
         // before the frame that consumes it. During the graphics warm-up the
@@ -2392,8 +2450,14 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         let input = warmUpRun == nil ? inputState.snapshot() : InputSnapshot()
 
         // Fast-forward: advance the console-only frames first. They produce no
-        // visible frame and no audible samples.
-        if speed > 1 {
+        // visible frame; normal 2×–4× keeps its audio. Unlimited runs as many
+        // console frames as fit into the 60 Hz presentation budget instead of
+        // stopping at 4× (audio is muted for that mode).
+        if unlimited {
+            if !runUnlimitedFrames(system: system, input: input, frameStart: frameStart) {
+                return false
+            }
+        } else if speed > 1 {
             var fastForwarded = 1
             while fastForwarded < speed {
                 if !runFastForwardFrame(system: system, input: input, frameStart: frameStart) {
@@ -2440,7 +2504,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         // console frame (including the extra ones) feeds the same ring buffer,
         // so the sound speeds up with the game instead of being muted.
         let audioStart = FrameClock.now()
-        pumpAudio(system: system)
+        if !unlimited {
+            pumpAudio(system: system)
+        }
         let audioTicks = FrameClock.now() - audioStart
         timingWindow.record(.audioPump, ticks: audioTicks)
 
@@ -2497,6 +2563,24 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// One extra console frame while fast-forwarding: advances the game without
     /// presenting or reading the screens; its audio is queued like a normal frame.
     /// runtimeQueue only. Returns false when the runtime stopped.
+    /// Unlimited-speed inner loop: guest frames until the presentation budget
+    /// (one 60 Hz interval) is used, with a hard frame-count guard so a faulty
+    /// runtime cannot spin forever.
+    private func runUnlimitedFrames(system: zk_system_t,
+                                    input: InputSnapshot,
+                                    frameStart: UInt64) -> Bool {
+        let budget = FrameClock.ticks(seconds: 1.0 / 60.0)
+        var frames = 0
+        while frames < 4096 {
+            if FrameClock.now() - frameStart >= budget { break }
+            if !runFastForwardFrame(system: system, input: input, frameStart: frameStart) {
+                return false
+            }
+            frames += 1
+        }
+        return true
+    }
+
     private func runFastForwardFrame(system: zk_system_t,
                                      input: InputSnapshot,
                                      frameStart: UInt64) -> Bool {
@@ -2507,8 +2591,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         let result = zk_run_frame(system)
         timingWindow.record(.runFrame, ticks: FrameClock.now() - runStart)
         framesRendered += 1
-        // Queue this extra frame's samples as well: fast-forward is audible.
-        pumpAudio(system: system)
+        // Normal 2×–4× fast-forward is audible; unlimited speed is muted.
+        if !isUnlimitedSpeed {
+            pumpAudio(system: system)
+        }
         guard result == 0 else {
             timingWindow.record(.renderTotal, ticks: FrameClock.now() - frameStart)
             return finishForRunFrameResult(result)
@@ -2866,6 +2952,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// changing the speed in Settings (or a new load) resets it.
     /// runtimeQueue only.
     private func considerPlaybackSpeedFallback(presentedFPS: Double) {
+        guard !isUnlimitedSpeed else {
+            slowPlaybackSpeedWindows = 0
+            return
+        }
         guard turboLimitEnabled else {
             slowPlaybackSpeedWindows = 0
             return
@@ -3003,6 +3093,14 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
 
     /// Mute switch, persisted by the settings page.
     func setAudioMuted(_ muted: Bool) {
+        userAudioMuted = muted
+        applyEffectiveAudioMute()
+    }
+
+    /// The device mute switch and the unlimited-speed mute are separate: leaving
+    /// unlimited speed restores the player's own choice.
+    private func applyEffectiveAudioMute() {
+        let muted = userAudioMuted || isUnlimitedSpeed
         audioOutput.setMuted(muted)
         // Audio runs during the warm-up too (boot sounds belong to loading),
         // so the switch stays live in the preparing phase as well. While the

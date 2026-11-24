@@ -9,6 +9,7 @@
 
 import SwiftUI
 import UIKit
+import UserNotifications
 
 /// Applies the orientation preference.
 enum AppOrientation {
@@ -61,7 +62,27 @@ enum AppOrientation {
 }
 
 /// Application delegate handed to SwiftUI through `UIApplicationDelegateAdaptor`.
-final class AppDelegate: NSObject, UIApplicationDelegate {
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        // Update notifications are local (UpdateChecker); the delegate shows
+        // them while the app is in the foreground too, because the daily check
+        // runs when ContentView appears.
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
+    /// Shows the local update notification even when the app is foreground.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list, .sound])
+    }
+
     func application(
         _ application: UIApplication,
         supportedInterfaceOrientationsFor window: UIWindow?
