@@ -667,6 +667,10 @@
 /* --- Round 0.1.6 app buttons --- */
 "Quick save" = "快速保存";
 "Quick saved" = "已快速保存";
+"MENU" = "MENU";
+"Screen aspect" = "画面比例";
+"How the preset screen layouts fill the game view: Fit keeps the picture shape, 4:3 fits it into a 4:3 box with black bars, Stretch fills the view and distorts the picture. The custom layouts place each screen explicitly and ignore this." = "预设屏幕布局如何填充游戏画面：适应保持画面比例；4:3 将画面放入 4:3 区域并加黑边；拉伸填满画面但会变形。自定义布局会明确摆放两块屏幕，忽略此设置。";
+"With Fit and 4:3, snap each 3DS pixel to a whole number of screen pixels (nearest-pixel magnification). Applies immediately to the preset screen layouts; the custom layouts keep their own placement." = "在适应和 4:3 模式下，把每个 3DS 像素对齐到整数个屏幕像素（最近邻放大）。对预设屏幕布局立即生效；自定义布局使用自己的摆放方式。";
 "Quick load" = "快速读取";
 "Quick loaded" = "已快速读取";
 "Swap screens" = "交换屏幕";

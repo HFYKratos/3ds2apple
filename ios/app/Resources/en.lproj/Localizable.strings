@@ -665,6 +665,10 @@
 /* --- Round 0.1.6 app buttons --- */
 "Quick save" = "Quick save";
 "Quick saved" = "Quick saved";
+"MENU" = "MENU";
+"Screen aspect" = "Screen aspect";
+"How the preset screen layouts fill the game view: Fit keeps the picture shape, 4:3 fits it into a 4:3 box with black bars, Stretch fills the view and distorts the picture. The custom layouts place each screen explicitly and ignore this." = "How the preset screen layouts fill the game view: Fit keeps the picture shape, 4:3 fits it into a 4:3 box with black bars, Stretch fills the view and distorts the picture. The custom layouts place each screen explicitly and ignore this.";
+"With Fit and 4:3, snap each 3DS pixel to a whole number of screen pixels (nearest-pixel magnification). Applies immediately to the preset screen layouts; the custom layouts keep their own placement." = "With Fit and 4:3, snap each 3DS pixel to a whole number of screen pixels (nearest-pixel magnification). Applies immediately to the preset screen layouts; the custom layouts keep their own placement.";
 "Quick load" = "Quick load";
 "Quick loaded" = "Quick loaded";
 "Swap screens" = "Swap screens";

@@ -369,7 +369,7 @@ struct GameView: View {
                 model.pauseForMenu()
             }
         } label: {
-            Image(systemName: "pause.fill")
+            Image(systemName: "gearshape.fill")
                 .font(.system(size: size * 0.36, weight: .bold))
                 .foregroundColor(.white)
                 .frame(width: size, height: size)

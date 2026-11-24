@@ -777,6 +777,22 @@ struct GraphicsSettingsPage: View {
             )
             .accessibilityIdentifier("settings-resolution")
 
+            SettingsSegmentedRow(
+                title: "Screen aspect",
+                description: "How the preset screen layouts fill the game view: Fit keeps the picture shape, 4:3 fits it into a 4:3 box with black bars, Stretch fills the view and distorts the picture. The custom layouts place each screen explicitly and ignore this.",
+                choices: ScreenAspect.allCases,
+                selection: persistedBinding(settings, \.screenAspect),
+                label: { $0.title }
+            )
+            .accessibilityIdentifier("settings-screen-aspect")
+
+            SettingsToggleRow(
+                title: "Integer scaling",
+                description: "With Fit and 4:3, snap each 3DS pixel to a whole number of screen pixels (nearest-pixel magnification). Applies immediately to the preset screen layouts; the custom layouts keep their own placement.",
+                isOn: persistedBinding(settings, \.integerScale)
+            )
+            .accessibilityIdentifier("settings-integer-scaling")
+
             SettingsToggleRow(
                 title: "GPU vertex shading",
                 description: "Experimental: run the 3D vertex stage on the GPU. Rendering and performance can change. Takes effect after restarting the app.",

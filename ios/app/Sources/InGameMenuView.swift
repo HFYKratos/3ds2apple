@@ -2,19 +2,19 @@
 //  InGameMenuView.swift
 //  3ds2apple
 //
-//  The in-game overlay menu: it dims the (paused) game and offers resume, the
-//  quick save state, the round-4 virtual-control options, mute and fast-forward,
-//  display settings, the save manager, diagnostics and exit.
+//  In-game menu (0.1.7-beta3 redesign). A light card slides up from the bottom
+//  in portrait; in landscape the same card is centred with all corners rounded.
+//  The header carries the MENU title, a white capsule with the power / restart /
+//  quick-save / quick-load actions and a white X that resumes the game. Rows are
+//  grouped white cards with a leading SF Symbol; rows that open a sub-menu push a
+//  secondary page inside the sheet instead of expanding sideways. Every feature
+//  of the old menu is kept: save/load state, virtual controls, display settings,
+//  the Settings sheet, Save Manager, Export logs, Reset and Exit are still
+//  reachable (power = Exit, restart = Reset, X = resume, save/load = quick slot).
 //
-//  Round 5 unifies the option rows: every row is the same icon-free style (a
-//  title plus an optional trailing toggle/chevron/value), the same height and
-//  padding. SF Symbol icons are intentionally not used for now.
-//
-//  Opening the menu pauses the frame loop and the audio engine in ROMSession,
-//  so the game can neither advance nor receive input behind the overlay. The
-//  Save State / Load State buttons take and restore instant states through
-//  SaveStateSupport on the paused runtime; a successful load resumes the game
-//  and drops the audio buffered before it.
+//  The design follows reference screenshots of another emulator's menu for its
+//  layout only; all strings and code here are our own and no GPL code/text is
+//  copied.
 //
 
 import SwiftUI
@@ -26,8 +26,6 @@ struct InGameMenuView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var saveStates: SaveStateSupport
     let onResume: () -> Void
-    /// Closes the menu and enters the in-game control edit mode (the runtime
-    /// stays paused; Done in the editor resumes it).
     let onEditControls: () -> Void
     let onReset: () -> Void
     let onDisplaySettings: () -> Void
@@ -35,39 +33,48 @@ struct InGameMenuView: View {
     let onSaveManager: () -> Void
     let onDiagnostics: () -> Void
     let onExit: () -> Void
-    /// Called after a state load succeeded: the game view closes the menu and
-    /// resumes the restored session.
     let onLoadStateCompleted: () -> Void
-    /// Path (relative to Documents) of the diagnostics file the last export
-    /// kept, so it can also be pulled from the Files app after sharing.
     var diagnosticsHint: String? = nil
 
-    /// The virtual-control options sheet (round 4) currently open, if any.
+    private enum MenuPage: Hashable {
+        case root
+        case virtualControls
+        case saveState
+    }
+
+    @State private var page: MenuPage = .root
     @State private var controlOptionsSheet: ControlOptionsPage?
     @State private var isResetControlsConfirmationPresented = false
     @State private var didHandleDebugOptions = false
 
-    // Unified row metrics (round 5): every option row uses these.
-    private let rowVerticalPadding: CGFloat = 12
-    private let rowHorizontalPadding: CGFloat = 10
+    // Light sheet palette (independent of the app's dark settings appearance).
+    private let sheetBackground = Color(red: 0.949, green: 0.945, blue: 0.973)
+    private let rowBackground = Color.white
+    private let primaryText = Color(red: 0.10, green: 0.10, blue: 0.12)
+    private let secondaryText = Color(red: 0.45, green: 0.45, blue: 0.50)
+    private let accentRed = Color(red: 0.94, green: 0.22, blue: 0.25)
 
     var body: some View {
-        ZStack {
-            Color.black.opacity(0.74)
-                .ignoresSafeArea()
-            ScrollView {
-                VStack(spacing: 12) {
-                    header
-                    resumeRow
-                    saveStateCard
-                    virtualControlsCard
-                    quickSettingsCard
-                    gameActionsCard
+        GeometryReader { geometry in
+            ZStack {
+                Color.black.opacity(0.55)
+                    .ignoresSafeArea()
+                if orientation == .portrait {
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 24)
+                        sheet(height: min(geometry.size.height * 0.68,
+                                            geometry.size.height - 60),
+                              width: geometry.size.width,
+                              topCornersOnly: true)
+                    }
+                    .ignoresSafeArea(edges: .bottom)
+                } else {
+                    sheet(height: min(geometry.size.height * 0.88, 820),
+                          width: min(560, geometry.size.width * 0.62),
+                          topCornersOnly: false)
                 }
-                .padding(20)
-                .frame(maxWidth: 420)
-                .frame(maxWidth: .infinity)
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .sheet(item: $controlOptionsSheet) { page in
             switch page {
@@ -90,79 +97,299 @@ struct InGameMenuView: View {
         .onAppear {
             saveStates.refresh()
             saveStates.clearMessages()
-            // Headless screenshot hook: open one of the option sheets straight
-            // away; inert in normal launches.
             if !didHandleDebugOptions {
                 didHandleDebugOptions = true
-                if let page = DebugLaunch.requestedControlOptions {
-                    controlOptionsSheet = page
+                if let requested = DebugLaunch.requestedControlOptions {
+                    controlOptionsSheet = requested
                 }
             }
         }
+        .ignoresSafeArea()
         .accessibilityIdentifier("in-game-menu-overlay")
     }
 
-    // MARK: - Header
+    // MARK: - Sheet shell
+
+    private func sheet(height: CGFloat, width: CGFloat, topCornersOnly: Bool) -> some View {
+        VStack(spacing: 0) {
+            header
+            ScrollView(showsIndicators: false) {
+                content
+                    .padding(.horizontal, 18)
+                    .padding(.top, 6)
+                    .padding(.bottom, 24)
+            }
+        }
+        .frame(width: width, height: max(height, 320))
+        .background(sheetBackground)
+        .clipShape(MenuSheetShape(radius: 28, topCornersOnly: topCornersOnly))
+        .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
+    }
 
     private var header: some View {
-        VStack(spacing: 4) {
-            Text("Paused")
-                .font(.title2.weight(.bold))
-                .foregroundColor(.white)
-            Text(romName)
-                .font(.subheadline)
-                .foregroundColor(.white.opacity(0.7))
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-        .padding(.bottom, 2)
-    }
-
-    // MARK: - Resume
-
-    private var resumeRow: some View {
-        Button(action: onResume) {
+        VStack(spacing: 8) {
+            if orientation == .portrait {
+                Capsule()
+                    .fill(Color.black.opacity(0.16))
+                    .frame(width: 38, height: 5)
+                    .padding(.top, 8)
+            }
             HStack(spacing: 10) {
-                Text("Resume game")
-                    .font(.body.weight(.semibold))
-                    .foregroundColor(.white)
+                if page != .root {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) { page = .root }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(primaryText)
+                            .frame(width: 34, height: 34)
+                            .background(Circle().fill(rowBackground))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("menu-back")
+                }
+                Text(pageTitle)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(primaryText)
                 Spacer(minLength: 8)
-                rowChevron
+                topButtons
             }
-            .padding(.horizontal, rowHorizontalPadding)
-            .padding(.vertical, rowVerticalPadding)
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.accentColor)
-            )
+            .padding(.horizontal, 18)
+            .padding(.top, orientation == .portrait ? 2 : 16)
+            .padding(.bottom, 10)
         }
-        .buttonStyle(.plain)
-        .disabled(saveStates.busy)
-        .accessibilityIdentifier("menu-resume")
     }
 
-    // MARK: - Quick save state
+    private var pageTitle: String {
+        switch page {
+        case .root: return L10n.tr("MENU")
+        case .virtualControls: return L10n.tr("Virtual controls")
+        case .saveState: return L10n.tr("Save state")
+        }
+    }
 
-    private var saveStateCard: some View {
-        card {
-            sectionTitle("Save state")
-            actionRow("Save state",
-                      enabled: saveStates.canSave,
-                      identifier: "menu-save-state") {
-                saveStates.save(slot: SaveStateSupport.quickSlot)
-            }
-            rowDivider
-            actionRow("Load state",
-                      enabled: saveStates.canLoad,
-                      identifier: "menu-load-state") {
-                saveStates.load(slot: SaveStateSupport.quickSlot) { result in
-                    if case .success = result {
-                        onLoadStateCompleted()
+    private var topButtons: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 0) {
+                topIcon("power", color: accentRed, identifier: "menu-exit", action: onExit)
+                topIcon("arrow.clockwise", identifier: "menu-reset", action: onReset)
+                topIcon("square.and.arrow.down",
+                        identifier: "menu-save-state",
+                        enabled: saveStates.canSave) {
+                    saveStates.save(slot: SaveStateSupport.quickSlot)
+                }
+                topIcon("arrow.down.doc",
+                        identifier: "menu-load-state",
+                        enabled: saveStates.canLoad) {
+                    saveStates.load(slot: SaveStateSupport.quickSlot) { result in
+                        if case .success = result { onLoadStateCompleted() }
                     }
                 }
             }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(rowBackground))
+            Button(action: onResume) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(primaryText)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(rowBackground))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("menu-resume")
+        }
+    }
+
+    private func topIcon(_ systemImage: String,
+                         color: Color? = nil,
+                         identifier: String,
+                         enabled: Bool = true,
+                         action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(color ?? primaryText)
+                .frame(width: 34, height: 34)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
+        .accessibilityIdentifier(identifier)
+    }
+
+    // MARK: - Pages
+
+    @ViewBuilder
+    private var content: some View {
+        switch page {
+        case .root: rootContent
+        case .virtualControls: virtualControlsContent
+        case .saveState: saveStateContent
+        }
+    }
+
+    private var rootContent: some View {
+        VStack(spacing: 14) {
+            singleRowCard(title: L10n.tr("Virtual controls"),
+                          systemImage: "gamecontroller",
+                          identifier: "menu-virtual-controls") {
+                withAnimation(.easeInOut(duration: 0.18)) { page = .virtualControls }
+            }
+            singleRowCard(title: L10n.tr("Save state"),
+                          systemImage: "archivebox",
+                          identifier: "menu-save-state-page") {
+                withAnimation(.easeInOut(duration: 0.18)) { page = .saveState }
+            }
+            rowGroup {
+                actionRow(L10n.tr("Display settings"),
+                          systemImage: "display",
+                          identifier: "menu-display-settings",
+                          action: onDisplaySettings)
+                rowDivider
+                actionRow(L10n.tr("Settings"),
+                          systemImage: "gearshape",
+                          identifier: "menu-settings",
+                          action: onSettings)
+                rowDivider
+                actionRow(L10n.tr("Save Manager"),
+                          systemImage: "folder",
+                          identifier: "menu-save-manager",
+                          action: onSaveManager)
+                rowDivider
+                actionRow(L10n.tr("Export logs"),
+                          systemImage: "doc.text",
+                          identifier: "menu-diagnostics",
+                          action: onDiagnostics)
+            }
+            rowGroup {
+                valueRow(title: L10n.tr("Fast-forward"),
+                         systemImage: "forward.fill",
+                         identifier: "menu-fast-forward") {
+                    Picker("Fast-forward", selection: persistedBinding(settings, \.playbackSpeed)) {
+                        ForEach(PlaybackSpeed.allCases) { speed in
+                            Text(speed.title).tag(speed)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .tint(accentRed)
+                }
+                rowDivider
+                valueRow(title: L10n.tr("Sound"),
+                         systemImage: "speaker.wave.2",
+                         identifier: "menu-mute") {
+                    Toggle("", isOn: persistedBinding(settings, \.audioMuted))
+                        .labelsHidden()
+                        .tint(accentRed)
+                }
+            }
+            if let diagnosticsHint {
+                Text(diagnosticsHint)
+                    .font(.caption2)
+                    .foregroundColor(secondaryText)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+            }
+            rowGroup {
+                actionRow(L10n.tr("Reset game"),
+                          systemImage: "arrow.counterclockwise",
+                          identifier: "menu-reset-row",
+                          destructive: true,
+                          action: onReset)
+                rowDivider
+                actionRow(L10n.tr("Exit to home"),
+                          systemImage: "power",
+                          identifier: "menu-exit-row",
+                          destructive: true,
+                          action: onExit)
+            }
+        }
+    }
+
+    private var virtualControlsContent: some View {
+        VStack(spacing: 14) {
+            rowGroup {
+                valueRow(title: L10n.tr("Show virtual controls"),
+                         systemImage: "gamecontroller",
+                         identifier: "menu-show-controls") {
+                    Toggle("", isOn: persistedBinding(settings, \.showTouchControls))
+                        .labelsHidden()
+                        .tint(accentRed)
+                }
+                rowDivider
+                valueRow(title: L10n.tr("Show performance stats"),
+                         systemImage: "speedometer",
+                         identifier: "menu-show-fps") {
+                    Toggle("", isOn: persistedBinding(settings, \.showFPS))
+                        .labelsHidden()
+                        .tint(accentRed)
+                }
+                rowDivider
+                valueRow(title: L10n.tr("Haptic feedback"),
+                         systemImage: "hand.tap",
+                         identifier: "menu-haptics") {
+                    Toggle("", isOn: persistedBinding(settings, \.haptics))
+                        .labelsHidden()
+                        .tint(accentRed)
+                }
+            }
+            rowGroup {
+                actionRow(L10n.tr("Edit layout"),
+                          systemImage: "slider.horizontal.3",
+                          identifier: "menu-edit-controls",
+                          action: onEditControls)
+                rowDivider
+                actionRow(L10n.tr("Toggle controls"),
+                          systemImage: "checkmark.circle",
+                          identifier: "menu-toggle-controls") {
+                    controlOptionsSheet = .visibility
+                }
+                rowDivider
+                actionRow(L10n.tr("Adjust size"),
+                          systemImage: "arrow.up.left.and.arrow.down.right",
+                          identifier: "menu-adjust-size") {
+                    controlOptionsSheet = .size
+                }
+                rowDivider
+                actionRow(L10n.tr("Adjust opacity"),
+                          systemImage: "circle.lefthalf.filled",
+                          identifier: "menu-adjust-opacity") {
+                    controlOptionsSheet = .opacity
+                }
+                rowDivider
+                actionRow(L10n.tr("Reset virtual controls"),
+                          systemImage: "arrow.counterclockwise",
+                          identifier: "menu-reset-controls",
+                          destructive: true) {
+                    isResetControlsConfirmationPresented = true
+                }
+            }
+        }
+    }
+
+    private var saveStateContent: some View {
+        VStack(spacing: 14) {
             saveStateStatus
+            rowGroup {
+                actionRow(L10n.tr("Save state"),
+                          systemImage: "square.and.arrow.down",
+                          identifier: "menu-save-state-row",
+                          enabled: saveStates.canSave) {
+                    saveStates.save(slot: SaveStateSupport.quickSlot)
+                }
+                rowDivider
+                actionRow(L10n.tr("Load state"),
+                          systemImage: "arrow.down.doc",
+                          identifier: "menu-load-state-row",
+                          enabled: saveStates.canLoad) {
+                    saveStates.load(slot: SaveStateSupport.quickSlot) { result in
+                        if case .success = result { onLoadStateCompleted() }
+                    }
+                }
+            }
         }
     }
 
@@ -170,208 +397,151 @@ struct InGameMenuView: View {
     private var saveStateStatus: some View {
         if saveStates.busy {
             HStack(spacing: 8) {
-                ProgressView()
-                    .tint(.white)
-                    .controlSize(.small)
+                ProgressView().tint(primaryText)
                 Text(saveStates.statusText)
                     .font(.caption)
-                    .foregroundColor(.white.opacity(0.75))
-                    .lineLimit(2)
+                    .foregroundColor(secondaryText)
             }
-            .padding(.horizontal, rowHorizontalPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 14).fill(rowBackground))
             .accessibilityIdentifier("menu-save-state-progress")
         } else if let error = saveStates.errorMessage {
             Text(error)
                 .font(.caption)
-                .foregroundColor(.orange)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, rowHorizontalPadding)
+                .foregroundColor(accentRed)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 14).fill(rowBackground))
                 .accessibilityIdentifier("menu-save-state-error")
         } else if !saveStates.isRuntimeLoaded {
-            Text("Save states are available while a game is running.")
+            Text(L10n.tr("Save states are available while a game is running."))
                 .font(.caption)
-                .foregroundColor(.white.opacity(0.55))
-                .padding(.horizontal, rowHorizontalPadding)
+                .foregroundColor(secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 14).fill(rowBackground))
         } else {
-            Text(L10n.format("Slot %ld · %@", SaveStateSupport.quickSlot, saveStates.quickSlotInfo.detail))
+            Text(L10n.format("Slot %ld · %@", SaveStateSupport.quickSlot,
+                            saveStates.quickSlotInfo.detail))
                 .font(.caption)
-                .foregroundColor(.white.opacity(0.55))
-                .padding(.horizontal, rowHorizontalPadding)
+                .foregroundColor(secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 14).fill(rowBackground))
                 .accessibilityIdentifier("menu-save-state-detail")
         }
     }
 
-    // MARK: - Virtual controls
+    // MARK: - Row pieces
 
-    private var virtualControlsCard: some View {
-        card {
-            sectionTitle("Virtual controls")
-            toggleRow("Show virtual controls",
-                      isOn: persistedBinding(settings, \.showTouchControls),
-                      identifier: "menu-show-controls")
-            toggleRow("Show performance stats",
-                      isOn: persistedBinding(settings, \.showFPS),
-                      identifier: "menu-show-fps")
-            toggleRow("Haptic feedback",
-                      isOn: persistedBinding(settings, \.haptics),
-                      identifier: "menu-haptics")
-            rowDivider
-            actionRow("Edit layout", identifier: "menu-edit-controls", action: onEditControls)
-            rowDivider
-            actionRow("Toggle controls", identifier: "menu-toggle-controls") {
-                controlOptionsSheet = .visibility
-            }
-            rowDivider
-            actionRow("Adjust size", identifier: "menu-adjust-size") {
-                controlOptionsSheet = .size
-            }
-            rowDivider
-            actionRow("Adjust opacity", identifier: "menu-adjust-opacity") {
-                controlOptionsSheet = .opacity
-            }
-            rowDivider
-            actionRow("Reset virtual controls",
-                      destructive: true,
-                      identifier: "menu-reset-controls") {
-                isResetControlsConfirmationPresented = true
-            }
+    private func singleRowCard(title: String,
+                               systemImage: String,
+                               identifier: String,
+                               action: @escaping () -> Void) -> some View {
+        rowGroup {
+            actionRow(title,
+                      systemImage: systemImage,
+                      identifier: identifier,
+                      action: action)
         }
     }
 
-    // MARK: - Quick settings
-
-    private var quickSettingsCard: some View {
-        card {
-            toggleRow("Mute audio",
-                      isOn: persistedBinding(settings, \.audioMuted),
-                      identifier: "menu-mute")
-            rowDivider
-            HStack(spacing: 10) {
-                rowLabel("Fast-forward")
-                Spacer(minLength: 8)
-                Picker("Fast-forward", selection: persistedBinding(settings, \.playbackSpeed)) {
-                    ForEach(PlaybackSpeed.allCases) { speed in
-                        Text(speed.title).tag(speed)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 190)
-            }
-            .padding(.horizontal, rowHorizontalPadding)
-            .padding(.vertical, rowVerticalPadding)
-            Text("Fast-forward applies when the game resumes.")
-                .font(.caption2)
-                .foregroundColor(.white.opacity(0.55))
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, rowHorizontalPadding)
-        }
+    private func rowGroup<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(spacing: 0, content: content)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(rowBackground))
     }
 
-    // MARK: - Game actions
-
-    private var gameActionsCard: some View {
-        card {
-            actionRow("Display settings", identifier: "menu-display-settings", action: onDisplaySettings)
-            rowDivider
-            actionRow("Settings", identifier: "menu-settings", action: onSettings)
-            rowDivider
-            actionRow("Save Manager", identifier: "menu-save-manager", action: onSaveManager)
-            rowDivider
-            actionRow("Export logs", identifier: "menu-diagnostics", action: onDiagnostics)
-            if let diagnosticsHint {
-                Text(diagnosticsHint)
-                    .font(.caption2)
-                    .foregroundColor(.white.opacity(0.55))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, rowHorizontalPadding)
-                    .accessibilityIdentifier("menu-diagnostics-hint")
-            }
-            rowDivider
-            actionRow("Reset game", identifier: "menu-reset", action: onReset)
-            rowDivider
-            actionRow("Exit to home",
-                      destructive: true,
-                      identifier: "menu-exit",
-                      action: onExit)
-        }
+    private var rowDivider: some View {
+        Rectangle()
+            .fill(Color.black.opacity(0.07))
+            .frame(height: 0.7)
+            .padding(.leading, 56)
     }
 
-    // MARK: - Unified row pieces (round 5: no icons)
-
-    private func rowLabel(_ title: LocalizedStringKey,
-                          destructive: Bool = false,
-                          enabled: Bool = true) -> some View {
-        Text(title)
-            .font(.body)
-            .foregroundColor(destructive ? .red : .white.opacity(enabled ? 0.95 : 0.45))
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-    }
-
-    private var rowChevron: some View {
-        Text("›")
-            .font(.body.weight(.semibold))
-            .foregroundColor(.white.opacity(0.35))
-    }
-
-    private func actionRow(_ title: LocalizedStringKey,
+    private func actionRow(_ title: String,
+                           systemImage: String,
+                           identifier: String,
                            enabled: Bool = true,
                            destructive: Bool = false,
-                           identifier: String,
                            action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                rowLabel(title, destructive: destructive, enabled: enabled)
+            HStack(spacing: 14) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 19, weight: .regular))
+                    .foregroundColor(destructive ? accentRed : primaryText)
+                    .frame(width: 26)
+                Text(title)
+                    .font(.system(size: 17))
+                    .foregroundColor(destructive ? accentRed : primaryText)
+                    .lineLimit(1)
                 Spacer(minLength: 8)
-                rowChevron
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(secondaryText.opacity(0.7))
             }
-            .padding(.horizontal, rowHorizontalPadding)
-            .padding(.vertical, rowVerticalPadding)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 17)
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.45)
         .accessibilityIdentifier(identifier)
     }
 
-    private func toggleRow(_ title: LocalizedStringKey,
-                           isOn: Binding<Bool>,
-                           identifier: String) -> some View {
-        HStack(spacing: 10) {
-            rowLabel(title)
+    private func valueRow<Trailing: View>(title: String,
+                                          systemImage: String,
+                                          identifier: String,
+                                          @ViewBuilder trailing: () -> Trailing) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: systemImage)
+                .font(.system(size: 19, weight: .regular))
+                .foregroundColor(primaryText)
+                .frame(width: 26)
+            Text(title)
+                .font(.system(size: 17))
+                .foregroundColor(primaryText)
+                .lineLimit(1)
             Spacer(minLength: 8)
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .tint(.accentColor)
+            trailing()
         }
-        .padding(.horizontal, rowHorizontalPadding)
-        .padding(.vertical, rowVerticalPadding)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 13)
+        .frame(maxWidth: .infinity)
         .accessibilityIdentifier(identifier)
     }
+}
 
-    private func sectionTitle(_ title: LocalizedStringKey) -> some View {
-        Text(title)
-            .font(.caption.weight(.semibold))
-            .foregroundColor(.white.opacity(0.55))
-            .padding(.horizontal, rowHorizontalPadding)
-    }
+/// The light menu sheet's card shape: all corners, or only the top two for the
+/// portrait bottom sheet (its bottom edge sits on the screen edge).
+private struct MenuSheetShape: Shape {
+    let radius: CGFloat
+    let topCornersOnly: Bool
 
-    private var rowDivider: some View {
-        Rectangle()
-            .fill(Color.white.opacity(0.1))
-            .frame(height: 0.5)
-    }
-
-    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 6, content: content)
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.white.opacity(0.08))
-            )
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let r = min(radius, min(rect.width, rect.height) / 2)
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY + r))
+        path.addQuadCurve(to: CGPoint(x: rect.minX + r, y: rect.minY),
+                          control: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - r, y: rect.minY))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY + r),
+                          control: CGPoint(x: rect.maxX, y: rect.minY))
+        if topCornersOnly {
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        } else {
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
+            path.addQuadCurve(to: CGPoint(x: rect.maxX - r, y: rect.maxY),
+                              control: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
+            path.addQuadCurve(to: CGPoint(x: rect.minX, y: rect.maxY - r),
+                              control: CGPoint(x: rect.minX, y: rect.maxY))
+        }
+        path.closeSubpath()
+        return path
     }
 }

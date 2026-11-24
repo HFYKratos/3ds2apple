@@ -391,8 +391,12 @@ check "default control layout uses the final round-6 values (shoulder row below 
   bash -c 'grep -q "x: 0.18583, y: 0.80797, size: 0.27778" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.16546, y: 0.87, size: 0.24396" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.10, y: 0.755, size: 0.065" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.24, y: 0.755, size: 0.07729" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.44565, y: 0.84126, size: 0.12440" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.92, y: 0.935, size: 0.08" ios/app/Sources/ControlLayout.swift'
 check "D-pad renders as one cross control with direction hit testing" \
   bash -c 'grep -q "struct DpadCrossShape" ios/app/Sources/VirtualControlsView.swift && grep -q "dpad-cross" ios/app/Sources/VirtualControlsView.swift && grep -q "func dpadGroup" ios/app/Sources/GameViewGeometry.swift && grep -q "control-edit-dpad" ios/app/Sources/InGameControlEditOverlay.swift'
-check "pause menu rows use the unified icon-free style" \
-  bash -c '! grep -q "systemImage:" ios/app/Sources/InGameMenuView.swift && grep -q "rowVerticalPadding" ios/app/Sources/InGameMenuView.swift && grep -q "toggleRow" ios/app/Sources/InGameMenuView.swift'
+check "in-game menu is the light sheet with top icon actions and secondary pages" \
+  bash -c 'grep -q "MenuSheetShape" ios/app/Sources/InGameMenuView.swift && grep -q "MenuPage" ios/app/Sources/InGameMenuView.swift && grep -q "menu-virtual-controls" ios/app/Sources/InGameMenuView.swift && grep -q "topIcon" ios/app/Sources/InGameMenuView.swift && grep -q "gearshape.fill" ios/app/Sources/GameView.swift'
+check "Graphics settings expose Integer scaling and Screen aspect" \
+  bash -c 'grep -q "settings-integer-scaling" ios/app/Sources/SettingsPages.swift && grep -q "settings-screen-aspect" ios/app/Sources/SettingsPages.swift && grep -q "integerScale" ios/app/Sources/SettingsPages.swift && grep -q "screenAspect" ios/app/Sources/SettingsPages.swift'
+check "TODO.md records the unsupported reference-emulator items" \
+  bash -c 'test -f TODO.md && grep -q "reference emulator" TODO.md && grep -q "Cheat code manager" TODO.md'
 check "per-orientation control profiles exist" contains ios/app/Sources/AppSettings.swift 'controlLayoutLandscape'
 check "runtime overlay draws the editable layout" contains ios/app/Sources/VirtualControlsView.swift 'struct VirtualControlsView'
 check "analog stick reports a vector (not D-pad bits)" contains ios/app/Sources/VirtualControlsView.swift 'onCirclePad'

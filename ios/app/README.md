@@ -27,7 +27,7 @@ views do not carry duplicated strings.
 | **Settings** | A flat dark main menu of eight categories (0.1.7-beta2): General, System, Gamepad, Graphics, Layout, Sound, Debug and About, plus a real **Reset All Settings** action. Each category is one page of title + explanation + trailing-control rows; see "Settings screens (0.1.7)" below. |
 | **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. The page re-reads the selected game's files when it opens, when the library changes and after every action; there is no refresh button. |
 | **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the FPS appears only while a game is loaded; everything else stays in the log and the diagnostics. |
-| **In-game menu** | Opened from the pause button over the game: pause/resume, save-state shortcuts, a **Virtual controls** card (Show virtual controls / Show performance stats / Haptic feedback, then Edit layout / Toggle controls / Adjust size / Adjust opacity / Reset virtual controls), quick toggles (mute, 1×/2×/4× fast-forward), Display settings, Save Manager, Diagnostics, Reset and Exit. Round 5 gives every option row one unified icon-free style (title plus a trailing toggle/chevron/value) with the same height and padding. |
+| **In-game menu** | Opened from the floating gear button over the game: a **light card** that slides up from the bottom in portrait and is centred with all corners rounded in landscape. The header shows **MENU**, a white capsule with power / restart / quick-save / quick-load icon buttons and a white **X** that resumes; below it are grouped white cards with a leading SF Symbol. Rows (Virtual controls, Save state, Display settings, Settings, Save Manager, Export logs, Fast-forward, Sound, Reset game, Exit to home) either open a secondary page inside the sheet (Virtual controls, Save state) or a sheet. It still pauses the frame loop and the audio engine, and every old action (save/load, virtual controls, display settings, save manager, export, reset, exit) is still reachable; the top icons are Exit / Reset / quick save / quick load. |
 
 Opening the in-game menu pauses emulation: the frame loop and the audio engine
 are stopped, the runtime handle and the last frame stay, and Resume continues the
@@ -277,8 +277,8 @@ The shell can be driven headlessly without tapping:
 - `-previewLandscape` forces the landscape appearance for headless screenshots
   (the app asks its window scene to rotate and the game view uses the landscape
   arrangement even before the rotation lands).
-- `-previewPauseMenu` opens the in-game pause menu over the preview picture, for
-  headless screenshots of the round-4 Virtual controls card.
+- `-previewPauseMenu` opens the redesigned in-game light menu over the preview
+  picture, for headless screenshots (portrait bottom sheet or landscape card).
 - `-previewControlEdit` enters the in-game control edit mode over the preview
   picture (draggable controls + Done pill), for headless screenshots.
 - `-openControlOptions visibility|size|opacity` opens one virtual-control options
@@ -348,10 +348,15 @@ project is used (it is GPL and reference-only for this repo).
 - **Gamepad**: on-screen controls on/off, overlay opacity, haptics and the
   connected controller name; control positions are still edited in-game from the
   pause menu (see "Editable layouts").
-- **Graphics**: render resolution 1×–4× with the exact pixel caption, the two
-  experimental GPU switches (`settings.gpuVertexShaders` /
-  `UI.experimental.gpuVertexShaders`, `settings.preciseShading` /
-  `UI.experimental.preciseShading`) and read-only **Renderer** information
+- **Graphics**: render resolution 1×–4× with the exact pixel caption,
+  **Screen aspect** (Fit / 4:3 / Stretch, `settings.screenAspect`) and
+  **Integer scaling** (`settings.integerScale`, whole-console-pixel nearest
+  magnification for Fit/4:3) — both are real settings applied immediately to the
+  preset screen layouts; the custom layouts place each screen explicitly and
+  ignore them. Then the two experimental GPU switches
+  (`settings.gpuVertexShaders` / `UI.experimental.gpuVertexShaders`,
+  `settings.preciseShading` / `UI.experimental.preciseShading`) and read-only
+  **Renderer** information
   (Metal via MoltenVK, or the CPU readback fallback when the shell does not
   embed the framework; the active path appears while a game is loaded). Both
   experimental switches are read once in `App.init` before the renderer's first
@@ -470,7 +475,7 @@ round-4 drag editor described below.
   D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, the Circle Pad and the C-stick. It is
   a full-screen floating layer over the picture in both orientations and takes no
   layout space, so hiding it never moves the image. The pause menu's **Virtual
-  controls** card (round 4) has: **Show virtual controls**, **Show performance
+  controls** page (opened from the light menu's first card) has: **Show virtual controls**, **Show performance
   stats** (the FPS pill), **Haptic feedback**, **Edit layout**, **Toggle
   controls**, **Adjust size**, **Adjust opacity** and **Reset virtual controls**.
   - **Edit layout** closes the menu, keeps the runtime paused, hides the pause/FPS
@@ -511,9 +516,12 @@ hint sits above it and the empty area stays inert) saves the current direction's
   (the profile archive and the per-row visibility/size scales are global). The
   reference layout app's behaviour rows (slide buttons, relative stick centre,
   D-pad slide, Combo Button) are not implemented; they are noted as future work.
-  Round 5 also unified the whole pause menu: every option row is the same
-  icon-free style (title + trailing toggle/chevron/value, same height and
-  padding) and uses no SF Symbol icons for now.
+  0.1.7-beta3 redesigns the whole in-game menu as a light bottom card (portrait)
+  / centred large card (landscape) with a MENU header, power / restart / quick
+  save / quick load / X icon buttons and grouped white rows with SF Symbols;
+  secondary items push a sub-page inside the sheet instead of expanding
+  sideways. The old feature set is unchanged (virtual controls and all its
+  sheets, save states, display/Settings, Save Manager, Export logs, Reset, Exit).
 - **Analog sticks.** The Circle Pad is a real analog stick: dragging inside it
   reports -1…1 on both axes (a 14% dead zone is removed, so a resting finger is
   exactly 0) into `InputState.circleX/circleY` and `zk_set_input`. It is not a
@@ -939,9 +947,9 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `HomeView.swift` | Home page: the Documents/Games library grid (two columns on iPhone, three on iPad; square 1:1 SMDH cover art that fills the card edge to edge with no icon frame, an attention-state badge in the corner (no AOT badge on a ready game); compact title/publisher/size/last-played text; no explanatory paragraph under the grid), last-played dates, the exact per-game validation error on tap, the launcher empty state, a long-press context menu with the Delete Game action, its second confirmation and result banner, pull-to-refresh, settings entry. |
 | `GameView.swift` | Running game: full-bleed picture from the split landscape / portrait screen layout choices, the floating full-screen on-screen controls (per-row visibility and size scale), the optional floating FPS pill and pause button, in-game menu, round-4 in-game control edit mode and the 3DS software-keyboard overlay; also the ROM-free `-previewGameView` path. |
 | `GameViewPreview.swift` | Synthetic TOP / BOTTOM test images (gradient, 1 px grid, 400×240 and 320×240) for the ROM-free `-previewGameView` screenshots. |
-| `InGameMenuView.swift` | Paused overlay menu (resume, save states, the round-4 Virtual controls card with Edit layout / Toggle controls / Adjust size / Adjust opacity / Reset, mute and fast-forward quick toggles, display settings, save manager, diagnostics, reset, exit) and its option sheets. |
+| `InGameMenuView.swift` | The 0.1.7-beta3 light in-game menu: bottom sheet in portrait / centred card in landscape, MENU header with white power / restart / quick-save / quick-load / X icon buttons, grouped white SF-Symbol rows and secondary pages (Virtual controls, Save state) inside the sheet; every old action is still reachable and the option sheets/alert are attached here. |
 | `SettingsView.swift` | Settings main page: the flat dark category menu (large SF Symbol + label rows, no cards or chevrons), the real **Reset All Settings** action (confirmation, `removePersistentDomain` for the app bundle and a relaunch prompt), the persisted-setting binding and the in-game quick display sheet. The category pages themselves live in `SettingsPages.swift`. |
-| `SettingsPages.swift` | The eight settings category pages and their shared flat rows/captions. 0.1.7-beta2 layout: General (fast-forward + read-only frame limiter), Layout (screen layout entry, rotation, orientation lock, swap screens and the Performance monitoring group with the FPS counter and Metal HUD), Gamepad (controls, opacity, haptics, controller), Graphics (resolution, the two experimental GPU switches, renderer info), System (storage/version/language/About), Sound and Debug (AOT verification, Save Manager, CPU profiler, diagnostics export). |
+| `SettingsPages.swift` | The eight settings category pages and their shared flat rows/captions. 0.1.7-beta2 layout: General (fast-forward + read-only frame limiter), Layout (screen layout entry, rotation, orientation lock, swap screens and the Performance monitoring group with the FPS counter and Metal HUD), Gamepad (controls, opacity, haptics, controller), Graphics (resolution, Screen aspect, Integer scaling, the two experimental GPU switches, renderer info), System (storage/version/language/About), Sound and Debug (AOT verification, Save Manager, CPU profiler, diagnostics export). |
 | `CPUProfilerView.swift` | The debug CPU profiler page: starts guest-PC sampling while a game runs and lists hot spots. Diagnosis only. |
 | `SaveManagerView.swift` | Game picker over the library, the selected game's battery save list (export as ZIP, import, delete) and its instant save-state slots (delete offline; save/load while that game runs), with progress and errors; re-reads the selected game's files on open, on library changes and after actions (no refresh button). |
 | `AboutView.swift` | Product page: app icon, name, version/build, project links, acknowledgements and legal notice; a compact runtime status card only while a game is loaded. |
