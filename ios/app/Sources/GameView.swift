@@ -186,8 +186,8 @@ struct GameView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .sheet(item: $sheet) { sheet in
-            switch sheet {
+        .sheet(item: $sheet) { presentedSheet in
+            switch presentedSheet {
             case .quickDisplaySettings:
                 QuickDisplaySettingsView(settings: settings)
             case .settings:
