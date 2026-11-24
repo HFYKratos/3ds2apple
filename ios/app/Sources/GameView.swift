@@ -314,6 +314,8 @@ struct GameView: View {
         VirtualControlsView(
             profile: settings.controlLayout(for: isLandscape ? .landscape : .portrait),
             opacityScale: settings.controlsBackgroundOpacity,
+            deadzone: settings.effectiveAnalogDeadzone(titleID: presentationTitleID),
+            highContrast: settings.effectiveControlAppearance(titleID: presentationTitleID) == .highContrast,
             haptics: settings.haptics,
             onButton: { bit, pressed in model.setOverlayButton(bit, pressed: pressed) },
             onCirclePad: { x, y in model.setOverlayStick(x: x, y: y) },

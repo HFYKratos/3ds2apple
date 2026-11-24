@@ -367,10 +367,14 @@ enum PlaybackSpeed: Int, CaseIterable, Identifiable {
 /// optional: nil means "use the global setting". Stored as raw values so the
 /// archive stays stable if an enum name changes.
 struct PerGameOverrides: Codable, Equatable {
-    var screenRotationRaw: String?
-    var swapScreens: Bool?
-    var integerScale: Bool?
-    var screenAspectRaw: String?
+    var screenRotationRaw: String? = nil
+    var swapScreens: Bool? = nil
+    var integerScale: Bool? = nil
+    var screenAspectRaw: String? = nil
+    /// Optional per-app Gamepad profile (0.2.0 C).
+    var analogDeadzone: Double? = nil
+    var controlAppearanceRaw: String? = nil
+    var controllerButtonMap: [String: String]? = nil
 }
 
 /// The GitHub update channel on the General page: Stable ignores pre-releases,
@@ -385,6 +389,120 @@ enum UpdateChannel: String, CaseIterable, Identifiable {
         switch self {
         case .stable: return L10n.tr("Stable")
         case .beta: return L10n.tr("Beta")
+        }
+    }
+}
+
+/// Built-in on-screen control appearance. Standard is the shipped translucent
+/// dark style; High contrast uses opaque black/white edges and bigger strokes.
+/// No Delta skin import (see TODO).
+enum ControlAppearance: String, CaseIterable, Identifiable {
+    case standard
+    case highContrast
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .standard: return L10n.tr("Standard")
+        case .highContrast: return L10n.tr("High contrast")
+        }
+    }
+}
+
+/// A physical controller button that can be remapped on the Gamepad page.
+enum PhysicalControllerButton: String, CaseIterable, Identifiable {
+    case a, b, x, y
+    case l, r, zl, zr
+    case start, select
+    case dpadUp, dpadDown, dpadLeft, dpadRight
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .a: return L10n.tr("A")
+        case .b: return L10n.tr("B")
+        case .x: return L10n.tr("X")
+        case .y: return L10n.tr("Y")
+        case .l: return L10n.tr("L")
+        case .r: return L10n.tr("R")
+        case .zl: return L10n.tr("ZL")
+        case .zr: return L10n.tr("ZR")
+        case .start: return L10n.tr("Start")
+        case .select: return L10n.tr("Select")
+        case .dpadUp: return L10n.tr("D-pad Up")
+        case .dpadDown: return L10n.tr("D-pad Down")
+        case .dpadLeft: return L10n.tr("D-pad Left")
+        case .dpadRight: return L10n.tr("D-pad Right")
+        }
+    }
+
+    /// The controller button's default 3DS target (the stock mapping).
+    var defaultAction: GamepadAction {
+        switch self {
+        case .a: return .a
+        case .b: return .b
+        case .x: return .x
+        case .y: return .y
+        case .l: return .l
+        case .r: return .r
+        case .zl: return .zl
+        case .zr: return .zr
+        case .start: return .start
+        case .select: return .select
+        case .dpadUp: return .up
+        case .dpadDown: return .down
+        case .dpadLeft: return .left
+        case .dpadRight: return .right
+        }
+    }
+}
+
+/// A 3DS HID button a physical controller button can be remapped to.
+enum GamepadAction: String, CaseIterable, Identifiable {
+    case a, b, x, y
+    case l, r, zl, zr
+    case start, select
+    case up, down, left, right
+
+    var id: String { rawValue }
+
+    var buttonBit: UInt32 {
+        switch self {
+        case .a: return ZKButton.a
+        case .b: return ZKButton.b
+        case .x: return ZKButton.x
+        case .y: return ZKButton.y
+        case .l: return ZKButton.l
+        case .r: return ZKButton.r
+        case .zl: return ZKButton.zl
+        case .zr: return ZKButton.zr
+        case .start: return ZKButton.start
+        case .select: return ZKButton.select
+        case .up: return ZKButton.up
+        case .down: return ZKButton.down
+        case .left: return ZKButton.left
+        case .right: return ZKButton.right
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .a: return L10n.tr("A")
+        case .b: return L10n.tr("B")
+        case .x: return L10n.tr("X")
+        case .y: return L10n.tr("Y")
+        case .l: return L10n.tr("L")
+        case .r: return L10n.tr("R")
+        case .zl: return L10n.tr("ZL")
+        case .zr: return L10n.tr("ZR")
+        case .start: return L10n.tr("Start")
+        case .select: return L10n.tr("Select")
+        case .up: return L10n.tr("D-pad Up")
+        case .down: return L10n.tr("D-pad Down")
+        case .left: return L10n.tr("D-pad Left")
+        case .right: return L10n.tr("D-pad Right")
         }
     }
 }
@@ -539,6 +657,14 @@ final class AppSettings: ObservableObject {
     @Published var showTouchControls: Bool
     @Published var controlsOpacity: Double
     @Published var haptics: Bool
+    /// Analog-stick dead zone, 0...0.35, shared by the on-screen sticks and the
+    /// physical controller thumbsticks.
+    @Published var analogDeadzone: Double
+    /// Built-in on-screen control appearance.
+    @Published var controlAppearance: ControlAppearance
+    /// Physical controller button -> 3DS button mapping (physical raw value ->
+    /// GamepadAction raw value). Reset restores the identity mapping.
+    @Published var controllerButtonMap: [String: String]
 
     // MARK: In-game virtual control options (round 4)
 
@@ -663,6 +789,17 @@ final class AppSettings: ObservableObject {
             controlsOpacity = 0.55
         }
         haptics = Self.bool(defaults, Keys.haptics, fallback: false)
+        let deadzone = defaults.object(forKey: Keys.analogDeadzone) as? Double ?? 0.14
+        analogDeadzone = min(max(deadzone, 0), 0.35)
+        controlAppearance = ControlAppearance(
+            rawValue: defaults.string(forKey: Keys.controlAppearance) ?? ""
+        ) ?? .standard
+        if let data = defaults.data(forKey: Keys.controllerButtonMap),
+           let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
+            controllerButtonMap = decoded
+        } else {
+            controllerButtonMap = Self.defaultControllerButtonMap
+        }
 
         // Layouts: every stored value is versioned Codable data. A missing or
         // unreadable entry falls back to the shipped default, so an install that
@@ -823,6 +960,11 @@ final class AppSettings: ObservableObject {
         defaults.set(showTouchControls, forKey: Keys.showTouchControls)
         defaults.set(controlsOpacity, forKey: Keys.controlsOpacity)
         defaults.set(haptics, forKey: Keys.haptics)
+        defaults.set(analogDeadzone, forKey: Keys.analogDeadzone)
+        defaults.set(controlAppearance.rawValue, forKey: Keys.controlAppearance)
+        if let data = try? JSONEncoder().encode(controllerButtonMap) {
+            defaults.set(data, forKey: Keys.controllerButtonMap)
+        }
         defaults.set(frameCap.rawValue, forKey: Keys.frameCap)
         defaults.set(systemMetalHUD, forKey: Keys.systemMetalHUD)
         // Keep MTL_HUD_ENABLED in step with the switch: it is read when a
@@ -1066,6 +1208,53 @@ final class AppSettings: ObservableObject {
         return screenAspect
     }
 
+    /// The stock physical-controller mapping (every button to the same 3DS
+    /// button).
+    static var defaultControllerButtonMap: [String: String] {
+        var map: [String: String] = [:]
+        for button in PhysicalControllerButton.allCases {
+            map[button.rawValue] = button.defaultAction.rawValue
+        }
+        return map
+    }
+
+    func controllerAction(for button: PhysicalControllerButton) -> GamepadAction {
+        if let raw = controllerButtonMap[button.rawValue],
+           let action = GamepadAction(rawValue: raw) {
+            return action
+        }
+        return button.defaultAction
+    }
+
+    func setControllerAction(_ action: GamepadAction, for button: PhysicalControllerButton) {
+        controllerButtonMap[button.rawValue] = action.rawValue
+        persist()
+    }
+
+    func resetControllerButtonMap() {
+        controllerButtonMap = Self.defaultControllerButtonMap
+        persist()
+    }
+
+    /// Effective analog dead zone for a running game (per-app override or global).
+    func effectiveAnalogDeadzone(titleID: String?) -> Double {
+        overrides(for: titleID)?.analogDeadzone ?? analogDeadzone
+    }
+
+    /// Effective control appearance for a running game.
+    func effectiveControlAppearance(titleID: String?) -> ControlAppearance {
+        if let raw = overrides(for: titleID)?.controlAppearanceRaw,
+           let value = ControlAppearance(rawValue: raw) {
+            return value
+        }
+        return controlAppearance
+    }
+
+    /// Effective physical button mapping for a running game.
+    func effectiveControllerButtonMap(titleID: String?) -> [String: String] {
+        overrides(for: titleID)?.controllerButtonMap ?? controllerButtonMap
+    }
+
     /// Replaces (or clears, with nil) one game's overrides and persists.
     func setPerGameOverrides(_ overrides: PerGameOverrides?, for titleID: String) {
         let key = titleID.uppercased()
@@ -1092,6 +1281,9 @@ final class AppSettings: ObservableObject {
         static let audioBuffer = "UI.audioBuffer"
         static let controlsOpacity = "UI.controlsOpacity"
         static let haptics = "UI.haptics"
+        static let analogDeadzone = "UI.analogDeadzone"
+        static let controlAppearance = "UI.controlAppearance"
+        static let controllerButtonMap = "UI.controllerButtonMap"
         static let frameCap = "UI.frameCap"
         static let systemMetalHUD = "UI.systemMetalHUD"
         /// One-time marker: the 0.1.0 default switched the Metal HUD to on.

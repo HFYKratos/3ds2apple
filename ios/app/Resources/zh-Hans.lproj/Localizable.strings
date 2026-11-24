@@ -813,3 +813,31 @@
 "The speed the on-screen Turbo button uses while Turbo limit is on." = "Turbo 限制开启时，屏幕 Turbo 按钮使用的速度。";
 "Update available" = "有可用更新";
 "3ds2apple %@ is available on GitHub." = "GitHub 上已有 3ds2apple %@。";
+
+/* --- 0.2.0-C 游戏手柄死区 / 外观 / 按键映射 --- */
+"Deadzone" = "死区";
+"How far a stick must move before it reports input. Applied to the on-screen Circle Pad/C-stick and to a physical controller's thumbsticks." = "摇杆需要移动多远才开始上报输入。应用于屏幕摇杆和物理手柄的左右摇杆。";
+"Control appearance" = "控件外观";
+"Standard is the translucent shipped style; High contrast uses opaque black/white edges and thicker strokes. Built-in styles only: Delta skin import is not implemented." = "标准为默认半透明样式；高对比度使用不透明黑/白边缘与更粗描边。仅内置样式，未实现 Delta 皮肤导入。";
+"Standard" = "标准";
+"High contrast" = "高对比度";
+"Button mapping" = "按键映射";
+"Map every physical controller button to a 3DS button. The reset action restores the stock mapping." = "把物理手柄的每个按键映射到 3DS 按键；重置可恢复默认映射。";
+"Physical controller" = "物理手柄";
+"Which 3DS button this physical button sends." = "该物理按键发送哪个 3DS 按键。";
+"Reset button mapping" = "重置按键映射";
+"Restores the stock physical-controller mapping (every button maps to the same 3DS button)." = "恢复默认物理手柄映射（每个按键映射到同名 3DS 按键）。";
+"Gamepad profile" = "手柄配置";
+"Custom (copy current mapping)" = "自定义（复制当前映射）";
+"A" = "A";
+"B" = "B";
+"X" = "X";
+"Y" = "Y";
+"L" = "L";
+"R" = "R";
+"ZL" = "ZL";
+"ZR" = "ZR";
+"D-pad Up" = "上十字键";
+"D-pad Down" = "下十字键";
+"D-pad Left" = "左十字键";
+"D-pad Right" = "右十字键";

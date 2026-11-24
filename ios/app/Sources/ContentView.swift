@@ -110,7 +110,10 @@ struct ContentView: View {
             // `-previewScreenLayout <preset>`, `-previewLandscape`): written to the
             // in-memory settings, never persisted. Inert in normal launches.
             DebugLaunch.applyPreviewSettings(to: settings)
-            model.startControllerSupport()
+            model.startControllerSupport(
+                deadzone: settings.effectiveAnalogDeadzone(titleID: model.currentGame?.titleID),
+                buttonMap: settings.effectiveControllerButtonMap(titleID: model.currentGame?.titleID)
+            )
             applySettings()
             // Rescan Documents/Games before the home page is measured: the
             // desktop launcher can add or replace games while the app is not
@@ -230,12 +233,16 @@ struct ContentView: View {
             model.setScreenRotation(settings.effectiveScreenRotation(titleID: titleID))
             model.setIntegerScaling(settings.effectiveIntegerScale(titleID: titleID))
             model.setScreenSwap(settings.effectiveSwapScreens(titleID: titleID))
+            model.setControllerDeadzone(settings.effectiveAnalogDeadzone(titleID: titleID))
+            model.setControllerButtonMap(settings.effectiveControllerButtonMap(titleID: titleID))
         }
         .onChange(of: model.currentGame?.titleID) { _ in
             let titleID = model.currentGame?.titleID
             model.setScreenRotation(settings.effectiveScreenRotation(titleID: titleID))
             model.setIntegerScaling(settings.effectiveIntegerScale(titleID: titleID))
             model.setScreenSwap(settings.effectiveSwapScreens(titleID: titleID))
+            model.setControllerDeadzone(settings.effectiveAnalogDeadzone(titleID: titleID))
+            model.setControllerButtonMap(settings.effectiveControllerButtonMap(titleID: titleID))
         }
         .onChange(of: settings.systemMetalHUD) { enabled in
             model.setSystemMetalHUD(enabled)
@@ -245,6 +252,19 @@ struct ContentView: View {
         }
         .onChange(of: settings.runSpeedLimit) { enabled in
             model.setRunSpeedLimitEnabled(enabled)
+        }
+        .onChange(of: settings.analogDeadzone) { value in
+            model.setControllerDeadzone(
+                settings.effectiveAnalogDeadzone(titleID: model.currentGame?.titleID)
+            )
+        }
+        .onChange(of: settings.controlAppearance) { _ in
+            // On-screen controls read the effective appearance in GameView.
+        }
+        .onChange(of: settings.controllerButtonMap) { _ in
+            model.setControllerButtonMap(
+                settings.effectiveControllerButtonMap(titleID: model.currentGame?.titleID)
+            )
         }
         .preferredColorScheme(settings.appearance.colorScheme)
         .task {
@@ -284,6 +304,8 @@ struct ContentView: View {
         model.setScreenSwap(settings.effectiveSwapScreens(titleID: titleID))
         model.setIntegerScaling(settings.effectiveIntegerScale(titleID: titleID))
         model.applyRenderScale(CGFloat(settings.renderScale))
+        model.setControllerDeadzone(settings.effectiveAnalogDeadzone(titleID: model.currentGame?.titleID))
+        model.setControllerButtonMap(settings.effectiveControllerButtonMap(titleID: model.currentGame?.titleID))
         model.setPlaybackSpeed(settings.playbackSpeed.rawValue)
         model.setSystemMetalHUD(settings.systemMetalHUD)
         model.setTurboLimitEnabled(settings.turboLimit)

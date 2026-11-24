@@ -846,15 +846,28 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
 
     /// Attaches the hardware-controller bridge. Safe to call repeatedly; only
     /// the first call starts it. The view calls this from `onAppear`.
-    func startControllerSupport() {
+    func startControllerSupport(deadzone: Double = 0.14,
+                                buttonMap: [String: String] = AppSettings.defaultControllerButtonMap) {
         guard controllerManager == nil else { return }
         let manager = GameControllerManager(input: inputState) { [weak self] name in
             DispatchQueue.main.async {
                 self?.controllerName = name
             }
         }
+        manager.setDeadzone(deadzone)
+        manager.setButtonMap(buttonMap)
         controllerManager = manager
         manager.start()
+    }
+
+    /// Gamepad page Deadzone slider (also used by the per-app profile).
+    func setControllerDeadzone(_ value: Double) {
+        controllerManager?.setDeadzone(value)
+    }
+
+    /// Gamepad page physical-button remapping (also used by the per-app profile).
+    func setControllerButtonMap(_ map: [String: String]) {
+        controllerManager?.setButtonMap(map)
     }
 
     /// On-screen button press/release.

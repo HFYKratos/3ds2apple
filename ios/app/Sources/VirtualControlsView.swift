@@ -29,6 +29,10 @@ struct VirtualControlsView: View {
     let profile: ControlLayoutProfile
     /// Multiplies every control's own opacity (the Settings "overlay opacity").
     var opacityScale: Double = 1.0
+    /// Analog-stick dead zone (Settings Gamepad page), 0...0.35.
+    var deadzone: Double = 0.14
+    /// Built-in High contrast control appearance (Settings Gamepad page).
+    var highContrast: Bool = false
     /// Light haptic feedback on a button press / stick touch.
     var haptics: Bool = false
     /// A button went down (true) or up (false).
@@ -84,7 +88,8 @@ struct VirtualControlsView: View {
         return DpadCrossControl(center: group.center,
                                 diameter: group.diameter,
                                 opacity: opacity,
-                                haptics: haptics) { element, pressed in
+                                haptics: haptics,
+                                highContrast: highContrast) { element, pressed in
             if let bit = element.buttonBit {
                 onButton(bit, pressed)
             }
@@ -110,6 +115,8 @@ struct VirtualControlsView: View {
                 diameter: frame.diameter,
                 opacity: opacity,
                 haptics: haptics,
+                deadzone: CGFloat(deadzone),
+                highContrast: highContrast,
                 onChange: element == .circlePad ? onCirclePad : onCStick
             )
             .position(frame.center)
@@ -124,6 +131,7 @@ struct VirtualControlsView: View {
                 cornerFactor: CGFloat(element.shapeCornerFactor),
                 opacity: opacity,
                 haptics: haptics,
+                highContrast: highContrast,
                 isActive: fastForwardActive
             ) { pressed in
                 // A tap toggles the temporary 2x mode (0.1.6-beta2).
@@ -140,7 +148,8 @@ struct VirtualControlsView: View {
                 height: frame.height,
                 cornerFactor: CGFloat(element.shapeCornerFactor),
                 opacity: opacity,
-                haptics: haptics
+                haptics: haptics,
+                highContrast: highContrast
             ) { pressed in
                 if !pressed { onQuickLoad() }
             }
@@ -155,7 +164,8 @@ struct VirtualControlsView: View {
                 height: frame.height,
                 cornerFactor: CGFloat(element.shapeCornerFactor),
                 opacity: opacity,
-                haptics: haptics
+                haptics: haptics,
+                highContrast: highContrast
             ) { pressed in
                 if !pressed { onSwapScreens() }
             }
@@ -170,7 +180,8 @@ struct VirtualControlsView: View {
                 height: frame.height,
                 cornerFactor: CGFloat(element.shapeCornerFactor),
                 opacity: opacity,
-                haptics: haptics
+                haptics: haptics,
+                highContrast: highContrast
             ) { pressed in
                 if !pressed { onQuickSave() }
             }
@@ -185,7 +196,8 @@ struct VirtualControlsView: View {
                 height: frame.height,
                 cornerFactor: CGFloat(element.shapeCornerFactor),
                 opacity: opacity,
-                haptics: haptics
+                haptics: haptics,
+                highContrast: highContrast
             ) { pressed in
                 onButton(bit, pressed)
             }
@@ -212,6 +224,7 @@ private struct OverlayButtonControl: View {
     let cornerFactor: CGFloat
     let opacity: Double
     let haptics: Bool
+    let highContrast: Bool
     /// Toggled buttons (Fast-forward) draw their active background.
     var isActive: Bool = false
     let onButton: (Bool) -> Void
@@ -231,7 +244,7 @@ private struct OverlayButtonControl: View {
                     .minimumScaleFactor(0.6)
             }
         }
-            .foregroundColor(.white.opacity(isPressed ? 1.0 : 0.92))
+            .foregroundColor(.white.opacity(highContrast ? 1.0 : (isPressed ? 1.0 : 0.92)))
             .frame(width: width, height: height)
             .background(
                 RoundedRectangle(cornerRadius: min(width, height) * 0.42, style: .continuous)
@@ -239,7 +252,8 @@ private struct OverlayButtonControl: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: min(width, height) * 0.42, style: .continuous)
-                    .strokeBorder(Color.white.opacity(isPressed ? 0.55 : 0.25), lineWidth: 1)
+                    .strokeBorder(Color.white.opacity(highContrast ? 0.95 : (isPressed ? 0.55 : 0.25)),
+                                  lineWidth: highContrast ? 2 : 1)
             )
             .scaleEffect(isPressed ? 0.94 : 1.0)
             .animation(.easeOut(duration: 0.08), value: isPressed)
@@ -275,8 +289,10 @@ private struct OverlayButtonControl: View {
             colors: isActive
                 ? [Color.accentColor.opacity(0.75), Color.accentColor.opacity(0.50)]
                 : (isPressed
-                    ? [Color.white.opacity(0.44), Color.white.opacity(0.26)]
-                    : [Color.black.opacity(0.42), Color.black.opacity(0.26)]),
+                    ? [Color.white.opacity(highContrast ? 0.62 : 0.44),
+                       Color.white.opacity(highContrast ? 0.40 : 0.26)]
+                    : [Color.black.opacity(highContrast ? 0.82 : 0.42),
+                       Color.black.opacity(highContrast ? 0.66 : 0.26)]),
             startPoint: .top,
             endPoint: .bottom
         )
@@ -295,13 +311,13 @@ private struct AnalogStickControl: View {
     let diameter: CGFloat
     let opacity: Double
     let haptics: Bool
+    let deadzone: CGFloat
+    let highContrast: Bool
     let onChange: (Float, Float) -> Void
 
     @State private var knobOffset: CGSize = .zero
     @State private var isActive = false
 
-    /// Fraction of the radius a resting finger may wander before reporting.
-    private static let deadZone: CGFloat = 0.14
     /// How far the knob itself travels, as a fraction of the base radius.
     private static let knobTravel: CGFloat = 0.62
 
@@ -311,20 +327,22 @@ private struct AnalogStickControl: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color.black.opacity(0.42),
-                            Color.black.opacity(0.28)
+                            Color.black.opacity(highContrast ? 0.84 : 0.42),
+                            Color.black.opacity(highContrast ? 0.68 : 0.28)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
             Circle()
-                .strokeBorder(Color.white.opacity(isActive ? 0.55 : 0.28), lineWidth: 1)
+                .strokeBorder(Color.white.opacity(highContrast ? 0.95 : (isActive ? 0.55 : 0.28)),
+                              lineWidth: highContrast ? 2 : 1)
             Circle()
-                .fill(Color.white.opacity(isActive ? 0.42 : 0.24))
+                .fill(Color.white.opacity(highContrast ? 0.72 : (isActive ? 0.42 : 0.24)))
                 .frame(width: diameter * 0.42, height: diameter * 0.42)
                 .overlay(
-                    Circle().strokeBorder(Color.white.opacity(0.30), lineWidth: 1)
+                    Circle().strokeBorder(Color.white.opacity(highContrast ? 0.85 : 0.30),
+                                          lineWidth: highContrast ? 1.5 : 1)
                 )
                 .offset(knobOffset)
         }
@@ -356,7 +374,8 @@ private struct AnalogStickControl: View {
                     let travel = radius * Self.knobTravel
                     knobOffset = CGSize(width: dx / magnitude * clamped * travel,
                                         height: dy / magnitude * clamped * travel)
-                    let normalised = (clamped - Self.deadZone) / (1 - Self.deadZone)
+                    let dz = min(max(deadzone, 0), 0.9)
+                    let normalised = (clamped - dz) / (1 - dz)
                     guard normalised > 0 else {
                         onChange(0, 0)
                         return
@@ -450,6 +469,7 @@ private struct DpadCrossControl: View {
     let diameter: CGFloat
     let opacity: Double
     let haptics: Bool
+    let highContrast: Bool
     let onPress: (ControlElement, Bool) -> Void
 
     @State private var direction: ControlElement?
@@ -464,13 +484,15 @@ private struct DpadCrossControl: View {
             DpadCrossShape()
                 .fill(
                     LinearGradient(
-                        colors: [Color.black.opacity(0.46), Color.black.opacity(0.30)],
+                        colors: [Color.black.opacity(highContrast ? 0.84 : 0.46),
+                                 Color.black.opacity(highContrast ? 0.68 : 0.30)],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
             DpadCrossShape()
-                .stroke(Color.white.opacity(direction == nil ? 0.28 : 0.46), lineWidth: 1)
+                .stroke(Color.white.opacity(highContrast ? 0.95 : (direction == nil ? 0.28 : 0.46)),
+                        lineWidth: highContrast ? 2 : 1)
             if let direction {
                 Circle()
                     .fill(Color.white.opacity(0.18))
@@ -482,8 +504,8 @@ private struct DpadCrossControl: View {
                     .font(.system(size: max(min(diameter * 0.24, 18), 9),
                                   weight: .semibold, design: .rounded))
                     .foregroundColor(direction == nil || direction == element
-                                     ? .white.opacity(0.92)
-                                     : .white.opacity(0.38))
+                                     ? .white.opacity(highContrast ? 1.0 : 0.92)
+                                     : .white.opacity(highContrast ? 0.70 : 0.38))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                     .position(arrowPosition(for: element, localCenter: localCenter))

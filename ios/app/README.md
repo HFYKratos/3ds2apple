@@ -363,9 +363,18 @@ project is used (it is GPL and reference-only for this repo).
   and a **Performance monitoring** group with the **FPS counter**
   (`settings.showFPS`) and the **System Metal HUD** (`settings.systemMetalHUD`,
   with the exact reason hint when the HUD cannot appear).
-- **Gamepad**: on-screen controls on/off, overlay opacity, haptics and the
-  connected controller name; control positions are still edited in-game from the
-  pause menu (see "Editable layouts").
+- **Gamepad** (0.2.0 C): on-screen controls on/off, overlay opacity, haptics,
+  **Deadzone** (`settings.analogDeadzone`, 0–30%, applied to the on-screen
+  Circle Pad/C-stick and to both physical-controller thumbsticks as a radial
+  dead zone with rescaling), **Control appearance** (Standard / High contrast;
+  built-in styles only, Delta skin import is not implemented), **Button mapping**
+  (a sub-page with one 3DS-button choice per physical controller button,
+  `UI.controllerButtonMap`, plus a reset that restores the stock identity
+  mapping; hotkey remapping is not implemented) and the connected controller
+  name. Control positions are still edited in-game from the pause menu (see
+  "Editable layouts"). Per-application Gamepad profiles (deadzone, appearance,
+  a copied button mapping) live in the in-game menu's Per-Application Settings
+  page; anything set to Use global follows the Gamepad page.
 - **Graphics**: render resolution 1×–4× with the exact pixel caption,
   **Screen aspect** (Fit / 4:3 / Stretch, `settings.screenAspect`) and
   **Integer scaling** (`settings.integerScale`, whole-console-pixel nearest
@@ -988,7 +997,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `CPUProfilerView.swift` | The debug CPU profiler page: starts guest-PC sampling while a game runs and lists hot spots. Diagnosis only. |
 | `SaveManagerView.swift` | Game picker over the library, the selected game's battery save list (export as ZIP, import, delete) and its instant save-state slots (delete offline; save/load while that game runs), with progress and errors; re-reads the selected game's files on open, on library changes and after actions (no refresh button). |
 | `AboutView.swift` | Product page: app icon, name, version/build, project links, acknowledgements and legal notice; a compact runtime status card only while a game is loaded. |
-| `AppSettings.swift` | Persisted settings model (separate landscape and portrait screen layout enums, screen rotation, interface orientation, appearance, buffer size, frame cap, run speed limit, default/turbo playback speeds, Turbo limit, Check for updates, update channel, Metal HUD and FPS-counter switches, the two next-launch experimental GPU switches, the round-4 hidden-control rows, per-row size scales and the per-title-ID presentation overrides) and the UserDefaults keys, including the round-1 single-choice migration (`migratedScreenLayouts`) and the render scale (1×–4×). |
+| `AppSettings.swift` | Persisted settings model (separate landscape and portrait screen layout enums, screen rotation, interface orientation, appearance, buffer size, frame cap, run speed limit, default/turbo playback speeds, Turbo limit, Check for updates, update channel, Metal HUD and FPS-counter switches, analog deadzone, built-in control appearance, the physical-controller button map, the two next-launch experimental GPU switches, the round-4 hidden-control rows, per-row size scales and the per-title-ID presentation + Gamepad profile overrides) and the UserDefaults keys, including the round-1 single-choice migration (`migratedScreenLayouts`) and the render scale (1×–4×). |
 | `UpdateChecker.swift` | GitHub release checker for the General page and the daily background update notification: /releases request, Stable/Beta channel filtering, semver comparison with CFBundleShortVersionString, a 24-hour background throttle and a local notification via UNUserNotificationCenter (permission requested on first use, one notification per version). |
 | `DiagnosticsReport.swift` | Diagnostics report text, the shared diagnostics file type and screen geometry helpers. |
 | `StorageInspector.swift` | Container folder sizes, save-data file list, pipeline-cache clearing, and `AtomicFileWriter` for temporary-file-then-rename writes. |
@@ -1012,7 +1021,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `KeyboardRequest.swift` | One 3DS software-keyboard request: the schema-1 JSON decode, the applet's confirmation rules (`Request::accepts`), UTF-16 limit handling and the localized rejection lines. |
 | `KeyboardOverlayView.swift` | The full-screen overlay that answers a software-keyboard request: hint, pre-filled text field, character counter, applet buttons and validation; portrait and landscape, above the system keyboard. |
 | `ControlLayout.swift` | Editable control layout model: the full New 3DS control set, normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. The shipped defaults are converted from the ModernCenteredX2 reference skin (numeric frames only; round 6 puts the portrait shoulder row and main set in the band below the picture, round 7 renders the D-pad as one cross) and an untouched beta3/older shipped default is migrated on load. |
-| `VirtualControlsView.swift` | Runtime overlay: draws one button / analog stick per control with its own gesture (multi-touch), plus the single cross-shaped D-pad (`DpadCrossShape`) whose touch position selects the direction; reports ZK_BUTTON_* bits, Circle Pad and C-stick vectors; skips the rows hidden in the pause menu and applies the per-row size scale. |
+| `VirtualControlsView.swift` | Runtime overlay: draws one button / analog stick per control with its own gesture (multi-touch), plus the single cross-shaped D-pad (`DpadCrossShape`) whose touch position selects the direction; reports ZK_BUTTON_* bits, Circle Pad and C-stick vectors; applies the analog deadzone, the built-in Standard / High contrast appearance, per-control visibility and the per-row size scale. |
 | `ControlLayoutEditorView.swift` | Legacy full-screen control layout editor kept for the `-openLayoutEditor control` screenshot hook; the app no longer links it (round-4 editing happens in-game). It draws/moves the D-pad as one cross and edits its group size/opacity/reset. |
 | `ControlLayoutSettingsView.swift` | Legacy control layout page (not linked from Settings since round 4); kept for compatibility of the old screenshot hook. |
 | `InGameControlEditOverlay.swift` | Round-4 in-game control editing: draggable controls over the frozen paused picture (gestures attach before `.position`, so each control's hit area is its own shape), the D-pad as one draggable cross, per-row visibility/size, a Done pill centered on the screen that saves the current direction and resumes the game. |
@@ -1021,7 +1030,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `ScreenLayoutEditorView.swift` | Full-screen custom screen layout drag editor (one direction per editor, opened from the numeric custom page's "Edit by dragging"): full-screen game-view canvas with the current control layout overlaid for reference, direct screen drag, a ≥44 pt corner handle or pinch to resize, edge snapping and one clear Done pill centered on the screen (round-8; hint above it, no bottom toolbar). |
 | `CustomScreenLayoutValuesView.swift` | The numeric custom screen layout page of one direction: Upper screen / Lower screen sections with X position, Y position, Width and Height as integer percentages of the game view, a live centered preview canvas (blue TOP / purple BOTTOM) under them, editing the CustomScreenLayout archive; also the "Edit by dragging" entry. |
 | `ScreenLayoutSettingsView.swift` | The screen layout page under Settings → Layout: the landscape six-choice row, the portrait three-choice row (each opening a radio picker sheet), the two custom layout rows and no reset / "how it works" section. |
-| `GameControllerInput.swift` | GameController-to-3DS button mapping. |
+| `GameControllerInput.swift` | GameController-to-3DS bridge: observes connect/disconnect, recomputes the button mask from each physical button through the user's remapping, applies the radial deadzone to both thumbsticks and forwards Circle Pad/C-stick vectors to InputState. |
 | `AudioOutput.swift` | Ring buffer and AVAudioEngine output (volume, mute, buffer duration). |
 | `FrameTiming.swift` | Per-phase frame timing for the diagnostics report and the fast-forward auto-fallback. |
 | `GraphicsWarmUp.swift` | Pipeline-cache filesystem stats used by Storage and the diagnostics report. The first-load warm-up types in this file are no longer reachable: the option was removed in 0.1.1. |

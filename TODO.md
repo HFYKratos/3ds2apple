@@ -6,8 +6,8 @@ text is copied, and no game assets are stored in the repository.
 
 ## Settings / in-game menu (reference-emulator items not implemented)
 
-- [ ] Controller skin selection (on-screen button skin assets) - the app ships
-      one fixed skin; the reference app can import Delta-style skins.
+- [ ] Delta-style controller skin import (custom on-screen button art/skins) -
+      the app ships built-in Standard / High contrast appearances only.
 - [ ] Cheat code manager (the reference app's "金手指" page) - not implemented.
 - [ ] Game manual viewer - not implemented.
 - [ ] Amiibo loading/simulation in the in-game menu - not shown as a fake row.
@@ -15,13 +15,14 @@ text is copied, and no game assets are stored in the repository.
 - [ ] Multiplayer / online play - not implemented (no network features).
 - [ ] Screen-rotation quick toggle inside the in-game menu (Settings -> Graphics
       -> Screen rotation exists instead).
-- [ ] Dead-zone configuration UI, controller remapping and per-game controller
-      profiles.
+- [ ] Hotkey/button-combo remapping for physical controllers - single-button
+      remapping is implemented, hotkeys are not.
 - [ ] Amiibo loading/simulation - not implemented.
 - [ ] Simulated blow/microphone input - not implemented.
 - [ ] AirPlay scaling/layout options - iOS handles external display output
       through the system; the app does not expose these options.
-- [ ] Per-game settings overrides (global settings only today).
+- [x] Per-game presentation overrides and optional per-app Gamepad profiles
+      (deadzone, appearance, copied button mapping), keyed by title ID.
 - [ ] In-game menu artwork/skin theming.
 - [ ] Reference-emulator percentage speed limit (e.g. 150%): the runtime now has
       real unlimited speed (Run speed limit off / Turbo limit off), but the
@@ -39,3 +40,5 @@ text is copied, and no game assets are stored in the repository.
 - Custom screen layouts, screen rotation, swap screens, integer scaling,
   screen aspect, resolution, fast-forward, quick save/load, save manager,
   diagnostics export, on-screen control layout editing.
+- Analog deadzone for on-screen and physical sticks, physical controller button
+  remapping with reset, and built-in Standard / High contrast control appearances.

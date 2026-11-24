@@ -913,6 +913,33 @@ struct GamepadSettingsPage: View {
             )
             .accessibilityIdentifier("settings-haptics")
 
+            SettingsSliderRow(
+                title: "Deadzone",
+                description: "How far a stick must move before it reports input. Applied to the on-screen Circle Pad/C-stick and to a physical controller's thumbsticks.",
+                valueText: "\(Int((settings.analogDeadzone * 100).rounded()))%",
+                value: persistedBinding(settings, \.analogDeadzone),
+                range: 0...0.30,
+                step: 0.01
+            )
+            .accessibilityIdentifier("settings-analog-deadzone")
+
+            SettingsSegmentedRow(
+                title: "Control appearance",
+                description: "Standard is the translucent shipped style; High contrast uses opaque black/white edges and thicker strokes. Built-in styles only: Delta skin import is not implemented.",
+                choices: ControlAppearance.allCases,
+                selection: persistedBinding(settings, \.controlAppearance),
+                label: { $0.title }
+            )
+            .accessibilityIdentifier("settings-control-appearance")
+
+            SettingsNavigationRow(
+                title: "Button mapping",
+                description: "Map every physical controller button to a 3DS button. The reset action restores the stock mapping.",
+                identifier: "settings-controller-button-mapping"
+            ) {
+                ControllerButtonMappingView(settings: settings)
+            }
+
             SettingsInfoRow(
                 title: "Controller",
                 value: model.controllerName ?? L10n.tr("Not connected"),
@@ -920,6 +947,44 @@ struct GamepadSettingsPage: View {
             )
             .accessibilityIdentifier("settings-controller")
         }
+    }
+}
+
+/// Physical controller button remapping page (0.2.0 C). Every row maps one
+/// physical button to a 3DS button; Reset restores the identity mapping. Hotkey
+/// remapping is not implemented (see TODO).
+struct ControllerButtonMappingView: View {
+    @ObservedObject var settings: AppSettings
+
+    var body: some View {
+        SettingsPageScaffold(title: "Button mapping") {
+            SettingsSectionCaption(title: "Physical controller")
+            ForEach(PhysicalControllerButton.allCases) { button in
+                SettingsChoiceRow(
+                    title: LocalizedStringKey(button.title),
+                    description: "Which 3DS button this physical button sends.",
+                    choices: GamepadAction.allCases,
+                    selection: actionBinding(for: button),
+                    label: { $0.title }
+                )
+                .accessibilityIdentifier("settings-controller-map-\(button.rawValue)")
+            }
+            SettingsActionRow(
+                title: "Reset button mapping",
+                description: "Restores the stock physical-controller mapping (every button maps to the same 3DS button).",
+                systemImage: "arrow.counterclockwise",
+                identifier: "settings-controller-map-reset"
+            ) {
+                settings.resetControllerButtonMap()
+            }
+        }
+    }
+
+    private func actionBinding(for button: PhysicalControllerButton) -> Binding<GamepadAction> {
+        Binding(
+            get: { settings.controllerAction(for: button) },
+            set: { settings.setControllerAction($0, for: button) }
+        )
     }
 }
 

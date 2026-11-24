@@ -811,3 +811,31 @@
 "The speed the on-screen Turbo button uses while Turbo limit is on." = "The speed the on-screen Turbo button uses while Turbo limit is on.";
 "Update available" = "Update available";
 "3ds2apple %@ is available on GitHub." = "3ds2apple %@ is available on GitHub.";
+
+/* --- 0.2.0-C Gamepad deadzone / appearance / button mapping --- */
+"Deadzone" = "Deadzone";
+"How far a stick must move before it reports input. Applied to the on-screen Circle Pad/C-stick and to a physical controller's thumbsticks." = "How far a stick must move before it reports input. Applied to the on-screen Circle Pad/C-stick and to a physical controller's thumbsticks.";
+"Control appearance" = "Control appearance";
+"Standard is the translucent shipped style; High contrast uses opaque black/white edges and thicker strokes. Built-in styles only: Delta skin import is not implemented." = "Standard is the translucent shipped style; High contrast uses opaque black/white edges and thicker strokes. Built-in styles only: Delta skin import is not implemented.";
+"Standard" = "Standard";
+"High contrast" = "High contrast";
+"Button mapping" = "Button mapping";
+"Map every physical controller button to a 3DS button. The reset action restores the stock mapping." = "Map every physical controller button to a 3DS button. The reset action restores the stock mapping.";
+"Physical controller" = "Physical controller";
+"Which 3DS button this physical button sends." = "Which 3DS button this physical button sends.";
+"Reset button mapping" = "Reset button mapping";
+"Restores the stock physical-controller mapping (every button maps to the same 3DS button)." = "Restores the stock physical-controller mapping (every button maps to the same 3DS button).";
+"Gamepad profile" = "Gamepad profile";
+"Custom (copy current mapping)" = "Custom (copy current mapping)";
+"A" = "A";
+"B" = "B";
+"X" = "X";
+"Y" = "Y";
+"L" = "L";
+"R" = "R";
+"ZL" = "ZL";
+"ZR" = "ZR";
+"D-pad Up" = "D-pad Up";
+"D-pad Down" = "D-pad Down";
+"D-pad Left" = "D-pad Left";
+"D-pad Right" = "D-pad Right";

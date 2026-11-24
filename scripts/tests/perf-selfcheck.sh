@@ -142,6 +142,16 @@ check "General page no longer has the frame limiter row" \
   bash -c '! sed -n "/^struct GeneralSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "settings-frame-limiter"'
 check "General page no longer holds rotation/haptics/FPS/HUD/GPU rows" \
   bash -c '! sed -n "/^struct GeneralSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Eq -- "settings-screen-rotation|settings-haptics|settings-fps-hud|settings-system-metal-hud|gpuVertexShaders|preciseShading"'
+check "Gamepad page exposes deadzone, appearance and button mapping" \
+  bash -c 'grep -q "settings-analog-deadzone" ios/app/Sources/SettingsPages.swift && grep -q "settings-control-appearance" ios/app/Sources/SettingsPages.swift && grep -q "settings-controller-button-mapping" ios/app/Sources/SettingsPages.swift'
+check "physical controller deadzone and button remapping are wired" \
+  bash -c 'grep -q "applyDeadzone" ios/app/Sources/GameControllerInput.swift && grep -q "buttonMap" ios/app/Sources/GameControllerInput.swift && grep -q "controllerAction" ios/app/Sources/AppSettings.swift && grep -q "setControllerButtonMap" ios/app/Sources/ContentView.swift'
+check "on-screen sticks use the deadzone and high-contrast appearance" \
+  bash -c 'grep -q "var deadzone" ios/app/Sources/VirtualControlsView.swift && grep -q "highContrast" ios/app/Sources/VirtualControlsView.swift && grep -q "effectiveAnalogDeadzone" ios/app/Sources/GameView.swift && grep -q "effectiveControlAppearance" ios/app/Sources/GameView.swift'
+check "per-application Gamepad profile fields exist" \
+  bash -c 'grep -q "analogDeadzone" ios/app/Sources/AppSettings.swift && grep -q "controllerButtonMap" ios/app/Sources/AppSettings.swift && grep -q "per-app-deadzone" ios/app/Sources/InGameMenuView.swift && grep -q "per-app-control-appearance" ios/app/Sources/InGameMenuView.swift'
+check "controller mapping page has reset and hotkeys stay unsupported" \
+  bash -c 'grep -q "settings-controller-map-reset" ios/app/Sources/SettingsPages.swift && grep -q "Hotkey" TODO.md'
 check "Graphics page has both restart-required GPU rows" \
   bash -c 'test "$(grep -c "restartRequired: true" ios/app/Sources/SettingsPages.swift)" -ge 2'
 check "en table has the restart badge" grep -Fq -- '"Restart required"' ios/app/Resources/en.lproj/Localizable.strings

@@ -501,6 +501,50 @@ struct InGameMenuView: View {
                         .pickerStyle(.menu)
                     }
                 }
+                Text(L10n.tr("Gamepad profile"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .textCase(.uppercase)
+                    .foregroundColor(secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+                rowGroup {
+                    pickerRow(title: L10n.tr("Deadzone"),
+                              systemImage: "circle.dashed",
+                              identifier: "per-app-deadzone") {
+                        Picker("Deadzone", selection: deadzoneOverrideBinding) {
+                            Text(L10n.tr("Use global")).tag("")
+                            ForEach(["0", "5", "10", "15", "20", "25", "30"], id: \.self) { percent in
+                                Text("\(percent)%").tag(percent)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                    }
+                    rowDivider
+                    pickerRow(title: L10n.tr("Control appearance"),
+                              systemImage: "circle.lefthalf.filled",
+                              identifier: "per-app-control-appearance") {
+                        Picker("Control appearance", selection: appearanceOverrideBinding) {
+                            Text(L10n.tr("Use global")).tag("")
+                            ForEach(ControlAppearance.allCases) { appearance in
+                                Text(appearance.title).tag(appearance.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                    }
+                    rowDivider
+                    pickerRow(title: L10n.tr("Button mapping"),
+                              systemImage: "gamecontroller",
+                              identifier: "per-app-button-mapping") {
+                        Picker("Button mapping", selection: buttonMapOverrideBinding) {
+                            Text(L10n.tr("Use global")).tag("")
+                            Text(L10n.tr("Custom (copy current mapping)")).tag("custom")
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                    }
+                }
                 rowGroup {
                     actionRow(L10n.tr("Clear per-application overrides"),
                               systemImage: "arrow.counterclockwise",
@@ -540,6 +584,8 @@ struct InGameMenuView: View {
         mutate(&overrides)
         let empty = overrides.screenRotationRaw == nil && overrides.swapScreens == nil
             && overrides.integerScale == nil && overrides.screenAspectRaw == nil
+            && overrides.analogDeadzone == nil && overrides.controlAppearanceRaw == nil
+            && overrides.controllerButtonMap == nil
         settings.setPerGameOverrides(empty ? nil : overrides, for: titleID)
     }
 
@@ -579,6 +625,46 @@ struct InGameMenuView: View {
                 set: { newValue in
                     mutateOverrides { $0.screenAspectRaw = newValue.isEmpty ? nil : newValue }
                 })
+    }
+
+    private var deadzoneOverrideBinding: Binding<String> {
+        Binding(
+            get: {
+                guard let value = currentOverrides.analogDeadzone else { return "" }
+                return String(Int((value * 100).rounded()))
+            },
+            set: { newValue in
+                mutateOverrides {
+                    $0.analogDeadzone = newValue.isEmpty
+                        ? nil
+                        : (Double(newValue) ?? 15) / 100
+                }
+            }
+        )
+    }
+
+    private var appearanceOverrideBinding: Binding<String> {
+        Binding(
+            get: { currentOverrides.controlAppearanceRaw ?? "" },
+            set: { newValue in
+                mutateOverrides {
+                    $0.controlAppearanceRaw = newValue.isEmpty ? nil : newValue
+                }
+            }
+        )
+    }
+
+    private var buttonMapOverrideBinding: Binding<String> {
+        Binding(
+            get: { currentOverrides.controllerButtonMap == nil ? "" : "custom" },
+            set: { newValue in
+                mutateOverrides {
+                    $0.controllerButtonMap = newValue.isEmpty
+                        ? nil
+                        : settings.controllerButtonMap
+                }
+            }
+        )
     }
 
     private var swapScreensBinding: Binding<Bool> {
