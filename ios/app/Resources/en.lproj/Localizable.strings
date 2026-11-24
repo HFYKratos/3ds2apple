@@ -669,3 +669,56 @@
 "Quick loaded" = "Quick loaded";
 "Swap screens" = "Swap screens";
 
+/* --- 0.1.7 settings redesign (task-42): flat category pages --------------- */
+"General" = "General";
+"System" = "System";
+"Gamepad" = "Gamepad";
+"Graphics" = "Graphics";
+"Layout" = "Layout";
+"Sound" = "Sound";
+"Debug" = "Debug";
+"The speed fast-forward runs at. Audio is muted while fast-forwarding." = "The speed fast-forward runs at. Audio is muted while fast-forwarding.";
+"Turn the pictures inside their area for a console held sideways." = "Turn the pictures inside their area for a console held sideways.";
+"Orientation lock" = "Orientation lock";
+"Which interface orientations the app allows. iOS can still override it, for example during a call." = "Which interface orientations the app allows. iOS can still override it, for example during a call.";
+"Haptics" = "Haptics";
+"A light vibration when an on-screen button is pressed or a control is picked up." = "A light vibration when an on-screen button is pressed or a control is picked up.";
+"FPS counter" = "FPS counter";
+"Show a small frames-per-second pill over the game." = "Show a small frames-per-second pill over the game.";
+"Apple's GPU performance overlay on the presented Metal layer." = "Apple's GPU performance overlay on the presented Metal layer.";
+"GPU vertex shading" = "GPU vertex shading";
+"Experimental: run the 3D vertex stage on the GPU. Rendering and performance can change. Takes effect after restarting the app." = "Experimental: run the 3D vertex stage on the GPU. Rendering and performance can change. Takes effect after restarting the app.";
+"Precise shading" = "Precise shading";
+"Experimental: use precise math in the 3D fragment stage instead of the fast approximation. Takes effect after restarting the app." = "Experimental: use precise math in the 3D fragment stage instead of the fast approximation. Takes effect after restarting the app.";
+"Restart required" = "Restart required";
+"Draw the virtual buttons over the game." = "Draw the virtual buttons over the game.";
+"How solid the virtual buttons are." = "How solid the virtual buttons are.";
+"The connected game controller, if any." = "The connected game controller, if any.";
+"The presenter drawable and the internal 3D render scale. The internal scale changes on the next game load." = "The presenter drawable and the internal 3D render scale. The internal scale changes on the next game load.";
+"Landscape and portrait arrangements, plus the two custom layouts." = "Landscape and portrait arrangements, plus the two custom layouts.";
+"Game audio volume." = "Game audio volume.";
+"Silence all game audio." = "Silence all game audio.";
+"Audio latency and dropout trade-off. A change restarts the audio engine once while a game runs." = "Audio latency and dropout trade-off. A change restarts the audio engine once while a game runs.";
+"Battery saves and instant save states for each game." = "Battery saves and instant save states for each game.";
+"CPU profiler" = "CPU profiler";
+"Record where the frame time goes while a game runs." = "Record where the frame time goes while a game runs.";
+"Write a diagnostics report and the session log, then share them." = "Write a diagnostics report and the session log, then share them.";
+"App version, links, acknowledgements and the legal notice." = "App version, links, acknowledgements and the legal notice.";
+"Saved to Documents/%@" = "Saved to Documents/%@";
+
+/* --- 0.1.7 CPU profiler page (task-43) ----------------------------------- */
+"CPU Profiler" = "CPU Profiler";
+"Sampling" = "Sampling";
+"About this profiler" = "About this profiler";
+"Hot spots" = "Hot spots";
+"Start sampling" = "Start sampling";
+"Refresh hot spots" = "Refresh hot spots";
+"Load a game first: sampling only works while a game is running." = "Load a game first: sampling only works while a game is running.";
+"Sampling started. Play for a few seconds, then tap Refresh hot spots." = "Sampling started. Play for a few seconds, then tap Refresh hot spots.";
+"Could not start sampling (is a game running?)." = "Could not start sampling (is a game running?).";
+"No samples yet. Start sampling, play for a few seconds, then tap Refresh hot spots." = "No samples yet. Start sampling, play for a few seconds, then tap Refresh hot spots.";
+"Updated %@" = "Updated %@";
+"Sampling is cumulative: every guest step since you tapped Start sampling contributes, so Refresh shows totals, not a recent window." = "Sampling is cumulative: every guest step since you tapped Start sampling contributes, so Refresh shows totals, not a recent window.";
+"The runtime never names guest functions: hot spots are raw guest PCs (thread 0xPC hits). Match an address against the symbol map of the game's libgame.a (the AOT GamePack build); addresses from a different build of that pack will not match." = "The runtime never names guest functions: hot spots are raw guest PCs (thread 0xPC hits). Match an address against the symbol map of the game's libgame.a (the AOT GamePack build); addresses from a different build of that pack will not match.";
+"The profiler stays on for the current game load and adds a small cost per guest step; it is for diagnosis only. Unload the game or relaunch the app to stop it." = "The profiler stays on for the current game load and adds a small cost per guest step; it is for diagnosis only. Unload the game or relaunch the app to stop it.";
+"Sampling is on. Reopen Settings later: the counts keep accumulating for this load." = "Sampling is on. Reopen Settings later: the counts keep accumulating for this load.";

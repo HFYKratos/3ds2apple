@@ -671,3 +671,56 @@
 "Quick loaded" = "已快速读取";
 "Swap screens" = "交换屏幕";
 
+/* --- 0.1.7 设置重构（task-42）：扁平分类页 ------------------------------- */
+"General" = "通用";
+"System" = "系统";
+"Gamepad" = "游戏手柄";
+"Graphics" = "图形";
+"Layout" = "布局";
+"Sound" = "声音";
+"Debug" = "调试";
+"The speed fast-forward runs at. Audio is muted while fast-forwarding." = "快进时的运行速度。快进期间音频会静音。";
+"Turn the pictures inside their area for a console held sideways." = "将画面在显示区域内旋转，方便横握主机游玩。";
+"Orientation lock" = "方向锁定";
+"Which interface orientations the app allows. iOS can still override it, for example during a call." = "App 允许的界面方向。iOS 仍可能在来电等情况下覆盖此设置。";
+"Haptics" = "触感反馈";
+"A light vibration when an on-screen button is pressed or a control is picked up." = "按下屏幕按键或拖动按键时产生轻微振动。";
+"FPS counter" = "帧率";
+"Show a small frames-per-second pill over the game." = "在游戏画面上显示一个小巧的实时帧率指示。";
+"Apple's GPU performance overlay on the presented Metal layer." = "在呈现的 Metal 图层上显示 Apple 的 GPU 性能悬浮窗。";
+"GPU vertex shading" = "GPU 顶点着色";
+"Experimental: run the 3D vertex stage on the GPU. Rendering and performance can change. Takes effect after restarting the app." = "实验性：把 3D 顶点阶段放到 GPU 上执行。渲染结果与性能可能变化。重启 App 后生效。";
+"Precise shading" = "精确着色";
+"Experimental: use precise math in the 3D fragment stage instead of the fast approximation. Takes effect after restarting the app." = "实验性：3D 片元阶段使用精确运算，而不是快速近似。重启 App 后生效。";
+"Restart required" = "需要重启 App";
+"Draw the virtual buttons over the game." = "在游戏画面上绘制虚拟按键。";
+"How solid the virtual buttons are." = "虚拟按键的不透明程度。";
+"The connected game controller, if any." = "当前连接的游戏手柄（如有）。";
+"The presenter drawable and the internal 3D render scale. The internal scale changes on the next game load." = "presenter 的绘制尺寸与内部 3D 渲染倍率；内部倍率在下次载入游戏时生效。";
+"Landscape and portrait arrangements, plus the two custom layouts." = "横屏与竖屏布局，以及两套自定义布局。";
+"Game audio volume." = "游戏音量。";
+"Silence all game audio." = "静音所有游戏音频。";
+"Audio latency and dropout trade-off. A change restarts the audio engine once while a game runs." = "延迟与音频断续之间的取舍；游戏运行时修改会重启一次音频引擎。";
+"Battery saves and instant save states for each game." = "每个游戏的电池存档与即时存档槽。";
+"CPU profiler" = "CPU 性能分析";
+"Record where the frame time goes while a game runs." = "记录游戏运行时每一帧的时间去向。";
+"Write a diagnostics report and the session log, then share them." = "写入诊断报告与本次会话日志并分享。";
+"App version, links, acknowledgements and the legal notice." = "App 版本、链接、致谢与法律声明。";
+"Saved to Documents/%@" = "已保存到 Documents/%@";
+
+/* --- 0.1.7 CPU 性能分析页（task-43） ------------------------------------ */
+"CPU Profiler" = "CPU 性能分析";
+"Sampling" = "采样";
+"About this profiler" = "关于此分析器";
+"Hot spots" = "热点";
+"Start sampling" = "开始采样";
+"Refresh hot spots" = "刷新热点";
+"Load a game first: sampling only works while a game is running." = "请先载入游戏：仅在游戏运行时才能采样。";
+"Sampling started. Play for a few seconds, then tap Refresh hot spots." = "采样已开始。游玩几秒后点“刷新热点”。";
+"Could not start sampling (is a game running?)." = "无法开始采样（游戏正在运行吗？）。";
+"No samples yet. Start sampling, play for a few seconds, then tap Refresh hot spots." = "还没有样本。开始采样，游玩几秒后点“刷新热点”。";
+"Updated %@" = "已更新 %@";
+"Sampling is cumulative: every guest step since you tapped Start sampling contributes, so Refresh shows totals, not a recent window." = "采样是累计的：从点“开始采样”起的每个 guest 指令步都会计入，因此“刷新”显示的是累计总量，而不是最近一段时间。";
+"The runtime never names guest functions: hot spots are raw guest PCs (thread 0xPC hits). Match an address against the symbol map of the game's libgame.a (the AOT GamePack build); addresses from a different build of that pack will not match." = "运行时不提供 guest 函数名：热点是原始 guest PC（线程 0xPC 命中次数）。请把地址与游戏 libgame.a（AOT GamePack 构建产物）的符号表对应；不同构建的地址无法匹配。";
+"The profiler stays on for the current game load and adds a small cost per guest step; it is for diagnosis only. Unload the game or relaunch the app to stop it." = "分析器在当前这次游戏载入期间保持开启，每个 guest 指令步会有少量开销；仅用于诊断。卸载游戏或重启 App 即可停止。";
+"Sampling is on. Reopen Settings later: the counts keep accumulating for this load." = "采样已开启。稍后重新打开设置：本次载入期间计数会持续累计。";

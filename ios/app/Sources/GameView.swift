@@ -87,12 +87,14 @@ struct GameView: View {
     /// One sheet slot for the pages the game view can present.
     private enum GameSheet: Identifiable {
         case quickDisplaySettings
+        case settings
         case saveManager
         case diagnostics(URL)
 
         var id: String {
             switch self {
             case .quickDisplaySettings: return "quick-display"
+            case .settings: return "settings"
             case .saveManager: return "save-manager"
             case .diagnostics(let url): return "diagnostics-\(url.path)"
             }
@@ -124,6 +126,7 @@ struct GameView: View {
                         onEditControls: { beginControlEditing(isLandscape: isLandscape) },
                         onReset: { requestConfirmation(.reset) },
                         onDisplaySettings: { sheet = .quickDisplaySettings },
+                        onSettings: { sheet = .settings },
                         onSaveManager: { sheet = .saveManager },
                         onDiagnostics: exportDiagnostics,
                         onExit: { requestConfirmation(.exit) },
@@ -187,6 +190,15 @@ struct GameView: View {
             switch sheet {
             case .quickDisplaySettings:
                 QuickDisplaySettingsView(settings: settings)
+            case .settings:
+                NavigationStack {
+                    SettingsView(settings: settings, model: model)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { sheet = nil }
+                            }
+                        }
+                }
             case .saveManager:
                 NavigationStack {
                     SaveManagerView(

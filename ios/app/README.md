@@ -24,7 +24,7 @@ views do not carry duplicated strings.
 |---|---|
 | **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`. Each card has a square art area at the icon's native 1:1 aspect: the game's own SMDH cover art (launcher-pushed `cover.png`, else the build's bundled cover, else the gradient placeholder) fills the square edge to edge with no inset frame (the gradient is only the placeholder when no cover is available), and a corner badge appears only when a game needs attention (**Checking** / **Data missing** / **Error**; a ready game has no AOT badge, since the app only runs AOT code and the AOT state stays in the log and the diagnostics export). Under the art the card is deliberately compact: the title for the app language (up to two lines, truncated), the publisher, then the pushed game size · last-played state. There is **no explanatory paragraph under the grid**. iPhone shows two columns, iPad three. Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Pull-to-refresh rescans Documents, and the library also rescans at launch and when the app returns to the foreground; there is no refresh button. Long-pressing a card opens its context menu; **Delete Game** asks a second confirmation and then deletes the game (see "Deleting a game" below). The empty state explains the desktop launcher. No on-phone import. Settings entry. |
 | **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback) arranged by the split landscape / portrait screen layout choices, filling the whole screen, with the on-screen controls floating over the picture, a floating FPS pill and pause button and the in-game menu. There is no title bar or reserved control pad any more. When a title starts the 3DS software keyboard, a full-screen keyboard overlay collects the text and the applet's buttons while the frame loop is stopped; answering resumes the game. |
-| **Settings** | Display, Audio, Controls, Performance (fast-forward, system Metal HUD, FPS counter), Storage and About sections. |
+| **Settings** | A flat dark main menu of eight categories (0.1.7): General, System, Gamepad, Graphics, Layout, Sound, Debug and About. Each category is one page of title + explanation + trailing-control rows; see "Settings screens (0.1.7)" below. |
 | **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. The page re-reads the selected game's files when it opens, when the library changes and after every action; there is no refresh button. |
 | **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the FPS appears only while a game is loaded; everything else stays in the log and the diagnostics. |
 | **In-game menu** | Opened from the pause button over the game: pause/resume, save-state shortcuts, a **Virtual controls** card (Show virtual controls / Show performance stats / Haptic feedback, then Edit layout / Toggle controls / Adjust size / Adjust opacity / Reset virtual controls), quick toggles (mute, 1×/2×/4× fast-forward), Display settings, Save Manager, Diagnostics, Reset and Exit. Round 5 gives every option row one unified icon-free style (title plus a trailing toggle/chevron/value) with the same height and padding. |
@@ -98,7 +98,7 @@ on-screen controls, so no input or audio advances behind it.
   migrated to off once (the marker makes the migration run only once, so a
   manual switch afterwards wins). See "System Metal HUD" below.
 - Optional in-game FPS counter, **on by default**: the only performance readout
-  the game view draws. The switch lives in Settings → Performance; the counter is
+  the game view draws. The switch lives in Settings → General → FPS counter; the counter is
   a translucent pill floating in the top-trailing safe-area corner over the
   picture in both orientations (the pause button sits next to it in portrait and
   at the bottom centre in landscape). Everything else (AOT state, renderer path,
@@ -252,9 +252,9 @@ The shell can be driven headlessly without tapping:
   accepted; an absolute path must stay inside the app container).
 - `-openAOTTitleID <TITLEID>` starts that library game 0.5 s after the home
   page appears, through the same path a card tap uses.
-- `-openLayoutPage` opens the screen layout page (Settings → Display → Screen
-  layout: the landscape and portrait preset rows and the two custom layout rows)
-  straight away, for headless screenshots.
+- `-openLayoutPage` opens the screen layout page (Settings → Layout: the
+  landscape and portrait preset rows and the two custom layout rows) straight
+  away, for headless screenshots.
 - `-openLayoutPicker landscape|portrait` opens that direction's screen layout
   radio picker straight away, for headless screenshots of the picker itself.
 - `-openCustomLayoutPage landscape|portrait` opens the numeric custom layout
@@ -323,6 +323,55 @@ Omit the game-data fixture (or use an empty `-gamesRoot` folder) to see the
 exercise the per-game error state. The fixture files are user-owned local test
 data: never commit them, and remove the fixture from the container when done.
 
+## Settings screens (0.1.7)
+
+Settings is a flat, dark menu rather than a `Form`: one row per category with a
+large SF Symbol and the category name, no grouped cards and no disclosure
+chevrons. The navigation title is the localized **Settings**, and every category
+page has a large title and rows made of a title, a one-line explanation and a
+trailing control (switch, value menu, slider or navigation arrow). The layout was
+sketched from reference screenshots of another emulator's settings app; no code
+or text from that project is used (it is GPL and reference-only for this repo).
+
+**General / System / Gamepad / Graphics / Layout / Sound / Debug / About:**
+
+- **General**: fast-forward speed, screen rotation, orientation lock, haptics,
+  FPS counter, System Metal HUD and the two experimental GPU switches
+  (`settings.gpuVertexShaders` / `UI.experimental.gpuVertexShaders`,
+  `settings.preciseShading` / `UI.experimental.preciseShading`). Fast-forward,
+  rotation, orientation, haptics, the FPS counter and the Metal HUD apply
+  immediately (the next frame or layer); the two experimental switches are read
+  once in `App.init` before the renderer's first device, so their rows carry a
+  **Restart required** badge and only take effect after force-quitting and
+  relaunching the app. `gpuVertexShaders` forces the GPU vertex-shading path
+  (`ZAKURO_GPU_SHADERS=1`); `preciseShading` turns off the release fast-math
+  fragment build (`ZAKURO_FRAG_FAST_MATH=0`). Both default to off.
+- **System**: the storage snapshot (installed games, save data, legacy files,
+  app logs, graphics pipeline cache), the pipeline-cache clear action with its
+  confirmation and "available when no game is running" gate, version/build, the
+  active language and a shortcut to About. The snapshot refreshes when the page
+  opens, as before.
+- **Gamepad**: on-screen controls on/off, overlay opacity and the connected
+  controller name; control positions are still edited in-game from the pause
+  menu (see "Editable layouts").
+- **Graphics**: render resolution 1×–4× with the exact pixel caption, and the
+  screen layout page.
+- **Layout**: the screen layout page itself - landscape/portrait preset rows and
+  the two numeric custom pages.
+- **Sound**: volume, mute and the audio buffer size.
+- **Debug**: Save Manager, the CPU profiler page and the diagnostics/log export
+  with its kept-file hint (same `Documents/Diagnostics` copy and share sheet as
+  before). The profiler samples raw guest PCs while a game runs and adds a small
+  per-step cost; it is for diagnosis only and stays on for the current game
+  load.
+- **About**: the product page (icon, version/build, links, acknowledgements,
+  legal notice).
+
+Settings is still opened from the home page. It is not reachable while a game is
+running (the game view replaces the home page), so the CPU profiler's "Start
+sampling" control can only be used once Settings has an in-game entry point; the
+Debug row documents the page and it says when no game is running.
+
 ## Display settings
 
 | Setting | Values | Behaviour |
@@ -359,9 +408,9 @@ once. Fast-forward is silent: see "Fast-forward" below.
 
 ## Controls settings
 
-Settings → Controls keeps the on-screen-controls switch, the global overlay
-opacity, haptics and the connected `GCController` name. There is **no
-full-screen editor link** any more: all control layout editing happens in the
+Settings → Gamepad keeps the on-screen-controls switch, the global overlay
+opacity and the connected `GCController` name (haptics moved to Settings →
+General in 0.1.7). There is **no full-screen editor link** any more: all control layout editing happens in the
 game through the pause menu's **Virtual controls** card (round 4) — Edit layout,
 Toggle controls, Adjust size, Adjust opacity and Reset virtual controls. See
 "Editable layouts" below.
@@ -441,7 +490,7 @@ hint sits above it and the empty area stays inert) saves the current direction's
     drag gesture: the item is hit-tested on start, a local preview follows the
     finger and the profile is committed once on release (tap selects, moving
     controls no longer carry the gesture, so the jitter videos are fixed).
-  The old Settings → Controls full-screen editor and its Default/Custom mode are
+  The old Settings → Gamepad full-screen editor and its Default/Custom mode are
   no longer exposed: every change is stored immediately from the in-game editor
   (the profile archive and the per-row visibility/size scales are global). The
   reference layout app's behaviour rows (slide buttons, relative stick centre,
@@ -457,8 +506,8 @@ hint sits above it and the empty area stays inert) saves the current direction's
   the New 3DS nub. A hardware controller's left stick feeds the Circle Pad and
   its right stick feeds the C-stick; on-screen and controller vectors add up and
   clamp to 1.0.
-- **Screens: landscape choice.** Settings → Display → **Landscape screen
-  layout** shows the current landscape choice; tapping the row opens a radio
+- **Screens: landscape choice.** Settings → Layout → **Landscape screen layout**
+  shows the current landscape choice; tapping the row opens a radio
   picker with the six landscape layouts in this order:
   - **Large screen** (default) - the upper screen 400x240 at the left and the
     lower screen scaled by 1/2.25 at its upper right (presenter
@@ -474,14 +523,14 @@ hint sits above it and the empty area stays inert) saves the current direction's
     `.stacked`);
   - **Custom layout** - the landscape rectangles from the numeric custom page
     (readback).
-- **Screens: portrait choice.** Settings → Display → **Portrait screen layout**
+- **Screens: portrait choice.** Settings → Layout → **Portrait screen layout**
   shows the current portrait choice; its radio picker offers:
   - **Default** (default) - top full width: upper screen 400x240 on top, lower
     screen scaled to 400x300 below it (presenter `.topFullWidth`, ABI 7);
   - **Original** - the native stack, top-aligned (presenter `.stacked`);
   - **Custom layout** - the portrait rectangles from the numeric custom page
     (readback).
-- **Custom layouts (numeric pages).** Settings → Display → **Landscape custom
+- **Custom layouts (numeric pages).** Settings → Layout → **Landscape custom
   layout** / **Portrait custom layout** open one numeric page per direction:
   sections **Upper screen** and **Lower screen**, each with **X position**,
   **Y position**, **Width** and **Height** as integer percentages of the game
@@ -584,7 +633,7 @@ frames with `zk_run_frame` before the frame that is presented:
 
 ## In-game FPS counter
 
-Settings → Performance → **Show FPS counter** (on by default) is the only
+Settings → General → **FPS counter** (on by default) is the only
 performance readout the game view draws. It is a small translucent pill floating
 in the top-trailing safe-area corner over the picture in both orientations; the
 pause button sits next to it in portrait and at the bottom centre in landscape
@@ -603,7 +652,7 @@ cache still warms later loads by itself.
 ## System Metal HUD
 
 The system Metal Performance HUD (FPS, GPU time, memory) attaches to the
-`CAMetalLayer` the presented screens draw into. Settings → Performance → System
+`CAMetalLayer` the presented screens draw into. Settings → General → System
 Metal HUD sets `CAMetalLayer.developerHUDProperties["mode"]` to `"default"` or
 `"disabled"` at run time (iOS 16 API), and the preference is persisted and
 re-applied whenever the layer is reused, so it survives page navigation and ROM
@@ -870,10 +919,12 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `GameView.swift` | Running game: full-bleed picture from the split landscape / portrait screen layout choices, the floating full-screen on-screen controls (per-row visibility and size scale), the optional floating FPS pill and pause button, in-game menu, round-4 in-game control edit mode and the 3DS software-keyboard overlay; also the ROM-free `-previewGameView` path. |
 | `GameViewPreview.swift` | Synthetic TOP / BOTTOM test images (gradient, 1 px grid, 400×240 and 320×240) for the ROM-free `-previewGameView` screenshots. |
 | `InGameMenuView.swift` | Paused overlay menu (resume, save states, the round-4 Virtual controls card with Edit layout / Toggle controls / Adjust size / Adjust opacity / Reset, mute and fast-forward quick toggles, display settings, save manager, diagnostics, reset, exit) and its option sheets. |
-| `SettingsView.swift` | Settings page and the in-game quick display settings; the persisted-setting binding. The Display page keeps the screen layout row, screen rotation and orientation (no aspect/integer/resolution rows); the Controls page no longer links a control-layout editor (editing is in-game). |
+| `SettingsView.swift` | Settings main page: the flat dark category menu (large SF Symbol + label rows, no cards or chevrons), the persisted-setting binding and the in-game quick display sheet. The category pages themselves live in `SettingsPages.swift`. |
+| `SettingsPages.swift` | The eight settings category pages (General, System, Gamepad, Graphics, Layout, Sound, Debug, About) and their shared flat rows. Keeps the storage snapshot/refresh, the pipeline-cache clear, the resolution/layout/audio/gamepad rows, the Save Manager and the diagnostics export, and links the CPU profiler page. |
+| `CPUProfilerView.swift` | The debug CPU profiler page: starts guest-PC sampling while a game runs and lists hot spots. Diagnosis only. |
 | `SaveManagerView.swift` | Game picker over the library, the selected game's battery save list (export as ZIP, import, delete) and its instant save-state slots (delete offline; save/load while that game runs), with progress and errors; re-reads the selected game's files on open, on library changes and after actions (no refresh button). |
 | `AboutView.swift` | Product page: app icon, name, version/build, project links, acknowledgements and legal notice; a compact runtime status card only while a game is loaded. |
-| `AppSettings.swift` | Persisted settings model (separate landscape and portrait screen layout enums, screen rotation, interface orientation, buffer size, frame cap, playback speed, Metal HUD and FPS-counter switches, the round-4 hidden-control rows and per-row size scales) the round-4 hidden-control rows and per-row size scales) and the UserDefaults keys, including the round-1 single-choice migration (`migratedScreenLayouts`) and the render scale (1×–4×). |
+| `AppSettings.swift` | Persisted settings model (separate landscape and portrait screen layout enums, screen rotation, interface orientation, buffer size, frame cap, playback speed, Metal HUD and FPS-counter switches, the two next-launch experimental GPU switches, the round-4 hidden-control rows and per-row size scales) and the UserDefaults keys, including the round-1 single-choice migration (`migratedScreenLayouts`) and the render scale (1×–4×). |
 | `DiagnosticsReport.swift` | Diagnostics report text, the shared diagnostics file type and screen geometry helpers. |
 | `StorageInspector.swift` | Container folder sizes, save-data file list, pipeline-cache clearing, and `AtomicFileWriter` for temporary-file-then-rename writes. |
 | `SaveStateSupport.swift` | Instant save states: three slots per game, the runtime's size → copy → load protocol on the serial runtime queue, the pause/audio-drop around save and load, and the slot list. |
@@ -904,7 +955,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `CustomScreenLayout.swift` | Custom screen layout model (archive v3 with the ratio-lock flag; older archives migrate to the round-2 measured defaults) plus `CustomScreenGeometry`: per-orientation screen rectangles, rotation, integer scaling. |
 | `ScreenLayoutEditorView.swift` | Full-screen custom screen layout drag editor (one direction per editor, opened from the numeric custom page's "Edit by dragging"): full-screen game-view canvas with the current control layout overlaid for reference, direct screen drag, a ≥44 pt corner handle or pinch to resize, edge snapping and one clear Done pill centered on the screen (round-8; hint above it, no bottom toolbar). |
 | `CustomScreenLayoutValuesView.swift` | The numeric custom screen layout page of one direction: Upper screen / Lower screen sections with X position, Y position, Width and Height as integer percentages of the game view, a live centered preview canvas (blue TOP / purple BOTTOM) under them, editing the CustomScreenLayout archive; also the "Edit by dragging" entry. |
-| `ScreenLayoutSettingsView.swift` | The screen layout page under Settings → Display: the landscape six-choice row, the portrait three-choice row (each opening a radio picker sheet), the two custom layout rows and no reset / "how it works" section. |
+| `ScreenLayoutSettingsView.swift` | The screen layout page under Settings → Layout: the landscape six-choice row, the portrait three-choice row (each opening a radio picker sheet), the two custom layout rows and no reset / "how it works" section. |
 | `GameControllerInput.swift` | GameController-to-3DS button mapping. |
 | `AudioOutput.swift` | Ring buffer and AVAudioEngine output (volume, mute, buffer duration). |
 | `FrameTiming.swift` | Per-phase frame timing for the diagnostics report and the fast-forward auto-fallback. |
@@ -956,7 +1007,7 @@ The app has one presentation path and one fallback:
   a system loads, so an already loaded game keeps its internal scale until it is
   reloaded or restarted.
 - Because there is a real Metal layer, the system Metal Performance HUD can
-  attach to it: Settings → Performance → System Metal HUD sets
+  attach to it: Settings → General → System Metal HUD sets
   `developerHUDProperties` on the layer (`mode: "default"` / `"disabled"`) at run
   time; it is on by default and the build's `MetalHudEnabled` (or the device's
   Developer settings) also has to enable it. On the readback path there is no
@@ -1509,7 +1560,7 @@ existing 0.5 s stats boundary). The same numbers are appended to the periodic
 3. The share sheet opens with the report, and the same file is also kept on the
    device as `Documents/Diagnostics/3ds2apple-diagnostics-yyyyMMdd-HHmmss.txt`
    (the newest 5 are kept). The export entry exists twice: the in-game menu
-   above, and the home page's **Settings -> More -> Export logs** (设置 -> 更多 ->
+   above, and the home page's **Settings -> Debug -> Export logs** (设置 -> 调试 ->
    导出日志). Use the in-game menu for performance data: unloading a game resets
    the frame/stutter counters, so a report exported from Settings after returning
    home has the counter block at 0 even though the session log (including the

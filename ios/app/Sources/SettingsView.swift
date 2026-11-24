@@ -2,16 +2,20 @@
 //  SettingsView.swift
 //  3ds2apple
 //
-//  Settings page: display, audio, controls, performance, storage and About.
-//  The Display section opens the screen layout page (separate landscape and
-//  portrait preset pickers plus the two numeric custom layout pages) and the
-//  Controls section opens the control layout page (Default / Custom; the
-//  custom choice opens the full-screen editor); the rotation/aspect/resolution
-//  rows also appear in the in-game quick settings sheet.
+//  Settings main page and the in-game quick display sheet.
+//
+//  0.1.7 reorganises Settings into a flat main menu and one page per category:
+//  General, System, Gamepad, Graphics, Layout, Sound, Debug and About. The main
+//  page is a plain dark list with a large SF Symbol and a label per category
+//  (no grouped cards, no separators, no chevrons); the category pages live in
+//  SettingsPages.swift. The design follows reference screenshots of another
+//  emulator's settings app for its layout only - all strings and code here are
+//  our own, and that project's GPL code/text is not copied.
 //
 //  The settings live in AppSettings; every control writes through a binding that
-//  also stores the new value in UserDefaults. Rows are written directly in the
-//  Form sections so a Form renders each control as its own row.
+//  also stores the new value in UserDefaults. The in-game quick display sheet
+//  (opened from the pause overlay) stays a compact Form because it floats over
+//  the running game and only covers the layout/rotation rows.
 //
 //  User-facing text: static SwiftUI literals localize through
 //  Localizable.strings; strings built at run time go through L10n.
@@ -19,7 +23,6 @@
 
 import Foundation
 import SwiftUI
-import UIKit
 
 // MARK: - Persisting binding
 
@@ -37,324 +40,61 @@ func persistedBinding<T>(
     )
 }
 
-
-// MARK: - Settings page
+// MARK: - Settings main page
 
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var model: ROMSession
 
-    @State private var storage = StorageSnapshot.empty
-    @State private var isClearCacheConfirmationPresented = false
-    @State private var shareItem: SettingsShareItem?
-    /// Kept copy of the last diagnostics export (relative to Documents).
-    @State private var diagnosticsHint: String?
-
     var body: some View {
-        Form {
-            displaySection
-            audioSection
-            controlsSection
-            performanceSection
-            storageSection
-            toolsSection
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(SettingsCategory.allCases) { category in
+                    NavigationLink(value: category) {
+                        SettingsMainRow(category: category)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings-category-\(category.rawValue)")
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 6)
+            .padding(.bottom, 36)
+            .frame(maxWidth: SettingsTheme.contentMaxWidth, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
+        .background(SettingsTheme.background.ignoresSafeArea())
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            refreshStorage()
-        }
-        .sheet(item: $shareItem) { item in
-            ShareSheet(items: [item.url])
-        }
-        .alert("Clear the graphics pipeline cache?", isPresented: $isClearCacheConfirmationPresented) {
-            Button("Clear", role: .destructive) {
-                clearPipelineCache()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The cache is rebuilt on the next load, so that first load is slower. Save data is not touched.")
+        // The settings redesign is a dark, flat list; this applies to the
+        // settings stack only, the home page and the game keep the system
+        // appearance.
+        .preferredColorScheme(.dark)
+        .navigationDestination(for: SettingsCategory.self) { category in
+            SettingsCategoryPage(category: category, settings: settings, model: model)
         }
     }
+}
 
-    // MARK: - Display
+/// One row of the main page: a large SF Symbol and the category name. The whole
+/// row is the NavigationLink label, so there is no disclosure chevron.
+private struct SettingsMainRow: View {
+    let category: SettingsCategory
 
-    private var displaySection: some View {
-        Section {
-            NavigationLink {
-                ScreenLayoutSettingsView(settings: settings)
-            } label: {
-                Text("Screen layout")
-            }
-            Picker("Screen rotation", selection: persistedBinding(settings, \.screenRotation)) {
-                ForEach(ScreenRotation.allCases) { rotation in
-                    Text(rotation.title).tag(rotation)
-                }
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Resolution")
-                Picker("Resolution", selection: persistedBinding(settings, \.renderScale)) {
-                    Text("1x").tag(1)
-                    Text("2x").tag(2)
-                    Text("3x").tag(3)
-                    Text("4x").tag(4)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                hintText(resolutionCaption(for: settings.renderScale))
-            }
-            Picker("Orientation", selection: persistedBinding(settings, \.orientation)) {
-                ForEach(OrientationLock.allCases) { lock in
-                    Text(lock.title).tag(lock)
-                }
-            }
-        } header: {
-            Text("Display")
-        }
-    }
-
-    // MARK: - Audio
-
-    private var audioSection: some View {
-        Section {
-            settingRow("Volume") {
-                Slider(value: persistedBinding(settings, \.audioVolume), in: 0...1, step: 0.05)
-                    .labelsHidden()
-            } hint: {
-                Text(L10n.format("%ld%%", Int((settings.audioVolume * 100).rounded())))
-                    .monospacedDigit()
-            }
-            Toggle("Mute", isOn: persistedBinding(settings, \.audioMuted))
-            HStack {
-                Text("Buffer size")
-                Spacer(minLength: 12)
-                Picker("Buffer size", selection: persistedBinding(settings, \.audioBuffer)) {
-                    ForEach(AudioBufferSize.allCases) { size in
-                        Text(size.title).tag(size)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-            }
-        } header: {
-            Text("Audio")
-        }
-    }
-
-    // MARK: - Controls
-
-    private var controlsSection: some View {
-        Section {
-            Toggle("Show on-screen controls", isOn: persistedBinding(settings, \.showTouchControls))
-            settingRow("Overlay opacity") {
-                Slider(value: persistedBinding(settings, \.controlsOpacity), in: 0.15...1.0, step: 0.05)
-                    .labelsHidden()
-            } hint: {
-                Text(L10n.format("%ld%%", Int((settings.controlsOpacity * 100).rounded())))
-                    .monospacedDigit()
-            }
-            Toggle("Haptic feedback on button press", isOn: persistedBinding(settings, \.haptics))
-            infoRow("Controller", model.controllerName ?? L10n.tr("Not connected"))
-        } header: {
-            Text("Controls")
-        }
-    }
-
-    // MARK: - Performance
-
-    private var performanceSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Fast-forward")
-                Picker("Fast-forward", selection: persistedBinding(settings, \.playbackSpeed)) {
-                    ForEach(PlaybackSpeed.allCases) { speed in
-                        Text(speed.title).tag(speed)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                if model.playbackSpeedAutoReduced {
-                    hintText(autoReducedText)
-                }
-            }
-            Toggle("System Metal HUD", isOn: persistedBinding(settings, \.systemMetalHUD))
-                .accessibilityIdentifier("settings-system-metal-hud")
-            if let hudUnavailableText {
-                hintText(hudUnavailableText)
-            }
-            Toggle("Show FPS counter", isOn: persistedBinding(settings, \.showFPS))
-                .accessibilityIdentifier("settings-fps-hud")
-        } header: {
-            Text("Performance")
-        }
-    }
-    /// The only HUD message left: why the switch cannot work right now. The
-    /// general explanation was removed with the other hints in 0.1.2; the
-    /// diagnostics report still records the full HUD state.
-    private var hudUnavailableText: String? {
-        if !model.buildEnablesSystemMetalHUD {
-            return L10n.tr("This build does not enable the Metal HUD; rebuild the shell with scripts/build-ios-app.sh.")
-        }
-        if settings.systemMetalHUD && model.isRuntimeLoaded && !model.displayPath.usesMetalLayer {
-            return L10n.tr("The game is on the CPU readback path, so the HUD has no Metal layer to attach to.")
-        }
-        return nil
-    }
-
-    // MARK: - Storage
-
-    private var storageSection: some View {
-        Section {
-            infoRow("Installed games", StorageFormat.size(storage.gamesBytes))
-            infoRow("Save data", StorageFormat.size(storage.saveDataBytes))
-            if storage.romBytes > 0 {
-                // 0.1.x shell cartridges: only present on an updated install.
-                infoRow("Legacy game files", StorageFormat.size(storage.romBytes))
-            }
-            infoRow("App logs", StorageFormat.size(storage.logBytes))
-            infoRow("Graphics pipeline cache", StorageFormat.size(storage.cacheBytes))
-            Button("Clear graphics pipeline cache") {
-                isClearCacheConfirmationPresented = true
-            }
-            .disabled(model.isRuntimeActive)
-            .accessibilityIdentifier("settings-clear-cache")
-            if model.isRuntimeActive {
-                Text("Available when no game is running.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        } header: {
-            Text("Storage")
-        }
-    }
-
-    // MARK: - Tools
-
-    private var toolsSection: some View {
-        Section {
-            NavigationLink {
-                SaveManagerView(model: model, saveStates: model.saveStates)
-            } label: {
-                moreRowLabel("Save Manager", systemImage: "externaldrive.fill")
-            }
-            .accessibilityIdentifier("settings-save-manager")
-            Button {
-                exportDiagnostics()
-            } label: {
-                moreRowLabel("Export logs", systemImage: "square.and.arrow.up.fill")
-            }
-            .tint(.primary)
-            .accessibilityIdentifier("settings-export-logs")
-            if let diagnosticsHint {
-                Text(diagnosticsHint)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-                    .accessibilityIdentifier("settings-diagnostics-hint")
-            }
-            NavigationLink {
-                AboutView(model: model)
-            } label: {
-                moreRowLabel("About", systemImage: "info.circle.fill")
-            }
-            .accessibilityIdentifier("settings-about")
-        } header: {
-            Text("More")
-        }
-    }
-
-    /// Standard inline hint under a control: one caption style everywhere, no
-    /// separate row/divider.
-    private func hintText(_ text: String) -> some View {
-        Text(text)
-            .font(.caption)
-            .foregroundColor(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-    /// Label for a row in the More section. All three rows (Save Manager,
-    /// Export logs, About) must look identical whatever row type they use, so
-    /// they share this one explicit composition: the accent-coloured icon and
-    /// the primary text colour, independent of the Form's default Button /
-    /// NavigationLink tint (0.1.3 item 4: the Export logs icon was blue while
-    /// the two navigation rows were not).
-    private func moreRowLabel(_ title: LocalizedStringKey, systemImage: String,
-                             iconColor: Color = .accentColor) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.body)
-                .foregroundStyle(iconColor)
-                .frame(width: 24, alignment: .center)
-            Text(title)
+    var body: some View {
+        HStack(spacing: 22) {
+            Image(systemName: category.systemImage)
+                .font(.system(size: 24, weight: .regular))
+                .foregroundStyle(.primary)
+                .frame(width: 38, alignment: .center)
+            Text(category.title)
+                .font(.system(size: 20, weight: .regular))
                 .foregroundStyle(.primary)
             Spacer(minLength: 0)
         }
-    }
-    /// One settings row: the control, with an optional one-line hint directly
-    /// underneath it (no extra divider row), so every hint in the page has the
-    /// same shape.
-    @ViewBuilder
-    private func settingRow<Control: View, Hint: View>(
-        _ title: LocalizedStringKey,
-        @ViewBuilder control: () -> Control,
-        @ViewBuilder hint: () -> Hint
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-            control()
-            hint()
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func exportDiagnostics() {
-        guard let export = DiagnosticsExporter.write(model: model, settings: settings) else { return }
-        diagnosticsHint = export.documentsPath.map { "Saved to Documents/\($0)" }
-        shareItem = SettingsShareItem(url: export.shareURL)
-    }
-
-    // MARK: - Text
-
-    /// Fast-forward state when the automatic fallback lowered the speed.
-    private var autoReducedText: String {
-        L10n.format(
-            "Lowered automatically from %@ because frames stayed below 20 fps.",
-            L10n.speedLabel(settings.playbackSpeed.rawValue)
-        )
-    }
-
-    private func infoRow(_ title: LocalizedStringKey, _ value: String) -> some View {
-        HStack {
-            Text(title)
-            Spacer(minLength: 12)
-            Text(value)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-    }
-
-    // MARK: - Actions
-
-    private func refreshStorage() {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let snapshot = StorageInspector.snapshot()
-            DispatchQueue.main.async {
-                self.storage = snapshot
-            }
-        }
-    }
-
-    private func clearPipelineCache() {
-        DispatchQueue.global(qos: .userInitiated).async {
-            _ = StorageInspector.clearPipelineCache()
-            let snapshot = StorageInspector.snapshot()
-            DispatchQueue.main.async {
-                self.storage = snapshot
-            }
-        }
+        .padding(.vertical, 21)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }
 
@@ -434,21 +174,4 @@ struct QuickDisplaySettingsView: View {
             }
         }
     }
-}
-
-/// The caption under the resolution picker: the exact pixels the selected
-/// render factor produces. A resolution change takes effect from the next game
-/// load (the runtime builds its renderer then); the presented drawable resizes
-/// at once.
-private func resolutionCaption(for renderScale: Int) -> String {
-    guard renderScale > 1 else {
-        return L10n.tr("1x is the 3DS's native 400×240.")
-    }
-    return L10n.format("%ldx is %ld×%ld.", renderScale, 400 * renderScale, 240 * renderScale)
-}
-
-/// Share sheet payload for the diagnostics export from Settings.
-private struct SettingsShareItem: Identifiable {
-    let id = UUID()
-    let url: URL
 }

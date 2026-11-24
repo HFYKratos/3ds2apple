@@ -10,8 +10,9 @@
 #   2) the manual refresh buttons are gone from the Home page and the Save
 #      Manager while the automatic rescans (launch / foreground / data change /
 #      pull-to-refresh) stay;
-#   3) the Settings -> More rows (Save Manager / Export logs / About) share one
-#      blue-accent label (0.1.3 item 4);
+#   3) the 0.1.7 Settings redesign keeps the Save Manager, diagnostics export and
+#      About entry points on the Debug / System pages with their accessibility
+#      identifiers, and the flat main page has no disclosure chevrons;
 #   4) the library cards have no AOT badge any more (the AOT state stays in the
 #      log and the diagnostics export) and no visible "..." menu button.
 #
@@ -43,6 +44,7 @@ LIB="${APP}/Sources/GameLibrary.swift"
 HOME="${APP}/Sources/HomeView.swift"
 SAVE="${APP}/Sources/SaveManagerView.swift"
 SETTINGS="${APP}/Sources/SettingsView.swift"
+SETTINGS_PAGES="${APP}/Sources/SettingsPages.swift"
 CONTENT="${APP}/Sources/ContentView.swift"
 EN="${APP}/Resources/en.lproj/Localizable.strings"
 ZH="${APP}/Resources/zh-Hans.lproj/Localizable.strings"
@@ -153,17 +155,15 @@ for key in "“%@” was deleted from this device." "Some of the game's files co
   check "same format placeholders for \"${key}\"" test "${en_specs}" -eq "${zh_specs}"
 done
 
-section 'Settings -> More rows share the blue accent (0.1.3 item 4)'
-more_block="$(sed -n '/private var toolsSection/,/Text("More")/p' "${SETTINGS}")"
-check "the three More rows use moreRowLabel" test "$(grep -Fc -- 'moreRowLabel(' <<<"${more_block}")" -eq 3
-check "the More rows have no bare Label leftovers" bash -c '! grep -Fq -- "Label(" <<<"${more_block}"'
-check "Save Manager row identifier" contains "${SETTINGS}" 'accessibilityIdentifier("settings-save-manager")'
-check "Export logs row identifier" contains "${SETTINGS}" 'accessibilityIdentifier("settings-export-logs")'
-check "About row identifier" contains "${SETTINGS}" 'accessibilityIdentifier("settings-about")'
-check "moreRowLabel pins the accent-coloured icon" contains "${SETTINGS}" 'iconColor: Color = .accentColor'
-check "moreRowLabel applies the icon colour" contains "${SETTINGS}" 'foregroundStyle(iconColor)'
-check "moreRowLabel pins the primary text colour" contains "${SETTINGS}" 'Text(title)'
-check "moreRowLabel shares one explicit composition" contains "${SETTINGS}" 'HStack(spacing: 12) {'
+section '0.1.7 Settings keeps the supporting rows (task-42)'
+check "Save Manager row identifier" contains "${SETTINGS_PAGES}" '"settings-save-manager"'
+check "Export logs row identifier" contains "${SETTINGS_PAGES}" '"settings-export-logs"'
+check "About row identifier" contains "${SETTINGS_PAGES}" '"settings-about"'
+check "the settings main page has the category menu" contains "${SETTINGS}" 'SettingsCategory.allCases'
+check "the settings main page forces the dark flat look" contains "${SETTINGS}" 'preferredColorScheme(.dark)'
+check "the Debug page keeps the Save Manager link" contains "${SETTINGS_PAGES}" 'SaveManagerView(model: model, saveStates: model.saveStates)'
+check "the Debug page keeps the diagnostics export" contains "${SETTINGS_PAGES}" 'DiagnosticsExporter.write(model: model, settings: settings)'
+check "the settings main page has no disclosure chevrons" bash -c '! sed -n "/private struct SettingsMainRow/,/^}/p" ios/app/Sources/SettingsView.swift | grep -Fq -- "chevron"'
 
 section 'Docs describe the delete semantics'
 check "README documents Deleting a game" contains "${README}" '### Deleting a game'

@@ -269,6 +269,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// via Vulkan (MoltenVK) and how the screens are presented; shown in
     /// diagnostics next to the warm-up/cache state.
     @Published private(set) var hardwareStatus: String = "—"
+    /// True after the guest-PC sampling profiler started on the current runtime
+    /// handle (CPUProfilerView). Sampling is cumulative and cannot be stopped;
+    /// a new game load resets it. Main queue only.
+    @Published private(set) var cpuProfilerStarted = false
     /// AOT checks of the last load (linked code, recompiled flag, runtime status
     /// text and the pack that was registered). Shown in About and exported in
     /// diagnostics; a refusal publishes it too, so the log and UI agree.
@@ -1504,6 +1508,56 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         }
     }
 
+    // MARK: - CPU profiler (main queue control, runtimeQueue executes)
+
+    /// Starts the guest-PC sampling profiler on the runtime queue and reports on
+    /// the main queue whether sampling is on. Only usable while a game is
+    /// loaded: the handle belongs to one load, and a new load starts unsampled.
+    /// Sampling costs a branch per guest step and cannot be stopped for the
+    /// rest of that load, so this is a diagnostic tool (CPUProfilerView).
+    func startCPUProfiler(completion: @escaping (Bool) -> Void) {
+        guard isRuntimeLoaded else {
+            completion(false)
+            return
+        }
+        runtimeQueue.async { [weak self] in
+            guard let self else { return }
+            guard let system = self.system else {
+                DispatchQueue.main.async { [weak self] in
+                    self?.cpuProfilerStarted = false
+                    completion(false)
+                }
+                return
+            }
+            let started = zk_profiler_start(system) == 0
+            DispatchQueue.main.async { [weak self] in
+                self?.cpuProfilerStarted = started
+                completion(started)
+            }
+            AppLog.log("[3ds2apple] CPU profiler: %@",
+                       started ? "sampling guest PCs" : "zk_profiler_start failed")
+        }
+    }
+
+    /// Copies the hottest count (1...100) sampled guest PCs as
+    /// "thread 0xPC hits" lines, most frequent first. The runtime's pointer is
+    /// only valid until its next status call on the runtime queue, so the Swift
+    /// String is made inside that queue block and handed to the main queue.
+    /// Empty when the profiler has no samples (or is not running).
+    func cpuProfilerHotSpots(count: UInt32 = 20, completion: @escaping (String) -> Void) {
+        let limit = min(max(count, 1), 100)
+        runtimeQueue.async { [weak self] in
+            var text = ""
+            if let system = self?.system {
+                let pointer = zk_profiler_hot_spots(system, limit)
+                if let pointer {
+                    text = String(cString: pointer)
+                }
+            }
+            DispatchQueue.main.async { completion(text) }
+        }
+    }
+
     // MARK: - A1 presentation (main queue creates, runtimeQueue presents)
 
     /// Whether the app tries the CAMetalLayer presentation path. Set this to
@@ -1790,6 +1844,8 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         AppLog.log("[3ds2apple] pipeline cache after zk_destroy: %@", cache.summary)
         DispatchQueue.main.async { [weak self] in
             self?.pipelineCacheStats = cache
+            // A new handle starts with the profiler off.
+            self?.cpuProfilerStarted = false
         }
     }
 

@@ -31,6 +31,7 @@ struct InGameMenuView: View {
     let onEditControls: () -> Void
     let onReset: () -> Void
     let onDisplaySettings: () -> Void
+    let onSettings: () -> Void
     let onSaveManager: () -> Void
     let onDiagnostics: () -> Void
     let onExit: () -> Void
@@ -272,6 +273,8 @@ struct InGameMenuView: View {
     private var gameActionsCard: some View {
         card {
             actionRow("Display settings", identifier: "menu-display-settings", action: onDisplaySettings)
+            rowDivider
+            actionRow("Settings", identifier: "menu-settings", action: onSettings)
             rowDivider
             actionRow("Save Manager", identifier: "menu-save-manager", action: onSaveManager)
             rowDivider

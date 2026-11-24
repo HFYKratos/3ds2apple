@@ -742,6 +742,33 @@ int32_t zk_recompiled(zk_system_t system);
  */
 const char *zk_recompiled_status(zk_system_t system);
 
+/* --------------------------------------------------- CPU profiler (guest PCs) -- */
+
+/**
+ * Starts the guest-PC sampling profiler for this System.
+ *
+ * Returns 0 on success and -1 for a NULL handle. Sampling costs a little on
+ * every guest step and stays on for the rest of the System's life; the sampled
+ * guest addresses accumulate (they are cumulative, not per window). Use it only
+ * while diagnosing: a `profiling` build starts it by itself, the normal build
+ * only samples after this call. Run it on the runtime serial queue like every
+ * other call that takes a handle.
+ */
+int32_t zk_profiler_start(zk_system_t system);
+
+/**
+ * The hottest `count` sampled guest locations as text: one
+ * `thread 0xPC hits` line each, most frequent first, or an empty string when
+ * sampling has not started or has no samples yet.
+ *
+ * Guest function names are not available to the runtime, so the PC is what a
+ * symbol map of the game's libgame.a matches. `count` is capped at 100. The
+ * pointer is owned by the library and stays valid until the next status call
+ * on the same thread; copy it (String(cString:) in Swift) before hopping to
+ * another queue. Call it on the runtime serial queue.
+ */
+const char *zk_profiler_hot_spots(zk_system_t system, uint32_t count);
+
 /* ------------------------------------------------ GamePack registration (AOT) -- */
 
 /*

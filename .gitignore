@@ -94,3 +94,6 @@ node_modules/
 
 # User-provided screen recordings (local only)
 /temp_file/
+
+# Local user-provided reference screenshots
+/temp_files/

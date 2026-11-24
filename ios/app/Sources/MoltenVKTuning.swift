@@ -174,12 +174,31 @@ enum MoltenVKTuning {
     /// so a later read would miss the value the profile set.
     private(set) static var diagnosticRenderScale: Int?
 
+    /// "NAME=value" renderer switches App.init set from the Settings Debug
+    /// page experimental options before applyFromEnvironment(). They are
+    /// already in the process environment (App.init ran setenv), so they are
+    /// recorded here to keep the release defaults below (fast-math fragments
+    /// on) from replacing the user's precise-shading choice, and to name them
+    /// in the diagnostics line. Empty on a normal launch.
+    private(set) static var settingsEnvironment: [String] = []
+
+    /// Records the "NAME=value" switches App.init put into the environment from
+    /// Settings. Called once, right before applyFromEnvironment(). A later
+    /// change in Settings applies on the next app launch: the renderer reads
+    /// the switches while it makes the device for a game load.
+    static func noteSettingsEnvironment(_ pairs: [String]) {
+        settingsEnvironment = pairs
+    }
+
     /// One line for the device log and the diagnostics report; says "none" on a
     /// normal launch so a captured report explains the framework defaults.
     static var diagnosticsLine: String {
         let moltenvk = applied.isEmpty ? "moltenvk_env=none" : "moltenvk_env=" + applied.joined(separator: ",")
         let renderer = rendererApplied.isEmpty ? "renderer_env=none" : "renderer_env=" + rendererApplied.joined(separator: ",")
-        return "\(moltenvk) gpu_profile=\(profile ?? "none") \(renderer)"
+        let settings = settingsEnvironment.isEmpty
+            ? "settings_env=none"
+            : "settings_env=" + settingsEnvironment.joined(separator: ",")
+        return "\(moltenvk) gpu_profile=\(profile ?? "none") \(renderer) \(settings)"
     }
 
     /// What a diagnostic profile sets: MoltenVK parameters and renderer
@@ -386,7 +405,13 @@ enum MoltenVKTuning {
                 AppLog.log("[3ds2apple] GPU tuning (%@): refusing unknown key %@", source, name)
                 continue
             }
-            if target.contains(where: { $0.hasPrefix(name + "=") }) { continue }
+            // A Settings experimental switch already in the environment wins:
+            // setenv(..., 1) must not replace precise shading's
+            // ZAKURO_FRAG_FAST_MATH=0 with the release fast-math default.
+            if target.contains(where: { $0.hasPrefix(name + "=") })
+                || settingsEnvironment.contains(where: { $0.hasPrefix(name + "=") }) {
+                continue
+            }
             guard setenv(name, value, 1) == 0 else {
                 AppLog.log("[3ds2apple] GPU tuning (%@): setenv(%@) failed", source, name)
                 continue

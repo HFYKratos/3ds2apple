@@ -540,6 +540,20 @@ final class AppSettings: ObservableObject {
     /// Fast-forward target: 1×, 2× or 4× (see `PlaybackSpeed`).
     @Published var playbackSpeed: PlaybackSpeed
 
+    // MARK: Experimental renderer options (Debug page; next app launch)
+
+    /// Shade vertices on the GPU ("ZAKURO_GPU_SHADERS=1") instead of on the CPU.
+    /// Experimental: App.init puts the switch into the environment and the
+    /// runtime reads it while it makes the device for a game load, so a change
+    /// here applies on the NEXT APP LAUNCH (the Debug page says so). OFF ships
+    /// the renderer's own default.
+    @Published var gpuVertexShaders: Bool
+    /// Build the fragment shader with the release fast-math build (OFF) or with
+    /// exact rounding (ON sets "ZAKURO_FRAG_FAST_MATH=0"). Experimental: it also
+    /// applies on the NEXT APP LAUNCH for the same reason as
+    /// gpuVertexShaders.
+    @Published var preciseShading: Bool
+
     private let defaults: UserDefaults
 
     private init(defaults: UserDefaults = .standard) {
@@ -706,6 +720,10 @@ final class AppSettings: ObservableObject {
         playbackSpeed = PlaybackSpeed(
             rawValue: defaults.integer(forKey: Keys.playbackSpeed)
         ) ?? .normal
+        // Debug page's experimental renderer options, both OFF by default: the
+        // values are read by App.init and only take effect on the next app launch.
+        gpuVertexShaders = Self.bool(defaults, Keys.gpuVertexShaders, fallback: false)
+        preciseShading = Self.bool(defaults, Keys.preciseShading, fallback: false)
     }
 
     /// Stores the current values. Called by the settings UI after a change.
@@ -729,6 +747,9 @@ final class AppSettings: ObservableObject {
         MetalHUD.apply(enabled: systemMetalHUD)
         defaults.set(showFPS, forKey: Keys.showFPS)
         defaults.set(playbackSpeed.rawValue, forKey: Keys.playbackSpeed)
+        // Experimental renderer options: App.init reads them on the next launch.
+        defaults.set(gpuVertexShaders, forKey: Keys.gpuVertexShaders)
+        defaults.set(preciseShading, forKey: Keys.preciseShading)
         // Editable layouts (versioned Codable data; see the init).
         defaults.set(landscapeScreenLayout.rawValue, forKey: Keys.landscapeScreenLayout)
         defaults.set(portraitScreenLayout.rawValue, forKey: Keys.portraitScreenLayout)
@@ -942,6 +963,10 @@ final class AppSettings: ObservableObject {
         /// "UI.graphicsWarmUpEnabled"; old values are ignored on purpose.
         static let showFPS = "UI.showFPS"
         static let playbackSpeed = "UI.playbackSpeed"
+        /// Debug page's experimental renderer options: read once by App.init,
+        /// applied on the next app launch.
+        static let gpuVertexShaders = "UI.experimental.gpuVertexShaders"
+        static let preciseShading = "UI.experimental.preciseShading"
         /// Round-2 landscape / portrait screen layout choices (independent).
         static let landscapeScreenLayout = "UI.landscapeScreenLayout"
         static let portraitScreenLayout = "UI.portraitScreenLayout"

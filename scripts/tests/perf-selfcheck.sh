@@ -65,7 +65,7 @@ check "session exposes the FPS readout" contains ios/app/Sources/ROMSession.swif
 check "GameView draws the FPS readout" contains ios/app/Sources/GameView.swift 'model.fpsText'
 check "GameView tags the FPS readout for UI smoke" contains ios/app/Sources/GameView.swift 'fps-hud'
 check "FPS readout is a persisted setting" contains ios/app/Sources/AppSettings.swift 'showFPS'
-check "Settings exposes the FPS switch" contains ios/app/Sources/SettingsView.swift 'settings-fps-hud'
+check "Settings exposes the FPS switch" contains ios/app/Sources/SettingsPages.swift 'settings-fps-hud'
 check "diagnostics report has the FPS counter state" contains ios/app/Sources/DiagnosticsReport.swift 'fps_counter='
 check "diagnostics report has aot_percent" contains ios/app/Sources/DiagnosticsReport.swift 'aot_percent='
 check "diagnostics report has timing shares" contains ios/app/Sources/DiagnosticsReport.swift 'timing_share_run_pct='
@@ -77,12 +77,12 @@ check "en Localizable.strings has the FPS accessibility label" grep -Fq -- '"Fra
 check "zh-Hans Localizable.strings has the FPS accessibility label" grep -Fq -- '"Frames per second: %@"' ios/app/Resources/zh-Hans.lproj/Localizable.strings
 # The in-game HUD only shows FPS: the old multi-segment badge and the removed
 # first-load warm-up option must stay out of the UI sources.
-if grep -Fq -- 'Metal backend' ios/app/Sources/SettingsView.swift; then
+if grep -Fq -- 'Metal backend' ios/app/Sources/SettingsView.swift ios/app/Sources/SettingsPages.swift; then
   fail "SettingsView still shows the Metal backend row"
 else
   pass "SettingsView has no Metal backend row"
 fi
-if grep -Fq -- 'First-load graphics warm-up' ios/app/Sources/SettingsView.swift ios/app/Sources/GameView.swift; then
+if grep -Fq -- 'First-load graphics warm-up' ios/app/Sources/SettingsView.swift ios/app/Sources/SettingsPages.swift ios/app/Sources/GameView.swift; then
   fail "a first-load warm-up option/overlay string is still in the UI sources"
 else
   pass "no first-load warm-up option/overlay in the UI sources"
@@ -91,6 +91,74 @@ if grep -Fq -- 'runtime-status-badge' ios/app/Sources/GameView.swift; then
   fail "GameView still carries the old runtime-status-badge"
 else
   pass "the old multi-segment runtime badge is gone"
+fi
+
+section '0.1.7 settings redesign (task-42)'
+# Main page: a flat dark category list, not a Form, without grouped Section
+# cards and without a disclosure chevron; every category has its own page in
+# SettingsPages.swift.
+check "settings main page lists every category" contains ios/app/Sources/SettingsView.swift 'SettingsCategory.allCases'
+check "settings main page is not a Form" \
+  bash -c '! sed -n "/^struct SettingsView: View/,/^}/p" ios/app/Sources/SettingsView.swift | grep -Fq -- "Form {"'
+check "settings main page has no grouped Section cards" \
+  bash -c '! sed -n "/^struct SettingsView: View/,/^}/p" ios/app/Sources/SettingsView.swift | grep -Fq -- "Section {"'
+check "settings main page rows have no disclosure chevron" \
+  bash -c '! sed -n "/private struct SettingsMainRow/,/^}/p" ios/app/Sources/SettingsView.swift | grep -Fq -- "chevron"'
+check "settings main page keeps a localized Settings title" contains ios/app/Sources/SettingsView.swift '.navigationTitle("Settings")'
+check "settings pages register the category destination" contains ios/app/Sources/SettingsView.swift '.navigationDestination(for: SettingsCategory.self)'
+check "settings main page uses the shared flat theme" contains ios/app/Sources/SettingsView.swift 'SettingsTheme.background'
+for title in General System Gamepad Graphics Layout Sound Debug; do
+  check "category ${title} title is localized" contains ios/app/Sources/SettingsPages.swift "return L10n.tr(\"${title}\")"
+done
+for symbol in 'gearshape' 'iphone' 'gamecontroller' 'square.grid.2x2' 'rectangle.split.2x1' 'return "speaker"' 'chevron.left.forwardslash.chevron.right' 'info.circle'; do
+  check "category symbol ${symbol} is present" contains ios/app/Sources/SettingsPages.swift "${symbol}"
+done
+# General page: large title plus every requested row, in the flat style.
+check "General page uses the large title" contains ios/app/Sources/SettingsPages.swift '.navigationBarTitleDisplayMode(.large)'
+check "General page has the fast-forward row" contains ios/app/Sources/SettingsPages.swift 'settings-fast-forward'
+check "General page has the screen rotation row" contains ios/app/Sources/SettingsPages.swift 'settings-screen-rotation'
+check "General page has the orientation lock row" contains ios/app/Sources/SettingsPages.swift 'settings-orientation-lock'
+check "General page has the haptics row" contains ios/app/Sources/SettingsPages.swift 'settings-haptics'
+check "General page has the FPS counter row" contains ios/app/Sources/SettingsPages.swift 'settings-fps-hud'
+check "General page has the system Metal HUD row" contains ios/app/Sources/SettingsPages.swift 'settings-system-metal-hud'
+check "General page binds the GPU vertex shading setting" contains ios/app/Sources/SettingsPages.swift '\.gpuVertexShaders'
+check "General page binds the precise shading setting" contains ios/app/Sources/SettingsPages.swift '\.preciseShading'
+check "both experimental GPU rows say a restart is required" \
+  bash -c 'test "$(grep -c "restartRequired: true" ios/app/Sources/SettingsPages.swift)" -ge 2'
+check "en table has the restart badge" grep -Fq -- '"Restart required"' ios/app/Resources/en.lproj/Localizable.strings
+check "zh table has the restart badge" grep -Fq -- '"Restart required" = "需要重启 App"' ios/app/Resources/zh-Hans.lproj/Localizable.strings
+# Every existing settings function lives on a category page.
+check "System page keeps the storage snapshot" contains ios/app/Sources/SettingsPages.swift 'StorageInspector.snapshot()'
+check "System page keeps the storage refresh" contains ios/app/Sources/SettingsPages.swift 'refreshStorage'
+check "System page keeps the pipeline-cache clear action" contains ios/app/Sources/SettingsPages.swift 'clearPipelineCache'
+check "System page keeps the clear-cache identifier" contains ios/app/Sources/SettingsPages.swift 'settings-clear-cache'
+check "System page keeps the version/build row" contains ios/app/Sources/SettingsPages.swift 'Version %@ · build %@'
+check "Gamepad page keeps the overlay opacity setting" contains ios/app/Sources/SettingsPages.swift 'controlsOpacity'
+check "Gamepad page keeps the controller row" contains ios/app/Sources/SettingsPages.swift 'controllerName'
+check "Graphics page keeps the resolution setting" contains ios/app/Sources/SettingsPages.swift 'renderScale'
+check "Graphics page links the screen layout page" contains ios/app/Sources/SettingsPages.swift 'ScreenLayoutSettingsView(settings: settings)'
+check "Sound page keeps the audio buffer setting" contains ios/app/Sources/SettingsPages.swift 'audioBuffer'
+check "Debug page keeps the Save Manager link" contains ios/app/Sources/SettingsPages.swift 'SaveManagerView(model: model, saveStates: model.saveStates)'
+check "Debug page keeps its Save Manager identifier" contains ios/app/Sources/SettingsPages.swift 'settings-save-manager'
+check "Debug page links the CPU profiler" contains ios/app/Sources/SettingsPages.swift 'CPUProfilerView(model: model)'
+check "Debug page gives the CPU profiler row an identifier" contains ios/app/Sources/SettingsPages.swift 'settings-cpu-profiler'
+check "Debug page keeps the diagnostics export" contains ios/app/Sources/SettingsPages.swift 'DiagnosticsExporter.write(model: model, settings: settings)'
+check "Debug page keeps the export identifier" contains ios/app/Sources/SettingsPages.swift 'settings-export-logs'
+check "Debug page keeps the diagnostics hint identifier" contains ios/app/Sources/SettingsPages.swift 'settings-diagnostics-hint'
+check "About category opens the product page" contains ios/app/Sources/SettingsPages.swift 'AboutView(model: model)'
+# Localization tables and docs.
+for key in '"General"' '"System"' '"Gamepad"' '"Graphics"' '"Layout"' '"Sound"' '"Debug"' '"GPU vertex shading"' '"Precise shading"' '"CPU profiler"'; do
+  check "en Localizable.strings has ${key}" grep -Fq -- "${key} =" ios/app/Resources/en.lproj/Localizable.strings
+  check "zh-Hans Localizable.strings has ${key}" grep -Fq -- "${key} =" ios/app/Resources/zh-Hans.lproj/Localizable.strings
+done
+check "the app README documents the new settings categories" \
+  contains ios/app/README.md 'General / System / Gamepad / Graphics / Layout / Sound / Debug / About'
+check "the app README documents the CPU profiler page" contains ios/app/README.md '**Debug**: Save Manager, the CPU profiler page'
+# This redesign is original work: it must not carry the reference project's text.
+if grep -riE "azahar|citra" ios/app/Sources/SettingsView.swift ios/app/Sources/SettingsPages.swift >/dev/null 2>&1; then
+  fail "the settings sources mention the GPL reference project"
+else
+  pass "the settings sources contain no reference-project code or text"
 fi
 
 section 'MoltenVK tuning hook (default off)'

@@ -67,7 +67,7 @@ targets:
       base:
         PRODUCT_NAME: "3ds2apple-launcher"
         PRODUCT_BUNDLE_IDENTIFIER: "com.kratos.3ds2apple.launcher"
-        MARKETING_VERSION: "0.1.6"
+        MARKETING_VERSION: "0.1.7"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: "Support/Info.plist"
