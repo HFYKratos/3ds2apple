@@ -178,6 +178,8 @@ struct SettingsRowShell<Control: View>: View {
                 Text(description)
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
                 if restartRequired {
                     SettingsRestartBadge()
@@ -384,6 +386,8 @@ struct SettingsInfoRow: View {
                     Text(description)
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
