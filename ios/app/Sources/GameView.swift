@@ -179,8 +179,16 @@ struct GameView: View {
                 syncPresentedLayout(isLandscape)
             }
             .onChange(of: settings.playbackSpeed) { _ in
-                // The menu's speed setting overrides an active FF toggle.
+                // The menu's default speed overrides an active Turbo toggle.
                 fastForwardToggled = false
+            }
+            .onChange(of: settings.turboSpeed) { _ in
+                if fastForwardToggled {
+                    let target = settings.turboLimit
+                        ? settings.turboSpeedValue
+                        : PlaybackSpeed.quadruple.rawValue
+                    model.setPlaybackSpeed(target)
+                }
             }
             .onChange(of: model.phase) { phase in
                 switch phase {
@@ -437,7 +445,13 @@ struct GameView: View {
     /// 2x, the next tap restores the menu's playback speed.
     private func toggleFastForward() {
         fastForwardToggled.toggle()
-        model.setPlaybackSpeed(fastForwardToggled ? 2 : settings.playbackSpeedValue)
+        // On: cap the Turbo button at the chosen speed. Off: use the fastest
+        // available step. The limit is only about the Turbo button, not about
+        // when the runtime may fall back for performance.
+        let turboTarget = settings.turboLimit
+            ? settings.turboSpeedValue
+            : PlaybackSpeed.quadruple.rawValue
+        model.setPlaybackSpeed(fastForwardToggled ? turboTarget : settings.playbackSpeedValue)
         if settings.haptics {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }

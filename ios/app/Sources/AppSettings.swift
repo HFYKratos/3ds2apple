@@ -342,22 +342,43 @@ enum FrameRateCap: Int, CaseIterable, Identifiable {
 }
 
 /// Fast-forward target: how many 3DS frames the runtime advances per presented
-/// frame. 1× is normal speed; 2× and 4× run extra `zk_run_frame` calls before
-/// the frame that is presented, so the game time advances that many times
-/// faster (as long as the device keeps up; see the frame loop in ROMSession).
+/// frame. 1× is normal speed; higher values run extra `zk_run_frame` calls
+/// before the frame that is presented, so the game time advances that many
+/// times faster (as long as the device keeps up; see the frame loop in
+/// ROMSession). 3× was added in 0.1.7-beta5 for the General page's Default and
+/// Turbo speed choices.
 enum PlaybackSpeed: Int, CaseIterable, Identifiable {
     case normal = 1
     case double = 2
+    case triple = 3
     case quadruple = 4
 
     var id: Int { rawValue }
 
-    /// "1×", "2×", "4×": the same in both languages.
+    /// "1×", "2×", "3×", "4×": the same in both languages.
     var title: String { L10n.speedLabel(rawValue) }
 
     /// Whether this setting asks the runtime to advance more than one frame per
     /// presented frame.
     var isFastForward: Bool { rawValue > 1 }
+}
+
+/// The app-wide appearance choice on the System page. ContentView maps it to a
+/// SwiftUI ColorScheme; the default follows the system exactly like before.
+enum AppAppearance: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system: return L10n.tr("System")
+        case .light: return L10n.tr("Light")
+        case .dark: return L10n.tr("Dark")
+        }
+    }
 }
 
 /// The system Metal Performance HUD (FPS / GPU time / frame interval overlay).
@@ -537,8 +558,18 @@ final class AppSettings: ObservableObject {
     /// state, renderer path, CPU/present/read timings) stay in the log and the
     /// diagnostics export.
     @Published var showFPS: Bool
-    /// Fast-forward target: 1×, 2× or 4× (see `PlaybackSpeed`).
+    /// Default speed target: 1×, 2×, 3× or 4× (see `PlaybackSpeed`).
     @Published var playbackSpeed: PlaybackSpeed
+    /// The speed the on-screen Turbo (fast-forward) button uses: 2×, 3× or 4×.
+    @Published var turboSpeed: PlaybackSpeed
+    /// When on, the runtime may lower a Turbo speed automatically if the
+    /// presented frame rate stays below the minimum (the "turbo limit").
+    @Published var turboLimit: Bool
+    /// Light/dark/system appearance for the whole app (System page).
+    @Published var appearance: AppAppearance
+    /// Check GitHub for a newer release when the General page appears (the
+    /// switch does not run a background poller; the page does the lookup).
+    @Published var checkForUpdates: Bool
 
     // MARK: Experimental renderer options (Debug page; next app launch)
 
@@ -720,6 +751,15 @@ final class AppSettings: ObservableObject {
         playbackSpeed = PlaybackSpeed(
             rawValue: defaults.integer(forKey: Keys.playbackSpeed)
         ) ?? .normal
+        let storedTurbo = defaults.integer(forKey: Keys.turboSpeed)
+        turboSpeed = (storedTurbo == 2 || storedTurbo == 3 || storedTurbo == 4)
+            ? (PlaybackSpeed(rawValue: storedTurbo) ?? .double)
+            : .double
+        turboLimit = Self.bool(defaults, Keys.turboLimit, fallback: true)
+        appearance = AppAppearance(
+            rawValue: defaults.string(forKey: Keys.appearance) ?? ""
+        ) ?? .system
+        checkForUpdates = Self.bool(defaults, Keys.checkForUpdates, fallback: true)
         // Debug page's experimental renderer options, both OFF by default: the
         // values are read by App.init and only take effect on the next app launch.
         gpuVertexShaders = Self.bool(defaults, Keys.gpuVertexShaders, fallback: false)
@@ -747,6 +787,10 @@ final class AppSettings: ObservableObject {
         MetalHUD.apply(enabled: systemMetalHUD)
         defaults.set(showFPS, forKey: Keys.showFPS)
         defaults.set(playbackSpeed.rawValue, forKey: Keys.playbackSpeed)
+        defaults.set(turboSpeed.rawValue, forKey: Keys.turboSpeed)
+        defaults.set(turboLimit, forKey: Keys.turboLimit)
+        defaults.set(appearance.rawValue, forKey: Keys.appearance)
+        defaults.set(checkForUpdates, forKey: Keys.checkForUpdates)
         // Experimental renderer options: App.init reads them on the next launch.
         defaults.set(gpuVertexShaders, forKey: Keys.gpuVertexShaders)
         defaults.set(preciseShading, forKey: Keys.preciseShading)
@@ -935,8 +979,11 @@ final class AppSettings: ObservableObject {
         persist()
     }
 
-    /// Fast-forward target as a plain number for the session and diagnostics.
+    /// Default-speed target as a plain number for the session and diagnostics.
     var playbackSpeedValue: Int { playbackSpeed.rawValue }
+
+    /// Turbo speed as a plain number for the on-screen Turbo button.
+    var turboSpeedValue: Int { turboSpeed.rawValue }
 
     // MARK: - Keys
 
@@ -963,6 +1010,10 @@ final class AppSettings: ObservableObject {
         /// "UI.graphicsWarmUpEnabled"; old values are ignored on purpose.
         static let showFPS = "UI.showFPS"
         static let playbackSpeed = "UI.playbackSpeed"
+        static let turboSpeed = "UI.turboSpeed"
+        static let turboLimit = "UI.turboLimit"
+        static let appearance = "UI.appearance"
+        static let checkForUpdates = "UI.checkForUpdates"
         /// Debug page's experimental renderer options: read once by App.init,
         /// applied on the next app launch.
         static let gpuVertexShaders = "UI.experimental.gpuVertexShaders"

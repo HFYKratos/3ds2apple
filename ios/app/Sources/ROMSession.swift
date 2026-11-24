@@ -380,6 +380,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// from `playbackSpeedState` so diagnostics can show both the requested and
     /// the effective speed after an automatic fallback.
     private var requestedPlaybackSpeed = 1
+    private var turboLimitEnabled = true
     /// Consecutive 0.5 s windows in which fast-forward kept missing the speed
     /// floor; two in a row lower the speed one step. runtimeQueue only.
     private var slowPlaybackSpeedWindows = 0
@@ -998,7 +999,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// restores normal speed (and sound). A change also clears an automatic
     /// fallback, so the requested speed is tried again.
     func setPlaybackSpeed(_ speed: Int) {
-        let clamped = speed >= 4 ? 4 : (speed >= 2 ? 2 : 1)
+        let clamped = speed >= 4 ? 4 : (speed >= 3 ? 3 : (speed >= 2 ? 2 : 1))
         requestedPlaybackSpeed = clamped
         playbackSpeedState.set(clamped)
         effectivePlaybackSpeed = clamped
@@ -1013,6 +1014,16 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// The speed asked for in Settings, for diagnostics (the effective value is
     /// in `effectivePlaybackSpeed`).
     var requestedPlaybackSpeedValue: Int { requestedPlaybackSpeed }
+
+    /// Whether the automatic Turbo fallback may lower a fast speed (General
+    /// page's "Turbo limit"). Off keeps the requested speed even if the device
+    /// cannot present it at 20 fps.
+    func setTurboLimitEnabled(_ enabled: Bool) {
+        turboLimitEnabled = enabled
+        if !enabled {
+            slowPlaybackSpeedWindows = 0
+        }
+    }
 
     // MARK: - System Metal HUD (main queue)
 
@@ -2855,6 +2866,10 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// changing the speed in Settings (or a new load) resets it.
     /// runtimeQueue only.
     private func considerPlaybackSpeedFallback(presentedFPS: Double) {
+        guard turboLimitEnabled else {
+            slowPlaybackSpeedWindows = 0
+            return
+        }
         let speed = playbackSpeedState.current
         guard speed > 1 else {
             slowPlaybackSpeedWindows = 0
@@ -2867,7 +2882,7 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         slowPlaybackSpeedWindows += 1
         guard slowPlaybackSpeedWindows >= 2 else { return }
         slowPlaybackSpeedWindows = 0
-        let reduced = speed >= 4 ? 2 : 1
+        let reduced = speed >= 3 ? 2 : 1
         playbackSpeedState.set(reduced)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }

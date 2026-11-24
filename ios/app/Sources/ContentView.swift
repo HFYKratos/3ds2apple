@@ -18,6 +18,18 @@ import CoreGraphics
 import SwiftUI
 import UIKit
 
+/// The persisted Settings appearance as a SwiftUI colour scheme, applied at the
+/// app root so the home, settings and game sheets all follow it.
+extension AppAppearance {
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
 struct ContentView: View {
     /// The persisted multi-game library, shared by the whole app.
     @StateObject private var library = GameLibrary.shared
@@ -216,6 +228,10 @@ struct ContentView: View {
         .onChange(of: settings.systemMetalHUD) { enabled in
             model.setSystemMetalHUD(enabled)
         }
+        .onChange(of: settings.turboLimit) { enabled in
+            model.setTurboLimitEnabled(enabled)
+        }
+        .preferredColorScheme(settings.appearance.colorScheme)
     }
 
     // MARK: - State
@@ -251,6 +267,7 @@ struct ContentView: View {
         model.applyRenderScale(CGFloat(settings.renderScale))
         model.setPlaybackSpeed(settings.playbackSpeed.rawValue)
         model.setSystemMetalHUD(settings.systemMetalHUD)
+        model.setTurboLimitEnabled(settings.turboLimit)
         model.setReadbackPresentationRequired(
             settings.usesReadbackPresentation(
                 isLandscape: GameViewDeviceMetrics.currentLayoutOrientation == .landscape

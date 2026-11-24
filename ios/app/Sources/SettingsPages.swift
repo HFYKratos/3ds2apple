@@ -57,7 +57,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
     case layout
     case sound
     case debug
-    case about
+    case other
 
     var id: String { rawValue }
 
@@ -71,7 +71,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .layout: return L10n.tr("Layout")
         case .sound: return L10n.tr("Sound")
         case .debug: return L10n.tr("Debug")
-        case .about: return L10n.tr("About")
+        case .other: return L10n.tr("Other")
         }
     }
 
@@ -85,7 +85,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .layout: return "rectangle.split.2x1"
         case .sound: return "speaker"
         case .debug: return "chevron.left.forwardslash.chevron.right"
-        case .about: return "info.circle"
+        case .other: return "ellipsis.circle"
         }
     }
 }
@@ -114,8 +114,8 @@ struct SettingsCategoryPage: View {
                 SoundSettingsPage(settings: settings)
             case .debug:
                 DebugSettingsPage(settings: settings, model: model)
-            case .about:
-                AboutView(model: model)
+            case .other:
+                OtherSettingsPage(settings: settings, model: model)
             }
         }
 
@@ -140,7 +140,7 @@ struct SettingsPageScaffold<Content: View>: View {
         }
         .listStyle(.insetGrouped)
         .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -421,10 +421,10 @@ struct SettingsNavigationRow<Destination: View>: View {
         NavigationLink {
             destination
         } label: {
+            // The List/NavigationLink already draws the disclosure chevron;
+            // adding our own made the two chevrons from the user screenshot.
             SettingsRowShell(title: title, description: description) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                EmptyView()
             }
         }
         .buttonStyle(.plain)
@@ -505,31 +505,152 @@ struct GeneralSettingsPage: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var model: ROMSession
 
+    private enum UpdateStatus {
+        case idle
+        case checking
+        case upToDate(String)
+        case available(String)
+        case failed
+    }
+
+    @State private var updateStatus: UpdateStatus = .idle
+
     var body: some View {
         SettingsPageScaffold(title: "General") {
+            SettingsToggleRow(
+                title: "Check for updates",
+                description: "When this page opens, look up the latest GitHub release and show whether this build is current. The check is a single request; nothing runs in the background.",
+                isOn: persistedBinding(settings, \.checkForUpdates)
+            )
+            .accessibilityIdentifier("settings-check-for-updates")
+
+            SettingsInfoRow(
+                title: "Update status",
+                value: updateStatusText,
+                description: updateStatusDescription
+            )
+            .accessibilityIdentifier("settings-update-status")
+
+            SettingsToggleRow(
+                title: "Turbo limit",
+                description: "Limit the on-screen Turbo button to the selected Turbo speed. Off uses the fastest available speed (4×).",
+                isOn: persistedBinding(settings, \.turboLimit)
+            )
+            .accessibilityIdentifier("settings-turbo-limit")
+
             SettingsChoiceRow(
-                title: "Fast-forward",
-                description: "The speed fast-forward runs at. Audio is muted while fast-forwarding.",
+                title: "Turbo speed",
+                description: "The speed the on-screen Turbo button uses while it is active.",
+                choices: [PlaybackSpeed.double, .triple, .quadruple],
+                selection: persistedBinding(settings, \.turboSpeed),
+                label: { $0.title }
+            )
+            .accessibilityIdentifier("settings-turbo-speed")
+
+            SettingsChoiceRow(
+                title: "Default speed",
+                description: "The normal game speed. 1× is the 3DS's own speed; higher values advance extra frames per presented frame.",
                 hint: model.playbackSpeedAutoReduced ? autoReducedText : nil,
                 choices: PlaybackSpeed.allCases,
                 selection: persistedBinding(settings, \.playbackSpeed),
                 label: { $0.title }
             )
-            .accessibilityIdentifier("settings-fast-forward")
-
-            // Read-only: the frame cap is fixed to the 3DS's own 60 Hz timeline
-            // (the performance page no longer offers a 30 fps cap); fast-forward
-            // is the only speed control.
-            SettingsInfoRow(
-                title: "Frame limiter",
-                value: L10n.tr("Automatic 60 Hz"),
-                description: "The runtime follows the 3DS's native 60 Hz timeline. Fast-forward is the only speed control."
-            )
-            .accessibilityIdentifier("settings-frame-limiter")
+            .accessibilityIdentifier("settings-default-speed")
+        }
+        .task { await refreshUpdateStatus() }
+        .onChange(of: settings.checkForUpdates) { enabled in
+            if enabled {
+                Task { await checkForUpdates() }
+            } else {
+                updateStatus = .idle
+            }
         }
     }
 
-    /// Fast-forward state when the automatic fallback lowered the speed.
+    private var updateStatusText: String {
+        switch updateStatus {
+        case .idle: return L10n.tr("Not checked yet")
+        case .checking: return L10n.tr("Checking…")
+        case .upToDate(let version): return L10n.format("Up to date (%@)", version)
+        case .available(let version): return L10n.format("Update available: %@", version)
+        case .failed: return L10n.tr("Check failed")
+        }
+    }
+
+    private var updateStatusDescription: String {
+        switch updateStatus {
+        case .idle:
+            return L10n.tr("Enable Check for updates to look up the latest GitHub release.")
+        case .checking:
+            return L10n.tr("Contacting GitHub…")
+        case .upToDate:
+            return L10n.tr("This build is the latest release the repository reports.")
+        case .available:
+            return L10n.tr("A newer release is available on GitHub.")
+        case .failed:
+            return L10n.tr("The update check could not reach GitHub. Try again later.")
+        }
+    }
+
+    private func refreshUpdateStatus() async {
+        guard settings.checkForUpdates else {
+            updateStatus = .idle
+            return
+        }
+        await checkForUpdates()
+    }
+
+    /// Real update check: the latest GitHub release tag compared with this
+    /// app's CFBundleShortVersionString. No fake switch state.
+    private func checkForUpdates() async {
+        updateStatus = .checking
+        guard let url = URL(string: "https://api.github.com/repos/HFYKratos/3ds2apple/releases/latest") else {
+            updateStatus = .failed
+            return
+        }
+        var request = URLRequest(url: url)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 15
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                updateStatus = .failed
+                return
+            }
+            struct GitHubRelease: Decodable { let tag_name: String }
+            let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
+            let latest = release.tag_name.hasPrefix("v")
+                ? String(release.tag_name.dropFirst())
+                : release.tag_name
+            let current = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+            updateStatus = Self.versionIsNewer(latest, than: current)
+                ? .available(latest)
+                : .upToDate(latest)
+        } catch {
+            updateStatus = .failed
+        }
+    }
+
+    /// Default-speed state when the automatic fallback lowered the speed.
+    /// Numeric dotted-version comparison; "0.1.7" is newer than "0.1.6" and
+    /// a missing component counts as zero. Pre-release suffixes are ignored for
+    /// this user-facing check.
+    private static func versionIsNewer(_ candidate: String, than current: String) -> Bool {
+        func parts(_ raw: String) -> [Int] {
+            raw.split(separator: ".").map { part in
+                Int(part.prefix(while: { $0.isNumber })) ?? 0
+            }
+        }
+        let a = parts(candidate)
+        let b = parts(current)
+        for index in 0..<max(a.count, b.count) {
+            let lhs = index < a.count ? a[index] : 0
+            let rhs = index < b.count ? b[index] : 0
+            if lhs != rhs { return lhs > rhs }
+        }
+        return false
+    }
+
     private var autoReducedText: String {
         L10n.format(
             "Lowered automatically from %@ because frames stayed below 20 fps.",
@@ -611,7 +732,68 @@ struct LayoutSettingsPage: View {
 
 // MARK: - System
 
+/// Real system information and the app-wide appearance choice. Storage,
+/// version, language and the About page moved to Other in 0.1.7-beta5.
 struct SystemSettingsPage: View {
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var model: ROMSession
+
+    var body: some View {
+        SettingsPageScaffold(title: "System") {
+            SettingsChoiceRow(
+                title: "Appearance",
+                description: "Use the system light/dark appearance, or force light or dark for the whole app.",
+                choices: AppAppearance.allCases,
+                selection: persistedBinding(settings, \.appearance),
+                label: { $0.title }
+            )
+            .accessibilityIdentifier("settings-appearance")
+
+            SettingsInfoRow(
+                title: "Device",
+                value: UIDevice.current.model,
+                description: "The device this build is running on."
+            )
+            .accessibilityIdentifier("settings-device")
+
+            SettingsInfoRow(
+                title: "System version",
+                value: "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)"
+            )
+            .accessibilityIdentifier("settings-system-version")
+
+            SettingsInfoRow(
+                title: "App version",
+                value: versionText
+            )
+            .accessibilityIdentifier("settings-app-version")
+
+            SettingsInfoRow(
+                title: "Package",
+                value: packageVersionText
+            )
+            .accessibilityIdentifier("settings-package-version")
+        }
+    }
+
+    private var versionText: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info["CFBundleVersion"] as? String ?? "?"
+        return L10n.format("Version %@ · build %@", version, build)
+    }
+
+    private var packageVersionText: String {
+        Bundle.main.object(forInfoDictionaryKey: "ThreeDS2ApplePackageVersion") as? String
+            ?? L10n.tr("Unknown")
+    }
+}
+
+// MARK: - Other
+
+/// Storage, version, language and the About page (moved from System in
+/// 0.1.7-beta5; the main category is now called Other with an ellipsis icon).
+struct OtherSettingsPage: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var model: ROMSession
 
@@ -619,7 +801,7 @@ struct SystemSettingsPage: View {
     @State private var isClearCacheConfirmationPresented = false
 
     var body: some View {
-        SettingsPageScaffold(title: "System") {
+        SettingsPageScaffold(title: "Other") {
             SettingsInfoRow(
                 title: "Installed games",
                 value: StorageFormat.size(storage.gamesBytes)
@@ -798,17 +980,6 @@ struct GraphicsSettingsPage: View {
                 isOn: persistedBinding(settings, \.preciseShading)
             )
             .accessibilityIdentifier("settings-precise-shading")
-
-            // Read-only backend facts: whether this build carries the MoltenVK
-            // framework the presenter needs, and which path the running game uses.
-            SettingsInfoRow(
-                title: "Renderer",
-                value: MetalBackend.isMoltenVKEmbedded
-                    ? L10n.tr("Metal via MoltenVK")
-                    : L10n.tr("CPU readback (MoltenVK not bundled)"),
-                description: "The GPU backend this build ships. The presented screens draw through Metal; without the embedded framework the runtime falls back to its software renderer."
-            )
-            .accessibilityIdentifier("settings-renderer")
 
             if model.isRuntimeLoaded {
                 SettingsInfoRow(

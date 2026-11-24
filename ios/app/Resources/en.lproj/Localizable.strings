@@ -750,3 +750,34 @@
 "Every app setting returns to its default. Save data, games and the diagnostics export are not touched. Quit and reopen 3ds2apple to apply the reset." = "Every app setting returns to its default. Save data, games and the diagnostics export are not touched. Quit and reopen 3ds2apple to apply the reset.";
 "Settings reset" = "Settings reset";
 "Quit and reopen 3ds2apple for the default settings to take effect." = "Quit and reopen 3ds2apple for the default settings to take effect.";
+
+/* --- 0.1.7-beta5 General / System / Other --- */
+"Other" = "Other";
+"Appearance" = "Appearance";
+"Light" = "Light";
+"Dark" = "Dark";
+"Check for updates" = "Check for updates";
+"Update status" = "Update status";
+"Not checked yet" = "Not checked yet";
+"Checking…" = "Checking…";
+"Up to date (%@)" = "Up to date (%@)";
+"Update available: %@" = "Update available: %@";
+"Check failed" = "Check failed";
+"When this page opens, look up the latest GitHub release and show whether this build is current. The check is a single request; nothing runs in the background." = "When this page opens, look up the latest GitHub release and show whether this build is current. The check is a single request; nothing runs in the background.";
+"Enable Check for updates to look up the latest GitHub release." = "Enable Check for updates to look up the latest GitHub release.";
+"Contacting GitHub…" = "Contacting GitHub…";
+"This build is the latest release the repository reports." = "This build is the latest release the repository reports.";
+"A newer release is available on GitHub." = "A newer release is available on GitHub.";
+"The update check could not reach GitHub. Try again later." = "The update check could not reach GitHub. Try again later.";
+"Turbo limit" = "Turbo limit";
+"Turbo speed" = "Turbo speed";
+"Default speed" = "Default speed";
+"Limit the on-screen Turbo button to the selected Turbo speed. Off uses the fastest available speed (4×)." = "Limit the on-screen Turbo button to the selected Turbo speed. Off uses the fastest available speed (4×).";
+"The speed the on-screen Turbo button uses while it is active." = "The speed the on-screen Turbo button uses while it is active.";
+"The normal game speed. 1× is the 3DS's own speed; higher values advance extra frames per presented frame." = "The normal game speed. 1× is the 3DS's own speed; higher values advance extra frames per presented frame.";
+"Use the system light/dark appearance, or force light or dark for the whole app." = "Use the system light/dark appearance, or force light or dark for the whole app.";
+"The device this build is running on." = "The device this build is running on.";
+"System version" = "System version";
+"App version" = "App version";
+"Package" = "Package";
+"Unknown" = "Unknown";

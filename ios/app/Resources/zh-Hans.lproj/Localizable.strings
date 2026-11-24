@@ -752,3 +752,34 @@
 "Every app setting returns to its default. Save data, games and the diagnostics export are not touched. Quit and reopen 3ds2apple to apply the reset." = "所有 App 设置将恢复默认。存档、游戏数据与诊断导出不受影响。请退出并重新打开 3ds2apple 使重置生效。";
 "Settings reset" = "设置已重置";
 "Quit and reopen 3ds2apple for the default settings to take effect." = "请退出并重新打开 3ds2apple，默认设置才会生效。";
+
+/* --- 0.1.7-beta5 通用 / 系统 / 其他 --- */
+"Other" = "其他";
+"Appearance" = "外观";
+"Light" = "浅色";
+"Dark" = "深色";
+"Check for updates" = "检查更新";
+"Update status" = "更新状态";
+"Not checked yet" = "尚未检查";
+"Checking…" = "正在检查…";
+"Up to date (%@)" = "已是最新（%@）";
+"Update available: %@" = "有可用更新：%@";
+"Check failed" = "检查失败";
+"When this page opens, look up the latest GitHub release and show whether this build is current. The check is a single request; nothing runs in the background." = "打开此页面时查询 GitHub 最新 Release，并显示当前构建是否最新。只发送一次请求，不会在后台轮询。";
+"Enable Check for updates to look up the latest GitHub release." = "打开“检查更新”后会查询 GitHub 最新 Release。";
+"Contacting GitHub…" = "正在连接 GitHub…";
+"This build is the latest release the repository reports." = "当前构建已是仓库报告的最新版本。";
+"A newer release is available on GitHub." = "GitHub 上有更新的版本。";
+"The update check could not reach GitHub. Try again later." = "检查更新无法连接 GitHub，请稍后再试。";
+"Turbo limit" = "加速限制";
+"Turbo speed" = "加速速度";
+"Default speed" = "默认速度";
+"Limit the on-screen Turbo button to the selected Turbo speed. Off uses the fastest available speed (4×)." = "限制屏幕加速按钮使用所选的加速倍率；关闭则使用可用的最快速度（4×）。";
+"The speed the on-screen Turbo button uses while it is active." = "屏幕 Turbo 按钮激活时使用的速度。";
+"The normal game speed. 1× is the 3DS's own speed; higher values advance extra frames per presented frame." = "正常游戏速度。1× 为主机原始速度；更高值会在每个呈现帧前额外推进帧。";
+"Use the system light/dark appearance, or force light or dark for the whole app." = "跟随系统浅色/深色外观，或为整个 App 强制浅色/深色。";
+"The device this build is running on." = "当前运行此构建的设备。";
+"System version" = "系统版本";
+"App version" = "App 版本";
+"Package" = "包版本";
+"Unknown" = "未知";

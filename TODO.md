@@ -20,6 +20,15 @@ text is copied, and no game assets are stored in the repository.
       through the system; the app does not expose these options.
 - [ ] Per-game settings overrides (global settings only today).
 - [ ] In-game menu artwork/skin theming.
+- [ ] Update channel (Stable/Beta) and background update notifications; the
+      app can only run a single Check for updates request when the General page
+      opens, against the GitHub latest release.
+- [ ] Reference-emulator "speed limit" percentage / unlimited-speed switch; the
+      runtime only offers the fixed Default and Turbo speed choices (1×–4×) and
+      the automatic Turbo limit.
+- [ ] Hide 3DS images from the Android gallery (Android-only feature; iOS has no
+      equivalent).
+- [ ] Camera and Network settings categories.
 
 ## Already supported
 
