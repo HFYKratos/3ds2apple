@@ -65,7 +65,7 @@ struct SettingsView: View {
         }
         .background(SettingsTheme.background.ignoresSafeArea())
         .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
         // The settings redesign is a dark, flat list; this applies to the
         // settings stack only, the home page and the game keep the system
         // appearance.
