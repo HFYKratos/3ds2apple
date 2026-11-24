@@ -157,6 +157,9 @@ struct GameView: View {
                 }
             }
             .onAppear {
+                model.onHotkey = { action in
+                    handleHotkey(action)
+                }
                 syncPresentedLayout(isLandscape)
                 // Headless screenshot hooks; inert in normal launches.
                 if DebugLaunch.previewPauseMenu {
@@ -215,6 +218,9 @@ struct GameView: View {
                 case .idle, .failed, .finished: fastForwardToggled = false
                 default: break
                 }
+            }
+            .onDisappear {
+                model.onHotkey = nil
             }
         }
         .sheet(item: $sheet) { presentedSheet in
@@ -478,6 +484,54 @@ struct GameView: View {
         isEditingControls = false
         if !isPreviewingGame {
             model.resumeFromMenu()
+        }
+    }
+
+    // MARK: - Physical controller hotkeys
+
+    /// Executes a physical 2–4 button hotkey. The GameControllerManager has
+    /// already suppressed the combination from the guest while it is held.
+    private func handleHotkey(_ action: HotkeyAction) {
+        switch action {
+        case .toggleTurbo:
+            toggleFastForward()
+        case .quickSave:
+            performQuickSave()
+        case .quickLoad:
+            performQuickLoad()
+        case .swapScreens:
+            performSwapScreens()
+        case .rotateScreen:
+            rotateScreensClockwise()
+        case .openMenu:
+            guard !isMenuPresented, !isEditingControls else { return }
+            withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) {
+                isMenuPresented = true
+            }
+            if !isPreviewingGame {
+                model.pauseForMenu()
+            }
+        }
+    }
+
+    /// Rotate the screen in 90° steps, updating a per-app override when one is
+    /// active (same rule as the in-game menu's Rotate clockwise row).
+    private func rotateScreensClockwise() {
+        let current = settings.effectiveScreenRotation(titleID: presentationTitleID)
+        let next: ScreenRotation
+        switch current {
+        case .upright: next = .clockwise
+        case .clockwise: next = .upsideDown
+        case .upsideDown: next = .counterClockwise
+        case .counterClockwise: next = .upright
+        }
+        if let titleID = presentationTitleID,
+           var overrides = settings.overrides(for: titleID) {
+            overrides.screenRotationRaw = next.rawValue
+            settings.setPerGameOverrides(overrides, for: titleID)
+        } else {
+            settings.screenRotation = next
+            settings.persist()
         }
     }
 

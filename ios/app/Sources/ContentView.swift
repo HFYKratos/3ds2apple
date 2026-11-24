@@ -112,7 +112,8 @@ struct ContentView: View {
             DebugLaunch.applyPreviewSettings(to: settings)
             model.startControllerSupport(
                 deadzone: settings.effectiveAnalogDeadzone(titleID: model.currentGame?.titleID),
-                buttonMap: settings.effectiveControllerButtonMap(titleID: model.currentGame?.titleID)
+                buttonMap: settings.effectiveControllerButtonMap(titleID: model.currentGame?.titleID),
+                hotkeyMap: settings.hotkeys
             )
             applySettings()
             // Rescan Documents/Games before the home page is measured: the
@@ -266,6 +267,9 @@ struct ContentView: View {
                 settings.effectiveControllerButtonMap(titleID: model.currentGame?.titleID)
             )
         }
+        .onChange(of: settings.hotkeys) { hotkeys in
+            model.setControllerHotkeys(hotkeys)
+        }
         .preferredColorScheme(settings.appearance.colorScheme)
         .task {
             await UpdateChecker.shared.backgroundCheckIfDue(settings: settings)
@@ -306,6 +310,7 @@ struct ContentView: View {
         model.applyRenderScale(CGFloat(settings.renderScale))
         model.setControllerDeadzone(settings.effectiveAnalogDeadzone(titleID: model.currentGame?.titleID))
         model.setControllerButtonMap(settings.effectiveControllerButtonMap(titleID: model.currentGame?.titleID))
+        model.setControllerHotkeys(settings.hotkeys)
         model.setPlaybackSpeed(settings.playbackSpeed.rawValue)
         model.setSystemMetalHUD(settings.systemMetalHUD)
         model.setTurboLimitEnabled(settings.turboLimit)

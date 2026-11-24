@@ -150,8 +150,14 @@ check "on-screen sticks use the deadzone and high-contrast appearance" \
   bash -c 'grep -q "var deadzone" ios/app/Sources/VirtualControlsView.swift && grep -q "highContrast" ios/app/Sources/VirtualControlsView.swift && grep -q "effectiveAnalogDeadzone" ios/app/Sources/GameView.swift && grep -q "effectiveControlAppearance" ios/app/Sources/GameView.swift'
 check "per-application Gamepad profile fields exist" \
   bash -c 'grep -q "analogDeadzone" ios/app/Sources/AppSettings.swift && grep -q "controllerButtonMap" ios/app/Sources/AppSettings.swift && grep -q "per-app-deadzone" ios/app/Sources/InGameMenuView.swift && grep -q "per-app-control-appearance" ios/app/Sources/InGameMenuView.swift'
-check "controller mapping page has reset and hotkeys stay unsupported" \
-  bash -c 'grep -q "settings-controller-map-reset" ios/app/Sources/SettingsPages.swift && grep -q "Hotkey" TODO.md'
+check "controller mapping and hotkeys pages have reset actions" \
+  bash -c 'grep -q "settings-controller-map-reset" ios/app/Sources/SettingsPages.swift && grep -q "settings-hotkeys-reset" ios/app/Sources/SettingsPages.swift'
+check "hotkey actions and 2-4 button storage are implemented" \
+  bash -c 'grep -q "enum HotkeyAction" ios/app/Sources/AppSettings.swift && grep -q "case openMenu" ios/app/Sources/AppSettings.swift && grep -q "UI.hotkeys" ios/app/Sources/AppSettings.swift && grep -q "setHotkey" ios/app/Sources/AppSettings.swift'
+check "controller manager detects hotkeys and suppresses their guest buttons" \
+  bash -c 'grep -q "hotkeyMap" ios/app/Sources/GameControllerInput.swift && grep -q "onHotkey" ios/app/Sources/GameControllerInput.swift && grep -q "activeHotkeyButtons.contains" ios/app/Sources/GameControllerInput.swift'
+check "hotkey recording and GameView execution are wired" \
+  bash -c 'grep -q "beginControllerHotkeyRecording" ios/app/Sources/ROMSession.swift && grep -q "HotkeyRecorderSheet" ios/app/Sources/SettingsPages.swift && grep -q "func handleHotkey" ios/app/Sources/GameView.swift && grep -q "rotateScreensClockwise" ios/app/Sources/GameView.swift'
 check "Graphics page has both restart-required GPU rows" \
   bash -c 'test "$(grep -c "restartRequired: true" ios/app/Sources/SettingsPages.swift)" -ge 2'
 check "en table has the restart badge" grep -Fq -- '"Restart required"' ios/app/Resources/en.lproj/Localizable.strings

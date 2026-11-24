@@ -8,8 +8,10 @@
 //  `isPressed` state, so there is no per-bit bookkeeping that can get out of
 //  sync when controllers connect, disconnect or repeat events.
 //
-//  0.2.0 C adds two user settings: a radial dead zone for both thumbsticks and
-//  a physical-button → 3DS-button remapping (identity by default).
+//  0.2.0 C adds a radial stick dead zone and physical-button → 3DS-button
+//  remapping. 0.2.0 final adds physical hotkey combinations: a 2–4 button
+//  combination triggers a GameView action once and its buttons are suppressed
+//  from the guest while the combination is held.
 //
 
 import Foundation
@@ -19,20 +21,30 @@ import GameController
 final class GameControllerManager {
     private let input: InputState
     private let onConnectionChange: (String?) -> Void
+    /// Called once per hotkey press cycle on the main thread.
+    private let onHotkey: ((HotkeyAction) -> Void)?
     private var observers: [NSObjectProtocol] = []
     private var running = false
     /// Radial dead zone applied to both thumbsticks (0...0.35).
     private var deadzone: Float = 0.14
     /// Physical button raw value -> GamepadAction raw value.
     private var buttonMap: [String: String] = AppSettings.defaultControllerButtonMap
+    /// Hotkey action raw value -> physical button raw values, parsed on refresh.
+    private var hotkeyMap: [String: [String]] = [:]
+    /// Buttons of the hotkey currently being held (suppressed from the guest).
+    private var activeHotkeyButtons: Set<String> = []
+    /// UI hotkey recorder: receives the currently pressed physical buttons.
+    private var recordingHandler: (([PhysicalControllerButton]) -> Void)?
 
-    init(input: InputState, onConnectionChange: @escaping (String?) -> Void) {
+    init(input: InputState,
+         onHotkey: ((HotkeyAction) -> Void)? = nil,
+         onConnectionChange: @escaping (String?) -> Void) {
         self.input = input
+        self.onHotkey = onHotkey
         self.onConnectionChange = onConnectionChange
     }
 
-    /// Updates the radial stick dead zone (main thread). Applied on the next
-    /// controller refresh.
+    /// Updates the radial stick dead zone (main thread).
     func setDeadzone(_ value: Double) {
         deadzone = Float(min(max(value, 0), 0.35))
         refresh()
@@ -41,6 +53,26 @@ final class GameControllerManager {
     /// Replaces the physical button mapping (main thread).
     func setButtonMap(_ map: [String: String]) {
         buttonMap = map
+        refresh()
+    }
+
+    /// Replaces the hotkey combinations (main thread).
+    func setHotkeyMap(_ map: [String: [String]]) {
+        hotkeyMap = map
+        activeHotkeyButtons = []
+        refresh()
+    }
+
+    /// Starts/stops the UI recorder; while recording, controller input is
+    /// suppressed and no hotkey fires, and the pressed buttons are published.
+    func beginRecording(_ handler: @escaping ([PhysicalControllerButton]) -> Void) {
+        recordingHandler = handler
+        activeHotkeyButtons = []
+        refresh()
+    }
+
+    func endRecording() {
+        recordingHandler = nil
         refresh()
     }
 
@@ -81,6 +113,8 @@ final class GameControllerManager {
             NotificationCenter.default.removeObserver(observer)
         }
         observers.removeAll()
+        recordingHandler = nil
+        activeHotkeyButtons = []
         input.clearController()
     }
 
@@ -114,10 +148,11 @@ final class GameControllerManager {
         var cStickX: Float = 0
         var cStickY: Float = 0
         var controllerName: String?
+        var pressed: Set<PhysicalControllerButton> = []
 
         for controller in GCController.controllers() {
             guard let gamepad = controller.extendedGamepad else { continue }
-            mask |= buttonMask(from: gamepad)
+            pressed.formUnion(pressedButtons(on: gamepad))
             if controllerName == nil {
                 controllerName = controller.vendorName
             }
@@ -135,6 +170,49 @@ final class GameControllerManager {
                     deadzone: deadzone
                 )
             }
+        }
+
+        // Recording mode: publish the pressed set to the recorder UI, but do
+        // not send any controller input to the guest and do not fire hotkeys.
+        if let recordingHandler {
+            recordingHandler(Array(pressed))
+            input.setControllerButtons(0)
+            input.setControllerStick(x: 0, y: 0)
+            input.setControllerCStick(x: 0, y: 0)
+            onConnectionChange(controllerName)
+            return
+        }
+
+        // Release the active hotkey once any of its buttons is up.
+        if !activeHotkeyButtons.isEmpty {
+            let stillHeld = activeHotkeyButtons.allSatisfy { raw in
+                pressed.contains { $0.rawValue == raw }
+            }
+            if !stillHeld {
+                activeHotkeyButtons = []
+            }
+        }
+
+        // Fire the longest matching 2–4 button combination once per hold.
+        if activeHotkeyButtons.isEmpty {
+            let pressedRaw = Set(pressed.map(.rawValue))
+            let matches = hotkeyMap
+                .compactMap { action, buttons -> (HotkeyAction, [String])? in
+                    guard let action = HotkeyAction(rawValue: action),
+                          buttons.count >= 2, buttons.count <= 4,
+                          buttons.allSatisfy({ pressedRaw.contains($0) }) else { return nil }
+                    return (action, buttons)
+                }
+                .sorted { $0.1.count > $1.1.count }
+            if let match = matches.first {
+                activeHotkeyButtons = Set(match.1)
+                onHotkey?(match.0)
+            }
+        }
+
+        for controller in GCController.controllers() {
+            guard let gamepad = controller.extendedGamepad else { continue }
+            mask |= buttonMask(from: gamepad)
         }
 
         input.setControllerButtons(mask)
@@ -159,11 +237,21 @@ final class GameControllerManager {
         var mask: UInt32 = 0
         for button in PhysicalControllerButton.allCases {
             guard Self.isPressed(button, on: gamepad) else { continue }
+            // A triggered hotkey's buttons are never sent to the guest.
+            if activeHotkeyButtons.contains(button.rawValue) { continue }
             let raw = buttonMap[button.rawValue]
             let action = raw.flatMap(GamepadAction.init(rawValue:)) ?? button.defaultAction
             mask |= action.buttonBit
         }
         return mask
+    }
+
+    private func pressedButtons(on gamepad: GCExtendedGamepad) -> Set<PhysicalControllerButton> {
+        var set: Set<PhysicalControllerButton> = []
+        for button in PhysicalControllerButton.allCases where Self.isPressed(button, on: gamepad) {
+            set.insert(button)
+        }
+        return set
     }
 
     // MARK: - Physical input lookup

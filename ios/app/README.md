@@ -370,8 +370,12 @@ project is used (it is GPL and reference-only for this repo).
   built-in styles only, Delta skin import is not implemented), **Button mapping**
   (a sub-page with one 3DS-button choice per physical controller button,
   `UI.controllerButtonMap`, plus a reset that restores the stock identity
-  mapping; hotkey remapping is not implemented) and the connected controller
-  name. Control positions are still edited in-game from the pause menu (see
+  mapping), **Hotkeys** (a sub-page with Toggle Turbo / Quick save / Quick load /
+  Swap screens / Rotate screen / Open menu; each is a 2–4 physical-button
+  combination, `UI.hotkeys`, recorded live from the controller or picked from a
+  preset, persisted and resettable) and the connected controller name. A
+  triggered combination fires once and its buttons are suppressed from the
+  guest while held. Control positions are still edited in-game from the pause menu (see
   "Editable layouts"). Per-application Gamepad profiles (deadzone, appearance,
   a copied button mapping) live in the in-game menu's Per-Application Settings
   page; anything set to Use global follows the Gamepad page.
@@ -1030,7 +1034,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `ScreenLayoutEditorView.swift` | Full-screen custom screen layout drag editor (one direction per editor, opened from the numeric custom page's "Edit by dragging"): full-screen game-view canvas with the current control layout overlaid for reference, direct screen drag, a ≥44 pt corner handle or pinch to resize, edge snapping and one clear Done pill centered on the screen (round-8; hint above it, no bottom toolbar). |
 | `CustomScreenLayoutValuesView.swift` | The numeric custom screen layout page of one direction: Upper screen / Lower screen sections with X position, Y position, Width and Height as integer percentages of the game view, a live centered preview canvas (blue TOP / purple BOTTOM) under them, editing the CustomScreenLayout archive; also the "Edit by dragging" entry. |
 | `ScreenLayoutSettingsView.swift` | The screen layout page under Settings → Layout: the landscape six-choice row, the portrait three-choice row (each opening a radio picker sheet), the two custom layout rows and no reset / "how it works" section. |
-| `GameControllerInput.swift` | GameController-to-3DS bridge: observes connect/disconnect, recomputes the button mask from each physical button through the user's remapping, applies the radial deadzone to both thumbsticks and forwards Circle Pad/C-stick vectors to InputState. |
+| `GameControllerInput.swift` | GameController-to-3DS bridge: observes connect/disconnect, recomputes the button mask from each physical button through the user's remapping, applies the radial deadzone to both thumbsticks, forwards Circle Pad/C-stick vectors to InputState, detects 2–4 button hotkey combinations (suppressing their buttons from the guest while held) and exposes a recording callback for the Hotkeys page. |
 | `AudioOutput.swift` | Ring buffer and AVAudioEngine output (volume, mute, buffer duration). |
 | `FrameTiming.swift` | Per-phase frame timing for the diagnostics report and the fast-forward auto-fallback. |
 | `GraphicsWarmUp.swift` | Pipeline-cache filesystem stats used by Storage and the diagnostics report. The first-load warm-up types in this file are no longer reachable: the option was removed in 0.1.1. |

@@ -841,3 +841,21 @@
 "D-pad Down" = "下十字键";
 "D-pad Left" = "左十字键";
 "D-pad Right" = "右十字键";
+
+/* --- 0.2.0 热键 --- */
+"Hotkeys" = "热键";
+"Toggle Turbo" = "切换 Turbo";
+"Rotate screen" = "旋转屏幕";
+"Open menu" = "打开菜单";
+"Record" = "录制";
+"Record hotkey" = "录制热键";
+"Captured combination" = "已捕获组合";
+"Presets" = "预设";
+"Not set" = "未设置";
+"Reset all hotkeys" = "重置全部热键";
+"Physical controller button combinations (2–4 buttons) for Turbo, quick save/load, screen swap/rotation and opening the menu." = "物理手柄的组合键（2–4 个按键），可触发 Turbo、快速保存/读取、交换/旋转屏幕和打开菜单。";
+"Press and hold 2–4 controller buttons at the same time. Release to record the combination." = "同时按住 2–4 个手柄按键，松开后记录该组合。";
+"Waiting for controller buttons…" = "等待手柄按键…";
+"Too many buttons: use 2–4." = "按键过多：请使用 2–4 个。";
+"Clears every controller combination. No hotkey is assigned by default." = "清除所有手柄组合键。默认不分配任何热键。";
+"A combination triggers once per press and its buttons are not sent to the game while held." = "组合键每次按住只触发一次，按住期间这些按键不会发送给游戏。";

@@ -393,10 +393,45 @@ enum UpdateChannel: String, CaseIterable, Identifiable {
     }
 }
 
+/// Physical-controller hotkey actions (0.2.0 final). A hotkey is a 2–4 button
+/// combination of PhysicalControllerButton values.
+enum HotkeyAction: String, CaseIterable, Identifiable, Hashable {
+    case toggleTurbo
+    case quickSave
+    case quickLoad
+    case swapScreens
+    case rotateScreen
+    case openMenu
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .toggleTurbo: return L10n.tr("Toggle Turbo")
+        case .quickSave: return L10n.tr("Quick save")
+        case .quickLoad: return L10n.tr("Quick load")
+        case .swapScreens: return L10n.tr("Swap screens")
+        case .rotateScreen: return L10n.tr("Rotate screen")
+        case .openMenu: return L10n.tr("Open menu")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .toggleTurbo: return "forward.fill"
+        case .quickSave: return "square.and.arrow.down"
+        case .quickLoad: return "arrow.down.doc"
+        case .swapScreens: return "arrow.left.arrow.right"
+        case .rotateScreen: return "rotate.right"
+        case .openMenu: return "pause.circle"
+        }
+    }
+}
+
 /// Built-in on-screen control appearance. Standard is the shipped translucent
 /// dark style; High contrast uses opaque black/white edges and bigger strokes.
 /// No Delta skin import (see TODO).
-enum ControlAppearance: String, CaseIterable, Identifiable {
+enum ControlAppearance: String, CaseIterable, Identifiable, Hashable {
     case standard
     case highContrast
 
@@ -411,7 +446,7 @@ enum ControlAppearance: String, CaseIterable, Identifiable {
 }
 
 /// A physical controller button that can be remapped on the Gamepad page.
-enum PhysicalControllerButton: String, CaseIterable, Identifiable {
+enum PhysicalControllerButton: String, CaseIterable, Identifiable, Hashable {
     case a, b, x, y
     case l, r, zl, zr
     case start, select
@@ -460,7 +495,7 @@ enum PhysicalControllerButton: String, CaseIterable, Identifiable {
 }
 
 /// A 3DS HID button a physical controller button can be remapped to.
-enum GamepadAction: String, CaseIterable, Identifiable {
+enum GamepadAction: String, CaseIterable, Identifiable, Hashable {
     case a, b, x, y
     case l, r, zl, zr
     case start, select
@@ -665,6 +700,9 @@ final class AppSettings: ObservableObject {
     /// Physical controller button -> 3DS button mapping (physical raw value ->
     /// GamepadAction raw value). Reset restores the identity mapping.
     @Published var controllerButtonMap: [String: String]
+    /// Hotkey action raw value -> [PhysicalControllerButton raw value]. Empty
+    /// when the hotkey is disabled. A hotkey is 2–4 buttons.
+    @Published var hotkeys: [String: [String]]
 
     // MARK: In-game virtual control options (round 4)
 
@@ -799,6 +837,12 @@ final class AppSettings: ObservableObject {
             controllerButtonMap = decoded
         } else {
             controllerButtonMap = Self.defaultControllerButtonMap
+        }
+        if let data = defaults.data(forKey: Keys.hotkeys),
+           let decoded = try? JSONDecoder().decode([String: [String]].self, from: data) {
+            hotkeys = decoded
+        } else {
+            hotkeys = [:]
         }
 
         // Layouts: every stored value is versioned Codable data. A missing or
@@ -964,6 +1008,9 @@ final class AppSettings: ObservableObject {
         defaults.set(controlAppearance.rawValue, forKey: Keys.controlAppearance)
         if let data = try? JSONEncoder().encode(controllerButtonMap) {
             defaults.set(data, forKey: Keys.controllerButtonMap)
+        }
+        if let data = try? JSONEncoder().encode(hotkeys) {
+            defaults.set(data, forKey: Keys.hotkeys)
         }
         defaults.set(frameCap.rawValue, forKey: Keys.frameCap)
         defaults.set(systemMetalHUD, forKey: Keys.systemMetalHUD)
@@ -1236,6 +1283,32 @@ final class AppSettings: ObservableObject {
         persist()
     }
 
+    /// The buttons assigned to a hotkey, in their physical order.
+    func hotkeyButtons(for action: HotkeyAction) -> [PhysicalControllerButton] {
+        hotkeys[action.rawValue]?.compactMap(PhysicalControllerButton.init(rawValue:)) ?? []
+    }
+
+    /// Replaces one hotkey's 2–4 button combination; an empty list disables it.
+    func setHotkey(_ buttons: [PhysicalControllerButton], for action: HotkeyAction) {
+        let unique = Array(Set(buttons.map(.rawValue))).sorted()
+        if unique.count >= 2 && unique.count <= 4 {
+            hotkeys[action.rawValue] = unique
+        } else {
+            hotkeys.removeValue(forKey: action.rawValue)
+        }
+        persist()
+    }
+
+    func clearHotkey(for action: HotkeyAction) {
+        hotkeys.removeValue(forKey: action.rawValue)
+        persist()
+    }
+
+    func resetHotkeys() {
+        hotkeys = [:]
+        persist()
+    }
+
     /// Effective analog dead zone for a running game (per-app override or global).
     func effectiveAnalogDeadzone(titleID: String?) -> Double {
         overrides(for: titleID)?.analogDeadzone ?? analogDeadzone
@@ -1284,6 +1357,7 @@ final class AppSettings: ObservableObject {
         static let analogDeadzone = "UI.analogDeadzone"
         static let controlAppearance = "UI.controlAppearance"
         static let controllerButtonMap = "UI.controllerButtonMap"
+        static let hotkeys = "UI.hotkeys"
         static let frameCap = "UI.frameCap"
         static let systemMetalHUD = "UI.systemMetalHUD"
         /// One-time marker: the 0.1.0 default switched the Metal HUD to on.

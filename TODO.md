@@ -15,8 +15,9 @@ text is copied, and no game assets are stored in the repository.
 - [ ] Multiplayer / online play - not implemented (no network features).
 - [ ] Screen-rotation quick toggle inside the in-game menu (Settings -> Graphics
       -> Screen rotation exists instead).
-- [ ] Hotkey/button-combo remapping for physical controllers - single-button
-      remapping is implemented, hotkeys are not.
+- [x] Physical controller hotkey combinations (2–4 buttons) for Toggle Turbo,
+      Quick save/load, Swap/rotate screens and Open menu, with live recording,
+      presets, persistence and reset.
 - [ ] Amiibo loading/simulation - not implemented.
 - [ ] Simulated blow/microphone input - not implemented.
 - [ ] AirPlay scaling/layout options - iOS handles external display output

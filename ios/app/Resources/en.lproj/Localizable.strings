@@ -839,3 +839,21 @@
 "D-pad Down" = "D-pad Down";
 "D-pad Left" = "D-pad Left";
 "D-pad Right" = "D-pad Right";
+
+/* --- 0.2.0 hotkeys --- */
+"Hotkeys" = "Hotkeys";
+"Toggle Turbo" = "Toggle Turbo";
+"Rotate screen" = "Rotate screen";
+"Open menu" = "Open menu";
+"Record" = "Record";
+"Record hotkey" = "Record hotkey";
+"Captured combination" = "Captured combination";
+"Presets" = "Presets";
+"Not set" = "Not set";
+"Reset all hotkeys" = "Reset all hotkeys";
+"Physical controller button combinations (2–4 buttons) for Turbo, quick save/load, screen swap/rotation and opening the menu." = "Physical controller button combinations (2–4 buttons) for Turbo, quick save/load, screen swap/rotation and opening the menu.";
+"Press and hold 2–4 controller buttons at the same time. Release to record the combination." = "Press and hold 2–4 controller buttons at the same time. Release to record the combination.";
+"Waiting for controller buttons…" = "Waiting for controller buttons…";
+"Too many buttons: use 2–4." = "Too many buttons: use 2–4.";
+"Clears every controller combination. No hotkey is assigned by default." = "Clears every controller combination. No hotkey is assigned by default.";
+"A combination triggers once per press and its buttons are not sent to the game while held." = "A combination triggers once per press and its buttons are not sent to the game while held.";

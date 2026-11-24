@@ -363,6 +363,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private let inputState = InputState()
     /// Hardware controller bridge; created by `startControllerSupport()`.
     private var controllerManager: GameControllerManager?
+    /// Called on the main thread when a physical hotkey combination fires.
+    /// GameView installs the action handler while it is visible.
+    var onHotkey: ((HotkeyAction) -> Void)?
 
     /// Audio path: ring buffer + AVAudioEngine, started after a successful load.
     private let audioOutput = AudioOutput()
@@ -847,15 +850,23 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Attaches the hardware-controller bridge. Safe to call repeatedly; only
     /// the first call starts it. The view calls this from `onAppear`.
     func startControllerSupport(deadzone: Double = 0.14,
-                                buttonMap: [String: String] = AppSettings.defaultControllerButtonMap) {
+                                buttonMap: [String: String] = AppSettings.defaultControllerButtonMap,
+                                hotkeyMap: [String: [String]] = [:]) {
         guard controllerManager == nil else { return }
-        let manager = GameControllerManager(input: inputState) { [weak self] name in
-            DispatchQueue.main.async {
-                self?.controllerName = name
+        let manager = GameControllerManager(
+            input: inputState,
+            onHotkey: { [weak self] action in
+                self?.onHotkey?(action)
+            },
+            onConnectionChange: { [weak self] name in
+                DispatchQueue.main.async {
+                    self?.controllerName = name
+                }
             }
-        }
+        )
         manager.setDeadzone(deadzone)
         manager.setButtonMap(buttonMap)
+        manager.setHotkeyMap(hotkeyMap)
         controllerManager = manager
         manager.start()
     }
@@ -868,6 +879,20 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// Gamepad page physical-button remapping (also used by the per-app profile).
     func setControllerButtonMap(_ map: [String: String]) {
         controllerManager?.setButtonMap(map)
+    }
+
+    /// Hotkeys page: physical 2–4 button combinations.
+    func setControllerHotkeys(_ map: [String: [String]]) {
+        controllerManager?.setHotkeyMap(map)
+    }
+
+    /// Hotkey recorder sheet: receives every physical button state while open.
+    func beginControllerHotkeyRecording(_ handler: @escaping ([PhysicalControllerButton]) -> Void) {
+        controllerManager?.beginRecording(handler)
+    }
+
+    func endControllerHotkeyRecording() {
+        controllerManager?.endRecording()
     }
 
     /// On-screen button press/release.

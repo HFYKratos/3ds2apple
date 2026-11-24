@@ -940,6 +940,14 @@ struct GamepadSettingsPage: View {
                 ControllerButtonMappingView(settings: settings)
             }
 
+            SettingsNavigationRow(
+                title: "Hotkeys",
+                description: "Physical controller button combinations (2–4 buttons) for Turbo, quick save/load, screen swap/rotation and opening the menu.",
+                identifier: "settings-hotkeys"
+            ) {
+                HotkeySettingsView(settings: settings, model: model)
+            }
+
             SettingsInfoRow(
                 title: "Controller",
                 value: model.controllerName ?? L10n.tr("Not connected"),
@@ -985,6 +993,170 @@ struct ControllerButtonMappingView: View {
             get: { settings.controllerAction(for: button) },
             set: { settings.setControllerAction($0, for: button) }
         )
+    }
+}
+
+// MARK: - Hotkeys
+
+/// Physical-controller hotkey combinations (0.2.0 final). Each row records or
+/// chooses a 2–4 button combination; the manager suppresses the combination
+/// from the guest while it is held and GameView performs the action once.
+struct HotkeySettingsView: View {
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var model: ROMSession
+    @State private var recordingAction: HotkeyAction?
+
+    var body: some View {
+        SettingsPageScaffold(title: "Hotkeys") {
+            SettingsSectionCaption(title: "Physical controller combinations")
+            ForEach(HotkeyAction.allCases) { action in
+                HStack(alignment: .top, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(action.title)
+                            .font(.system(size: 17, weight: .semibold))
+                        Text(comboText(for: action))
+                            .font(.system(size: 14))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 10)
+                    Button(L10n.tr("Record")) {
+                        recordingAction = action
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("settings-hotkey-record-\(action.rawValue)")
+                    if !settings.hotkeyButtons(for: action).isEmpty {
+                        Button {
+                            settings.clearHotkey(for: action)
+                        } label: {
+                            Image(systemName: "xmark.circle")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("settings-hotkey-clear-\(action.rawValue)")
+                    }
+                }
+                .accessibilityIdentifier("settings-hotkey-\(action.rawValue)")
+            }
+            SettingsActionRow(
+                title: "Reset all hotkeys",
+                description: "Clears every controller combination. No hotkey is assigned by default.",
+                systemImage: "arrow.counterclockwise",
+                identifier: "settings-hotkeys-reset"
+            ) {
+                settings.resetHotkeys()
+            }
+            Text(L10n.tr("A combination triggers once per press and its buttons are not sent to the game while held."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .sheet(item: $recordingAction) { action in
+            HotkeyRecorderSheet(action: action, settings: settings, model: model)
+        }
+    }
+
+    private func comboText(for action: HotkeyAction) -> String {
+        let buttons = settings.hotkeyButtons(for: action)
+        guard !buttons.isEmpty else { return L10n.tr("Not set") }
+        return buttons.map(\.title).joined(separator: " + ")
+    }
+}
+
+/// Records a physical 2–4 button combination live, or lets the user pick a
+/// common preset without a controller. Buttons are suppressed from the guest
+/// while the sheet is open.
+struct HotkeyRecorderSheet: View {
+    let action: HotkeyAction
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var model: ROMSession
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var pressed: [PhysicalControllerButton] = []
+    @State private var captured: [PhysicalControllerButton] = []
+    @State private var isTooMany = false
+
+    private static let presets: [[PhysicalControllerButton]] = [
+        [.l, .r],
+        [.zl, .zr],
+        [.l, .r, .zl],
+        [.zl, .zr, .start],
+        [.l, .r, .start],
+        [.select, .start]
+    ]
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text(action.title)
+                        .font(.headline)
+                    Text(L10n.tr("Press and hold 2–4 controller buttons at the same time. Release to record the combination."))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Section(L10n.tr("Captured combination")) {
+                    if captured.isEmpty {
+                        Text(pressed.isEmpty
+                             ? L10n.tr("Waiting for controller buttons…")
+                             : pressed.map(\.title).joined(separator: " + "))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(captured.map(\.title).joined(separator: " + "))
+                            .font(.system(size: 17, weight: .semibold))
+                    }
+                    if isTooMany {
+                        Text(L10n.tr("Too many buttons: use 2–4."))
+                            .foregroundStyle(.orange)
+                    }
+                }
+                Section(L10n.tr("Presets")) {
+                    ForEach(Self.presets, id: \.self) { preset in
+                        Button(preset.map(\.title).joined(separator: " + ")) {
+                            captured = preset.sorted { lhs, rhs in
+                                index(of: lhs) < index(of: rhs)
+                            }
+                            isTooMany = false
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle(L10n.tr("Record hotkey"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L10n.tr("Cancel")) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.tr("Save")) {
+                        settings.setHotkey(captured, for: action)
+                        dismiss()
+                    }
+                    .disabled(captured.count < 2 || captured.count > 4)
+                }
+            }
+        }
+        .onAppear {
+            model.beginControllerHotkeyRecording { buttons in
+                pressed = sorted(buttons)
+                if buttons.count >= 2 && buttons.count <= 4 {
+                    captured = sorted(buttons)
+                    isTooMany = false
+                } else if buttons.count > 4 {
+                    isTooMany = true
+                }
+            }
+        }
+        .onDisappear {
+            model.endControllerHotkeyRecording()
+        }
+    }
+
+    private func sorted(_ buttons: [PhysicalControllerButton]) -> [PhysicalControllerButton] {
+        buttons.sorted { index(of: $0) < index(of: $1) }
+    }
+
+    private func index(of button: PhysicalControllerButton) -> Int {
+        PhysicalControllerButton.allCases.firstIndex(of: button) ?? 0
     }
 }
 
