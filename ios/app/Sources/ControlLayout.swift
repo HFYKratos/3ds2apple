@@ -408,31 +408,81 @@ struct ControlLayoutProfile: Codable, Equatable {
         return result
     }
 
-    // MARK: - Shipped defaults (ModernCenteredX2 reference skin, round 6)
+    // MARK: - Shipped defaults (0.2.1 Delta reference skins)
 
-    /// Round 6: the shipped default layout follows the ModernCenteredX2 Delta
-    /// skin numbers (round 5) with device-feedback changes:
-    /// - portrait controls are moved into the free black band below the portrait
-    ///   game picture. The final screenshot revision puts the shoulder row
-    ///   (ZL/L/Select/Start/R/ZR) on one line at y=0.755 just under the picture
-    ///   (bottom ~0.73), the main set at y=0.87 and the C-stick at
-    ///   (0.92, 0.935) with size 0.08;
-    /// - the D-pad keeps four directional placements whose centres form the
-    ///   cross arms (portrait 103 pt -> size 0.12440, landscape 105 pt ->
-    ///   0.12681), but round 7 renders and drags them as ONE cross-shaped
-    ///   control (DpadCrossShape). The four placements remain the input,
-    ///   visibility and size semantics, and old profiles need no migration.
+    /// The shipped default layout follows the two Delta `.deltaskin` skins the
+    /// user pointed at for 0.2.1 (read-only geometry references, no assets or
+    /// artwork copied into the repo):
+    /// - portrait: **ModernFS** (`com.stars33k.3ds.modernfs`);
+    /// - landscape: **ModernHybrid** (`com.stars33k.3ds.modernhybrid`).
     ///
-    /// Opacity is 0.85 everywhere. The skin is a read-only reference: only its
-    /// numeric frames are converted (centre / mapping size, diameter / 414);
-    /// ZL/ZR and the C-stick are not in the skin and follow the design note.
+    /// Both are DeltaSkin-compatible zips: `info.json` plus PDF/PNG artwork.
+    /// The geometry is `representations.iphone.edgeToEdge.<orientation>`:
+    /// `mappingSize` is the point space (portrait 414 x 896, landscape
+    /// 896 x 414) and every `items[].frame` is an absolute point rect in it.
+    /// The conversion (unchanged since round 5) is:
+    /// - centre: x = (frame.x + frame.width / 2) / mappingWidth,
+    ///           y = (frame.y + frame.height / 2) / mappingHeight;
+    /// - size:   frame.width / min(mappingWidth, mappingHeight), except the wide
+    ///           L/R capsules, whose frame height is used; the A/B/X/Y cluster
+    ///           rides on one size (the skin's X item is 1 pt smaller);
+    /// - opacity 0.85 (the shipped value; the Settings opacity slider scales it).
+    ///
+    /// Landscape normalised table (mapping 896 x 414; both skins have identical
+    /// landscape items, ModernHybrid's are used):
+    ///   circlePad (0.185826, 0.807971) 0.277778 (115 pt)
+    ///   dpad      group centre (0.349888, 0.822464), item 105 x 97 pt ->
+    ///             arm size 0.126812 (52.5 pt), arms dx 0.029297 / dy 0.063406:
+    ///             up (0.349888, 0.759058) down (0.349888, 0.885870)
+    ///             left (0.320591, 0.822464) right (0.379185, 0.822464)
+    ///   A (0.896763, 0.766908) B (0.835379, 0.899758)
+    ///   X (0.835379, 0.631643) Y (0.773438, 0.766908) size 0.152174 (63 pt)
+    ///   L (0.755022, 0.595411) R (0.915737, 0.592995) size 0.074879 (31 pt)
+    ///   Start (0.546875, 0.900966) Select (0.452009, 0.900966) 0.082126 (34 pt)
+    ///
+    /// Portrait normalised table (mapping 414 x 896; ModernFS):
+    ///   circlePad (0.164251, 0.825893) 0.241546 (100 pt)
+    ///   dpad      group centre (0.446860, 0.857143), item 102 x 102 pt ->
+    ///             arm size 0.123188 (51 pt), arms dx 0.061594 / dy 0.028460:
+    ///             up (0.446860, 0.828683) down (0.446860, 0.885603)
+    ///             left (0.385266, 0.857143) right (0.508454, 0.857143)
+    ///   A (0.915459, 0.825893) B (0.789855, 0.882812)
+    ///   X (0.791063, 0.768415) Y (0.666667, 0.825893) size 0.130435 (54 pt)
+    ///   L (0.169082, 0.716518) R (0.830918, 0.716518) size 0.077295 (32 pt)
+    ///   Start (0.608696, 0.716518) Select (0.393720, 0.716518) 0.082126 (34 pt)
+    ///
+    /// Not in the skins (design fill-ins, same approach as round 5):
+    /// - ZL/ZR: neither skin has an item. Portrait keeps them outboard in the
+    ///   shoulder row at x 0.058 / 0.942, size 0.055 (~23 pt), clear of L/R;
+    ///   landscape keeps the shipped "one step above L/R" positions
+    ///   (0.755022 / 0.915737 at y 0.487920).
+    /// - C-stick: neither skin has an item. Landscape stays in the free gap
+    ///   under the small bottom screen (0.84821, 0.48309); portrait uses the
+    ///   free bottom-right corner above the app-button row (0.92, 0.885; round 6
+    ///   had y 0.935, which would now sit on the Swap-screens button).
+    /// - App-only buttons (fastForward / quickSave / quickLoad / swapScreens):
+    ///   the skins put their own quickSave / quickLoad / menu chips in the
+    ///   margins (landscape left strip y 0.164 / 0.242 and menu y 0.766; portrait
+    ///   top margin y 0.061 and menu at the bottom-left (0.126, 0.936)). On our
+    ///   full-bleed overlay the bands that never cover the picture are the black
+    ///   band below the portrait picture and the letterbox strip below the
+    ///   landscape arrangement, so the app buttons use those: portrait bottom row
+    ///   at y 0.94 (skin menu x 0.126, skin quickSave/quickLoad x mirrored at
+    ///   0.257 / 0.743, size 0.07); landscape bottom-right row at y 0.945
+    ///   (x 0.60 / 0.66 / 0.72 / 0.78, size 0.06), right of Start/Select and
+    ///   left of B.
+    ///
+    /// The D-pad stays four directional placements whose centres are the cross
+    /// arms (round 7 draws and drags them as one cross-shaped control): the arm
+    /// centres are the skin item centre +/- half an arm, so `dpadGroup(in:)`
+    /// recovers the item centre and half its width as the arm thickness (the
+    /// cross span equals the skin item width).
     private static func rawDefaultPlacements(
         for orientation: ControlLayoutOrientation
     ) -> [(ControlElement, ControlPlacement)] {
         switch orientation {
         case .landscape:
-            // mappingSize 896 x 414 pt; D-pad centre (0.34989, 0.82246),
-            // diameter 0.12681 (52.5 pt), offsets dx 0.02930 / dy 0.06341.
+            // ModernHybrid landscape, mapping 896 x 414; see the table above.
             return [
                 (.circlePad, ControlPlacement(x: 0.18583, y: 0.80797, size: 0.27778, opacity: 0.85)),
                 (.dpadUp, ControlPlacement(x: 0.34989, y: 0.75905, size: 0.12681, opacity: 0.85)),
@@ -452,20 +502,83 @@ struct ControlLayoutProfile: Codable, Equatable {
                 (.buttonSelect, ControlPlacement(x: 0.45201, y: 0.90097, size: 0.08213, opacity: 0.85)),
                 // Not in the skin: above/right of the A-B-X-Y cluster.
                 (.cStick, ControlPlacement(x: 0.84821, y: 0.48309, size: 0.10, opacity: 0.85)),
-                // Round 0.1.6 app buttons, in the free centre area.
+                // App-only buttons: the free letterbox strip below the large
+                // screen, right of Start/Select and left of B (0.2.1 positions;
+                // see the doc comment above).
+                (.fastForward, ControlPlacement(x: 0.60, y: 0.945, size: 0.06, opacity: 0.85)),
+                (.quickSave, ControlPlacement(x: 0.66, y: 0.945, size: 0.06, opacity: 0.85)),
+                (.quickLoad, ControlPlacement(x: 0.72, y: 0.945, size: 0.06, opacity: 0.85)),
+                (.swapScreens, ControlPlacement(x: 0.78, y: 0.945, size: 0.06, opacity: 0.85))
+            ]
+        case .portrait:
+            // ModernFS portrait, mapping 414 x 896; see the table above.
+            return [
+                (.circlePad, ControlPlacement(x: 0.16425, y: 0.82589, size: 0.24155, opacity: 0.85)),
+                (.dpadUp, ControlPlacement(x: 0.44686, y: 0.82868, size: 0.12319, opacity: 0.85)),
+                (.dpadDown, ControlPlacement(x: 0.44686, y: 0.88560, size: 0.12319, opacity: 0.85)),
+                (.dpadLeft, ControlPlacement(x: 0.38527, y: 0.85714, size: 0.12319, opacity: 0.85)),
+                (.dpadRight, ControlPlacement(x: 0.50845, y: 0.85714, size: 0.12319, opacity: 0.85)),
+                (.buttonA, ControlPlacement(x: 0.91546, y: 0.82589, size: 0.13043, opacity: 0.85)),
+                (.buttonB, ControlPlacement(x: 0.78986, y: 0.88281, size: 0.13043, opacity: 0.85)),
+                (.buttonX, ControlPlacement(x: 0.79106, y: 0.76841, size: 0.13043, opacity: 0.85)),
+                (.buttonY, ControlPlacement(x: 0.66667, y: 0.82589, size: 0.13043, opacity: 0.85)),
+                (.buttonL, ControlPlacement(x: 0.16908, y: 0.71652, size: 0.07729, opacity: 0.85)),
+                (.buttonR, ControlPlacement(x: 0.83092, y: 0.71652, size: 0.07729, opacity: 0.85)),
+                // Not in the skin: outboard in the shoulder row, clear of L/R.
+                (.buttonZL, ControlPlacement(x: 0.058, y: 0.71652, size: 0.055, opacity: 0.85)),
+                (.buttonZR, ControlPlacement(x: 0.942, y: 0.71652, size: 0.055, opacity: 0.85)),
+                (.buttonStart, ControlPlacement(x: 0.60870, y: 0.71652, size: 0.08213, opacity: 0.85)),
+                (.buttonSelect, ControlPlacement(x: 0.39372, y: 0.71652, size: 0.08213, opacity: 0.85)),
+                // Not in the skin: free bottom-right corner, above the app row.
+                (.cStick, ControlPlacement(x: 0.92, y: 0.885, size: 0.08, opacity: 0.85)),
+                // App-only buttons: the black band below the picture. The row
+                // height follows the skin's menu button; quickSave/quickLoad x
+                // are the skin's top chips (0.257 / 0.743) mirrored into the band,
+                // fastForward/swapScreens are the mirrored corner pair.
+                (.fastForward, ControlPlacement(x: 0.126, y: 0.94, size: 0.07, opacity: 0.85)),
+                (.quickSave, ControlPlacement(x: 0.257, y: 0.94, size: 0.07, opacity: 0.85)),
+                (.quickLoad, ControlPlacement(x: 0.743, y: 0.94, size: 0.07, opacity: 0.85)),
+                (.swapScreens, ControlPlacement(x: 0.874, y: 0.94, size: 0.07, opacity: 0.85))
+            ]
+        }
+    }
+
+    // MARK: - Legacy shipped defaults (migration sources)
+
+    /// The 0.2.0 shipped defaults (round 6/7: the ModernCenteredX2-derived
+    /// portrait band layout, the landscape frames from the same reference and
+    /// the round-0.1.6 app buttons). Kept only to recognise an untouched stored
+    /// profile during the 0.2.1 migration.
+    private static func zeroTwoShippedPlacements(
+        for orientation: ControlLayoutOrientation
+    ) -> [String: ControlPlacement] {
+        let entries: [(ControlElement, ControlPlacement)]
+        switch orientation {
+        case .landscape:
+            entries = [
+                (.circlePad, ControlPlacement(x: 0.18583, y: 0.80797, size: 0.27778, opacity: 0.85)),
+                (.dpadUp, ControlPlacement(x: 0.34989, y: 0.75905, size: 0.12681, opacity: 0.85)),
+                (.dpadDown, ControlPlacement(x: 0.34989, y: 0.88587, size: 0.12681, opacity: 0.85)),
+                (.dpadLeft, ControlPlacement(x: 0.32059, y: 0.82246, size: 0.12681, opacity: 0.85)),
+                (.dpadRight, ControlPlacement(x: 0.37919, y: 0.82246, size: 0.12681, opacity: 0.85)),
+                (.buttonA, ControlPlacement(x: 0.89676, y: 0.76691, size: 0.15217, opacity: 0.85)),
+                (.buttonB, ControlPlacement(x: 0.83538, y: 0.89976, size: 0.15217, opacity: 0.85)),
+                (.buttonX, ControlPlacement(x: 0.83538, y: 0.63164, size: 0.15217, opacity: 0.85)),
+                (.buttonY, ControlPlacement(x: 0.77344, y: 0.76812, size: 0.15217, opacity: 0.85)),
+                (.buttonL, ControlPlacement(x: 0.75502, y: 0.59541, size: 0.07488, opacity: 0.85)),
+                (.buttonR, ControlPlacement(x: 0.91574, y: 0.59299, size: 0.07488, opacity: 0.85)),
+                (.buttonZL, ControlPlacement(x: 0.75502, y: 0.48792, size: 0.065, opacity: 0.85)),
+                (.buttonZR, ControlPlacement(x: 0.91574, y: 0.48792, size: 0.065, opacity: 0.85)),
+                (.buttonStart, ControlPlacement(x: 0.54688, y: 0.90097, size: 0.08213, opacity: 0.85)),
+                (.buttonSelect, ControlPlacement(x: 0.45201, y: 0.90097, size: 0.08213, opacity: 0.85)),
+                (.cStick, ControlPlacement(x: 0.84821, y: 0.48309, size: 0.10, opacity: 0.85)),
                 (.fastForward, ControlPlacement(x: 0.48, y: 0.70, size: 0.08, opacity: 0.85)),
                 (.quickSave, ControlPlacement(x: 0.48, y: 0.82, size: 0.08, opacity: 0.85)),
                 (.quickLoad, ControlPlacement(x: 0.56, y: 0.70, size: 0.08, opacity: 0.85)),
                 (.swapScreens, ControlPlacement(x: 0.56, y: 0.82, size: 0.08, opacity: 0.85))
             ]
         case .portrait:
-            // mappingSize 414 x 896 pt. Round-6 screenshot revision: the shoulder
-            // row (ZL/L/Select/Start/R/ZR) becomes one row at y=0.755 just below
-            // the picture (bottom ~0.73 on a modern phone), and the main set sits
-            // at y=0.87 in the empty band; the D-pad cross centre is
-            // (0.44565, 0.87), diameter 0.12440 (51.5 pt), offsets
-            // dx 0.06220 / dy 0.02874.
-            return [
+            entries = [
                 (.circlePad, ControlPlacement(x: 0.16546, y: 0.87, size: 0.24396, opacity: 0.85)),
                 (.dpadUp, ControlPlacement(x: 0.44565, y: 0.84126, size: 0.12440, opacity: 0.85)),
                 (.dpadDown, ControlPlacement(x: 0.44565, y: 0.89874, size: 0.12440, opacity: 0.85)),
@@ -477,28 +590,26 @@ struct ControlLayoutProfile: Codable, Equatable {
                 (.buttonY, ControlPlacement(x: 0.66304, y: 0.87, size: 0.13285, opacity: 0.85)),
                 (.buttonL, ControlPlacement(x: 0.24, y: 0.755, size: 0.07729, opacity: 0.85)),
                 (.buttonR, ControlPlacement(x: 0.76, y: 0.755, size: 0.07729, opacity: 0.85)),
-                // Not in the skin: one step above L/R.
                 (.buttonZL, ControlPlacement(x: 0.10, y: 0.755, size: 0.065, opacity: 0.85)),
                 (.buttonZR, ControlPlacement(x: 0.90, y: 0.755, size: 0.065, opacity: 0.85)),
                 (.buttonStart, ControlPlacement(x: 0.60, y: 0.755, size: 0.07971, opacity: 0.85)),
                 (.buttonSelect, ControlPlacement(x: 0.40, y: 0.755, size: 0.07971, opacity: 0.85)),
-                // Moved to the free bottom-right corner (round-6 screenshot
-                // revision: further clear of A/B and smaller).
                 (.cStick, ControlPlacement(x: 0.92, y: 0.935, size: 0.08, opacity: 0.85)),
-                // Round 0.1.6 app buttons: the free band between the shoulder row
-                // and the main set (the D-pad cross starts around y=0.84).
                 (.fastForward, ControlPlacement(x: 0.50, y: 0.80, size: 0.07, opacity: 0.85)),
                 (.quickSave, ControlPlacement(x: 0.62, y: 0.80, size: 0.07, opacity: 0.85)),
                 (.quickLoad, ControlPlacement(x: 0.56, y: 0.80, size: 0.07, opacity: 0.85)),
                 (.swapScreens, ControlPlacement(x: 0.56, y: 0.875, size: 0.07, opacity: 0.85))
             ]
         }
+        var result: [String: ControlPlacement] = [:]
+        for (element, placement) in entries {
+            result[element.rawValue] = placement
+        }
+        return result
     }
 
-    // MARK: - Legacy shipped defaults (migration sources)
-
     /// The beta3 (round-5) shipped defaults, kept only to recognise an untouched
-    /// stored profile during the round-6 migration.
+    /// stored profile during the shipped-default migrations.
     private static func beta3ShippedPlacements(
         for orientation: ControlLayoutOrientation
     ) -> [String: ControlPlacement] {
@@ -607,7 +718,8 @@ struct ControlLayoutProfile: Codable, Equatable {
     private static func legacyShippedPlacements(
         for orientation: ControlLayoutOrientation
     ) -> [[String: ControlPlacement]] {
-        [beta3ShippedPlacements(for: orientation),
+        [zeroTwoShippedPlacements(for: orientation),
+         beta3ShippedPlacements(for: orientation),
          roundFourShippedPlacements(for: orientation)]
     }
 
@@ -636,9 +748,11 @@ struct ControlLayoutProfile: Codable, Equatable {
         return false
     }
 
-    /// Round-6 migration: an untouched legacy shipped profile (beta3 round-5 or
-    /// earlier) becomes the new cross-shaped default; a customised profile is
-    /// returned unchanged.
+    /// The shipped-default migration: an untouched stored profile from an older
+    /// shipped default (0.2.0 round 6/7, beta3 round-5 or earlier round 4)
+    /// becomes the current skin default; a customised profile is returned
+    /// unchanged. It runs in memory on every load and is idempotent: once the
+    /// stored profile is the current default it no longer matches a legacy set.
     static func migratingPreviousShippedDefault(
         _ profile: ControlLayoutProfile,
         for orientation: ControlLayoutOrientation

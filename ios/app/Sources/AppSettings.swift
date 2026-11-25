@@ -901,9 +901,9 @@ final class AppSettings: ObservableObject {
         }
         // In-game virtual-control options: the hidden rows became per direction
         // in 0.1.6-beta2. Migrate the old global set once: an empty/absent old
-        // set gets the new shipped defaults (C-stick/ZL/ZR hidden in both
-        // directions, D-pad additionally hidden in portrait); a customised old
-        // set is copied to both directions unchanged.
+        // set gets the current shipped defaults (see
+        // defaultHiddenItems(for:)); a customised old set is copied to both
+        // directions unchanged.
         let storedHidden = defaults.stringArray(forKey: Keys.hiddenControlItems)
             .map { Set($0.compactMap(ControlOptionItem.init(rawValue:))) }
         if defaults.object(forKey: Keys.hiddenControlItemsMigrated) == nil {
@@ -934,6 +934,39 @@ final class AppSettings: ObservableObject {
             let landscape = defaults.stringArray(forKey: Keys.hiddenControlItemsLandscapeKey)
             hiddenControlItemsPortrait = Set((portrait ?? []).compactMap(ControlOptionItem.init(rawValue:)))
             hiddenControlItemsLandscape = Set((landscape ?? []).compactMap(ControlOptionItem.init(rawValue:)))
+        }
+        // 0.2.1: the shipped default layouts now follow the ModernFS (portrait) /
+        // ModernHybrid (landscape) reference skins, which draw neither ZL/ZR nor
+        // a C-stick and do draw the portrait D-pad. An untouched 0.2.0 shipped
+        // hidden set (see legacyDefaultHiddenItems(for:)) becomes the new shipped
+        // set once; a customised set is kept. The marker makes this run once, and
+        // the sets are written back because a later launch reads the per-direction
+        // keys instead of these defaults.
+        if defaults.object(forKey: Keys.hiddenControlItemsSkinDefaultsMigrated) == nil {
+            // Read the sets back from UserDefaults: the block above either wrote
+            // the migrated 0.1.5 sets or just loaded the per-direction keys, and
+            // reading the @Published properties here would touch `self` before
+            // every stored property is initialised.
+            var portrait = Set((defaults.stringArray(forKey: Keys.hiddenControlItemsPortraitKey) ?? [])
+                .compactMap(ControlOptionItem.init(rawValue:)))
+            var landscape = Set((defaults.stringArray(forKey: Keys.hiddenControlItemsLandscapeKey) ?? [])
+                .compactMap(ControlOptionItem.init(rawValue:)))
+            if portrait == Self.legacyDefaultHiddenItems(for: .portrait) {
+                portrait = Self.defaultHiddenItems(for: .portrait)
+            }
+            if landscape == Self.legacyDefaultHiddenItems(for: .landscape) {
+                landscape = Self.defaultHiddenItems(for: .landscape)
+            }
+            hiddenControlItemsPortrait = portrait
+            hiddenControlItemsLandscape = landscape
+            defaults.set(portrait.map(\.rawValue).sorted(),
+                         forKey: Keys.hiddenControlItemsPortraitKey)
+            defaults.set(landscape.map(\.rawValue).sorted(),
+                         forKey: Keys.hiddenControlItemsLandscapeKey)
+            defaults.set(true, forKey: Keys.hiddenControlItemsSkinDefaultsMigrated)
+            AppLog.log("[3ds2apple] virtual controls: hidden rows migrated to the 0.2.1 skin defaults (%@ / %@)",
+                       portrait.map(\.rawValue).sorted().joined(separator: ","),
+                       landscape.map(\.rawValue).sorted().joined(separator: ","))
         }
         if let data = defaults.data(forKey: Keys.controlSizeScales),
            let decoded = try? JSONDecoder().decode([String: Double].self, from: data) {
@@ -1153,9 +1186,24 @@ final class AppSettings: ObservableObject {
         min(max(value, controlSizeScaleRange.lowerBound), controlSizeScaleRange.upperBound)
     }
 
-    /// The shipped hidden rows: both directions hide the C-stick and the two
-    /// triggers; portrait also hides the D-pad.
+    /// The shipped hidden rows (0.2.1): both reference skins draw neither ZL/ZR
+    /// nor a C-stick, so those stay hidden in both directions (the layout still
+    /// places them as design fill-ins); every control the skins do draw is
+    /// visible, including the portrait D-pad, which the ModernFS skin places in
+    /// the band below the picture (0.1.6-0.2.0 additionally hid it in portrait).
     static func defaultHiddenItems(
+        for orientation: ControlLayoutOrientation
+    ) -> Set<ControlOptionItem> {
+        switch orientation {
+        case .portrait, .landscape:
+            return [.cStick, .buttonZL, .buttonZR]
+        }
+    }
+
+    /// The 0.1.6-0.2.0 shipped hidden rows, kept only to recognise an untouched
+    /// stored default during the 0.2.1 migration: both directions hid the
+    /// C-stick and the two triggers, portrait also hid the D-pad.
+    static func legacyDefaultHiddenItems(
         for orientation: ControlLayoutOrientation
     ) -> Set<ControlOptionItem> {
         var items: Set<ControlOptionItem> = [.cStick, .buttonZL, .buttonZR]
@@ -1393,6 +1441,9 @@ final class AppSettings: ObservableObject {
         static let hiddenControlItemsPortraitKey = "UI.hiddenControlItemsPortrait"
         static let hiddenControlItemsLandscapeKey = "UI.hiddenControlItemsLandscape"
         static let hiddenControlItemsMigrated = "UI.hiddenControlItemsMigrated"
+        /// One-time 0.2.1 migration to the hidden rows that match the new
+        /// ModernFS/ModernHybrid default layouts.
+        static let hiddenControlItemsSkinDefaultsMigrated = "UI.hiddenControlItemsSkinDefaultsMigrated"
         static let controlSizeScales = "UI.controlSizeScales"
         static let swapScreens = "UI.swapScreens"
         static let controlLayoutPortrait = "UI.controlLayoutPortrait"
