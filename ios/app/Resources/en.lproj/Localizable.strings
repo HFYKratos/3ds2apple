@@ -863,3 +863,6 @@
 "Updates" = "Updates";
 "Experimental" = "Experimental";
 "Physical controller combinations" = "Physical controller combinations";
+
+/* --- 0.2.1-beta2 controls: skin HOME/MENU buttons ----------------------- */
+"Menu" = "Menu";

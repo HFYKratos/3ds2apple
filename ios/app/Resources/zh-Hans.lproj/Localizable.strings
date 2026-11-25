@@ -865,3 +865,6 @@
 "Updates" = "更新";
 "Experimental" = "实验性";
 "Physical controller combinations" = "物理手柄组合键";
+
+/* --- 0.2.1-beta2 控制：皮肤 HOME/MENU 按钮 ------------------------------ */
+"Menu" = "菜单";
