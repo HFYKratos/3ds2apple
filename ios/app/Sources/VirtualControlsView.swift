@@ -53,6 +53,14 @@ struct VirtualControlsView: View {
     /// Round 0.1.6-beta2 app buttons.
     var onQuickLoad: () -> Void = {}
     var onSwapScreens: () -> Void = {}
+    /// 0.2.1-beta2 app buttons (tap on release, like Quick save):
+    /// - `onMenu` is the MENU element, the skins' menu chip, and opens the
+    ///   app's in-game pause menu;
+    /// - `onSettings` is the SETTINGS element in the skins' HOME slot and opens
+    ///   the app's Settings page.
+    /// Neither reports a 3DS button bit, so they never touch the hold logic.
+    var onMenu: () -> Void = {}
+    var onSettings: () -> Void = {}
     /// Whether the Fast-forward toggle is currently active (button highlight).
     var fastForwardActive: Bool = false
 
@@ -184,6 +192,38 @@ struct VirtualControlsView: View {
                 highContrast: highContrast
             ) { pressed in
                 if !pressed { onQuickSave() }
+            }
+            .position(frame.center)
+        } else if element == .menu {
+            OverlayButtonControl(
+                symbol: element.symbol,
+                systemImage: element.systemImage,
+                accessibilityLabel: element.accessibilityTitle,
+                identifier: "control-\(element.rawValue)",
+                width: frame.width,
+                height: frame.height,
+                cornerFactor: CGFloat(element.shapeCornerFactor),
+                opacity: opacity,
+                haptics: haptics,
+                highContrast: highContrast
+            ) { pressed in
+                if !pressed { onMenu() }
+            }
+            .position(frame.center)
+        } else if element == .settings {
+            OverlayButtonControl(
+                symbol: element.symbol,
+                systemImage: element.systemImage,
+                accessibilityLabel: element.accessibilityTitle,
+                identifier: "control-\(element.rawValue)",
+                width: frame.width,
+                height: frame.height,
+                cornerFactor: CGFloat(element.shapeCornerFactor),
+                opacity: opacity,
+                haptics: haptics,
+                highContrast: highContrast
+            ) { pressed in
+                if !pressed { onSettings() }
             }
             .position(frame.center)
         } else if let bit = element.buttonBit {

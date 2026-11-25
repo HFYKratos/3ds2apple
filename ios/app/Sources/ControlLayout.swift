@@ -71,6 +71,14 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
     case quickSave
     case quickLoad
     case swapScreens
+    /// 0.2.1-beta2 app-only buttons (user request 2026-11-25). The two Delta
+    /// reference skins draw a HOME button and a MENU button: on the overlay the
+    /// HOME slot becomes our Settings button and MENU opens the in-game pause
+    /// menu. Neither reports a 3DS button bit (the console's HOME is a system
+    /// button, not a HID input). The skins' volume buttons are deliberately
+    /// left out of the layout.
+    case menu
+    case settings
 
     var id: String { rawValue }
 
@@ -92,7 +100,8 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
         case .buttonZR: return ZKButton.zr
         case .buttonStart: return ZKButton.start
         case .buttonSelect: return ZKButton.select
-        case .circlePad, .cStick, .fastForward, .quickSave, .quickLoad, .swapScreens:
+        case .circlePad, .cStick, .fastForward, .quickSave, .quickLoad, .swapScreens,
+             .menu, .settings:
             return nil
         }
     }
@@ -147,6 +156,8 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
         case .quickSave: return "⤓"
         case .quickLoad: return "⤒"
         case .swapScreens: return "⇄"
+        case .menu: return "☰"
+        case .settings: return "⚙"
         }
     }
 
@@ -158,6 +169,8 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
         case .quickSave: return "square.and.arrow.down"
         case .quickLoad: return "arrow.clockwise"
         case .swapScreens: return "arrow.left.arrow.right"
+        case .menu: return "line.3.horizontal"
+        case .settings: return "gearshape.fill"
         default: return nil
         }
     }
@@ -184,6 +197,8 @@ enum ControlElement: String, CaseIterable, Codable, Identifiable {
         case .quickSave: return L10n.tr("Quick save")
         case .quickLoad: return L10n.tr("Quick load")
         case .swapScreens: return L10n.tr("Swap screens")
+        case .menu: return L10n.tr("Menu")
+        case .settings: return L10n.tr("Settings")
         }
     }
 
@@ -212,6 +227,11 @@ enum ControlOptionItem: String, CaseIterable, Identifiable {
     case quickSave
     case quickLoad
     case swapScreens
+    /// 0.2.1-beta2 app-only rows (the skins' HOME slot is our Settings button
+    /// and MENU opens the in-game menu). Both ship visible in both directions;
+    /// the visibility and size sheets list them with the other rows.
+    case menu
+    case settings
 
     var id: String { rawValue }
 
@@ -236,6 +256,8 @@ enum ControlOptionItem: String, CaseIterable, Identifiable {
         case .quickSave: return [.quickSave]
         case .quickLoad: return [.quickLoad]
         case .swapScreens: return [.swapScreens]
+        case .menu: return [.menu]
+        case .settings: return [.settings]
         }
     }
 
@@ -259,6 +281,8 @@ enum ControlOptionItem: String, CaseIterable, Identifiable {
         case .quickSave: return .quickSave
         case .quickLoad: return .quickLoad
         case .swapScreens: return .swapScreens
+        case .menu: return .menu
+        case .settings: return .settings
         }
     }
 
@@ -281,6 +305,8 @@ enum ControlOptionItem: String, CaseIterable, Identifiable {
         case .quickSave: return L10n.tr("Quick save")
         case .quickLoad: return L10n.tr("Quick load")
         case .swapScreens: return L10n.tr("Swap screens")
+        case .menu: return L10n.tr("Menu")
+        case .settings: return L10n.tr("Settings")
         }
     }
 }
@@ -408,29 +434,63 @@ struct ControlLayoutProfile: Codable, Equatable {
         return result
     }
 
-    // MARK: - Shipped defaults (0.2.1 Delta reference skins)
+    // MARK: - Shipped defaults (0.2.1-beta2 Delta reference skins)
 
     /// The shipped default layout follows the two Delta `.deltaskin` skins the
-    /// user pointed at for 0.2.1 (read-only geometry references, no assets or
-    /// artwork copied into the repo):
+    /// user pointed at for 0.2.1 (read-only geometry references; no skin assets,
+    /// artwork or skin text are copied into the repo):
     /// - portrait: **ModernFS** (`com.stars33k.3ds.modernfs`);
     /// - landscape: **ModernHybrid** (`com.stars33k.3ds.modernhybrid`).
     ///
-    /// Both are DeltaSkin-compatible zips: `info.json` plus PDF/PNG artwork.
-    /// The geometry is `representations.iphone.edgeToEdge.<orientation>`:
-    /// `mappingSize` is the point space (portrait 414 x 896, landscape
-    /// 896 x 414) and every `items[].frame` is an absolute point rect in it.
-    /// The conversion (unchanged since round 5) is:
+    /// Both are DeltaSkin-compatible zips: `info.json` plus PDF/PNG artwork. The
+    /// geometry is `representations.iphone.edgeToEdge.<orientation>`:
+    /// `mappingSize` is the point space (portrait **414 x 896**, landscape
+    /// **896 x 414**) and every `items[].frame` is an absolute point rect in it.
+    ///
+    /// Normalisation (unchanged since round 5; the tables below are the result):
     /// - centre: x = (frame.x + frame.width / 2) / mappingWidth,
     ///           y = (frame.y + frame.height / 2) / mappingHeight;
-    /// - size:   frame.width / min(mappingWidth, mappingHeight), except the wide
-    ///           L/R capsules, whose frame height is used; the A/B/X/Y cluster
-    ///           rides on one size (the skin's X item is 1 pt smaller);
+    /// - size:   frame.width / min(mappingWidth, mappingHeight) (= / 414), except
+    ///           the wide L/R capsules, whose frame height is used; the A/B/X/Y
+    ///           cluster rides on one size (the skins' X item is 1 pt smaller);
     /// - opacity 0.85 (the shipped value; the Settings opacity slider scales it).
     ///
-    /// Landscape normalised table (mapping 896 x 414; both skins have identical
-    /// landscape items, ModernHybrid's are used):
-    ///   circlePad (0.185826, 0.807971) 0.277778 (115 pt)
+    /// Skin item -> ControlElement (both orientations; the numbers in brackets are
+    /// the skin frame sizes in points):
+    ///   circlePad (100 x 100 portrait, 115 x 113 landscape) -> .circlePad
+    ///   dpad (one item, 102 x 102 portrait / 105 x 97 landscape) -> the four
+    ///       .dpadUp/.dpadDown/.dpadLeft/.dpadRight arms. The arm centres are the
+    ///       item centre +/- half an arm and `dpadGroup(in:)` recovers the item
+    ///       centre and the arm thickness; the cross span is 2 x arm = the item
+    ///       width (round 7).
+    ///   A / B / X / Y (54-55 portrait, 63 landscape) -> .buttonA/B/X/Y
+    ///   L / R (wide pills, 130 x 32 / 128 x 32 portrait, 57 x 31 landscape) ->
+    ///       .buttonL/.buttonR (sized by the frame height, drawn 1.65 x wide)
+    ///   select / start (34 x 34 portrait, 34 x 34 landscape) ->
+    ///       .buttonSelect/.buttonStart
+    ///   homeMenu (34 x 34) -> **.settings**. The console HOME slot now opens the
+    ///       app's Settings page instead of a HOME button (user request
+    ///       2026-11-25: the skins' home button becomes our settings button).
+    ///   menu (32 x 33 portrait, 46 x 28 landscape) -> **.menu**, which opens the
+    ///       app's in-game menu (user request: the skins' MENU key joins the
+    ///       default layout).
+    ///   quickLoad / quickSave (chips, 31 x 18 portrait, 46 x 28 landscape) ->
+    ///       .quickLoad/.quickSave, in the skin's notch-side chips: portrait top
+    ///       corners (LOAD left, SAVE right), landscape left strip (SAVE above
+    ///       LOAD).
+    ///
+    /// The skins' volume buttons are deliberately **not** part of the layout: the
+    /// user does not want on-screen volume keys.
+    ///
+    /// App chips are wide pills in the skin while the overlay draws every app
+    /// button as a rounded square (`isWide == false`), so an app chip's placement
+    /// size is its skin height raised to a tappable square: 0.07 (~29 pt) for
+    /// quickSave/quickLoad/menu in both directions; the square 34 x 34 homeMenu
+    /// keeps its own 0.08213.
+    ///
+    /// Landscape normalised table (mapping 896 x 414; ModernHybrid; both skins
+    /// have identical landscape items):
+    ///   circlePad (0.185826, 0.807971) 0.277778 (115 x 113 pt)
     ///   dpad      group centre (0.349888, 0.822464), item 105 x 97 pt ->
     ///             arm size 0.126812 (52.5 pt), arms dx 0.029297 / dy 0.063406:
     ///             up (0.349888, 0.759058) down (0.349888, 0.885870)
@@ -439,9 +499,12 @@ struct ControlLayoutProfile: Codable, Equatable {
     ///   X (0.835379, 0.631643) Y (0.773438, 0.766908) size 0.152174 (63 pt)
     ///   L (0.755022, 0.595411) R (0.915737, 0.592995) size 0.074879 (31 pt)
     ///   Start (0.546875, 0.900966) Select (0.452009, 0.900966) 0.082126 (34 pt)
+    ///   settings HOME slot (0.498884, 0.900966) 0.082126 (34 x 34 pt)
+    ///   quickSave (0.029018, 0.164251) quickLoad (0.029018, 0.241546) 0.07
+    ///   menu      (0.029018, 0.765700) 0.07
     ///
     /// Portrait normalised table (mapping 414 x 896; ModernFS):
-    ///   circlePad (0.164251, 0.825893) 0.241546 (100 pt)
+    ///   circlePad (0.164251, 0.825893) 0.241546 (100 x 100 pt)
     ///   dpad      group centre (0.446860, 0.857143), item 102 x 102 pt ->
     ///             arm size 0.123188 (51 pt), arms dx 0.061594 / dy 0.028460:
     ///             up (0.446860, 0.828683) down (0.446860, 0.885603)
@@ -450,27 +513,42 @@ struct ControlLayoutProfile: Codable, Equatable {
     ///   X (0.791063, 0.768415) Y (0.666667, 0.825893) size 0.130435 (54 pt)
     ///   L (0.169082, 0.716518) R (0.830918, 0.716518) size 0.077295 (32 pt)
     ///   Start (0.608696, 0.716518) Select (0.393720, 0.716518) 0.082126 (34 pt)
+    ///   settings HOME slot (0.502420, 0.716518) 0.082126 (34 x 34 pt)
+    ///   quickLoad (0.257246, 0.061384) quickSave (0.742754, 0.061384) 0.07
+    ///   menu      (0.125603, 0.935828) 0.077295 (32 pt)
     ///
     /// Not in the skins (design fill-ins, same approach as round 5):
     /// - ZL/ZR: neither skin has an item. Portrait keeps them outboard in the
     ///   shoulder row at x 0.058 / 0.942, size 0.055 (~23 pt), clear of L/R;
     ///   landscape keeps the shipped "one step above L/R" positions
-    ///   (0.755022 / 0.915737 at y 0.487920).
+    ///   (0.755022 / 0.915737 at y 0.487920). Both ship hidden.
     /// - C-stick: neither skin has an item. Landscape stays in the free gap
     ///   under the small bottom screen (0.84821, 0.48309); portrait uses the
-    ///   free bottom-right corner above the app-button row (0.92, 0.885; round 6
-    ///   had y 0.935, which would now sit on the Swap-screens button).
-    /// - App-only buttons (fastForward / quickSave / quickLoad / swapScreens):
-    ///   the skins put their own quickSave / quickLoad / menu chips in the
-    ///   margins (landscape left strip y 0.164 / 0.242 and menu y 0.766; portrait
-    ///   top margin y 0.061 and menu at the bottom-left (0.126, 0.936)). On our
-    ///   full-bleed overlay the bands that never cover the picture are the black
-    ///   band below the portrait picture and the letterbox strip below the
-    ///   landscape arrangement, so the app buttons use those: portrait bottom row
-    ///   at y 0.94 (skin menu x 0.126, skin quickSave/quickLoad x mirrored at
-    ///   0.257 / 0.743, size 0.07); landscape bottom-right row at y 0.945
-    ///   (x 0.60 / 0.66 / 0.72 / 0.78, size 0.06), right of Start/Select and
-    ///   left of B.
+    ///   free bottom-right corner above the app-button row (0.92, 0.885). Ships
+    ///   hidden.
+    /// - App-only fastForward / swapScreens: the skins have no such items, so
+    ///   they use the bands that never cover the picture and do not collide with
+    ///   the skin items (the beta1 app row would now sit on the skin menu chip
+    ///   and the Settings button):
+    ///   portrait: a pair in the black band below the picture, opposite the skin
+    ///   menu button: fastForward (0.79, 0.94), swapScreens (0.875, 0.94), size
+    ///   0.07; the band's left slot is the skin's menu button itself.
+    ///   landscape: the letterbox strip below the picture, right of
+    ///   Start/Select/Settings and left of B: fastForward (0.70, 0.945),
+    ///   swapScreens (0.77, 0.945), size 0.07.
+    ///
+    /// The floating in-game HUD is drawn by GameView above this layout: portrait
+    /// keeps the FPS pill + pause button in the top-right corner (clear of the
+    /// SAVE chip on a 430 pt-wide screen; on narrower phones the non-interactive
+    /// FPS pill can touch it) and landscape keeps the pause button bottom-centre,
+    /// i.e. on the skin HOME slot that now holds Settings. GameView owns that HUD
+    /// (out of this file's scope); hide or move it so the two gear buttons do not
+    /// stack.
+    ///
+    /// Migration: the 0.2.1-beta1 default (same skins, but no menu/settings and
+    /// quickSave/quickLoad in the app-button band) is kept verbatim in
+    /// `betaOneShippedPlacements`; an untouched beta1 profile migrates once to
+    /// this layout (see `migratingPreviousShippedDefault`).
     ///
     /// The D-pad stays four directional placements whose centres are the cross
     /// arms (round 7 draws and drags them as one cross-shaped control): the arm
@@ -495,20 +573,25 @@ struct ControlLayoutProfile: Codable, Equatable {
                 (.buttonY, ControlPlacement(x: 0.77344, y: 0.76812, size: 0.15217, opacity: 0.85)),
                 (.buttonL, ControlPlacement(x: 0.75502, y: 0.59541, size: 0.07488, opacity: 0.85)),
                 (.buttonR, ControlPlacement(x: 0.91574, y: 0.59299, size: 0.07488, opacity: 0.85)),
-                // Not in the skin: one step above L/R.
+                // Not in the skin: one step above L/R (hidden by default).
                 (.buttonZL, ControlPlacement(x: 0.75502, y: 0.48792, size: 0.065, opacity: 0.85)),
                 (.buttonZR, ControlPlacement(x: 0.91574, y: 0.48792, size: 0.065, opacity: 0.85)),
-                (.buttonStart, ControlPlacement(x: 0.54688, y: 0.90097, size: 0.08213, opacity: 0.85)),
                 (.buttonSelect, ControlPlacement(x: 0.45201, y: 0.90097, size: 0.08213, opacity: 0.85)),
-                // Not in the skin: above/right of the A-B-X-Y cluster.
+                (.buttonStart, ControlPlacement(x: 0.54688, y: 0.90097, size: 0.08213, opacity: 0.85)),
+                // The skin's HOME slot: our Settings button.
+                (.settings, ControlPlacement(x: 0.49888, y: 0.90097, size: 0.08213, opacity: 0.85)),
+                // The skin's SAVE / LOAD chips in the notch-side strip, SAVE
+                // above LOAD.
+                (.quickSave, ControlPlacement(x: 0.02902, y: 0.16425, size: 0.07, opacity: 0.85)),
+                (.quickLoad, ControlPlacement(x: 0.02902, y: 0.24155, size: 0.07, opacity: 0.85)),
+                // The skin's MENU chip: opens the in-game menu.
+                (.menu, ControlPlacement(x: 0.02902, y: 0.76570, size: 0.07, opacity: 0.85)),
+                // Not in the skin: above/right of the A-B-X-Y cluster (hidden).
                 (.cStick, ControlPlacement(x: 0.84821, y: 0.48309, size: 0.10, opacity: 0.85)),
-                // App-only buttons: the free letterbox strip below the large
-                // screen, right of Start/Select and left of B (0.2.1 positions;
-                // see the doc comment above).
-                (.fastForward, ControlPlacement(x: 0.60, y: 0.945, size: 0.06, opacity: 0.85)),
-                (.quickSave, ControlPlacement(x: 0.66, y: 0.945, size: 0.06, opacity: 0.85)),
-                (.quickLoad, ControlPlacement(x: 0.72, y: 0.945, size: 0.06, opacity: 0.85)),
-                (.swapScreens, ControlPlacement(x: 0.78, y: 0.945, size: 0.06, opacity: 0.85))
+                // App-only buttons: the letterbox strip below the picture, right
+                // of Start/Select/Settings and left of B.
+                (.fastForward, ControlPlacement(x: 0.70, y: 0.945, size: 0.07, opacity: 0.85)),
+                (.swapScreens, ControlPlacement(x: 0.77, y: 0.945, size: 0.07, opacity: 0.85))
             ]
         case .portrait:
             // ModernFS portrait, mapping 414 x 896; see the table above.
@@ -520,25 +603,31 @@ struct ControlLayoutProfile: Codable, Equatable {
                 (.dpadRight, ControlPlacement(x: 0.50845, y: 0.85714, size: 0.12319, opacity: 0.85)),
                 (.buttonA, ControlPlacement(x: 0.91546, y: 0.82589, size: 0.13043, opacity: 0.85)),
                 (.buttonB, ControlPlacement(x: 0.78986, y: 0.88281, size: 0.13043, opacity: 0.85)),
-                (.buttonX, ControlPlacement(x: 0.79106, y: 0.76841, size: 0.13043, opacity: 0.85)),
+                (.buttonX, ControlPlacement(x: 0.79106, y: 0.76842, size: 0.13043, opacity: 0.85)),
                 (.buttonY, ControlPlacement(x: 0.66667, y: 0.82589, size: 0.13043, opacity: 0.85)),
                 (.buttonL, ControlPlacement(x: 0.16908, y: 0.71652, size: 0.07729, opacity: 0.85)),
                 (.buttonR, ControlPlacement(x: 0.83092, y: 0.71652, size: 0.07729, opacity: 0.85)),
-                // Not in the skin: outboard in the shoulder row, clear of L/R.
+                // Not in the skin: outboard in the shoulder row, clear of L/R
+                // (hidden by default).
                 (.buttonZL, ControlPlacement(x: 0.058, y: 0.71652, size: 0.055, opacity: 0.85)),
                 (.buttonZR, ControlPlacement(x: 0.942, y: 0.71652, size: 0.055, opacity: 0.85)),
-                (.buttonStart, ControlPlacement(x: 0.60870, y: 0.71652, size: 0.08213, opacity: 0.85)),
                 (.buttonSelect, ControlPlacement(x: 0.39372, y: 0.71652, size: 0.08213, opacity: 0.85)),
-                // Not in the skin: free bottom-right corner, above the app row.
+                (.buttonStart, ControlPlacement(x: 0.60870, y: 0.71652, size: 0.08213, opacity: 0.85)),
+                // The skin's HOME slot: our Settings button.
+                (.settings, ControlPlacement(x: 0.50242, y: 0.71652, size: 0.08213, opacity: 0.85)),
+                // The skin's SAVE / LOAD chips in the top corners next to the
+                // notch: LOAD left, SAVE right.
+                (.quickLoad, ControlPlacement(x: 0.25725, y: 0.06138, size: 0.07, opacity: 0.85)),
+                (.quickSave, ControlPlacement(x: 0.74275, y: 0.06138, size: 0.07, opacity: 0.85)),
+                // The skin's MENU chip at the bottom-left: opens the in-game menu.
+                (.menu, ControlPlacement(x: 0.12560, y: 0.93583, size: 0.07729, opacity: 0.85)),
+                // Not in the skin: free bottom-right corner above the app pair
+                // (hidden by default).
                 (.cStick, ControlPlacement(x: 0.92, y: 0.885, size: 0.08, opacity: 0.85)),
-                // App-only buttons: the black band below the picture. The row
-                // height follows the skin's menu button; quickSave/quickLoad x
-                // are the skin's top chips (0.257 / 0.743) mirrored into the band,
-                // fastForward/swapScreens are the mirrored corner pair.
-                (.fastForward, ControlPlacement(x: 0.126, y: 0.94, size: 0.07, opacity: 0.85)),
-                (.quickSave, ControlPlacement(x: 0.257, y: 0.94, size: 0.07, opacity: 0.85)),
-                (.quickLoad, ControlPlacement(x: 0.743, y: 0.94, size: 0.07, opacity: 0.85)),
-                (.swapScreens, ControlPlacement(x: 0.874, y: 0.94, size: 0.07, opacity: 0.85))
+                // App-only buttons: the black band below the picture, opposite the
+                // skin menu button (the skin's SAVE/LOAD chips moved to the top).
+                (.fastForward, ControlPlacement(x: 0.79, y: 0.94, size: 0.07, opacity: 0.85)),
+                (.swapScreens, ControlPlacement(x: 0.875, y: 0.94, size: 0.07, opacity: 0.85))
             ]
         }
     }
@@ -714,11 +803,77 @@ struct ControlLayoutProfile: Codable, Equatable {
         return result
     }
 
-    /// All legacy shipped defaults, newest first.
+    /// The 0.2.1-beta1 shipped defaults: the same two skins, before the
+    /// 0.2.1-beta2 reshuffle (no menu/settings elements; quickSave/quickLoad sit
+    /// in the app-button band instead of the skins' notch-side chips). Kept
+    /// verbatim only to recognise an untouched stored profile during the
+    /// 0.2.1-beta2 migration.
+    private static func betaOneShippedPlacements(
+        for orientation: ControlLayoutOrientation
+    ) -> [String: ControlPlacement] {
+        let entries: [(ControlElement, ControlPlacement)]
+        switch orientation {
+        case .landscape:
+            entries = [
+                (.circlePad, ControlPlacement(x: 0.18583, y: 0.80797, size: 0.27778, opacity: 0.85)),
+                (.dpadUp, ControlPlacement(x: 0.34989, y: 0.75905, size: 0.12681, opacity: 0.85)),
+                (.dpadDown, ControlPlacement(x: 0.34989, y: 0.88587, size: 0.12681, opacity: 0.85)),
+                (.dpadLeft, ControlPlacement(x: 0.32059, y: 0.82246, size: 0.12681, opacity: 0.85)),
+                (.dpadRight, ControlPlacement(x: 0.37919, y: 0.82246, size: 0.12681, opacity: 0.85)),
+                (.buttonA, ControlPlacement(x: 0.89676, y: 0.76691, size: 0.15217, opacity: 0.85)),
+                (.buttonB, ControlPlacement(x: 0.83538, y: 0.89976, size: 0.15217, opacity: 0.85)),
+                (.buttonX, ControlPlacement(x: 0.83538, y: 0.63164, size: 0.15217, opacity: 0.85)),
+                (.buttonY, ControlPlacement(x: 0.77344, y: 0.76812, size: 0.15217, opacity: 0.85)),
+                (.buttonL, ControlPlacement(x: 0.75502, y: 0.59541, size: 0.07488, opacity: 0.85)),
+                (.buttonR, ControlPlacement(x: 0.91574, y: 0.59299, size: 0.07488, opacity: 0.85)),
+                (.buttonZL, ControlPlacement(x: 0.75502, y: 0.48792, size: 0.065, opacity: 0.85)),
+                (.buttonZR, ControlPlacement(x: 0.91574, y: 0.48792, size: 0.065, opacity: 0.85)),
+                (.buttonStart, ControlPlacement(x: 0.54688, y: 0.90097, size: 0.08213, opacity: 0.85)),
+                (.buttonSelect, ControlPlacement(x: 0.45201, y: 0.90097, size: 0.08213, opacity: 0.85)),
+                (.cStick, ControlPlacement(x: 0.84821, y: 0.48309, size: 0.10, opacity: 0.85)),
+                (.fastForward, ControlPlacement(x: 0.60, y: 0.945, size: 0.06, opacity: 0.85)),
+                (.quickSave, ControlPlacement(x: 0.66, y: 0.945, size: 0.06, opacity: 0.85)),
+                (.quickLoad, ControlPlacement(x: 0.72, y: 0.945, size: 0.06, opacity: 0.85)),
+                (.swapScreens, ControlPlacement(x: 0.78, y: 0.945, size: 0.06, opacity: 0.85))
+            ]
+        case .portrait:
+            entries = [
+                (.circlePad, ControlPlacement(x: 0.16425, y: 0.82589, size: 0.24155, opacity: 0.85)),
+                (.dpadUp, ControlPlacement(x: 0.44686, y: 0.82868, size: 0.12319, opacity: 0.85)),
+                (.dpadDown, ControlPlacement(x: 0.44686, y: 0.88560, size: 0.12319, opacity: 0.85)),
+                (.dpadLeft, ControlPlacement(x: 0.38527, y: 0.85714, size: 0.12319, opacity: 0.85)),
+                (.dpadRight, ControlPlacement(x: 0.50845, y: 0.85714, size: 0.12319, opacity: 0.85)),
+                (.buttonA, ControlPlacement(x: 0.91546, y: 0.82589, size: 0.13043, opacity: 0.85)),
+                (.buttonB, ControlPlacement(x: 0.78986, y: 0.88281, size: 0.13043, opacity: 0.85)),
+                (.buttonX, ControlPlacement(x: 0.79106, y: 0.76841, size: 0.13043, opacity: 0.85)),
+                (.buttonY, ControlPlacement(x: 0.66667, y: 0.82589, size: 0.13043, opacity: 0.85)),
+                (.buttonL, ControlPlacement(x: 0.16908, y: 0.71652, size: 0.07729, opacity: 0.85)),
+                (.buttonR, ControlPlacement(x: 0.83092, y: 0.71652, size: 0.07729, opacity: 0.85)),
+                (.buttonZL, ControlPlacement(x: 0.058, y: 0.71652, size: 0.055, opacity: 0.85)),
+                (.buttonZR, ControlPlacement(x: 0.942, y: 0.71652, size: 0.055, opacity: 0.85)),
+                (.buttonStart, ControlPlacement(x: 0.60870, y: 0.71652, size: 0.08213, opacity: 0.85)),
+                (.buttonSelect, ControlPlacement(x: 0.39372, y: 0.71652, size: 0.08213, opacity: 0.85)),
+                (.cStick, ControlPlacement(x: 0.92, y: 0.885, size: 0.08, opacity: 0.85)),
+                (.fastForward, ControlPlacement(x: 0.126, y: 0.94, size: 0.07, opacity: 0.85)),
+                (.quickSave, ControlPlacement(x: 0.257, y: 0.94, size: 0.07, opacity: 0.85)),
+                (.quickLoad, ControlPlacement(x: 0.743, y: 0.94, size: 0.07, opacity: 0.85)),
+                (.swapScreens, ControlPlacement(x: 0.874, y: 0.94, size: 0.07, opacity: 0.85))
+            ]
+        }
+        var result: [String: ControlPlacement] = [:]
+        for (element, placement) in entries {
+            result[element.rawValue] = placement
+        }
+        return result
+    }
+
+    /// All legacy shipped defaults, newest first: 0.2.0 (round 6/7), the
+    /// 0.2.1-beta1 skin layout, beta3 (round 5) and round 4.
     private static func legacyShippedPlacements(
         for orientation: ControlLayoutOrientation
     ) -> [[String: ControlPlacement]] {
         [zeroTwoShippedPlacements(for: orientation),
+         betaOneShippedPlacements(for: orientation),
          beta3ShippedPlacements(for: orientation),
          roundFourShippedPlacements(for: orientation)]
     }
@@ -726,19 +881,33 @@ struct ControlLayoutProfile: Codable, Equatable {
     /// True when a stored profile is still exactly one of the legacy shipped
     /// defaults (within a small tolerance). A profile the user moved does not
     /// match and is kept.
+    ///
+    /// Two details matter since the element set grows:
+    /// - only the elements a legacy default knew are compared: an old profile
+    ///   never stored the controls added later, so the dictionaries have
+    ///   different sizes;
+    /// - every control a legacy default did not know (healed in by
+    ///   `withDefaultsFilled` from the current defaults) must still sit on the
+    ///   current shipped placement, so a profile where the user only moved a
+    ///   newly added control is not migrated away.
     static func isPreviousShippedDefault(
         _ profile: ControlLayoutProfile,
         for orientation: ControlLayoutOrientation
     ) -> Bool {
+        let current = defaultPlacements(for: orientation)
         for expected in legacyShippedPlacements(for: orientation) {
-            guard profile.placements.count == expected.count else { continue }
             var matches = true
             for (key, value) in expected {
-                guard let stored = profile.placements[key] else { matches = false; break }
-                if abs(stored.x - value.x) > 0.005
-                    || abs(stored.y - value.y) > 0.005
-                    || abs(stored.size - value.size) > 0.005
-                    || abs(stored.opacity - value.opacity) > 0.01 {
+                guard let stored = profile.placements[key],
+                      Self.isClose(stored, to: value) else {
+                    matches = false
+                    break
+                }
+            }
+            guard matches else { continue }
+            for (key, stored) in profile.placements where expected[key] == nil {
+                guard let shipped = current[key],
+                      Self.isClose(stored, to: shipped) else {
                     matches = false
                     break
                 }
@@ -748,11 +917,25 @@ struct ControlLayoutProfile: Codable, Equatable {
         return false
     }
 
+    /// Tolerance used to recognise a stored shipped default: the profiles are
+    /// written from the same literals, so only rounding drift can occur.
+    private static func isClose(_ stored: ControlPlacement,
+                                to expected: ControlPlacement) -> Bool {
+        abs(stored.x - expected.x) <= 0.005
+            && abs(stored.y - expected.y) <= 0.005
+            && abs(stored.size - expected.size) <= 0.005
+            && abs(stored.opacity - expected.opacity) <= 0.01
+    }
+
     /// The shipped-default migration: an untouched stored profile from an older
-    /// shipped default (0.2.0 round 6/7, beta3 round-5 or earlier round 4)
-    /// becomes the current skin default; a customised profile is returned
-    /// unchanged. It runs in memory on every load and is idempotent: once the
-    /// stored profile is the current default it no longer matches a legacy set.
+    /// shipped default (0.2.0 round 6/7, the 0.2.1-beta1 skin layout, beta3
+    /// round-5 or earlier round 4) becomes the current skin default; a
+    /// customised profile is returned unchanged. A profile from before
+    /// 0.2.1-beta2 has no menu/settings placements; `withDefaultsFilled` already
+    /// healed those in from the current defaults, so an upgraded user sees the
+    /// new Settings/Menu buttons either way. It runs in memory on every load and
+    /// is idempotent: once the stored profile is the current default it no
+    /// longer matches a legacy set.
     static func migratingPreviousShippedDefault(
         _ profile: ControlLayoutProfile,
         for orientation: ControlLayoutOrientation

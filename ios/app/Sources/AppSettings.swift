@@ -873,9 +873,13 @@ final class AppSettings: ObservableObject {
         let decodedControlLandscape = Self.decodeControlLayout(
             defaults, Keys.controlLayoutLandscape, orientation: .landscape
         )
-        // Round 6: a stored profile that is still an untouched beta3 (round-5)
-        // or older shipped default moves to the new cross-shaped default; a
-        // profile the user moved is kept unchanged.
+        // Shipped-default migration: a stored profile that is still an
+        // untouched shipped default (0.2.0, the 0.2.1-beta1 skin layout, beta3
+        // round 5 or round 4) moves to the current 0.2.1-beta2 skin layout; a
+        // profile the user moved is kept unchanged. A profile written before
+        // 0.2.1-beta2 has no menu/settings elements; the decode above already
+        // healed those in from the current defaults, so an upgraded user sees
+        // the new Settings/Menu buttons either way.
         let storedControlPortrait = ControlLayoutProfile.migratingPreviousShippedDefault(
             decodedControlPortrait, for: .portrait
         )
@@ -1191,6 +1195,8 @@ final class AppSettings: ObservableObject {
     /// places them as design fill-ins); every control the skins do draw is
     /// visible, including the portrait D-pad, which the ModernFS skin places in
     /// the band below the picture (0.1.6-0.2.0 additionally hid it in portrait).
+    /// The app-only Settings and Menu buttons added in 0.2.1-beta2 ship visible
+    /// in both directions.
     static func defaultHiddenItems(
         for orientation: ControlLayoutOrientation
     ) -> Set<ControlOptionItem> {
@@ -1254,7 +1260,7 @@ final class AppSettings: ObservableObject {
     }
 
     /// Restores the shipped placements for both orientations, every row to
-    /// 100% and all controls visible (the pause menu's Reset action).
+    /// 100% and the shipped hidden rows (the pause menu's Reset action).
     func resetVirtualControls() {
         controlLayoutMode = .standard
         controlLayoutPortrait = .standard(for: .portrait)

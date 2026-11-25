@@ -211,6 +211,9 @@ struct ControlLayoutEditorView: View {
     @ViewBuilder
     private func controls(_ scaler: GameViewPreviewScaler) -> some View {
         let container = geometry.controlContainerRect
+        // Every element is enumerated from allCases, so a control the layout
+        // adds (the 0.2.1-beta2 Settings/Menu buttons) is drawn, draggable and
+        // resizable here without per-control code.
         ForEach(ControlElement.allCases) { element in
             if !element.isDpadDirection {
                 editableOverlayControl(element, container: container, scaler: scaler)
