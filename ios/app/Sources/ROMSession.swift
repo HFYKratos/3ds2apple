@@ -1110,6 +1110,14 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     /// in `effectivePlaybackSpeed`).
     var requestedPlaybackSpeedValue: Int { requestedPlaybackSpeed }
 
+    /// Speed shown by the in-game performance overlay: the effective playback
+    /// multiplier, or "Max" while the unlimited run-speed mode is active.
+    var performanceSpeedText: String {
+        if isUnlimitedSpeedActive { return "Max" }
+        let percent = max(1, effectivePlaybackSpeed) * 100
+        return "\(percent)%"
+    }
+
     /// Whether the automatic Turbo fallback may lower a fast speed (General
     /// page's "Turbo limit"). Off keeps the requested speed even if the device
     /// cannot present it at 20 fps.
