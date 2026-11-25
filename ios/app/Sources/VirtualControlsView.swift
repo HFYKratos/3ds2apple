@@ -18,6 +18,10 @@
 //  view, which is what multi-touch on the 3DS needs (D-pad + A + touchscreen, or
 //  Circle Pad + C-stick + ZL in a New 3DS title).
 //
+//  0.2.1-beta6 adds `showsOnlySettings`: while the player has "Show virtual
+//  controls" off, the same overlay draws only the Settings button (at its normal
+//  placement, size and opacity) so the in-game menu stays reachable.
+//
 
 import SwiftUI
 import UIKit
@@ -62,22 +66,43 @@ struct VirtualControlsView: View {
     var onSettings: () -> Void = {}
     /// Whether the Fast-forward toggle is currently active (button highlight).
     var fastForwardActive: Bool = false
+    /// 0.2.1-beta6: render only the Settings button. Set while "Show virtual
+    /// controls" is off so the player can still reach the in-game menu (and
+    /// Settings) from a running game: the Settings button keeps its profile
+    /// placement, size, opacity, haptics and accessibility, while every other
+    /// control - the D-pad cross and the analog sticks included - is skipped.
+    /// `isVisible` still comes from the caller (the Settings row can never be
+    /// hidden, so `isVisible(.settings)` is true). Default false: the full
+    /// overlay, unchanged.
+    var showsOnlySettings: Bool = false
 
     var body: some View {
         GeometryReader { geometry in
             let container = geometry.size
             ZStack(alignment: .topLeading) {
                 Color.clear
-                // The four D-pad directions are one cross-shaped control on
-                // screen (round 7): they stay four elements in the profile for
-                // input/visibility/size, but only the cross is drawn.
-                ForEach(ControlElement.allCases) { element in
-                    if !element.isDpadDirection && isVisible(element) {
-                        control(element, in: container)
+                if showsOnlySettings {
+                    // 0.2.1-beta6: with "Show virtual controls" off the overlay
+                    // keeps only the Settings button, at its normal placement,
+                    // size, opacity and accessibility. It is the only way back to
+                    // the in-game menu and Settings, so it must stay reachable;
+                    // everything else (including the D-pad cross and the analog
+                    // sticks) is skipped.
+                    if isVisible(.settings) {
+                        control(.settings, in: container)
                     }
-                }
-                if profile.isDpadVisible(isVisible) {
-                    dpadCross(in: container)
+                } else {
+                    // The four D-pad directions are one cross-shaped control on
+                    // screen (round 7): they stay four elements in the profile for
+                    // input/visibility/size, but only the cross is drawn.
+                    ForEach(ControlElement.allCases) { element in
+                        if !element.isDpadDirection && isVisible(element) {
+                            control(element, in: container)
+                        }
+                    }
+                    if profile.isDpadVisible(isVisible) {
+                        dpadCross(in: container)
+                    }
                 }
             }
             .frame(width: container.width, height: container.height)
