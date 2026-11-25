@@ -859,3 +859,9 @@
 "Too many buttons: use 2–4." = "按键过多：请使用 2–4 个。";
 "Clears every controller combination. No hotkey is assigned by default." = "清除所有手柄组合键。默认不分配任何热键。";
 "A combination triggers once per press and its buttons are not sent to the game while held." = "组合键每次按住只触发一次，按住期间这些按键不会发送给游戏。";
+
+/* --- 0.2.1 设置：iOS 原生分组标题 ---------------------------------------- */
+"Speed" = "速度";
+"Updates" = "更新";
+"Experimental" = "实验性";
+"Physical controller combinations" = "物理手柄组合键";

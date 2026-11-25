@@ -857,3 +857,9 @@
 "Too many buttons: use 2–4." = "Too many buttons: use 2–4.";
 "Clears every controller combination. No hotkey is assigned by default." = "Clears every controller combination. No hotkey is assigned by default.";
 "A combination triggers once per press and its buttons are not sent to the game while held." = "A combination triggers once per press and its buttons are not sent to the game while held.";
+
+/* --- 0.2.1 Settings iOS-native grouped sections -------------------------- */
+"Speed" = "Speed";
+"Updates" = "Updates";
+"Experimental" = "Experimental";
+"Physical controller combinations" = "Physical controller combinations";
