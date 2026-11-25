@@ -47,13 +47,13 @@ enum ShellRuntime {
     static let expectedSHA256 = "6cd5888490d08b36356d04c50c05e2eda5b9bcb3d0338ece693a28987de96aff"
 
     /// Pinned ROM-free shell template that carries the verified framework
-    /// (shell 0.2.1-beta2 build 1, Metal HUD + Documents file sharing enabled).
+    /// (shell 0.2.1-beta3 build 1, Metal HUD + Documents file sharing enabled).
     static let pinnedTemplateRelativePath = "out/shell/3ds2apple-shell.ipa"
-    /// Rebuilt 0.2.1-beta2 build 1 ROM-free shell IPA from current main (0.2.1-beta2
+    /// Rebuilt 0.2.1-beta3 build 1 ROM-free shell IPA from current main (0.2.1-beta3
     /// local pre-release; the shell's CFBundleShortVersionString is the numeric 0.2.1
     /// and ThreeDS2ApplePackageVersion carries the beta label).
-    static let pinnedTemplateBytes: Int64 = 6_631_583
-    static let pinnedTemplateSHA256 = "38605fd95d74eed39b8332faab580b476c62291b69773395661f57b28ac8fb2d"
+    static let pinnedTemplateBytes: Int64 = 6_631_529
+    static let pinnedTemplateSHA256 = "5606362f2d4bc5c608ba4a28e13486201bdb0e20f4dca706b8538cd01dbf5c5b"
     /// The rebuilt shell identity the launcher is built against. The pinned
     /// template must report exactly these values; another shell build is refused.
     static let expectedShellVersion = "0.2.1"
@@ -203,7 +203,7 @@ enum ShellRuntime {
         return problems
     }
 
-    /// The pinned shell's advertised product version/build (0.2.1-beta2 build 1).
+    /// The pinned shell's advertised product version/build (0.2.1-beta3 build 1).
     /// Empty means the shell is the identity this launcher pins; anything else
     /// means a mismatched template/build.
     static func shellIdentityProblems(inShellAppAt appPath: String) -> [String] {
