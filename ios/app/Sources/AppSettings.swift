@@ -938,12 +938,13 @@ final class AppSettings: ObservableObject {
         )
         // Shipped-default migration: a stored profile that is still an
         // untouched shipped default (0.2.0, the 0.2.1-beta1 skin layout, the
-        // 0.2.1-beta2 layout with its MENU key, beta3 round 5 or round 4) moves
-        // to the current 0.2.1-beta3 layout; a profile the user moved is kept
-        // unchanged. A profile written before 0.2.1-beta3 may still carry the
-        // MENU placement or lack the Settings placement; the decode above heals
-        // the current elements and the migration ignores the removed MENU key,
-        // so an untouched upgraded user lands on the current default.
+        // 0.2.1-beta2 layout with its MENU key, the 0.2.1-beta3 layout, or the
+        // older round-5 beta3 / round 4 arrangements) moves to the current
+        // 0.2.1-beta4 layout; a profile the user moved is kept unchanged. A
+        // profile written before 0.2.1-beta3 may still carry the MENU placement
+        // or lack the Settings placement; the decode above heals the current
+        // elements and the migration ignores the removed MENU key, so an
+        // untouched upgraded user lands on the current default.
         let storedControlPortrait = ControlLayoutProfile.migratingPreviousShippedDefault(
             decodedControlPortrait, for: .portrait
         )
