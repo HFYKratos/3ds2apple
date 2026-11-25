@@ -1066,6 +1066,32 @@ final class AppSettings: ObservableObject {
                        portrait.map(\.rawValue).sorted().joined(separator: ","),
                        landscape.map(\.rawValue).sorted().joined(separator: ","))
         }
+        // 0.2.1-beta5: the Settings button can never be hidden (it is the only
+        // in-game entry into Settings since beta3 removed the MENU row). Builds
+        // up to beta4 offered it in Toggle controls, so drop it from both stored
+        // sets on load and write the cleaned sets back. Read them from
+        // UserDefaults for the same reason as the migrations above: touching the
+        // @Published properties here would access `self` before every stored
+        // property is initialised.
+        let storedPortraitHidden = Set((defaults.stringArray(forKey: Keys.hiddenControlItemsPortraitKey) ?? [])
+            .compactMap(ControlOptionItem.init(rawValue:)))
+        let storedLandscapeHidden = Set((defaults.stringArray(forKey: Keys.hiddenControlItemsLandscapeKey) ?? [])
+            .compactMap(ControlOptionItem.init(rawValue:)))
+        let portraitHidden = Self.sanitizedHiddenItems(storedPortraitHidden)
+        let landscapeHidden = Self.sanitizedHiddenItems(storedLandscapeHidden)
+        hiddenControlItemsPortrait = portraitHidden
+        hiddenControlItemsLandscape = landscapeHidden
+        if portraitHidden != storedPortraitHidden {
+            defaults.set(portraitHidden.map(\.rawValue).sorted(),
+                         forKey: Keys.hiddenControlItemsPortraitKey)
+        }
+        if landscapeHidden != storedLandscapeHidden {
+            defaults.set(landscapeHidden.map(\.rawValue).sorted(),
+                         forKey: Keys.hiddenControlItemsLandscapeKey)
+        }
+        if portraitHidden != storedPortraitHidden || landscapeHidden != storedLandscapeHidden {
+            AppLog.log("[3ds2apple] virtual controls: the Settings button was restored from the hidden rows")
+        }
         if let data = defaults.data(forKey: Keys.controlSizeScales),
            let decoded = try? JSONDecoder().decode([String: Double].self, from: data) {
             controlSizeScales = decoded
@@ -1354,7 +1380,8 @@ final class AppSettings: ObservableObject {
     /// visible, including the portrait D-pad, which the ModernFS skin places in
     /// the band below the picture (0.1.6-0.2.0 additionally hid it in portrait).
     /// The app-only Settings button added in 0.2.1-beta2 ships visible in both
-    /// directions (its MENU sibling was removed in beta3).
+    /// directions and can never be hidden (its MENU sibling was removed in
+    /// beta3); the default set below therefore never contains it.
     static func defaultHiddenItems(
         for orientation: ControlLayoutOrientation
     ) -> Set<ControlOptionItem> {
@@ -1388,25 +1415,42 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// Drops rows that cannot be hidden from a stored or migrated hidden set.
+    /// Only the Settings button is in that group (see
+    /// `ControlOptionItem.canToggleVisibility`): older builds could hide it, so
+    /// every load sanitises both directions and the UI can no longer write it.
+    static func sanitizedHiddenItems(_ items: Set<ControlOptionItem>) -> Set<ControlOptionItem> {
+        Set(items.filter { $0.canToggleVisibility })
+    }
+
     private func hiddenItems(for orientation: ControlLayoutOrientation) -> Set<ControlOptionItem> {
         orientation == .landscape ? hiddenControlItemsLandscape : hiddenControlItemsPortrait
     }
 
-    /// Whether one control element is drawn and hit-testable right now.
+    /// Whether one control element is drawn and hit-testable right now. A row
+    /// that cannot be toggled (the Settings button) is always visible.
     func isControlVisible(_ element: ControlElement,
                           orientation: ControlLayoutOrientation) -> Bool {
-        !hiddenItems(for: orientation).contains(ControlOptionItem.item(containing: element))
+        let item = ControlOptionItem.item(containing: element)
+        guard item.canToggleVisibility else { return true }
+        return !hiddenItems(for: orientation).contains(item)
     }
 
     /// Whether one option row (control or D-pad group) is visible in a direction.
+    /// The Settings row is always visible: it is no longer offered in Toggle
+    /// controls, and the guard also covers a stale stored set.
     func isControlItemVisible(_ item: ControlOptionItem,
                               orientation: ControlLayoutOrientation) -> Bool {
-        !hiddenItems(for: orientation).contains(item)
+        guard item.canToggleVisibility else { return true }
+        return !hiddenItems(for: orientation).contains(item)
     }
 
     func setControlItem(_ item: ControlOptionItem,
                         visible: Bool,
                         orientation: ControlLayoutOrientation) {
+        // The Settings button cannot be hidden: Toggle controls no longer lists
+        // it, and this guard stops any other caller from storing it.
+        guard item.canToggleVisibility else { return }
         if orientation == .landscape {
             if visible { hiddenControlItemsLandscape.remove(item) }
             else { hiddenControlItemsLandscape.insert(item) }

@@ -10,9 +10,11 @@
 //  The rows are ControlOptionItem: one per control, with the D-pad's four
 //  directions as one group. They match the labels in the reference layout
 //  app's controller-options page, without its unimplemented behaviour rows.
-//  Every row is enumerated from ControlOptionItem.allCases, so a control the
-//  layout adds (the 0.2.1 Settings button) turns up in both sheets with no
-//  extra code; 0.2.1-beta3 removed the separate MENU row again.
+//  The rows are enumerated from ControlOptionItem, so a control the layout adds
+//  turns up in the sheets with no extra code; 0.2.1-beta3 removed the separate
+//  MENU row again. "Toggle controls" lists only the rows that may be hidden (the
+//  Settings button must stay reachable, so it is excluded), while "Adjust size"
+//  lists every row.
 //
 
 import SwiftUI
@@ -48,7 +50,7 @@ struct ControlVisibilitySheet: View {
         NavigationStack {
             Form {
                 Section {
-                    ForEach(ControlOptionItem.allCases) { item in
+                    ForEach(ControlOptionItem.toggleableItems) { item in
                         Toggle(isOn: visibilityBinding(item)) {
                             Text(item.title)
                         }

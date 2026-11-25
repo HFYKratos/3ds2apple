@@ -231,9 +231,10 @@ enum ControlOptionItem: String, CaseIterable, Identifiable {
     case quickLoad
     case swapScreens
     /// 0.2.1 app-only Settings row (the skins' HOME slot is our single menu
-    /// button). It ships visible in both directions; the visibility and size
-    /// sheets list it with the other rows. (0.2.1-beta3 removed beta2's separate
-    /// MENU row, so it no longer turns up in those sheets.)
+    /// button). It ships visible in both directions and can never be hidden: it
+    /// is the only in-game entry into Settings, so "Toggle controls" omits it
+    /// (see `canToggleVisibility`) while "Adjust size" still lists it so the
+    /// button stays resizable. (0.2.1-beta3 removed beta2's separate MENU row.)
     case settings
 
     var id: String { rawValue }
@@ -285,6 +286,23 @@ enum ControlOptionItem: String, CaseIterable, Identifiable {
         case .swapScreens: return .swapScreens
         case .settings: return .settings
         }
+    }
+
+    /// Whether "Toggle controls" may hide this row. The Settings button is how
+    /// the player reaches Settings while a game is running (0.2.1-beta3 removed
+    /// the separate MENU row), so it always stays visible; the user can still
+    /// change its size in "Adjust size" and the global overlay opacity.
+    var canToggleVisibility: Bool {
+        switch self {
+        case .settings: return false
+        default: return true
+        }
+    }
+
+    /// The rows the "Toggle controls" sheet offers: every row the user may hide.
+    /// "Adjust size" keeps enumerating `allCases`, Settings included.
+    static var toggleableItems: [ControlOptionItem] {
+        allCases.filter { $0.canToggleVisibility }
     }
 
     var title: String {
