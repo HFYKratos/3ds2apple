@@ -75,6 +75,11 @@ check "performance overlay position offers six corners" \
   bash -c 'for case in topLeft topCenter topRight bottomLeft bottomCenter bottomRight; do grep -Fq -- "case $case" ios/app/Sources/AppSettings.swift || exit 1; done'
 check "performance overlay settings page keeps its toggles and position row" \
   bash -c 'for id in settings-performance-overlay-enabled settings-performance-overlay-background settings-performance-overlay-position settings-performance-overlay-fps settings-performance-overlay-frame-time settings-performance-overlay-speed settings-performance-overlay-process-memory settings-performance-overlay-available-memory; do grep -Fq -- "$id" ios/app/Sources/SettingsPages.swift || exit 1; done'
+check "battery temperature is gone from the overlay settings and strings" \
+  bash -c '! grep -rq -- "performanceOverlayShowBatteryTemperature\|settings-performance-overlay-battery" ios/app/Sources && ! grep -Fq -- "Show battery temperature" ios/app/Resources/en.lproj/Localizable.strings ios/app/Resources/zh-Hans.lproj/Localizable.strings'
+check "the Settings button can never be hidden" \
+  bash -c 'grep -Fq -- "var canToggleVisibility" ios/app/Sources/ControlLayout.swift && grep -Fq -- "toggleableItems" ios/app/Sources/ControlOptionsViews.swift && grep -Fq -- "guard item.canToggleVisibility" ios/app/Sources/AppSettings.swift'
+
 check "old FPS switch migrates once to the overlay master switch" \
   bash -c 'grep -Fq -- "UI.performanceOverlayMigrated" ios/app/Sources/AppSettings.swift && grep -Fq -- "UI.showFPS" ios/app/Sources/AppSettings.swift'
 check "diagnostics report has the FPS counter state" contains ios/app/Sources/DiagnosticsReport.swift 'fps_counter='

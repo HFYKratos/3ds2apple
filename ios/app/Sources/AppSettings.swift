@@ -779,8 +779,8 @@ final class AppSettings: ObservableObject {
 
     /// The performance overlay drawn over the running game. It replaces the old
     /// FPS pill: one overlay that shows the frame rate, the frame generation
-    /// time, the emulation speed, the memory the app is using, the memory still
-    /// free and the battery temperature, each line on its own. `GameView`
+    /// time, the emulation speed, the memory the app is using and the memory
+    /// still free, each line on its own. `GameView`
     /// draws it; these values only decide what it shows and where.
     /// ON by default; OFF hides the whole overlay.
     @Published var performanceOverlayEnabled: Bool
@@ -792,13 +792,12 @@ final class AppSettings: ObservableObject {
     @Published var performanceOverlayPosition: PerformanceOverlayPosition
     /// The overlay's information lines. The shipped defaults are the reference
     /// screenshots' choices: frame rate, frame generation time and the app's
-    /// memory use on; speed, available memory and battery temperature off.
+    /// memory use on; speed and available memory off.
     @Published var performanceOverlayShowFPS: Bool
     @Published var performanceOverlayShowFrameTime: Bool
     @Published var performanceOverlayShowSpeed: Bool
     @Published var performanceOverlayShowProcessMemory: Bool
     @Published var performanceOverlayShowAvailableMemory: Bool
-    @Published var performanceOverlayShowBatteryTemperature: Bool
 
     /// The old FPS pill switch, kept for compatibility (0.2.1-beta4). It is a
     /// mirror of `performanceOverlayEnabled`: the Settings page no longer shows
@@ -1135,7 +1134,6 @@ final class AppSettings: ObservableObject {
             performanceOverlayShowSpeed = false
             performanceOverlayShowProcessMemory = true
             performanceOverlayShowAvailableMemory = false
-            performanceOverlayShowBatteryTemperature = false
             defaults.set(legacyShowFPS, forKey: Keys.performanceOverlayEnabled)
             defaults.set(false, forKey: Keys.performanceOverlayBackground)
             defaults.set(PerformanceOverlayPosition.topLeft.rawValue,
@@ -1145,7 +1143,6 @@ final class AppSettings: ObservableObject {
             defaults.set(false, forKey: Keys.performanceOverlayShowSpeed)
             defaults.set(true, forKey: Keys.performanceOverlayShowProcessMemory)
             defaults.set(false, forKey: Keys.performanceOverlayShowAvailableMemory)
-            defaults.set(false, forKey: Keys.performanceOverlayShowBatteryTemperature)
             defaults.set(true, forKey: Keys.performanceOverlayMigrated)
             AppLog.log("[3ds2apple] performance overlay: the FPS pill switch (%@) became the overlay master switch",
                        legacyShowFPS ? "on" : "off")
@@ -1167,8 +1164,6 @@ final class AppSettings: ObservableObject {
                 defaults, Keys.performanceOverlayShowProcessMemory, fallback: true)
             performanceOverlayShowAvailableMemory = Self.bool(
                 defaults, Keys.performanceOverlayShowAvailableMemory, fallback: false)
-            performanceOverlayShowBatteryTemperature = Self.bool(
-                defaults, Keys.performanceOverlayShowBatteryTemperature, fallback: false)
         }
         playbackSpeed = PlaybackSpeed(
             rawValue: defaults.integer(forKey: Keys.playbackSpeed)
@@ -1237,7 +1232,6 @@ final class AppSettings: ObservableObject {
         defaults.set(performanceOverlayShowSpeed, forKey: Keys.performanceOverlayShowSpeed)
         defaults.set(performanceOverlayShowProcessMemory, forKey: Keys.performanceOverlayShowProcessMemory)
         defaults.set(performanceOverlayShowAvailableMemory, forKey: Keys.performanceOverlayShowAvailableMemory)
-        defaults.set(performanceOverlayShowBatteryTemperature, forKey: Keys.performanceOverlayShowBatteryTemperature)
         defaults.set(playbackSpeed.rawValue, forKey: Keys.playbackSpeed)
         defaults.set(turboSpeed.rawValue, forKey: Keys.turboSpeed)
         defaults.set(turboLimit, forKey: Keys.turboLimit)
@@ -1648,7 +1642,6 @@ final class AppSettings: ObservableObject {
         static let performanceOverlayShowSpeed = "UI.performanceOverlayShowSpeed"
         static let performanceOverlayShowProcessMemory = "UI.performanceOverlayShowProcessMemory"
         static let performanceOverlayShowAvailableMemory = "UI.performanceOverlayShowAvailableMemory"
-        static let performanceOverlayShowBatteryTemperature = "UI.performanceOverlayShowBatteryTemperature"
         static let performanceOverlayMigrated = "UI.performanceOverlayMigrated"
         static let playbackSpeed = "UI.playbackSpeed"
         static let turboSpeed = "UI.turboSpeed"
