@@ -39,7 +39,7 @@
 <p align="center"><sub><b>最新の安定版: v0.2.1</b> · Windows 10/11 ランチャー（検証済みの経路）· macOS 13+ ランチャー（開発者プレビュー、<a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a> を参照）· iOS アプリはランチャーがあなた自身の Apple ID で構成・署名・インストールするため、iOS 単体のダウンロードはありません。</sub></p>
 
 <p align="center">
-  <img src="docs/assets/hero.png" width="880" alt="iPhone と iPad で動作する 3ds2apple、および Windows と macOS のランチャー">
+  <img src="docs/assets/hero.png" width="880" alt="0.2.1 hero image: synthetic portrait and landscape previews with the wordmark.">
 </p>
 
 > [!NOTE]
@@ -52,19 +52,19 @@
 ## デモ
 
 <p align="center">
-  <img src="docs/assets/demo.gif" width="720" alt="合成デモのループ：縦画面のコントロール、横画面のコントロール、ポーズメニューのバーチャルコントローラー、画面レイアウト設定">
+  <img src="docs/assets/demo.gif" width="720" alt="0.2.1 合成デモループ：HOME スロットの設定ボタン付き縦画面コントロール、上端に貼り付く横画面コントロール、ゲーム内メニュー、パフォーマンスオーバーレイ設定。">
 </p>
 
-<p align="center"><sub>合成プレビュー、ゲームデータなし：縦画面コントロール → 横画面コントロール → ポーズメニューのバーチャルコントローラー → 画面レイアウト設定。</sub></p>
+<p align="center"><sub>0.2.1 合成プレビュー、ゲームデータなし：縦画面コントロール → 横画面コントロール → ゲーム内メニュー → パフォーマンスオーバーレイ設定。</sub></p>
 
-## 0.2.0 の新機能（2026-11-25）
+## 0.2.1 の新機能（2026-11-25）
 
-- **刷新された iOS 体験。** 設定は iOS 26/27 のグループ表示になり、ゲーム内メニューは刷新されました：ネイティブの push/pop サブページ、ヘッダーに実行中のゲーム名、電源 / 再起動 / 閉じるボタンのみ、オプションはグループ化して表示。
-- **ひと目で読める設定説明。** 各設定の説明は 2 行の平易な文に整理され、タイトルは中央寄せの inline に。分類は General / System / Gamepad / Graphics / Layout / Sound / Debug / Other。
-- **グラフィック設定の追加。** 「Screen aspect」（Fit / 4:3 / Stretch）と「Integer scaling」を追加、「Renderer」行は削除。
-- **本物の速度制御。** 「Run speed limit」と「Turbo limit」が実際の制限として機能（制限オフで本当に無制限）。「Default speed」/「Turbo speed」は 1x〜4x から選択可能。
-- **更新とコントローラー。** GitHub 更新チャンネル（Stable / Beta）と毎日のバックグラウンド確認＋ローカル通知。Gamepad にスティックのデッドゾーン、物理ボタンの完全な再マッピング、2〜4 ボタンのホットキー、Standard / High contrast のコントロール表示、アプリ別 Gamepad プロファイルを追加。
-- **アプリ別設定（Per-Application Settings）。** グローバルの既定値を変えずに、タイトルごとに一部の設定だけを上書きできます。
+- **画面が上端に貼り付きます。** 横画面の Large screen / Side by side / Hybrid が画面の上端にぴったり接し、上の黒帯がなくなりました。水平中央・アスペクト比・整数スケーリングはそのままです。
+- **FPS ピルに代わるパフォーマンスオーバーレイ。** Azahar 風オーバーレイが画面の最上端に表示されます：FPS、フレーム時間、速度、アプリメモリ、空きメモリを各行で切り替え可能。6 つの位置と任意の背景、取得できないバッテリー温度行は削除されました。
+- **設定ボタンは非表示にできません。** ゲーム内の設定ボタンはスキンの HOME スロットに固定され、常にゲーム内メニューを開きます。コントロールの切り替えには表示されず、サイズ調整では変更でき、古い保存データの非表示設定は自動で消去されます。
+- **2 つの参照スキンによる既定レイアウト。** 既定の仮想コントロールは縦画面 ModernFS / 横画面 ModernHybrid に従い、クイックセーブ／クイックロードはノッチの横に配置。未変更の旧レイアウトは一度だけ移行し、カスタムは保持されます。
+- **ゲーム内メニューの仕上げ。** iOS のグループ表示を踏襲し、縦画面は単一のスライドアップ、横画面は中央カード、ネイティブの push/pop サブページ、ヘッダーにゲーム名。
+- **細部の調整。** 設定は iOS 26/27 の inset-grouped スタイルを維持。既定の非表示セットは ZL、ZR、C スティック、早送り、画面入れ替え。SAVE/LOAD はノッチの角に戻りました。
 - **未対応：** Delta スキンのインポート、チート、マニュアル、amiibo、マイク、カメラ、ネットワーク/オンラインプレイ、JIT。
 
 ## 機能一覧
@@ -120,7 +120,7 @@
 
 ゲームをポーズして **バーチャルコントローラー → レイアウトを編集** を開きます。各コントロールには独自のヒット領域があるため、掴んだコントロールだけをポーズ中の画面の上でドラッグでき、中央の **完了** で現在の向きを保存して再開します。同じカードでボタンごとの表示、10%〜200% のサイズ、透明度、**リセット** も扱えます。縦画面と横画面の位置は別々に保存されます。
 
-画面レイアウトは **設定 → ディスプレイ → 画面レイアウト** で別に編集します。パーセントのフィールド（ライブプレビュー付き）か、全画面のドラッグエディター（ドラッグで移動、ピンチでサイズ変更。プレビューは指に追従し、ジェスチャー終了時に確定するためレイアウトが揺れません）を使います。横画面のカスタムレイアウトを編集している間は横画面に固定されます。プリセットは即時適用、カスタム画面レイアウトは次回のゲーム読み込みから適用されます。
+<p align="center"><sub>0.2.1 合成プレビュー、ゲームデータなし：縦画面コントロール → 横画面コントロール → ゲーム内メニュー → パフォーマンスオーバーレイ設定。</sub></p>
 
 ## スクリーンショット
 
@@ -128,14 +128,14 @@
 
 | Windows ランチャー | Windows ランチャー（简体中文） | macOS ランチャー |
 |:---:|:---:|:---:|
-| <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="Windows ランチャーのライブラリ、英語 UI"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="Windows ランチャーのライブラリ、中国語 UI"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS ランチャーの空のライブラリ、ダークテーマ"> |
+| <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> |
 | ライブラリ（English） | ライブラリ（中文） | 空のライブラリ（ダーク） |
 
 **iOS アプリ**——オンスクリーンコントロールの合成プレビューです。ゲームデータは含まれません。
 
 | 縦画面 | 横画面 |
 |:---:|:---:|
-| <img src="docs/assets/portrait.png" width="280" alt="オンスクリーンコントロール付きの縦画面合成プレビュー"> | <img src="docs/assets/landscape.png" width="520" alt="オンスクリーンコントロール付きの横画面合成プレビュー"> |
+| <img src="docs/assets/portrait.png" width="280" alt="0.2.1 合成横画面プレビュー：上端に貼り付くオンスクリーンコントロール"> | <img src="docs/assets/landscape.png" width="520" alt="0.2.1 合成横画面プレビュー：上端に貼り付くオンスクリーンコントロール"> |
 | 縦画面コントロール | 横画面コントロール |
 
 ## クイックスタート

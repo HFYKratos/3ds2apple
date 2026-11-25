@@ -39,7 +39,7 @@
 <p align="center"><sub><b>최신 안정 버전: v0.2.1</b> · Windows 10/11 런처(검증된 경로) · macOS 13+ 런처(개발자 프리뷰, <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a> 참고) · iOS 앱은 런처가 사용자의 Apple ID로 구성·서명·설치하므로 별도의 iOS 다운로드는 없습니다.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/hero.png" width="880" alt="iPhone과 iPad에서 실행되는 3ds2apple, 그리고 Windows와 macOS 런처">
+  <img src="docs/assets/hero.png" width="880" alt="0.2.1 hero image: synthetic portrait and landscape previews with the wordmark.">
 </p>
 
 > [!NOTE]
@@ -52,19 +52,19 @@
 ## 데모
 
 <p align="center">
-  <img src="docs/assets/demo.gif" width="720" alt="합성 데모 루프: 세로 화면 컨트롤, 가로 화면 컨트롤, 일시정지 메뉴의 가상 컨트롤, 화면 레이아웃 설정">
+  <img src="docs/assets/demo.gif" width="720" alt="0.2.1 합성 데모 루프: HOME 슬롯 설정 버튼이 있는 세로 화면 컨트롤, 위쪽 가장자리에 붙은 가로 화면 컨트롤, 게임 내 메뉴, 성능 오버레이 설정.">
 </p>
 
-<p align="center"><sub>합성 프리뷰, 게임 데이터 없음: 세로 화면 컨트롤 → 가로 화면 컨트롤 → 일시정지 메뉴의 가상 컨트롤 → 화면 레이아웃 설정.</sub></p>
+<p align="center"><sub>0.2.1 합성 프리뷰, 게임 데이터 없음: 세로 화면 컨트롤 → 가로 화면 컨트롤 → 게임 내 메뉴 → 성능 오버레이 설정.</sub></p>
 
-## 0.2.0 새로운 기능(2026-11-25)
+## 0.2.1 새로운 기능(2026-11-25)
 
-- **새로워진 iOS 경험.** 설정은 iOS 26/27 그룹 스타일을 따르고, 인게임 메뉴는 네이티브 push/pop 하위 페이지, 헤더의 실행 중인 게임 이름, 전원 / 재시작 / 닫기 버튼만 남긴 채 옵션을 그룹화해 보여 주도록 재설계되었습니다.
-- **한눈에 읽히는 설정 설명.** 모든 설정 설명이 두 줄의 쉬운 문장으로 정리되고 제목은 중앙 inline으로 표시됩니다. 분류는 General / System / Gamepad / Graphics / Layout / Sound / Debug / Other입니다.
-- **그래픽 설정 추가.** 'Screen aspect'(Fit / 4:3 / Stretch)와 'Integer scaling'이 추가되고 'Renderer' 행은 제거되었습니다.
-- **진짜 속도 제어.** 'Run speed limit'과 'Turbo limit'이 실제 제한으로 동작하며(제한 해제 시 진짜 무제한), 'Default speed' / 'Turbo speed'를 1x–4x에서 선택할 수 있습니다.
-- **업데이트와 컨트롤러.** GitHub 업데이트 채널(Stable / Beta)과 매일 백그라운드 확인 + 로컬 알림. Gamepad에 스틱 데드존, 물리 버튼 전체 재매핑, 2–4 버튼 핫키, Standard / High contrast 컨트롤 스타일, 앱별 Gamepad 프로필이 추가되었습니다.
-- **앱별 설정(Per-Application Settings).** 전역 기본값을 바꾸지 않고 타이틀별로 일부 설정을 덮어쓸 수 있습니다.
+- **화면이 위쪽 가장자리에 붙습니다.** 가로 화면의 Large screen / Side by side / Hybrid가 화면 위쪽 가장자리에 맞닿아 위쪽 검은 띠가 사라졌습니다. 가로 중앙 정렬, 화면 비율, 정수 배율은 그대로입니다.
+- **FPS 알약을 대신하는 성능 오버레이.** Azahar 스타일 오버레이가 화면 맨 위 가장자리에 표시됩니다: FPS, 프레임 시간, 속도, 앱 메모리, 사용 가능 메모리를 줄마다 켜고 끌 수 있고, 6개 위치와 선택형 배경을 지원합니다. 가져올 수 없는 배터리 온도 행은 삭제되었습니다.
+- **설정 버튼은 숨길 수 없습니다.** 게임 내 설정 버튼은 스킨의 HOME 슬롯에 고정되어 항상 게임 내 메뉴를 엽니다. 컨트롤 전환 목록에는 나오지 않고, 크기 조정으로는 크기를 바꿀 수 있으며, 이전 저장 데이터의 숨김 설정은 자동으로 정리됩니다.
+- **두 참조 스킨 기반 기본 레이아웃.** 기본 가상 컨트롤은 세로 ModernFS / 가로 ModernHybrid를 따르며 빠른 저장/빠른 불러오기는 노치 옆에 있습니다. 수정하지 않은 이전 레이아웃은 한 번만 마이그레이션되고 사용자 지정 레이아웃은 유지됩니다.
+- **게임 내 메뉴 다듬기.** iOS 그룹 스타일을 따르며 세로 화면은 단일 슬라이드업, 가로 화면은 중앙 카드, 네이티브 push/pop 하위 페이지, 헤더에 실행 중인 게임 이름을 표시합니다.
+- **세부 정리.** 설정은 iOS 26/27 inset-grouped 스타일을 유지합니다. 기본 숨김 집합은 ZL, ZR, C 스틱, 빨리 감기, 화면 교체입니다. SAVE/LOAD는 노치 모서리로 돌아왔습니다.
 - **아직 미지원:** Delta 스킨 가져오기, 치트, 매뉴얼, amiibo, 마이크, 카메라, 네트워크/온라인 플레이, JIT.
 
 ## 기능 한눈에 보기
@@ -128,14 +128,14 @@
 
 | Windows 런처 | Windows 런처(简体中文) | macOS 런처 |
 |:---:|:---:|:---:|
-| <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="Windows 런처 라이브러리, 영어 UI"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="Windows 런처 라이브러리, 중국어 UI"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS 런처의 빈 라이브러리, 다크 테마"> |
+| <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> |
 | 라이브러리(English) | 라이브러리(中文) | 빈 라이브러리(다크) |
 
 **iOS 앱** — 화면 컨트롤의 합성 프리뷰입니다. 게임 데이터는 없습니다.
 
 | 세로 | 가로 |
 |:---:|:---:|
-| <img src="docs/assets/portrait.png" width="280" alt="화면 컨트롤이 있는 세로 합성 프리뷰"> | <img src="docs/assets/landscape.png" width="520" alt="화면 컨트롤이 있는 가로 합성 프리뷰"> |
+| <img src="docs/assets/portrait.png" width="280" alt="0.2.1 합성 가로 프리뷰: 위쪽 가장자리에 붙은 화면 컨트롤"> | <img src="docs/assets/landscape.png" width="520" alt="0.2.1 합성 가로 프리뷰: 위쪽 가장자리에 붙은 화면 컨트롤"> |
 | 세로 컨트롤 | 가로 컨트롤 |
 
 ## 빠른 시작

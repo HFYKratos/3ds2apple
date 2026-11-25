@@ -36,7 +36,7 @@
 <p align="center"><sub><b>Latest stable release: v0.2.1</b> · Windows 10/11 launcher (verified path) · macOS 13+ launcher (developer preview, see <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>) · the iOS app is composed, signed and installed by the launcher with your own Apple ID, so there is no separate iOS download.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/hero.png" width="880" alt="3ds2apple running on iPhone and iPad, with the Windows and macOS launchers">
+  <img src="docs/assets/hero.png" width="880" alt="0.2.1 hero image: synthetic portrait and landscape previews with the wordmark.">
 </p>
 
 > [!NOTE]
@@ -49,19 +49,19 @@
 ## Demo
 
 <p align="center">
-  <img src="docs/assets/demo.gif" width="720" alt="Synthetic demo loop: portrait controls, landscape controls, pause-menu virtual controls and screen-layout settings">
+  <img src="docs/assets/demo.gif" width="720" alt="0.2.1 synthetic demo loop: portrait controls with the HOME-slot Settings button, landscape controls flush to the top edge, the in-game menu, and the performance overlay settings.">
 </p>
 
-<p align="center"><sub>Synthetic preview, no game data: portrait controls → landscape controls → pause-menu Virtual controls → screen-layout settings.</sub></p>
+<p align="center"><sub>0.2.1 synthetic preview, no game data: portrait controls → landscape controls → in-game menu → performance overlay settings.</sub></p>
 
-## What's new in 0.2.0 (2026-11-25)
+## What's new in 0.2.1 (2026-11-25)
 
-- **A redesigned iOS experience.** Settings use the iOS 26/27 grouped style, and the in-game menu is rebuilt: native push/pop subpages, the running game's name in the header, only power / restart / close buttons, and options grouped in sheets.
-- **Readable settings at a glance.** Every settings row is a concise two-line explanation with an inline title, split into General / System / Gamepad / Graphics / Layout / Sound / Debug / Other.
-- **More graphics control.** New Screen aspect (Fit / 4:3 / Stretch) and Integer scaling; the Renderer row is gone.
-- **Real speed control.** Run speed limit and Turbo limit are now real constraints (limiting off = genuinely unlimited), and Default / Turbo speed are selectable from 1x to 4x.
-- **Updates and controllers.** GitHub update channel (Stable / Beta) with a daily background check and a local notification; Gamepad adds stick deadzone, full physical button remapping, 2–4 button hotkeys, Standard / High contrast controls and per-app Gamepad profiles.
-- **Per-Application Settings.** Override a small set of settings for one title without changing the global defaults.
+- **The picture sits at the top edge.** Landscape Large screen, Side by side and Hybrid now start flush against the top edge — the black band above the picture is gone — while staying horizontally centred with their aspect ratio and integer scaling unchanged.
+- **The performance overlay replaces the FPS pill.** An Azahar-style overlay sits at the very top edge of the picture: frame rate, frame time, speed, app memory and available memory, each line switchable, six positions and an optional background; the unavailable battery-temperature row is gone.
+- **Settings can never be hidden.** The in-game Settings button stays in the skins' HOME slot and keeps opening the in-game menu. Toggle controls no longer lists it, Adjust size still resizes it, and an older saved hidden set is cleaned up automatically.
+- **A default layout from two reference skins.** The shipped virtual controls follow ModernFS in portrait and ModernHybrid in landscape, with Quick save / Quick load beside the notch; untouched old layouts migrate once and custom layouts are kept.
+- **The in-game menu is refined.** The same iOS grouped language with a single slide-up animation in portrait, a centred card in landscape, native push/pop sub-pages and the running game's name in the header.
+- **Quiet polish.** Settings keeps the iOS 26/27 inset-grouped style, the default hidden set is ZL, ZR, the C-stick, Fast-forward and Swap screens, and SAVE/LOAD return to the notch corners.
 - **Still not included:** Delta skin import, cheats, a manual, amiibo, microphone, camera, network/online play and JIT.
 
 ## Features at a glance
@@ -117,22 +117,22 @@ Visibility is per orientation (the Toggle controls sheet edits the current one);
 
 Pause any game and open **Virtual controls → Edit layout**: every control has its own hit area, so you drag just the one you grabbed over the paused picture, and the centred **Done** saves the current orientation and resumes. The same card gives per-button visibility, 10%–200% size and opacity, and **Reset** restores the defaults. Portrait and landscape positions are stored separately.
 
-Screen layouts are edited separately under **Settings → Display → Screen layout**, by percentage fields with a live preview or in the full-screen drag editor (drag to move, pinch to resize; the preview follows your finger and commits when the gesture ends, so the layout no longer jitters). Editing a landscape custom layout switches the app to landscape. Presets apply immediately; a custom screen layout applies from the next game load.
+<p align="center"><sub>0.2.1 synthetic preview, no game data: portrait controls → landscape controls → in-game menu → performance overlay settings.</sub></p>
 
 ## Screenshots
 
-**Desktop launchers** — real app screenshots; the library entries are synthetic demo entries and no game art appears.
+**Desktop launchers** — real 0.2.1 launcher screenshots; the library is the built-in synthetic fixture (empty or demo entries) and no game art appears.
 
 | Windows launcher | Windows launcher (简体中文) | macOS launcher |
 |:---:|:---:|:---:|
-| <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="Windows launcher library, English UI"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="Windows launcher library, Chinese UI"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS launcher with an empty library, dark theme"> |
+| <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> |
 | Library (EN) | Library (中文) | Empty library (dark) |
 
-**iOS app** — synthetic previews of the on-screen controls; no game data.
+**iOS app** — 0.2.1 synthetic previews of the game view and performance overlay; no game data.
 
 | Portrait | Landscape |
 |:---:|:---:|
-| <img src="docs/assets/portrait.png" width="280" alt="Synthetic portrait preview with on-screen controls"> | <img src="docs/assets/landscape.png" width="520" alt="Synthetic landscape preview with on-screen controls"> |
+| <img src="docs/assets/portrait.png" width="280" alt="0.2.1 synthetic landscape preview with on-screen controls flush to the top edge"> | <img src="docs/assets/landscape.png" width="520" alt="0.2.1 synthetic landscape preview with on-screen controls flush to the top edge"> |
 | Portrait controls | Landscape controls |
 
 ## Quick start

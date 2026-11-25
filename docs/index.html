@@ -108,10 +108,10 @@
         </ul>
       </div>
       <figure class="hero-media" data-gif>
-        <img class="gif-anim" src="assets/demo.gif" width="960" height="640" alt="Animated synthetic preview: portrait controls below the game picture, landscape controls over the picture, the pause menu's Virtual controls card, and the screen-layout settings.">
-        <img class="gif-still" src="assets/demo-poster.png" width="960" height="640" alt="Synthetic preview poster: a portrait phone with the control set below a blue and a purple grid labelled TOP and BOTTOM." hidden>
+        <img class="gif-anim" src="assets/demo.gif" width="960" height="640" alt="0.2.1 synthetic preview loop: portrait controls with the HOME-slot Settings button, landscape controls flush to the top edge, the in-game menu, and the performance overlay settings.">
+        <img class="gif-still" src="assets/demo-poster.png" width="960" height="640" alt="0.2.1 synthetic preview poster: a portrait phone with the top-edge performance overlay and the full control set below the picture." hidden>
         <button class="gif-toggle" type="button" hidden>Pause preview</button>
-        <figcaption>Synthetic preview — topology grids and control labels only; no game data. <span class="dim">Animated slideshow (11&nbsp;s loop).</span></figcaption>
+        <figcaption>0.2.1 synthetic preview — topology grids and control labels only; no game data. <span class="dim">Animated slideshow (5&nbsp;s loop).</span></figcaption>
       </figure>
     </div>
   </section>
@@ -241,7 +241,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 20h8M12 17v3"/></svg>
           <h3>Full-bleed picture</h3>
-          <p>No title bar, card border or game name. Only the FPS pill, the floating pause button and your controls sit over the picture.</p>
+          <p>No title bar, card border or game name. Only the performance overlay and your floating controls sit over the picture, with the always-visible Settings button in the HOME slot as the only in-game menu entry.</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z"/><path d="m4 12 8 4.5 8-4.5M4 16.5 12 21l8-4.5"/></svg>
@@ -270,8 +270,8 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 13h4l3-7 4 12 3-6h6"/></svg>
-          <h3>Optional FPS readout</h3>
-          <p>A floating FPS pill in the top-right safe area, on by default and switchable in the Virtual controls card. Nothing else is drawn over the game.</p>
+          <h3>Performance overlay at the top edge</h3>
+          <p>An Azahar-style overlay sits at the very top edge of the picture: frame rate, frame time, speed, app memory and available memory, each line switchable, six positions and an optional background. The battery-temperature row is gone.</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9V3Z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15V3.5Z"/></svg>
@@ -292,52 +292,26 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
 
       <div class="layout-block">
         <h3>Landscape <span class="count">6 presets</span></h3>
-        <p>Chosen separately from portrait. Custom layouts are edited by percentage fields or by dragging, with a live preview.</p>
+        <p>Chosen separately from portrait. In 0.2.1 Large screen, Side by side and Hybrid sit flush to the top edge — the black band above the picture is gone — and Custom layouts are edited by percentage fields or by dragging, with a live preview. Single screen, Original and Custom layout complete the six presets on the same GPU path.</p>
         <div class="layout-grid">
           <figure class="layout-card">
-            <img class="shot" src="assets/screenshots/layout-large.png" width="780" height="360" loading="lazy" decoding="async" alt="Synthetic landscape preview of the Large screen layout: a large blue top screen with a small purple bottom screen at the top right.">
-            <div class="body"><h4>Large screen <span class="tag tag-gpu">Preset · GPU</span></h4><p>One large top screen with the bottom screen beside it.</p></div>
+            <img class="shot" src="assets/screenshots/layout-large.png" width="780" height="360" loading="lazy" decoding="async" alt="0.2.1 synthetic landscape preview of the Large screen layout, flush to the top edge: a large blue top screen with a small purple bottom screen at the top right.">
+            <div class="body"><h4>Large screen <span class="tag tag-gpu">Preset · GPU</span></h4><p>One large top screen with the bottom screen beside it, flush to the top edge.</p></div>
           </figure>
           <figure class="layout-card">
-            <img class="shot" src="assets/screenshots/layout-single.png" width="780" height="360" loading="lazy" decoding="async" alt="Synthetic landscape preview of the Single screen layout: only the blue top screen fills the view.">
-            <div class="body"><h4>Single screen <span class="tag tag-gpu">Preset · GPU</span></h4><p>The top screen alone, as wide as the phone allows.</p></div>
+            <img class="shot" src="assets/screenshots/layout-side.png" width="780" height="360" loading="lazy" decoding="async" alt="0.2.1 synthetic landscape preview of the Side by side layout, flush to the top edge: blue top and purple bottom screens next to each other.">
+            <div class="body"><h4>Side by side <span class="tag tag-gpu">Preset · GPU</span></h4><p>Top and bottom screens side by side, both fully visible and flush to the top edge.</p></div>
           </figure>
           <figure class="layout-card">
-            <img class="shot" src="assets/screenshots/layout-side.png" width="780" height="360" loading="lazy" decoding="async" alt="Synthetic landscape preview of the Side by side layout: blue top and purple bottom screens next to each other.">
-            <div class="body"><h4>Side by side <span class="tag tag-gpu">Preset · GPU</span></h4><p>Top and bottom screens side by side, both fully visible.</p></div>
-          </figure>
-          <figure class="layout-card">
-            <img class="shot" src="assets/screenshots/layout-hybrid.png" width="780" height="360" loading="lazy" decoding="async" alt="Synthetic landscape preview of the Hybrid layout: one large blue top screen with two small purple screens stacked beside it.">
-            <div class="body"><h4>Hybrid <span class="tag tag-gpu">Preset · GPU</span></h4><p>One large top screen with two small screens stacked beside it.</p></div>
-          </figure>
-          <figure class="layout-card">
-            <img class="shot" src="assets/screenshots/layout-original.png" width="780" height="360" loading="lazy" decoding="async" alt="Synthetic landscape preview of the Original layout: top and bottom screens at their original relative size.">
-            <div class="body"><h4>Original <span class="tag tag-gpu">Preset · GPU</span></h4><p>The two screens at their original relative size and shape.</p></div>
-          </figure>
-          <figure class="layout-card">
-            <img class="shot" src="assets/screenshots/layout-custom.png" width="780" height="360" loading="lazy" decoding="async" alt="Synthetic landscape preview of the Custom layout: the two screens at user-placed rectangles over a dark canvas.">
-            <div class="body"><h4>Custom layout <span class="tag tag-gpu">GPU path</span></h4><p>Place each screen at its own rectangle by percentage or in the full-screen drag editor; four rotations and screen swap stay on the GPU path.</p></div>
+            <img class="shot" src="assets/screenshots/layout-hybrid.png" width="780" height="360" loading="lazy" decoding="async" alt="0.2.1 synthetic landscape preview of the Hybrid layout, flush to the top edge: one large blue top screen with two small purple screens stacked beside it.">
+            <div class="body"><h4>Hybrid <span class="tag tag-gpu">Preset · GPU</span></h4><p>One large top screen with two small screens stacked beside it, flush to the top edge.</p></div>
           </figure>
         </div>
       </div>
 
       <div class="layout-block">
         <h3>Portrait <span class="count">3 presets</span></h3>
-        <p>Portrait keeps the whole control set in the empty band below the picture, so the screens are never covered.</p>
-        <div class="layout-grid layout-portraits">
-          <figure class="layout-card">
-            <img class="shot" src="assets/screenshots/layout-portrait-default.png" width="460" height="997" loading="lazy" decoding="async" alt="Synthetic portrait preview of the Default layout: the blue top screen full width above the purple bottom screen.">
-            <div class="body"><h4>Default <span class="tag tag-gpu">Preset · GPU</span></h4><p>Top screen full width above the bottom screen; the controls sit below both.</p></div>
-          </figure>
-          <figure class="layout-card">
-            <img class="shot" src="assets/screenshots/layout-portrait-original.png" width="460" height="997" loading="lazy" decoding="async" alt="Synthetic portrait preview of the Original layout: the two screens at their original relative size and shape.">
-            <div class="body"><h4>Original <span class="tag tag-gpu">Preset · GPU</span></h4><p>The two screens at their original relative size and shape.</p></div>
-          </figure>
-          <figure class="layout-card">
-            <img class="shot" src="assets/screenshots/layout-portrait-custom.png" width="460" height="997" loading="lazy" decoding="async" alt="Synthetic portrait preview of the Custom layout: the two screens placed at custom rectangles.">
-            <div class="body"><h4>Custom layout <span class="tag tag-gpu">GPU path</span></h4><p>Percentage fields with a live preview, or drag in the full-screen editor; rotation and screen swap stay on the GPU path.</p></div>
-          </figure>
-        </div>
+        <p>Portrait keeps the whole control set in the empty band below the picture, so the screens are never covered; the 0.2.1 default portrait view and its HOME-slot Settings button are shown in the controls section above.</p>
       </div>
       <p class="fine">Screen rotation and orientation are kept, and custom layouts now rotate and swap with the GPU presenter. If no GPU presenter can be created, the app falls back to the screen-readback path. Render resolution (1x–4x) still applies on the next game load; 0.2.0 adds Integer scaling and Screen aspect (Fit / 4:3 / Stretch) under Settings → Graphics and removes the read-only Renderer row.</p>
     </div>
@@ -348,7 +322,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
       <div class="section-head">
         <p class="eyebrow">Controls</p>
         <h2>Full 3DS controls, on screen.</h2>
-        <p>The on-screen pad is the complete New 3DS set, with real analog sticks and per-control customisation from the pause menu. 0.1.6 adds Fast-forward, Quick save, Quick load and Swap screens as editable on-screen buttons.</p>
+        <p>The on-screen pad is the complete New 3DS set, with real analog sticks and per-control customisation from the pause menu. The 0.2.1 default layout follows two Delta reference skins (ModernFS in portrait, ModernHybrid in landscape) and keeps the Settings button visible even with the pad hidden; Fast-forward, Quick save, Quick load and Swap screens are editable on-screen buttons.</p>
       </div>
       <div class="controls-grid">
         <div class="two-shots">
@@ -357,8 +331,8 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
             <figcaption>Portrait — the whole pad sits below the picture.</figcaption>
           </figure>
           <figure class="shot-figure">
-            <img src="assets/screenshots/pause-virtual-controls.png" width="800" height="1734" loading="lazy" decoding="async" alt="Synthetic pause menu preview: Resume game, Save state, and the Virtual controls card with Edit layout, Toggle controls, Adjust size, Adjust opacity and Reset.">
-            <figcaption>Pause menu — the Virtual controls card.</figcaption>
+            <img src="assets/screenshots/pause-virtual-controls.png" width="800" height="1734" loading="lazy" decoding="async" alt="0.2.1 synthetic in-game menu preview: the iOS-style grouped menu with the running game name and its rows, including Virtual controls.">
+            <figcaption>Pause menu — the 0.2.1 in-game menu and its Virtual controls card.</figcaption>
           </figure>
         </div>
         <div>
@@ -373,11 +347,11 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
           </ul>
           <div class="vc-card">
             <h3>Pause menu → Virtual controls</h3>
-            <p>Show or hide the pad, show the FPS pill, edit the layout in place, toggle individual controls, resize each button or group from 10% to 200%, adjust opacity and reset to the defaults. Since 0.1.6 visibility is per device direction (C-stick, ZL and ZR are hidden by default; portrait also hides the D-pad), while size and opacity stay global.</p>
+            <p>Show or hide the pad, toggle the performance overlay, edit the layout in place, toggle individual controls, resize each button or group from 10% to 200%, adjust opacity and reset to the defaults. With the pad hidden every virtual control disappears except the always-visible Settings button, which keeps opening the in-game menu. Toggle controls no longer lists Settings and Adjust size still resizes it; the default hidden set is ZL, ZR, the C-stick, Fast-forward and Swap screens.</p>
             <div class="vc-shots">
-              <figure><img src="assets/screenshots/control-edit.png" width="800" height="1734" loading="lazy" decoding="async" alt="Synthetic in-game edit mode: controls over the paused picture with a centred Done button."><figcaption>Edit layout · drag, then Done</figcaption></figure>
-              <figure><img src="assets/screenshots/controls-size.png" width="800" height="1734" loading="lazy" decoding="async" alt="Synthetic Adjust size screen: per-button size sliders from Button A through Start."><figcaption>Adjust size · 10–200%</figcaption></figure>
-              <figure><img src="assets/screenshots/controls-visibility.png" width="800" height="1734" loading="lazy" decoding="async" alt="Synthetic Toggle controls screen: a switch for each control in the pad."><figcaption>Toggle controls · per button</figcaption></figure>
+              <figure><img src="assets/screenshots/controls-visibility.png" width="800" height="1734" loading="lazy" decoding="async" alt="Synthetic Toggle controls screen in 0.2.1: the sheet no longer lists the Settings button."><figcaption>Toggle controls · Settings excluded</figcaption></figure>
+              <figure><img src="assets/screenshots/controls-size.png" width="800" height="1734" loading="lazy" decoding="async" alt="Synthetic Adjust size screen in 0.2.1: the Settings row is still available at the end of the list."><figcaption>Adjust size · Settings included</figcaption></figure>
+              <figure><img src="assets/screenshots/controls-hidden.png" width="800" height="1734" loading="lazy" decoding="async" alt="Synthetic portrait game view with Show virtual controls off: only the Settings button remains over the picture."><figcaption>Pad off · Settings only</figcaption></figure>
             </div>
           </div>
         </div>
@@ -393,14 +367,15 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         <p>The Windows and macOS launchers, plus the app's own settings screens. Launcher screenshots show the built-in synthetic demo entries; app screenshots are synthetic previews — no game data is depicted.</p>
       </div>
       <div class="gallery">
-        <figure><img src="assets/screenshots/launcher-windows-en.png" width="1120" height="820" loading="lazy" decoding="async" alt="Windows launcher Library screen with two synthetic demo entries, Synthetic Demo Game and Synthetic No-Icon Game."><figcaption>Windows launcher · Library (synthetic demo entries)</figcaption></figure>
-        <figure><img src="assets/screenshots/launcher-windows-zh.png" width="1120" height="820" loading="lazy" decoding="async" alt="Windows launcher Library screen with the Simplified Chinese interface and two synthetic demo entries."><figcaption>Windows launcher · 游戏库（合成演示条目）</figcaption></figure>
-        <figure><img src="assets/screenshots/launcher-macos-empty.png" width="1240" height="694" loading="lazy" decoding="async" alt="macOS launcher with an empty library in dark mode."><figcaption>macOS launcher · empty library (dark)</figcaption></figure>
-        <figure><img src="assets/screenshots/settings.png" width="800" height="1734" loading="lazy" decoding="async" alt="The app's iOS Settings screen."><figcaption>iOS Settings</figcaption></figure>
-        <figure><img src="assets/screenshots/display-settings.png" width="800" height="1734" loading="lazy" decoding="async" alt="Display settings showing Screen layout, resolution, screen rotation and orientation."><figcaption>Display settings · screen layout entry</figcaption></figure>
-        <figure><img src="assets/screenshots/custom-layout-values.png" width="800" height="1734" loading="lazy" decoding="async" alt="Custom screen layout percentage fields with a live preview of the top and bottom screen rectangles."><figcaption>Custom screen layout · percentages + live preview</figcaption></figure>
-        <figure><img src="assets/screenshots/hybrid-preview.png" width="1100" height="508" loading="lazy" decoding="async" alt="Hybrid preset preview: one large top screen with two small screens stacked beside it."><figcaption>Hybrid preset preview</figcaption></figure>
-        <figure><img src="assets/screenshots/screen-layout-editor.png" width="800" height="1734" loading="lazy" decoding="async" alt="Custom screen layout drag editor with both screens placed on the canvas and a Done button."><figcaption>Custom layout · drag editor</figcaption></figure>
+        <figure><img src="assets/screenshots/launcher-windows-en.png" width="1120" height="820" loading="lazy" decoding="async" alt="Windows launcher 0.2.1 Library screen with an empty synthetic library."><figcaption>Windows launcher · Library (0.2.1, empty synthetic library)</figcaption></figure>
+        <figure><img src="assets/screenshots/launcher-windows-zh.png" width="1120" height="820" loading="lazy" decoding="async" alt="Windows launcher 0.2.1 Library screen with the Simplified Chinese interface and an empty synthetic library."><figcaption>Windows launcher · 游戏库（0.2.1，合成空库）</figcaption></figure>
+        <figure><img src="assets/screenshots/launcher-windows-deploy-en.png" width="1120" height="820" loading="lazy" decoding="async" alt="Windows launcher 0.2.1 Deploy screen with the synthetic demo library."><figcaption>Windows launcher · Deploy</figcaption></figure>
+        <figure><img src="assets/screenshots/launcher-macos-empty.png" width="1240" height="693" loading="lazy" decoding="async" alt="macOS launcher 0.2.1 with an empty library in dark mode."><figcaption>macOS launcher · empty library (dark)</figcaption></figure>
+        <figure><img src="assets/screenshots/launcher-macos-settings.png" width="1240" height="1114" loading="lazy" decoding="async" alt="macOS launcher 0.2.1 Settings page in dark mode."><figcaption>macOS launcher · Settings (dark)</figcaption></figure>
+        <figure><img src="assets/screenshots/settings.png" width="800" height="1734" loading="lazy" decoding="async" alt="iOS Settings main page in 0.2.1: iOS-style grouped cards and coloured icons."><figcaption>iOS Settings · 0.2.1</figcaption></figure>
+        <figure><img src="assets/screenshots/display-settings.png" width="800" height="1734" loading="lazy" decoding="async" alt="Layout settings in 0.2.1 with the screen layout entry and the Performance monitoring group."><figcaption>Layout settings · screen layout + performance monitoring</figcaption></figure>
+        <figure><img src="assets/screenshots/performance-overlay.png" width="800" height="1734" loading="lazy" decoding="async" alt="Performance overlay settings in 0.2.1: the master switch, background, six positions and five line switches."><figcaption>Performance overlay settings</figcaption></figure>
+        <figure><img src="assets/screenshots/overlay-position.png" width="800" height="1734" loading="lazy" decoding="async" alt="Overlay position picker in 0.2.1 with the six corner positions."><figcaption>Overlay position · six places</figcaption></figure>
       </div>
     </div>
   </section>
