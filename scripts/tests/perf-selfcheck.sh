@@ -106,20 +106,20 @@ check "settings main page groups categories and the reset action in Sections" \
 check "settings main page rows use NavigationLink with category icons" \
   bash -c 'grep -Fq -- "NavigationLink(value: category)" ios/app/Sources/SettingsView.swift && grep -Fq -- "category.systemImage" ios/app/Sources/SettingsView.swift'
 check "settings main page keeps a localized Settings title" contains ios/app/Sources/SettingsView.swift '.navigationTitle("Settings")'
-check "settings main page uses the inline title style" contains ios/app/Sources/SettingsView.swift '.navigationBarTitleDisplayMode(.inline)'
-check "settings main page no longer uses the large title style" bash -c '! grep -Fq -- ".navigationBarTitleDisplayMode(.large)" ios/app/Sources/SettingsView.swift'
+check "settings main page uses the iOS large title style" contains ios/app/Sources/SettingsView.swift '.navigationBarTitleDisplayMode(.large)'
+check "settings category pages use the iOS large title style" contains ios/app/Sources/SettingsPages.swift '.navigationBarTitleDisplayMode(.large)'
 check "settings pages register the category destination" contains ios/app/Sources/SettingsView.swift '.navigationDestination(for: SettingsCategory.self)'
 check "settings use the iOS inset-grouped style with system colours" \
   bash -c 'grep -Fq -- "listStyle(.insetGrouped)" ios/app/Sources/SettingsPages.swift && ! grep -rq "preferredColorScheme(.dark)" ios/app/Sources'
 for title in General System Gamepad Graphics Layout Sound Debug; do
   check "category ${title} title is localized" contains ios/app/Sources/SettingsPages.swift "return L10n.tr(\"${title}\")"
 done
-for symbol in 'gearshape' 'iphone' 'gamecontroller' 'square.grid.2x2' 'rectangle.split.2x1' 'return "speaker"' 'chevron.left.forwardslash.chevron.right' 'ellipsis.circle'; do
+for symbol in 'gearshape.fill' 'iphone' 'gamecontroller.fill' 'square.grid.2x2.fill' 'rectangle.split.2x1' 'speaker.wave.2.fill' 'chevron.left.forwardslash.chevron.right' 'ellipsis.circle.fill'; do
   check "category symbol ${symbol} is present" contains ios/app/Sources/SettingsPages.swift "${symbol}"
 done
 # General (task-51): real Check for updates plus Turbo limit/speed and the
 # Default speed; the old Fast-forward and read-only Frame limiter rows moved out.
-check "category pages use the inline navigation title" contains ios/app/Sources/SettingsPages.swift '.navigationBarTitleDisplayMode(.inline)'
+check "choice rows push an iOS-style radio selection page" bash -c 'grep -Fq -- "SettingsChoicePage" ios/app/Sources/SettingsPages.swift && grep -Fq -- "checkmark" ios/app/Sources/SettingsPages.swift'
 check "General page has the Check for updates row" contains ios/app/Sources/SettingsPages.swift 'settings-check-for-updates'
 check "General page has the update status row" contains ios/app/Sources/SettingsPages.swift 'settings-update-status'
 check "General page has the Turbo limit row" contains ios/app/Sources/SettingsPages.swift 'settings-turbo-limit'
@@ -215,7 +215,7 @@ check "Layout page has the orientation lock row" \
   bash -c 'sed -n "/^struct LayoutSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "settings-orientation-lock"'
 check "Layout page binds the swap screens setting" \
   bash -c 'sed -n "/^struct LayoutSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "swapScreens"'
-check "Layout page has a Performance monitoring group" contains ios/app/Sources/SettingsPages.swift 'SettingsSectionCaption(title: "Performance monitoring")'
+check "Layout page has a Performance monitoring group" contains ios/app/Sources/SettingsPages.swift 'Text("Performance monitoring")'
 check "Layout page has the FPS counter row" \
   bash -c 'sed -n "/^struct LayoutSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "settings-fps-hud"'
 check "Layout page has the system Metal HUD row" \
@@ -232,7 +232,7 @@ check "Debug page reports the interpreted percentage" contains ios/app/Sources/S
 check "Debug page reports instruction fallbacks when available" contains ios/app/Sources/SettingsPages.swift 'model.aotDiagnostics.instructionFallbacks'
 # Reset All Settings: real UserDefaults reset plus relaunch prompt.
 check "main page has the Reset All Settings row" contains ios/app/Sources/SettingsView.swift 'settings-reset-all'
-check "Reset row uses the counter-clockwise symbol" contains ios/app/Sources/SettingsView.swift '"arrow.counterclockwise"'
+check "Reset row uses the system destructive action style" bash -c 'grep -Fq -- "Button(role: .destructive)" ios/app/Sources/SettingsView.swift && grep -Fq -- "settings-reset-all" ios/app/Sources/SettingsView.swift'
 check "Reset removes the app's defaults domain" contains ios/app/Sources/SettingsView.swift 'removePersistentDomain(forName: bundleIdentifier)'
 check "Reset asks for confirmation first" contains ios/app/Sources/SettingsView.swift '"Reset all settings?"'
 check "Reset tells the user to relaunch" contains ios/app/Sources/SettingsView.swift 'Quit and reopen 3ds2apple for the default settings to take effect.'
@@ -256,13 +256,13 @@ check "storage/About rows moved from System to Other" \
 check "navigation rows do not add their own disclosure chevron" \
   bash -c '! sed -n "/struct SettingsNavigationRow/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "chevron.right"'
 
-section '0.2.0 settings copy fits two lines (task-62)'
-# Every settings row description is written to be readable in two lines; the
-# lineLimit(2) in the row shells stays as a safeguard, not as the normal state.
-check "every settings row shell keeps the two-line limit" \
-  bash -c '[ "$(grep -c "lineLimit(2)" ios/app/Sources/SettingsPages.swift)" -ge 3 ]'
-check "warning rows cap their message at two lines" \
-  bash -c 'sed -n "/struct SettingsWarningRow/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- ".lineLimit(2)"'
+section 'settings copy stays compact (0.2.1 footnote rows)'
+# 0.2.1 renders explanations as system footnote text (no custom bold); the
+# descriptions stay short enough to read as one or two lines on a phone.
+check "settings rows use the system footnote explanation style" \
+  bash -c 'sed -n "/struct SettingsRowShell/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- ".font(.footnote)"'
+check "warning rows use the system footnote message style" \
+  bash -c 'sed -n "/struct SettingsWarningRow/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- ".font(.footnote)"'
 long_desc="$(grep -o 'description: "[^"]*"' ios/app/Sources/SettingsPages.swift \
   | sed 's/^description: "//; s/"$//' | awk 'length($0) > 96')"
 if [ -z "$long_desc" ]; then

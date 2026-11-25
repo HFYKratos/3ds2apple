@@ -167,7 +167,7 @@ check "the settings main page has no disclosure chevrons" bash -c '! sed -n "/pr
 
 section '0.1.7-beta2 settings layout (task-45)'
 check "Layout page replaced the direct screen-layout jump" contains "${SETTINGS_PAGES}" 'LayoutSettingsPage(settings: settings, model: model)'
-check "Layout page has the Performance monitoring group" contains "${SETTINGS_PAGES}" 'SettingsSectionCaption(title: "Performance monitoring")'
+check "Layout page has the Performance monitoring group" contains "${SETTINGS_PAGES}" 'Text("Performance monitoring")'
 check "Layout page binds the swap screens setting" contains "${SETTINGS_PAGES}" 'swapScreens'
 check "Gamepad page has the haptics row" contains "${SETTINGS_PAGES}" 'settings-haptics'
 check "Graphics page no longer shows the renderer row" bash -c '! grep -Fq -- "settings-renderer" ios/app/Sources/SettingsPages.swift'
