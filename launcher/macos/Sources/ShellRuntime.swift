@@ -52,8 +52,8 @@ enum ShellRuntime {
     /// Rebuilt 0.2.1-beta2 build 1 ROM-free shell IPA from current main (0.2.1-beta2
     /// local pre-release; the shell's CFBundleShortVersionString is the numeric 0.2.1
     /// and ThreeDS2ApplePackageVersion carries the beta label).
-    static let pinnedTemplateBytes: Int64 = 6_631_526
-    static let pinnedTemplateSHA256 = "9307c01f027ab52bf4096334c2ea13e0b2d6709c17ccb1d1a0a82fa44fd5feaa"
+    static let pinnedTemplateBytes: Int64 = 6_631_583
+    static let pinnedTemplateSHA256 = "38605fd95d74eed39b8332faab580b476c62291b69773395661f57b28ac8fb2d"
     /// The rebuilt shell identity the launcher is built against. The pinned
     /// template must report exactly these values; another shell build is refused.
     static let expectedShellVersion = "0.2.1"
