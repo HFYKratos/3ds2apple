@@ -1,6 +1,6 @@
 [package]
 name = "zakuro-ios"
-version = "0.2.1-beta4"
+version = "0.2.1-beta5"
 edition = "2021"
 
 [lib]
