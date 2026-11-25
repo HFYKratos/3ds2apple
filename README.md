@@ -104,7 +104,7 @@ A hardware controller's left stick feeds the Circle Pad and its right stick feed
 
 The paused game's **Virtual controls** card is where the pad is customised:
 
-- **Show/hide the pad**, show the performance overlay, haptics.
+- **Show/hide the pad**, show the performance overlay, haptics. Turning the pad off hides every virtual control except the **Settings** button, which stays in its HOME-slot place and still opens the in-game menu.
 - **On-screen buttons** — the always-shown Settings button (opens the in-game menu), a Fast-forward toggle (2x on/off), Quick save, Quick load and Swap screens; like the console controls the other buttons can be moved, resized and shown or hidden, while Settings can be moved and resized but never hidden.
 - **Edit layout** — drag the controls over the paused picture; the centred **Done** saves the current orientation and resumes.
 - **Toggle controls** — visibility is per orientation: ZL, ZR, the C-stick, Fast-forward and Swap screens start hidden in both; every control the default skins draw, including the portrait D-pad, starts visible. The Settings button is not listed because it can never be hidden (Adjust size still resizes it), and an older saved set that hid it is cleaned up automatically. An untouched 0.2.0, 0.2.1-beta1 or 0.2.1-beta2 default set migrates once; a customised set is kept.
