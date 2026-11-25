@@ -4,8 +4,8 @@ import SwiftUI
 /// Azahar-style performance overlay drawn over the game picture.
 ///
 /// The lines are composed from the switches on the Performance overlay settings
-/// page; a metric the platform cannot expose (battery temperature) is skipped
-/// instead of showing a placeholder.
+/// page; the platform does not expose a battery temperature, so that row is
+/// not offered at all.
 struct PerformanceOverlayView: View {
     @ObservedObject var model: ROMSession
     @ObservedObject var settings: AppSettings
@@ -61,11 +61,6 @@ struct PerformanceOverlayView: View {
         if settings.performanceOverlayShowAvailableMemory,
            let bytes = PerformanceMetrics.availableMemoryBytes() {
             memory.append("Available RAM: \(PerformanceMetrics.megabytes(bytes)) MB")
-        }
-        if settings.performanceOverlayShowBatteryTemperature,
-           let celsius = PerformanceMetrics.batteryTemperatureCelsius {
-            let fahrenheit = celsius * 9 / 5 + 32
-            memory.append(String(format: "%.1f°C / %.1f°F", celsius, fahrenheit))
         }
         return [primary.joined(separator: " | "), memory.joined(separator: " | ")]
             .filter { !$0.isEmpty }

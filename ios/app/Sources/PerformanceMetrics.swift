@@ -32,10 +32,6 @@ enum PerformanceMetrics {
         return bytes > 0 ? UInt64(bytes) : nil
     }
 
-    /// Public iOS APIs do not expose battery temperature. The settings row
-    /// explains this and the overlay skips the line while it is nil.
-    static var batteryTemperatureCelsius: Double? { nil }
-
     static func megabytes(_ bytes: UInt64) -> Int {
         Int(bytes / 1_048_576)
     }

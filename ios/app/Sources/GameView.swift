@@ -358,23 +358,10 @@ struct GameView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity,
                        alignment: settings.performanceOverlayPosition.alignment)
                 .padding(.horizontal, 10)
-                .padding(.top, isLandscape ? 8 : 62)
+                .padding(.top, isLandscape ? 6 : 0)
                 .padding(.bottom, isLandscape ? 22 : 34)
-            if !isMenuPresented,
-               !settings.isControlVisible(.settings, orientation: isLandscape ? .landscape : .portrait) {
-                // The on-screen Settings button opens the in-game menu; the
-                // floating gear is only the fallback when it is hidden.
-                if isLandscape {
-                    pauseButton(size: GameViewLayout.floatingPauseSize)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .padding(.bottom, GameViewLayout.landscapePauseBottomPadding)
-                } else {
-                    pauseButton(size: GameViewLayout.floatingPauseSize)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                        .padding(.trailing, GameViewLayout.floatingHUDHorizontalPadding)
-                        .padding(.top, 64)
-                }
-            }
+            // The Settings button is always visible (0.2.1-beta5), so there is
+            // no floating pause fallback any more.
         }
     }
 
