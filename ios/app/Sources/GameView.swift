@@ -347,42 +347,33 @@ struct GameView: View {
         .accessibilityIdentifier("touch-controls-overlay")
     }
 
-    /// The floating FPS counter and pause button. Portrait keeps both in the
-    /// top-trailing safe-area corner; landscape keeps the pause button at the
-    /// bottom centre (the top corners belong to L/R).
+    /// The performance overlay plus the floating pause fallback. The overlay
+    /// position (six corners) and its lines come from the Performance overlay
+    /// settings; portrait clears the notch and the home indicator, landscape
+    /// only needs the small stage insets.
     @ViewBuilder
     private func floatingHUD(isLandscape: Bool) -> some View {
         if isLoaded || isPreviewingGame {
-            if isLandscape {
-                if settings.showFPS {
-                    fpsPill
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                        .padding(.horizontal, GameViewLayout.floatingHUDHorizontalPadding)
-                        .padding(.top, GameViewLayout.floatingHUDTopPadding)
-                }
-                if !isMenuPresented,
-                   !settings.isControlVisible(.settings, orientation: .landscape) {
-                    // The on-screen Settings button opens the in-game menu; the
-                    // floating gear is only the fallback when it is hidden.
+            PerformanceOverlayView(model: model, settings: settings, isPreview: isPreviewingGame)
+                .frame(maxWidth: .infinity, maxHeight: .infinity,
+                       alignment: settings.performanceOverlayPosition.alignment)
+                .padding(.horizontal, 10)
+                .padding(.top, isLandscape ? 8 : 62)
+                .padding(.bottom, isLandscape ? 22 : 34)
+            if !isMenuPresented,
+               !settings.isControlVisible(.settings, orientation: isLandscape ? .landscape : .portrait) {
+                // The on-screen Settings button opens the in-game menu; the
+                // floating gear is only the fallback when it is hidden.
+                if isLandscape {
                     pauseButton(size: GameViewLayout.floatingPauseSize)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                         .padding(.bottom, GameViewLayout.landscapePauseBottomPadding)
+                } else {
+                    pauseButton(size: GameViewLayout.floatingPauseSize)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .padding(.trailing, GameViewLayout.floatingHUDHorizontalPadding)
+                        .padding(.top, 64)
                 }
-            } else {
-                // Portrait hides the status bar and the skin's SAVE/LOAD chips
-                // own the notch corners, so the FPS pill sits centred just below
-                // the notch. The floating gear is only the fallback shown when the
-                // on-screen Settings button is hidden.
-                HStack(spacing: GameViewLayout.floatingHUDSpacing) {
-                    if settings.showFPS {
-                        fpsPill
-                    }
-                    if !settings.isControlVisible(.settings, orientation: .portrait) {
-                        pauseButton(size: GameViewLayout.floatingPauseSize)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .padding(.top, 64)
             }
         }
     }
@@ -1041,33 +1032,6 @@ struct GameView: View {
         if case .starting = model.phase { return true }
         if case .preparing = model.phase { return true }
         return false
-    }
-
-    // MARK: - FPS (the only in-game HUD)
-
-    /// Presented frames per second, e.g. `59 fps`. The only performance readout
-    /// the game view draws: a translucent floating pill in the top-trailing
-    /// safe-area corner. The AOT state, renderer path and the CPU/present/read
-    /// timing breakdown stay in the log and the diagnostics export.
-    private var fpsPill: some View {
-        Text(fpsText)
-            .font(.caption2.weight(.semibold))
-            .monospacedDigit()
-            .foregroundColor(.white.opacity(0.92))
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background(Capsule().fill(Color.black.opacity(0.42)))
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
-            .allowsHitTesting(false)
-            .accessibilityElement(children: .ignore)
-            .accessibilityIdentifier("fps-hud")
-            .accessibilityLabel(L10n.format("Frames per second: %@", fpsText))
-    }
-
-    private var fpsText: String {
-        // The preview has no runtime; a representative value keeps the pill
-        // looking like the real thing in a screenshot.
-        isPreviewingGame ? "60 fps" : model.fpsText
     }
 
     // MARK: - Diagnostics
