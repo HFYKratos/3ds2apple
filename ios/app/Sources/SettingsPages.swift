@@ -7,8 +7,9 @@
 //  system section header/footer styling, an iOS large title on every page, and
 //  rows that use the system semantic text colours - body regular weight for a
 //  row title (no custom bold or semibold), a footnote secondary explanation and
-//  a secondary trailing value. Switches and menus keep the system styles and
-//  navigation rows stay NavigationLink pushes. Colours are semantic, so light
+//  a secondary trailing value. Switches keep the system style, choice rows push
+//  a radio selection page and navigation rows stay NavigationLink pushes.
+//  Colours are semantic, so light
 //  and dark appearance follow the system (Settings -> System -> Appearance can
 //  still force one if the user asks for it).
 //
@@ -236,7 +237,10 @@ struct SettingsToggleRow: View {
     }
 }
 
-/// A settings row that picks one of several values from a trailing menu.
+/// A settings row that pushes a radio selection page, the system Settings app's
+/// way of choosing one value: the row shows the current value in secondary text
+/// and the pushed page lists every choice with a blue checkmark on the selected
+/// one. Choosing a value updates the binding and stays on the page.
 struct SettingsChoiceRow<Choice: Hashable>: View {
     let title: LocalizedStringKey
     let description: LocalizedStringKey
@@ -262,30 +266,62 @@ struct SettingsChoiceRow<Choice: Hashable>: View {
     }
 
     var body: some View {
-        SettingsRowShell(title: title, description: description, hint: hint) {
-            Menu {
+        NavigationLink {
+            SettingsChoicePage(
+                title: title,
+                description: description,
+                choices: choices,
+                selection: $selection,
+                label: label
+            )
+        } label: {
+            SettingsRowShell(title: title, description: description, hint: hint) {
+                Text(label(selection))
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// The radio selection page a choice row pushes: one row per choice with the
+/// system blue checkmark on the selected one. Selecting a value updates the
+/// setting and keeps the page open, like the system Settings app.
+struct SettingsChoicePage<Choice: Hashable>: View {
+    let title: LocalizedStringKey
+    let description: LocalizedStringKey
+    let choices: [Choice]
+    @Binding var selection: Choice
+    let label: (Choice) -> String
+
+    var body: some View {
+        SettingsPageScaffold(title: title) {
+            Section {
                 ForEach(choices, id: \.self) { choice in
                     Button {
                         selection = choice
                     } label: {
-                        if choice == selection {
-                            Label(label(choice), systemImage: "checkmark")
-                        } else {
+                        HStack(spacing: 8) {
                             Text(label(choice))
+                                .font(.body)
+                                .foregroundStyle(.primary)
+                            Spacer(minLength: 8)
+                            if choice == selection {
+                                Image(systemName: "checkmark")
+                                    .font(.body)
+                                    .foregroundStyle(.tint)
+                            }
                         }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(label(selection))
-                        .lineLimit(1)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption2)
-                }
-                .font(.body)
-                .foregroundStyle(.secondary)
+            } footer: {
+                Text(description)
             }
-            .accessibilityLabel(Text(title))
         }
     }
 }
