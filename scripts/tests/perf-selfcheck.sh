@@ -470,6 +470,18 @@ check "control layout carries ZL/ZR" contains ios/app/Sources/ControlLayout.swif
 check "layout persistence is versioned" contains ios/app/Sources/ControlLayout.swift 'currentVersion'
 check "default control layout uses the 0.2.1 ModernFS / ModernHybrid skin values" \
   bash -c 'grep -q "x: 0.18583, y: 0.80797, size: 0.27778" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.16425, y: 0.82589, size: 0.24155" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.058, y: 0.71652, size: 0.055" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.16908, y: 0.71652, size: 0.07729" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.44686, y: 0.82868, size: 0.12319" ios/app/Sources/ControlLayout.swift && grep -q "x: 0.92, y: 0.885, size: 0.08" ios/app/Sources/ControlLayout.swift && grep -q "ModernFS" ios/app/Sources/ControlLayout.swift && grep -q "ModernHybrid" ios/app/Sources/ControlLayout.swift'
+section 'Default layout HOME / MENU and notch SAVE-LOAD (0.2.1-beta2)'
+check "layout adds the app-only Settings (HOME slot) and Menu controls" \
+  bash -c 'grep -Fq -- "case menu" ios/app/Sources/ControlLayout.swift && grep -Fq -- "case settings" ios/app/Sources/ControlLayout.swift'
+check "portrait puts Settings in the skin HOME slot and Menu bottom-left" \
+  bash -c 'grep -Fq -- "(\\.settings, ControlPlacement(x: 0.50242, y: 0.71652" ios/app/Sources/ControlLayout.swift && grep -Fq -- "(\\.menu, ControlPlacement(x: 0.12560, y: 0.93583" ios/app/Sources/ControlLayout.swift'
+check "portrait puts SAVE/LOAD in the top notch corners" \
+  bash -c 'grep -Fq -- "(\\.quickLoad, ControlPlacement(x: 0.25725, y: 0.06138" ios/app/Sources/ControlLayout.swift && grep -Fq -- "(\\.quickSave, ControlPlacement(x: 0.74275, y: 0.06138" ios/app/Sources/ControlLayout.swift'
+check "landscape puts SAVE/LOAD and MENU on the left notch edge" \
+  bash -c 'grep -Fq -- "(\\.quickSave, ControlPlacement(x: 0.02902, y: 0.16425" ios/app/Sources/ControlLayout.swift && grep -Fq -- "(\\.quickLoad, ControlPlacement(x: 0.02902, y: 0.24155" ios/app/Sources/ControlLayout.swift && grep -Fq -- "(\\.menu, ControlPlacement(x: 0.02902, y: 0.76570" ios/app/Sources/ControlLayout.swift'
+check "beta1 shipped defaults stay recognised for the one-time migration" contains ios/app/Sources/ControlLayout.swift 'betaOneShippedPlacements'
+check "runtime overlay wires the Menu and Settings callbacks" \
+  bash -c 'grep -Fq -- "onMenu: () -> Void" ios/app/Sources/VirtualControlsView.swift && grep -Fq -- "onSettings: () -> Void" ios/app/Sources/VirtualControlsView.swift && grep -Fq -- "onSettings: { sheet = .settings }" ios/app/Sources/GameView.swift'
 check "D-pad renders as one cross control with direction hit testing" \
   bash -c 'grep -q "struct DpadCrossShape" ios/app/Sources/VirtualControlsView.swift && grep -q "dpad-cross" ios/app/Sources/VirtualControlsView.swift && grep -q "func dpadGroup" ios/app/Sources/GameViewGeometry.swift && grep -q "control-edit-dpad" ios/app/Sources/InGameControlEditOverlay.swift'
 check "in-game menu uses the iOS grouped style and tap-outside resume" \

@@ -339,6 +339,19 @@ struct GameView: View {
             onQuickSave: { performQuickSave() },
             onQuickLoad: { performQuickLoad() },
             onSwapScreens: { performSwapScreens() },
+            onMenu: {
+                guard !isMenuPresented, !isEditingControls else { return }
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
+                    isMenuPresented = true
+                }
+                if !isPreviewingGame {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        guard isMenuPresented else { return }
+                        model.pauseForMenu()
+                    }
+                }
+            },
+            onSettings: { sheet = .settings },
             fastForwardActive: fastForwardToggled
         )
         .ignoresSafeArea()
@@ -360,7 +373,10 @@ struct GameView: View {
                         .padding(.horizontal, GameViewLayout.floatingHUDHorizontalPadding)
                         .padding(.top, GameViewLayout.floatingHUDTopPadding)
                 }
-                if !isMenuPresented {
+                if !isMenuPresented,
+                   !settings.isControlVisible(.menu, orientation: .landscape) {
+                    // The layout's MENU button opens the in-game menu; the
+                    // floating gear is only the fallback when it is hidden.
                     pauseButton(size: GameViewLayout.floatingPauseSize)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                         .padding(.bottom, GameViewLayout.landscapePauseBottomPadding)
@@ -370,7 +386,9 @@ struct GameView: View {
                     if settings.showFPS {
                         fpsPill
                     }
-                    pauseButton(size: GameViewLayout.floatingPauseSize)
+                    if !settings.isControlVisible(.menu, orientation: .portrait) {
+                        pauseButton(size: GameViewLayout.floatingPauseSize)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 .padding(.horizontal, GameViewLayout.floatingHUDHorizontalPadding)
