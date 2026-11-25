@@ -13,6 +13,8 @@ displays the two 3DS screens, drives the Zakuro runtime and exposes input,
 audio, fast-forward, save data, diagnostics and settings. The app is organised
 as a home page, the running game, a settings page and a few supporting pages.
 
+The shell ships as part of **3ds2apple 0.2.1**, the latest stable release.
+
 The UI follows the system language: Simplified Chinese gets Chinese, every other
 language gets English. Static text lives in `Resources/<lang>.lproj/
 Localizable.strings`; run-time text goes through the small `L10n` helper, so the
@@ -496,7 +498,7 @@ choice (six options) and an independent portrait choice (three options), each
 selected from its own radio picker, with the numeric custom pages and the
 round-4 drag editor described below.
 
-- **Default control layout (0.2.1-beta4 Delta reference skins).** The shipped
+- **Default control layout (0.2.1 Delta reference skins).** The shipped
   positions follow the two Delta `.deltaskin` skins used as the 0.2.1 geometry
   reference, read only for their numeric mapping size and `items[].frame`
   rectangles (no artwork, skin text or assets copied): **ModernFS** for portrait
@@ -556,7 +558,7 @@ round-4 drag editor described below.
   controls**, **Adjust size**, **Adjust opacity** and **Reset virtual controls**.
   Turning **Show virtual controls** off hides every virtual control except the
   Settings button, which keeps its HOME-slot placement, size and opacity and
-  still opens the in-game menu (0.2.1-beta6), so Settings stays reachable with
+  still opens the in-game menu (0.2.1), so Settings stays reachable with
   the pad off.
   - **Edit layout** closes the menu, keeps the runtime paused, hides the pause/overlay
     HUD and returns to the frozen game picture with the on-screen controls
@@ -791,7 +793,7 @@ frame generation time on the first line, then the app's resident memory
 ("Process RAM") on the second, with optional speed and available memory
 additions. The overlay sits at the very top edge of the game picture, in one of
 six places (top left by default): in portrait it hugs the top safe-area edge
-(0.2.1-beta5 removed the extra 62 pt downward inset) and in landscape it sits a
+(0.2.1 removed the extra 62 pt downward inset) and in landscape it sits a
 little below the stage's top edge. It can draw a translucent background behind
 the text so it stays readable over bright scenes, and bottom placements keep
 clear of the home indicator. The on-screen Settings button is always visible, so
@@ -904,7 +906,7 @@ localized.
   restarts the audio engine.
 - The picture fills the whole game view; the always-visible on-screen **Settings**
   button opens the in-game menu (it stays in place when Show virtual controls is
-  off, and there is no floating pause fallback since 0.2.1-beta5 because the
+  off, and there is no floating pause fallback since 0.2.1 because the
   button can never be hidden). The in-game menu keeps the
   same z-order above the picture, the controls and the HUD.
 - The picture box is top-aligned in the game view: portrait shows the console
@@ -1425,7 +1427,7 @@ Instant save states:
   fallback. The presenter side needs the
   round-0.1.6 library/patch 0009; an older library falls back to readback.
   The custom rectangles still apply from the next game load.
-- The shipped default controls (0.2.1-beta4 positions; unchanged in 0.2.1-beta5) follow two Delta reference skins
+- The shipped default controls (0.2.1) follow two Delta reference skins
   read for geometry only, **ModernFS** in portrait (mapping 414x896) and
   **ModernHybrid** in landscape (mapping 896x414): the skins' HOME slot is the
   single Settings button (it opens the in-game menu; the Settings page is the
