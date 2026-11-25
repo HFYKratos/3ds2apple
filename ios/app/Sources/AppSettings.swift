@@ -874,12 +874,13 @@ final class AppSettings: ObservableObject {
             defaults, Keys.controlLayoutLandscape, orientation: .landscape
         )
         // Shipped-default migration: a stored profile that is still an
-        // untouched shipped default (0.2.0, the 0.2.1-beta1 skin layout, beta3
-        // round 5 or round 4) moves to the current 0.2.1-beta2 skin layout; a
-        // profile the user moved is kept unchanged. A profile written before
-        // 0.2.1-beta2 has no menu/settings elements; the decode above already
-        // healed those in from the current defaults, so an upgraded user sees
-        // the new Settings/Menu buttons either way.
+        // untouched shipped default (0.2.0, the 0.2.1-beta1 skin layout, the
+        // 0.2.1-beta2 layout with its MENU key, beta3 round 5 or round 4) moves
+        // to the current 0.2.1-beta3 layout; a profile the user moved is kept
+        // unchanged. A profile written before 0.2.1-beta3 may still carry the
+        // MENU placement or lack the Settings placement; the decode above heals
+        // the current elements and the migration ignores the removed MENU key,
+        // so an untouched upgraded user lands on the current default.
         let storedControlPortrait = ControlLayoutProfile.migratingPreviousShippedDefault(
             decodedControlPortrait, for: .portrait
         )
@@ -969,6 +970,35 @@ final class AppSettings: ObservableObject {
                          forKey: Keys.hiddenControlItemsLandscapeKey)
             defaults.set(true, forKey: Keys.hiddenControlItemsSkinDefaultsMigrated)
             AppLog.log("[3ds2apple] virtual controls: hidden rows migrated to the 0.2.1 skin defaults (%@ / %@)",
+                       portrait.map(\.rawValue).sorted().joined(separator: ","),
+                       landscape.map(\.rawValue).sorted().joined(separator: ","))
+        }
+        // 0.2.1-beta3: fastForward / swapScreens join the shipped hidden rows
+        // (the reference skins draw neither, and beta2 showed them in the app
+        // bands). An untouched beta1/beta2 shipped set (see
+        // betaTwoDefaultHiddenItems(for:)) becomes the new shipped set once; a
+        // set the user changed is kept. The marker makes this run once, and the
+        // sets are written back because a later launch reads the per-direction
+        // keys instead of these defaults.
+        if defaults.object(forKey: Keys.hiddenControlItemsBetaTwoDefaultsMigrated) == nil {
+            var portrait = Set((defaults.stringArray(forKey: Keys.hiddenControlItemsPortraitKey) ?? [])
+                .compactMap(ControlOptionItem.init(rawValue:)))
+            var landscape = Set((defaults.stringArray(forKey: Keys.hiddenControlItemsLandscapeKey) ?? [])
+                .compactMap(ControlOptionItem.init(rawValue:)))
+            if portrait == Self.betaTwoDefaultHiddenItems(for: .portrait) {
+                portrait = Self.defaultHiddenItems(for: .portrait)
+            }
+            if landscape == Self.betaTwoDefaultHiddenItems(for: .landscape) {
+                landscape = Self.defaultHiddenItems(for: .landscape)
+            }
+            hiddenControlItemsPortrait = portrait
+            hiddenControlItemsLandscape = landscape
+            defaults.set(portrait.map(\.rawValue).sorted(),
+                         forKey: Keys.hiddenControlItemsPortraitKey)
+            defaults.set(landscape.map(\.rawValue).sorted(),
+                         forKey: Keys.hiddenControlItemsLandscapeKey)
+            defaults.set(true, forKey: Keys.hiddenControlItemsBetaTwoDefaultsMigrated)
+            AppLog.log("[3ds2apple] virtual controls: hidden rows migrated to the 0.2.1-beta3 defaults (%@ / %@)",
                        portrait.map(\.rawValue).sorted().joined(separator: ","),
                        landscape.map(\.rawValue).sorted().joined(separator: ","))
         }
@@ -1190,19 +1220,21 @@ final class AppSettings: ObservableObject {
         min(max(value, controlSizeScaleRange.lowerBound), controlSizeScaleRange.upperBound)
     }
 
-    /// The shipped hidden rows (0.2.1): both reference skins draw neither ZL/ZR
-    /// nor a C-stick, so those stay hidden in both directions (the layout still
-    /// places them as design fill-ins); every control the skins do draw is
+    /// The shipped hidden rows (0.2.1-beta3): both reference skins draw neither
+    /// ZL/ZR nor a C-stick, and they draw no fast-forward / swap-screens item
+    /// either, so those five stay hidden in both directions (the layout still
+    /// places them as design fill-ins in the top-centre row so the user can find
+    /// and move them after enabling them); every control the skins do draw is
     /// visible, including the portrait D-pad, which the ModernFS skin places in
     /// the band below the picture (0.1.6-0.2.0 additionally hid it in portrait).
-    /// The app-only Settings and Menu buttons added in 0.2.1-beta2 ship visible
-    /// in both directions.
+    /// The app-only Settings button added in 0.2.1-beta2 ships visible in both
+    /// directions (its MENU sibling was removed in beta3).
     static func defaultHiddenItems(
         for orientation: ControlLayoutOrientation
     ) -> Set<ControlOptionItem> {
         switch orientation {
         case .portrait, .landscape:
-            return [.cStick, .buttonZL, .buttonZR]
+            return [.cStick, .buttonZL, .buttonZR, .fastForward, .swapScreens]
         }
     }
 
@@ -1215,6 +1247,19 @@ final class AppSettings: ObservableObject {
         var items: Set<ControlOptionItem> = [.cStick, .buttonZL, .buttonZR]
         if orientation == .portrait { items.insert(.dpad) }
         return items
+    }
+
+    /// The 0.2.1-beta1/beta2 shipped hidden rows, kept only to recognise an
+    /// untouched stored default during the one-time 0.2.1-beta3 migration: both
+    /// directions hid the C-stick and the two triggers; fastForward and
+    /// swapScreens still shipped visible back then.
+    static func betaTwoDefaultHiddenItems(
+        for orientation: ControlLayoutOrientation
+    ) -> Set<ControlOptionItem> {
+        switch orientation {
+        case .portrait, .landscape:
+            return [.cStick, .buttonZL, .buttonZR]
+        }
     }
 
     private func hiddenItems(for orientation: ControlLayoutOrientation) -> Set<ControlOptionItem> {
@@ -1450,6 +1495,9 @@ final class AppSettings: ObservableObject {
         /// One-time 0.2.1 migration to the hidden rows that match the new
         /// ModernFS/ModernHybrid default layouts.
         static let hiddenControlItemsSkinDefaultsMigrated = "UI.hiddenControlItemsSkinDefaultsMigrated"
+        /// One-time 0.2.1-beta3 migration: fastForward/swapScreens join the
+        /// shipped hidden rows of the beta1/beta2 default set.
+        static let hiddenControlItemsBetaTwoDefaultsMigrated = "UI.hiddenControlItemsBetaTwoDefaultsMigrated"
         static let controlSizeScales = "UI.controlSizeScales"
         static let swapScreens = "UI.swapScreens"
         static let controlLayoutPortrait = "UI.controlLayoutPortrait"
