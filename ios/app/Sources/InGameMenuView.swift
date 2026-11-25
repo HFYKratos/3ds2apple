@@ -399,7 +399,7 @@ struct InGameMenuView: View {
                           systemImage: "speedometer",
                           tint: tintGreen,
                           identifier: "menu-show-fps",
-                          isOn: persistedBinding(settings, \.showFPS))
+                          isOn: persistedBinding(settings, \.performanceOverlayEnabled))
                 rowDivider
                 toggleRow(L10n.tr("Haptic feedback"),
                           systemImage: "hand.tap",

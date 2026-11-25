@@ -62,10 +62,10 @@ check "AOTDiagnostics parses interpreted %" contains ios/app/Sources/ROMSession.
 check "AOTDiagnostics exposes AOT %" contains ios/app/Sources/ROMSession.swift 'aotPercent'
 check "AOTDiagnostics counts instruction fallbacks" contains ios/app/Sources/ROMSession.swift 'instructionFallbacks'
 check "session exposes the FPS readout" contains ios/app/Sources/ROMSession.swift 'var fpsText'
-check "GameView draws the FPS readout" contains ios/app/Sources/GameView.swift 'model.fpsText'
-check "GameView tags the FPS readout for UI smoke" contains ios/app/Sources/GameView.swift 'fps-hud'
-check "FPS readout is a persisted setting" contains ios/app/Sources/AppSettings.swift 'showFPS'
-check "Settings exposes the FPS switch" contains ios/app/Sources/SettingsPages.swift 'settings-fps-hud'
+check "GameView draws the performance overlay" contains ios/app/Sources/GameView.swift 'PerformanceOverlayView'
+check "performance overlay view tags its readout for UI smoke" contains ios/app/Sources/PerformanceOverlayView.swift 'performance-overlay'
+check "performance overlay is a persisted setting" contains ios/app/Sources/AppSettings.swift 'performanceOverlayEnabled'
+check "Settings exposes the performance overlay page" contains ios/app/Sources/SettingsPages.swift 'settings-performance-overlay'
 check "diagnostics report has the FPS counter state" contains ios/app/Sources/DiagnosticsReport.swift 'fps_counter='
 check "diagnostics report has aot_percent" contains ios/app/Sources/DiagnosticsReport.swift 'aot_percent='
 check "diagnostics report has timing shares" contains ios/app/Sources/DiagnosticsReport.swift 'timing_share_run_pct='
@@ -142,7 +142,7 @@ check "settings explain the unlimited-speed heat/battery warning" \
 check "General page no longer has the frame limiter row" \
   bash -c '! sed -n "/^struct GeneralSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "settings-frame-limiter"'
 check "General page no longer holds rotation/haptics/FPS/HUD/GPU rows" \
-  bash -c '! sed -n "/^struct GeneralSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Eq -- "settings-screen-rotation|settings-haptics|settings-fps-hud|settings-system-metal-hud|gpuVertexShaders|preciseShading"'
+  bash -c '! sed -n "/^struct GeneralSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Eq -- "settings-screen-rotation|settings-haptics|settings-performance-overlay|settings-system-metal-hud|gpuVertexShaders|preciseShading"'
 check "Gamepad page exposes deadzone, appearance and button mapping" \
   bash -c 'grep -q "settings-analog-deadzone" ios/app/Sources/SettingsPages.swift && grep -q "settings-control-appearance" ios/app/Sources/SettingsPages.swift && grep -q "settings-controller-button-mapping" ios/app/Sources/SettingsPages.swift'
 check "physical controller deadzone and button remapping are wired" \
@@ -216,8 +216,8 @@ check "Layout page has the orientation lock row" \
 check "Layout page binds the swap screens setting" \
   bash -c 'sed -n "/^struct LayoutSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "swapScreens"'
 check "Layout page has a Performance monitoring group" contains ios/app/Sources/SettingsPages.swift 'Text("Performance monitoring")'
-check "Layout page has the FPS counter row" \
-  bash -c 'sed -n "/^struct LayoutSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "settings-fps-hud"'
+check "Layout page has the performance overlay row" \
+  bash -c 'sed -n "/^struct LayoutSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "settings-performance-overlay"'
 check "Layout page has the system Metal HUD row" \
   bash -c 'sed -n "/^struct LayoutSettingsPage: View/,/^}/p" ios/app/Sources/SettingsPages.swift | grep -Fq -- "settings-system-metal-hud"'
 check "Layout page keeps the HUD unavailable hint" \
@@ -238,7 +238,7 @@ check "Reset asks for confirmation first" contains ios/app/Sources/SettingsView.
 check "Reset tells the user to relaunch" contains ios/app/Sources/SettingsView.swift 'Quit and reopen 3ds2apple for the default settings to take effect.'
 check "Reset does not touch Documents data" contains ios/app/README.md 'Game data, battery saves and the diagnostics'
 # Every existing settings function keeps its accessibility identifier.
-for id in settings-run-speed-limit settings-check-for-updates settings-update-channel settings-update-status settings-turbo-limit settings-turbo-speed settings-default-speed settings-screen-rotation settings-orientation-lock settings-swap-screens settings-fps-hud settings-system-metal-hud settings-haptics settings-show-touch-controls settings-controls-opacity settings-controller settings-resolution settings-screen-layout settings-gpu-vertex-shaders settings-precise-shading settings-appearance settings-device settings-system-version settings-app-version settings-aot-status settings-save-manager settings-cpu-profiler settings-export-logs settings-diagnostics-hint settings-clear-cache settings-about; do
+for id in settings-run-speed-limit settings-check-for-updates settings-update-channel settings-update-status settings-turbo-limit settings-turbo-speed settings-default-speed settings-screen-rotation settings-orientation-lock settings-swap-screens settings-performance-overlay settings-system-metal-hud settings-haptics settings-show-touch-controls settings-controls-opacity settings-controller settings-resolution settings-screen-layout settings-gpu-vertex-shaders settings-precise-shading settings-appearance settings-device settings-system-version settings-app-version settings-aot-status settings-save-manager settings-cpu-profiler settings-export-logs settings-diagnostics-hint settings-clear-cache settings-about; do
   check "settings identifier ${id} is preserved" grep -Fq -- "\"${id}\"" ios/app/Sources/SettingsPages.swift
 done
 # Localization tables and docs.

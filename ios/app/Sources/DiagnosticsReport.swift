@@ -308,7 +308,7 @@ enum DiagnosticsExporter {
         playback_speed=\(settings.playbackSpeed.rawValue)
         playback_speed_effective=\(model.effectivePlaybackSpeed)
         playback_speed_auto_reduced=\(model.playbackSpeedAutoReduced ? 1 : 0)
-        fps_counter=\(settings.showFPS ? 1 : 0)
+        fps_counter=\(settings.performanceOverlayEnabled ? 1 : 0)
         warmup_enabled=0
         warmup_note=removed-in-0.1.1 (the optional first-load graphics warm-up was removed; pipeline-cache persistence is unchanged)
         system_metal_hud=\(settings.systemMetalHUD ? 1 : 0)
