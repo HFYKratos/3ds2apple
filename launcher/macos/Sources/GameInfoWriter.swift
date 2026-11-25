@@ -28,7 +28,7 @@ import Foundation
 
 enum GameInfoWriter {
     static let shellSchemaVersion = 1
-    static let launcherVersion = "0.2.1-beta3"
+    static let launcherVersion = "0.2.1-beta4"
 
     struct Output {
         var json: [String: Any]
