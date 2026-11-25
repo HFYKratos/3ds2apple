@@ -2,25 +2,27 @@
 //  SettingsPages.swift
 //  3ds2apple
 //
-//  The category pages of the 0.1.7 settings redesign. The main page (see
-//  SettingsView.swift) is a flat dark list of large category rows plus a
-//  Reset All Settings action; each category opens one page with a large title
-//  and rows that show a title, a one-line explanation and a trailing control.
-//  There are no grouped cards, no separators and no chevrons on the main page.
+//  The category pages of the 0.2.1 settings redesign. Everything here follows
+//  the system Settings app: an inset-grouped List card per topic with the
+//  system section header/footer styling, an iOS large title on every page, and
+//  rows that use the system semantic text colours - body regular weight for a
+//  row title (no custom bold or semibold), a footnote secondary explanation and
+//  a secondary trailing value. Switches and menus keep the system styles and
+//  navigation rows stay NavigationLink pushes. Colours are semantic, so light
+//  and dark appearance follow the system (Settings -> System -> Appearance can
+//  still force one if the user asks for it).
 //
-//  0.1.7-beta2 page layout: General (fast-forward speed and the read-only frame
-//  limiter), Layout (screen layout entry, screen rotation, orientation lock,
-//  swap screens, and the Performance monitoring group with the FPS counter and
-//  the system Metal HUD), Gamepad (on-screen controls, overlay opacity,
-//  haptics, controller), Graphics (resolution, the two experimental GPU
-//  switches and read-only renderer information), Sound (volume, mute, buffer),
-//  System (storage, version, language, About), Debug (AOT verification, Save
-//  Manager, CPU profiler and the diagnostics export) and About.
+//  Page layout: General (speed limit, default speed, turbo, update checks),
+//  Layout (screens and performance monitoring), System (appearance and the
+//  device/version facts), Gamepad (on-screen controls and the controller
+//  subpages), Graphics (resolution/aspect plus the experimental GPU switches),
+//  Sound (volume/mute/buffer), Debug (AOT verification and tools), and Other
+//  (storage, version, language, About).
 //
-//  The design was sketched after reference screenshots of another emulator's
-//  settings app. Only the layout idea was used: every string below is our own
-//  and is localized through Localizable.strings / L10n. No code or text was
-//  copied from that project (it is GPL and reference-only for this repo).
+//  The General page order follows reference screenshots of another emulator's
+//  settings app for the order only; every string below is our own and is
+//  localized through Localizable.strings / L10n. No code or text was copied
+//  from that project (it is GPL and reference-only for this repo).
 //
 //  The two experimental switches are next-launch settings: App.init applies
 //  them before the renderer creates its first device, so the rows say that a
@@ -31,20 +33,6 @@
 import Foundation
 import SwiftUI
 import UIKit
-
-// MARK: - Theme
-
-/// Colours and metrics shared by the settings pages. Since 0.1.7-beta4 the
-/// settings use the system grouped style and semantic colours, so light/dark
-/// follows the system appearance like the rest of the app.
-enum SettingsTheme {
-    static let background = Color(.systemGroupedBackground)
-    static let horizontalPadding: CGFloat = 20
-    /// Vertical gap between two settings rows (the reference has no dividers).
-    static let rowSpacing: CGFloat = 28
-    /// The page content stays readable on iPad.
-    static let contentMaxWidth: CGFloat = 700
-}
 
 // MARK: - Categories
 
@@ -75,17 +63,31 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    /// The large SF Symbol on the main page.
+    /// The white SF Symbol on the main page's rounded-square icon tile.
     var systemImage: String {
         switch self {
-        case .general: return "gearshape"
+        case .general: return "gearshape.fill"
         case .system: return "iphone"
-        case .gamepad: return "gamecontroller"
-        case .graphics: return "square.grid.2x2"
+        case .gamepad: return "gamecontroller.fill"
+        case .graphics: return "square.grid.2x2.fill"
         case .layout: return "rectangle.split.2x1"
-        case .sound: return "speaker"
+        case .sound: return "speaker.wave.2.fill"
         case .debug: return "chevron.left.forwardslash.chevron.right"
-        case .other: return "ellipsis.circle"
+        case .other: return "ellipsis.circle.fill"
+        }
+    }
+
+    /// The tile colour on the main page, like the system Settings app's icons.
+    var iconTint: Color {
+        switch self {
+        case .general: return .gray
+        case .system: return .blue
+        case .gamepad: return .green
+        case .graphics: return .purple
+        case .layout: return .orange
+        case .sound: return .pink
+        case .debug: return .indigo
+        case .other: return .teal
         }
     }
 }
@@ -124,7 +126,8 @@ struct SettingsCategoryPage: View {
 
 // MARK: - Page scaffolding
 
-/// Shared page body: an iOS inset-grouped list with an inline navigation title.
+/// Shared page body: an inset-grouped List with the system large title every
+/// Settings page uses. Each page builds its own sections and system headers.
 struct SettingsPageScaffold<Content: View>: View {
     let title: LocalizedStringKey
     private let content: () -> Content
@@ -140,14 +143,14 @@ struct SettingsPageScaffold<Content: View>: View {
         }
         .listStyle(.insetGrouped)
         .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
     }
 }
 
 // MARK: - Rows
 
-/// One settings row: a title, a two-line explanation and a trailing control.
-/// A row sits directly on the page background, without a card or a divider.
+/// One settings row: a body-weight title, a footnote explanation and a trailing
+/// control, matching a row inside a system Settings grouped card.
 struct SettingsRowShell<Control: View>: View {
     let title: LocalizedStringKey
     let description: LocalizedStringKey
@@ -170,32 +173,28 @@ struct SettingsRowShell<Control: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.body)
                     .foregroundStyle(.primary)
                 Text(description)
-                    .font(.system(size: 14))
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
                 if restartRequired {
                     SettingsRestartBadge()
-                        .padding(.top, 3)
+                        .padding(.top, 1)
                 }
                 if let hint {
                     Text(hint)
-                        .font(.caption)
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 2)
                 }
             }
-            Spacer(minLength: 10)
+            Spacer(minLength: 8)
             control
-                .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -277,16 +276,14 @@ struct SettingsChoiceRow<Choice: Hashable>: View {
                     }
                 }
             } label: {
-                HStack(spacing: 5) {
+                HStack(spacing: 4) {
                     Text(label(selection))
+                        .lineLimit(1)
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.caption2)
                 }
-                .font(.system(size: 14, weight: .medium))
+                .font(.body)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(Color.primary.opacity(0.09)))
             }
             .accessibilityLabel(Text(title))
         }
@@ -323,7 +320,7 @@ struct SettingsSegmentedRow<Choice: Hashable>: View {
         VStack(alignment: .leading, spacing: 10) {
             SettingsRowShell(title: title, description: description, hint: hint) {
                 Text(label(selection))
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.body)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
@@ -352,7 +349,7 @@ struct SettingsSliderRow: View {
         VStack(alignment: .leading, spacing: 10) {
             SettingsRowShell(title: title, description: description) {
                 Text(valueText)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.body)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
@@ -378,22 +375,21 @@ struct SettingsInfoRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.body)
+                    .foregroundStyle(.primary)
                 if let description {
                     Text(description)
-                        .font(.system(size: 14))
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .truncationMode(.tail)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Spacer(minLength: 10)
+            Spacer(minLength: 8)
             Text(value)
-                .font(.system(size: 14))
+                .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.trailing)
                 .lineLimit(2)
@@ -408,20 +404,18 @@ struct SettingsWarningRow: View {
     let message: LocalizedStringKey
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.subheadline)
                 .foregroundStyle(.orange)
-                .frame(width: 26)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.body)
+                    .foregroundStyle(.primary)
                 Text(message)
-                    .font(.system(size: 14))
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -489,15 +483,26 @@ struct SettingsActionRow: View {
 
     var body: some View {
         Button(action: action) {
-            SettingsRowShell(title: title, description: description) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.body)
+                        .foregroundStyle(isEnabled ? Color.accentColor : Color.secondary)
+                    Text(description)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
                 Image(systemName: systemImage)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.body)
                     .foregroundStyle(isEnabled ? Color.accentColor : Color.secondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.55)
         .accessibilityIdentifier(identifier)
     }
 }
@@ -506,26 +511,8 @@ struct SettingsActionRow: View {
 struct SettingsRestartBadge: View {
     var body: some View {
         Text("Restart required")
-            .font(.system(size: 11, weight: .semibold))
+            .font(.footnote)
             .foregroundStyle(.orange)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Capsule().fill(Color.orange.opacity(0.16)))
-    }
-}
-
-/// A flat group caption inside a category page (for example the Layout page's
-/// Performance monitoring group). It keeps the flat style: no card, just a
-/// small secondary label above its rows.
-struct SettingsSectionCaption: View {
-    let title: LocalizedStringKey
-
-    var body: some View {
-        Text(title)
-            .font(.system(size: 12, weight: .semibold))
-            .textCase(.uppercase)
-            .foregroundStyle(.secondary)
-            .padding(.top, 4)
     }
 }
 
@@ -538,71 +525,79 @@ struct GeneralSettingsPage: View {
 
     var body: some View {
         SettingsPageScaffold(title: "General") {
-            SettingsToggleRow(
-                title: "Run speed limit",
-                description: "On: capped speed. Off: uncapped — hot, fast drain, muted.",
-                isOn: persistedBinding(settings, \.runSpeedLimit)
-            )
-            .accessibilityIdentifier("settings-run-speed-limit")
-
-            if !settings.runSpeedLimit || !settings.turboLimit {
-                SettingsWarningRow(
-                    title: "High power use",
-                    message: !settings.runSpeedLimit
-                        ? "Unlimited speed: device heats up, battery drains fast, audio muted."
-                        : "Turbo limit off: holding Turbo is uncapped — hot, fast drain, muted."
+            Section {
+                SettingsToggleRow(
+                    title: "Run speed limit",
+                    description: "On: capped speed. Off: uncapped — hot, fast drain, muted.",
+                    isOn: persistedBinding(settings, \.runSpeedLimit)
                 )
-                .accessibilityIdentifier("settings-unlimited-warning")
+                .accessibilityIdentifier("settings-run-speed-limit")
+
+                if !settings.runSpeedLimit || !settings.turboLimit {
+                    SettingsWarningRow(
+                        title: "High power use",
+                        message: !settings.runSpeedLimit
+                            ? "Unlimited speed: device heats up, battery drains fast, audio muted."
+                            : "Turbo limit off: holding Turbo is uncapped — hot, fast drain, muted."
+                    )
+                    .accessibilityIdentifier("settings-unlimited-warning")
+                }
+
+                SettingsChoiceRow(
+                    title: "Default speed",
+                    description: "Normal speed; 1× is native, higher adds frames.",
+                    hint: model.playbackSpeedAutoReduced ? autoReducedText : nil,
+                    choices: PlaybackSpeed.allCases,
+                    selection: persistedBinding(settings, \.playbackSpeed),
+                    label: { $0.title }
+                )
+                .accessibilityIdentifier("settings-default-speed")
+
+                SettingsToggleRow(
+                    title: "Turbo limit",
+                    description: "On: Turbo speed, auto-lowered under 20 fps. Off: uncapped.",
+                    isOn: persistedBinding(settings, \.turboLimit)
+                )
+                .accessibilityIdentifier("settings-turbo-limit")
+
+                SettingsChoiceRow(
+                    title: "Turbo speed",
+                    description: "Turbo button speed while Turbo limit is on.",
+                    choices: [PlaybackSpeed.double, .triple, .quadruple],
+                    selection: persistedBinding(settings, \.turboSpeed),
+                    label: { $0.title }
+                )
+                .accessibilityIdentifier("settings-turbo-speed")
+            } header: {
+                Text("Speed")
             }
 
-            SettingsToggleRow(
-                title: "Check for updates",
-                description: "Check GitHub on open and daily; notify on a new release.",
-                isOn: persistedBinding(settings, \.checkForUpdates)
-            )
-            .accessibilityIdentifier("settings-check-for-updates")
+            Section {
+                SettingsToggleRow(
+                    title: "Check for updates",
+                    description: "Check GitHub on open and daily; notify on a new release.",
+                    isOn: persistedBinding(settings, \.checkForUpdates)
+                )
+                .accessibilityIdentifier("settings-check-for-updates")
 
-            SettingsChoiceRow(
-                title: "Update channel",
-                description: "Stable: full releases only. Beta: pre-releases too.",
-                choices: UpdateChannel.allCases,
-                selection: persistedBinding(settings, \.updateChannel),
-                label: { $0.title }
-            )
-            .accessibilityIdentifier("settings-update-channel")
+                SettingsChoiceRow(
+                    title: "Update channel",
+                    description: "Stable: full releases only. Beta: pre-releases too.",
+                    choices: UpdateChannel.allCases,
+                    selection: persistedBinding(settings, \.updateChannel),
+                    label: { $0.title }
+                )
+                .accessibilityIdentifier("settings-update-channel")
 
-            SettingsInfoRow(
-                title: "Update status",
-                value: updateStatusText,
-                description: LocalizedStringKey(updateStatusDescription)
-            )
-            .accessibilityIdentifier("settings-update-status")
-
-            SettingsToggleRow(
-                title: "Turbo limit",
-                description: "On: Turbo speed, auto-lowered under 20 fps. Off: uncapped.",
-                isOn: persistedBinding(settings, \.turboLimit)
-            )
-            .accessibilityIdentifier("settings-turbo-limit")
-
-            SettingsChoiceRow(
-                title: "Turbo speed",
-                description: "Turbo button speed while Turbo limit is on.",
-                choices: [PlaybackSpeed.double, .triple, .quadruple],
-                selection: persistedBinding(settings, \.turboSpeed),
-                label: { $0.title }
-            )
-            .accessibilityIdentifier("settings-turbo-speed")
-
-            SettingsChoiceRow(
-                title: "Default speed",
-                description: "Normal speed; 1× is native, higher adds frames.",
-                hint: model.playbackSpeedAutoReduced ? autoReducedText : nil,
-                choices: PlaybackSpeed.allCases,
-                selection: persistedBinding(settings, \.playbackSpeed),
-                label: { $0.title }
-            )
-            .accessibilityIdentifier("settings-default-speed")
+                SettingsInfoRow(
+                    title: "Update status",
+                    value: updateStatusText,
+                    description: LocalizedStringKey(updateStatusDescription)
+                )
+                .accessibilityIdentifier("settings-update-status")
+            } header: {
+                Text("Updates")
+            }
         }
         .task { await refreshUpdateStatus() }
         .onChange(of: settings.checkForUpdates) { enabled in
@@ -665,54 +660,61 @@ struct LayoutSettingsPage: View {
 
     var body: some View {
         SettingsPageScaffold(title: "Layout") {
-            SettingsNavigationRow(
-                title: "Screen layout",
-                description: "Landscape and portrait arrangements, plus the two custom layouts.",
-                identifier: "settings-screen-layout"
-            ) {
-                ScreenLayoutSettingsView(settings: settings)
+            Section {
+                SettingsNavigationRow(
+                    title: "Screen layout",
+                    description: "Landscape and portrait arrangements, plus the two custom layouts.",
+                    identifier: "settings-screen-layout"
+                ) {
+                    ScreenLayoutSettingsView(settings: settings)
+                }
+
+                SettingsChoiceRow(
+                    title: "Screen rotation",
+                    description: "Rotate the picture for a sideways-held console.",
+                    choices: ScreenRotation.allCases,
+                    selection: persistedBinding(settings, \.screenRotation),
+                    label: { $0.title }
+                )
+                .accessibilityIdentifier("settings-screen-rotation")
+
+                SettingsChoiceRow(
+                    title: "Orientation lock",
+                    description: "Allowed orientations; iOS can still override.",
+                    choices: OrientationLock.allCases,
+                    selection: persistedBinding(settings, \.orientation),
+                    label: { $0.title }
+                )
+                .accessibilityIdentifier("settings-orientation-lock")
+
+                SettingsToggleRow(
+                    title: "Swap screens",
+                    description: "Swap top/bottom pictures; both render paths follow.",
+                    isOn: persistedBinding(settings, \.swapScreens)
+                )
+                .accessibilityIdentifier("settings-swap-screens")
+            } header: {
+                Text("Screens")
             }
 
-            SettingsChoiceRow(
-                title: "Screen rotation",
-                description: "Rotate the picture for a sideways-held console.",
-                choices: ScreenRotation.allCases,
-                selection: persistedBinding(settings, \.screenRotation),
-                label: { $0.title }
-            )
-            .accessibilityIdentifier("settings-screen-rotation")
+            Section {
+                SettingsToggleRow(
+                    title: "FPS counter",
+                    description: "Show a small frames-per-second pill over the game.",
+                    isOn: persistedBinding(settings, \.showFPS)
+                )
+                .accessibilityIdentifier("settings-fps-hud")
 
-            SettingsChoiceRow(
-                title: "Orientation lock",
-                description: "Allowed orientations; iOS can still override.",
-                choices: OrientationLock.allCases,
-                selection: persistedBinding(settings, \.orientation),
-                label: { $0.title }
-            )
-            .accessibilityIdentifier("settings-orientation-lock")
-
-            SettingsToggleRow(
-                title: "Swap screens",
-                description: "Swap top/bottom pictures; both render paths follow.",
-                isOn: persistedBinding(settings, \.swapScreens)
-            )
-            .accessibilityIdentifier("settings-swap-screens")
-
-            SettingsSectionCaption(title: "Performance monitoring")
-            SettingsToggleRow(
-                title: "FPS counter",
-                description: "Show a small frames-per-second pill over the game.",
-                isOn: persistedBinding(settings, \.showFPS)
-            )
-            .accessibilityIdentifier("settings-fps-hud")
-
-            SettingsToggleRow(
-                title: "System Metal HUD",
-                description: "Apple's GPU performance overlay on the presented Metal layer.",
-                hint: hudUnavailableText,
-                isOn: persistedBinding(settings, \.systemMetalHUD)
-            )
-            .accessibilityIdentifier("settings-system-metal-hud")
+                SettingsToggleRow(
+                    title: "System Metal HUD",
+                    description: "Apple's GPU performance overlay on the presented Metal layer.",
+                    hint: hudUnavailableText,
+                    isOn: persistedBinding(settings, \.systemMetalHUD)
+                )
+                .accessibilityIdentifier("settings-system-metal-hud")
+            } header: {
+                Text("Performance monitoring")
+            }
         }
     }
 
@@ -738,39 +740,45 @@ struct SystemSettingsPage: View {
 
     var body: some View {
         SettingsPageScaffold(title: "System") {
-            SettingsChoiceRow(
-                title: "Appearance",
-                description: "Follow the system, or force light/dark.",
-                choices: AppAppearance.allCases,
-                selection: persistedBinding(settings, \.appearance),
-                label: { $0.title }
-            )
-            .accessibilityIdentifier("settings-appearance")
+            Section {
+                SettingsChoiceRow(
+                    title: "Appearance",
+                    description: "Follow the system, or force light/dark.",
+                    choices: AppAppearance.allCases,
+                    selection: persistedBinding(settings, \.appearance),
+                    label: { $0.title }
+                )
+                .accessibilityIdentifier("settings-appearance")
+            } header: {
+                Text("Display")
+            }
 
-            SettingsInfoRow(
-                title: "Device",
-                value: UIDevice.current.model,
-                description: "The device this build is running on."
-            )
-            .accessibilityIdentifier("settings-device")
+            Section {
+                SettingsInfoRow(
+                    title: "Device",
+                    value: UIDevice.current.model,
+                    description: "The device this build is running on."
+                )
+                .accessibilityIdentifier("settings-device")
 
-            SettingsInfoRow(
-                title: "System version",
-                value: "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)"
-            )
-            .accessibilityIdentifier("settings-system-version")
+                SettingsInfoRow(
+                    title: "System version",
+                    value: "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)"
+                )
+                .accessibilityIdentifier("settings-system-version")
 
-            SettingsInfoRow(
-                title: "App version",
-                value: versionText
-            )
-            .accessibilityIdentifier("settings-app-version")
+                SettingsInfoRow(
+                    title: "App version",
+                    value: versionText
+                )
+                .accessibilityIdentifier("settings-app-version")
 
-            SettingsInfoRow(
-                title: "Package",
-                value: packageVersionText
-            )
-            .accessibilityIdentifier("settings-package-version")
+                SettingsInfoRow(
+                    title: "Package",
+                    value: packageVersionText
+                )
+                .accessibilityIdentifier("settings-package-version")
+            }
         }
     }
 
@@ -800,53 +808,60 @@ struct OtherSettingsPage: View {
 
     var body: some View {
         SettingsPageScaffold(title: "Other") {
-            SettingsInfoRow(
-                title: "Installed games",
-                value: StorageFormat.size(storage.gamesBytes)
-            )
-            SettingsInfoRow(
-                title: "Save data",
-                value: StorageFormat.size(storage.saveDataBytes)
-            )
-            if storage.romBytes > 0 {
-                // 0.1.x shell cartridges: only present on an updated install.
+            Section {
                 SettingsInfoRow(
-                    title: "Legacy game files",
-                    value: StorageFormat.size(storage.romBytes)
+                    title: "Installed games",
+                    value: StorageFormat.size(storage.gamesBytes)
                 )
-            }
-            SettingsInfoRow(
-                title: "App logs",
-                value: StorageFormat.size(storage.logBytes)
-            )
-            SettingsInfoRow(
-                title: "Graphics pipeline cache",
-                value: StorageFormat.size(storage.cacheBytes)
-            )
-            SettingsActionRow(
-                title: "Clear graphics pipeline cache",
-                description: "Rebuilt next load (one slow load); saves untouched.",
-                systemImage: "trash",
-                identifier: "settings-clear-cache",
-                isEnabled: !model.isRuntimeActive
-            ) {
-                isClearCacheConfirmationPresented = true
-            }
-            if model.isRuntimeActive {
-                Text("Available when no game is running.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                SettingsInfoRow(
+                    title: "Save data",
+                    value: StorageFormat.size(storage.saveDataBytes)
+                )
+                if storage.romBytes > 0 {
+                    // 0.1.x shell cartridges: only present on an updated install.
+                    SettingsInfoRow(
+                        title: "Legacy game files",
+                        value: StorageFormat.size(storage.romBytes)
+                    )
+                }
+                SettingsInfoRow(
+                    title: "App logs",
+                    value: StorageFormat.size(storage.logBytes)
+                )
+                SettingsInfoRow(
+                    title: "Graphics pipeline cache",
+                    value: StorageFormat.size(storage.cacheBytes)
+                )
+                SettingsActionRow(
+                    title: "Clear graphics pipeline cache",
+                    description: "Rebuilt next load (one slow load); saves untouched.",
+                    systemImage: "trash",
+                    identifier: "settings-clear-cache",
+                    isEnabled: !model.isRuntimeActive
+                ) {
+                    isClearCacheConfirmationPresented = true
+                }
+            } header: {
+                Text("Storage")
+            } footer: {
+                if model.isRuntimeActive {
+                    Text("Available when no game is running.")
+                }
             }
 
-            SettingsInfoRow(title: "Version", value: versionText)
-            SettingsInfoRow(title: "Language", value: L10n.languageSummary)
+            Section {
+                SettingsInfoRow(title: "Version", value: versionText)
+                SettingsInfoRow(title: "Language", value: L10n.languageSummary)
+            }
 
-            SettingsNavigationRow(
-                title: "About",
-                description: "App version, links, acknowledgements and the legal notice.",
-                identifier: "settings-about"
-            ) {
-                AboutView(model: model)
+            Section {
+                SettingsNavigationRow(
+                    title: "About",
+                    description: "App version, links, acknowledgements and the legal notice.",
+                    identifier: "settings-about"
+                ) {
+                    AboutView(model: model)
+                }
             }
         }
         .onAppear(perform: refreshStorage)
@@ -895,71 +910,79 @@ struct GamepadSettingsPage: View {
 
     var body: some View {
         SettingsPageScaffold(title: "Gamepad") {
-            SettingsToggleRow(
-                title: "Show on-screen controls",
-                description: "Draw the virtual buttons over the game.",
-                isOn: persistedBinding(settings, \.showTouchControls)
-            )
-            .accessibilityIdentifier("settings-show-touch-controls")
+            Section {
+                SettingsToggleRow(
+                    title: "Show on-screen controls",
+                    description: "Draw the virtual buttons over the game.",
+                    isOn: persistedBinding(settings, \.showTouchControls)
+                )
+                .accessibilityIdentifier("settings-show-touch-controls")
 
-            SettingsSliderRow(
-                title: "Overlay opacity",
-                description: "How solid the virtual buttons are.",
-                valueText: settingsPercentText(settings.controlsOpacity),
-                value: persistedBinding(settings, \.controlsOpacity),
-                range: 0.15...1.0,
-                step: 0.05
-            )
-            .accessibilityIdentifier("settings-controls-opacity")
+                SettingsSliderRow(
+                    title: "Overlay opacity",
+                    description: "How solid the virtual buttons are.",
+                    valueText: settingsPercentText(settings.controlsOpacity),
+                    value: persistedBinding(settings, \.controlsOpacity),
+                    range: 0.15...1.0,
+                    step: 0.05
+                )
+                .accessibilityIdentifier("settings-controls-opacity")
 
-            SettingsToggleRow(
-                title: "Haptics",
-                description: "Vibrate on button press and control pickup.",
-                isOn: persistedBinding(settings, \.haptics)
-            )
-            .accessibilityIdentifier("settings-haptics")
+                SettingsToggleRow(
+                    title: "Haptics",
+                    description: "Vibrate on button press and control pickup.",
+                    isOn: persistedBinding(settings, \.haptics)
+                )
+                .accessibilityIdentifier("settings-haptics")
 
-            SettingsSliderRow(
-                title: "Deadzone",
-                description: "Stick travel before input; on-screen and controller.",
-                valueText: "\(Int((settings.analogDeadzone * 100).rounded()))%",
-                value: persistedBinding(settings, \.analogDeadzone),
-                range: 0...0.30,
-                step: 0.01
-            )
-            .accessibilityIdentifier("settings-analog-deadzone")
+                SettingsSliderRow(
+                    title: "Deadzone",
+                    description: "Stick travel before input; on-screen and controller.",
+                    valueText: "\(Int((settings.analogDeadzone * 100).rounded()))%",
+                    value: persistedBinding(settings, \.analogDeadzone),
+                    range: 0...0.30,
+                    step: 0.01
+                )
+                .accessibilityIdentifier("settings-analog-deadzone")
 
-            SettingsSegmentedRow(
-                title: "Control appearance",
-                description: "Standard: translucent; High contrast: opaque. Built-in only.",
-                choices: ControlAppearance.allCases,
-                selection: persistedBinding(settings, \.controlAppearance),
-                label: { $0.title }
-            )
-            .accessibilityIdentifier("settings-control-appearance")
-
-            SettingsNavigationRow(
-                title: "Button mapping",
-                description: "Map controller buttons to 3DS buttons; reset restores stock.",
-                identifier: "settings-controller-button-mapping"
-            ) {
-                ControllerButtonMappingView(settings: settings)
+                SettingsSegmentedRow(
+                    title: "Control appearance",
+                    description: "Standard: translucent; High contrast: opaque. Built-in only.",
+                    choices: ControlAppearance.allCases,
+                    selection: persistedBinding(settings, \.controlAppearance),
+                    label: { $0.title }
+                )
+                .accessibilityIdentifier("settings-control-appearance")
+            } header: {
+                Text("On-screen controls")
             }
 
-            SettingsNavigationRow(
-                title: "Hotkeys",
-                description: "Controller combos (2–4 buttons) for Turbo, save/load, screens, menu.",
-                identifier: "settings-hotkeys"
-            ) {
-                HotkeySettingsView(settings: settings, model: model)
-            }
+            Section {
+                SettingsNavigationRow(
+                    title: "Button mapping",
+                    description: "Map controller buttons to 3DS buttons; reset restores stock.",
+                    identifier: "settings-controller-button-mapping"
+                ) {
+                    ControllerButtonMappingView(settings: settings)
+                }
 
-            SettingsInfoRow(
-                title: "Controller",
-                value: model.controllerName ?? L10n.tr("Not connected"),
-                description: "The connected game controller, if any."
-            )
-            .accessibilityIdentifier("settings-controller")
+                SettingsNavigationRow(
+                    title: "Hotkeys",
+                    description: "Controller combos (2–4 buttons) for Turbo, save/load, screens, menu.",
+                    identifier: "settings-hotkeys"
+                ) {
+                    HotkeySettingsView(settings: settings, model: model)
+                }
+
+                SettingsInfoRow(
+                    title: "Controller",
+                    value: model.controllerName ?? L10n.tr("Not connected"),
+                    description: "The connected game controller, if any."
+                )
+                .accessibilityIdentifier("settings-controller")
+            } header: {
+                Text("Controller")
+            }
         }
     }
 }
@@ -972,24 +995,30 @@ struct ControllerButtonMappingView: View {
 
     var body: some View {
         SettingsPageScaffold(title: "Button mapping") {
-            SettingsSectionCaption(title: "Physical controller")
-            ForEach(PhysicalControllerButton.allCases) { button in
-                SettingsChoiceRow(
-                    title: LocalizedStringKey(button.title),
-                    description: "Which 3DS button this physical button sends.",
-                    choices: GamepadAction.allCases,
-                    selection: actionBinding(for: button),
-                    label: { $0.title }
-                )
-                .accessibilityIdentifier("settings-controller-map-\(button.rawValue)")
+            Section {
+                ForEach(PhysicalControllerButton.allCases) { button in
+                    SettingsChoiceRow(
+                        title: LocalizedStringKey(button.title),
+                        description: "Which 3DS button this physical button sends.",
+                        choices: GamepadAction.allCases,
+                        selection: actionBinding(for: button),
+                        label: { $0.title }
+                    )
+                    .accessibilityIdentifier("settings-controller-map-\(button.rawValue)")
+                }
+            } header: {
+                Text("Physical controller")
             }
-            SettingsActionRow(
-                title: "Reset button mapping",
-                description: "Restores the stock controller mapping.",
-                systemImage: "arrow.counterclockwise",
-                identifier: "settings-controller-map-reset"
-            ) {
-                settings.resetControllerButtonMap()
+
+            Section {
+                SettingsActionRow(
+                    title: "Reset button mapping",
+                    description: "Restores the stock controller mapping.",
+                    systemImage: "arrow.counterclockwise",
+                    identifier: "settings-controller-map-reset"
+                ) {
+                    settings.resetControllerButtonMap()
+                }
             }
         }
     }
@@ -1014,46 +1043,52 @@ struct HotkeySettingsView: View {
 
     var body: some View {
         SettingsPageScaffold(title: "Hotkeys") {
-            SettingsSectionCaption(title: "Physical controller combinations")
-            ForEach(HotkeyAction.allCases) { action in
-                HStack(alignment: .top, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(action.title)
-                            .font(.system(size: 17, weight: .semibold))
-                        Text(comboText(for: action))
-                            .font(.system(size: 14))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 10)
-                    Button(L10n.tr("Record")) {
-                        recordingAction = action
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("settings-hotkey-record-\(action.rawValue)")
-                    if !settings.hotkeyButtons(for: action).isEmpty {
-                        Button {
-                            settings.clearHotkey(for: action)
-                        } label: {
-                            Image(systemName: "xmark.circle")
+            Section {
+                ForEach(HotkeyAction.allCases) { action in
+                    HStack(alignment: .center, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(action.title)
+                                .font(.body)
+                                .foregroundStyle(.primary)
+                            Text(comboText(for: action))
+                                .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("settings-hotkey-clear-\(action.rawValue)")
+                        Spacer(minLength: 8)
+                        Button(L10n.tr("Record")) {
+                            recordingAction = action
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("settings-hotkey-record-\(action.rawValue)")
+                        if !settings.hotkeyButtons(for: action).isEmpty {
+                            Button {
+                                settings.clearHotkey(for: action)
+                            } label: {
+                                Image(systemName: "xmark.circle")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("settings-hotkey-clear-\(action.rawValue)")
+                        }
                     }
+                    .accessibilityIdentifier("settings-hotkey-\(action.rawValue)")
                 }
-                .accessibilityIdentifier("settings-hotkey-\(action.rawValue)")
+            } header: {
+                Text("Physical controller combinations")
             }
-            SettingsActionRow(
-                title: "Reset all hotkeys",
-                description: "Clears every controller combination. No hotkey is assigned by default.",
-                systemImage: "arrow.counterclockwise",
-                identifier: "settings-hotkeys-reset"
-            ) {
-                settings.resetHotkeys()
+
+            Section {
+                SettingsActionRow(
+                    title: "Reset all hotkeys",
+                    description: "Clears every controller combination. No hotkey is assigned by default.",
+                    systemImage: "arrow.counterclockwise",
+                    identifier: "settings-hotkeys-reset"
+                ) {
+                    settings.resetHotkeys()
+                }
+            } footer: {
+                Text(L10n.tr("A combination triggers once per press and its buttons are not sent to the game while held."))
             }
-            Text(L10n.tr("A combination triggers once per press and its buttons are not sent to the game while held."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
         .sheet(item: $recordingAction) { action in
             HotkeyRecorderSheet(action: action, settings: settings, model: model)
@@ -1094,9 +1129,9 @@ struct HotkeyRecorderSheet: View {
             List {
                 Section {
                     Text(action.title)
-                        .font(.headline)
+                        .font(.body)
                     Text(L10n.tr("Press and hold 2–4 controller buttons at the same time. Release to record the combination."))
-                        .font(.subheadline)
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
                 Section(L10n.tr("Captured combination")) {
@@ -1107,7 +1142,7 @@ struct HotkeyRecorderSheet: View {
                             .foregroundStyle(.secondary)
                     } else {
                         Text(captured.map(\.title).joined(separator: " + "))
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.body)
                     }
                     if isTooMany {
                         Text(L10n.tr("Too many buttons: use 2–4."))
@@ -1174,54 +1209,64 @@ struct GraphicsSettingsPage: View {
 
     var body: some View {
         SettingsPageScaffold(title: "Graphics") {
-            SettingsSegmentedRow(
-                title: "Resolution",
-                description: "Drawable and internal 3D scale; internal applies next load.",
-                hint: resolutionCaption(for: settings.renderScale),
-                choices: [1, 2, 3, 4],
-                selection: persistedBinding(settings, \.renderScale),
-                label: { "\($0)x" }
-            )
-            .accessibilityIdentifier("settings-resolution")
+            Section {
+                SettingsSegmentedRow(
+                    title: "Resolution",
+                    description: "Drawable and internal 3D scale; internal applies next load.",
+                    hint: resolutionCaption(for: settings.renderScale),
+                    choices: [1, 2, 3, 4],
+                    selection: persistedBinding(settings, \.renderScale),
+                    label: { "\($0)x" }
+                )
+                .accessibilityIdentifier("settings-resolution")
 
-            SettingsSegmentedRow(
-                title: "Screen aspect",
-                description: "Fit/4:3/Stretch fill presets; custom ignores this.",
-                choices: ScreenAspect.allCases,
-                selection: persistedBinding(settings, \.screenAspect),
-                label: { $0.title }
-            )
-            .accessibilityIdentifier("settings-screen-aspect")
+                SettingsSegmentedRow(
+                    title: "Screen aspect",
+                    description: "Fit/4:3/Stretch fill presets; custom ignores this.",
+                    choices: ScreenAspect.allCases,
+                    selection: persistedBinding(settings, \.screenAspect),
+                    label: { $0.title }
+                )
+                .accessibilityIdentifier("settings-screen-aspect")
 
-            SettingsToggleRow(
-                title: "Integer scaling",
-                description: "Fit/4:3: whole-pixel scaling; presets only.",
-                isOn: persistedBinding(settings, \.integerScale)
-            )
-            .accessibilityIdentifier("settings-integer-scaling")
+                SettingsToggleRow(
+                    title: "Integer scaling",
+                    description: "Fit/4:3: whole-pixel scaling; presets only.",
+                    isOn: persistedBinding(settings, \.integerScale)
+                )
+                .accessibilityIdentifier("settings-integer-scaling")
+            } header: {
+                Text("Display")
+            }
 
-            SettingsToggleRow(
-                title: "GPU vertex shading",
-                description: "Experimental: vertex stage on GPU; needs restart.",
-                restartRequired: true,
-                isOn: persistedBinding(settings, \.gpuVertexShaders)
-            )
-            .accessibilityIdentifier("settings-gpu-vertex-shaders")
+            Section {
+                SettingsToggleRow(
+                    title: "GPU vertex shading",
+                    description: "Experimental: vertex stage on GPU; needs restart.",
+                    restartRequired: true,
+                    isOn: persistedBinding(settings, \.gpuVertexShaders)
+                )
+                .accessibilityIdentifier("settings-gpu-vertex-shaders")
 
-            SettingsToggleRow(
-                title: "Precise shading",
-                description: "Experimental: precise fragment math; needs restart.",
-                restartRequired: true,
-                isOn: persistedBinding(settings, \.preciseShading)
-            )
-            .accessibilityIdentifier("settings-precise-shading")
+                SettingsToggleRow(
+                    title: "Precise shading",
+                    description: "Experimental: precise fragment math; needs restart.",
+                    restartRequired: true,
+                    isOn: persistedBinding(settings, \.preciseShading)
+                )
+                .accessibilityIdentifier("settings-precise-shading")
+            } header: {
+                Text("Experimental")
+            }
 
             if model.isRuntimeLoaded {
-                SettingsInfoRow(
-                    title: "Active path",
-                    value: model.displayPath.title
-                )
-                .accessibilityIdentifier("settings-active-path")
+                Section {
+                    SettingsInfoRow(
+                        title: "Active path",
+                        value: model.displayPath.title
+                    )
+                    .accessibilityIdentifier("settings-active-path")
+                }
             }
         }
     }
@@ -1234,31 +1279,35 @@ struct SoundSettingsPage: View {
 
     var body: some View {
         SettingsPageScaffold(title: "Sound") {
-            SettingsSliderRow(
-                title: "Volume",
-                description: "Game audio volume.",
-                valueText: settingsPercentText(settings.audioVolume),
-                value: persistedBinding(settings, \.audioVolume),
-                range: 0...1,
-                step: 0.05
-            )
-            .accessibilityIdentifier("settings-volume")
+            Section {
+                SettingsSliderRow(
+                    title: "Volume",
+                    description: "Game audio volume.",
+                    valueText: settingsPercentText(settings.audioVolume),
+                    value: persistedBinding(settings, \.audioVolume),
+                    range: 0...1,
+                    step: 0.05
+                )
+                .accessibilityIdentifier("settings-volume")
 
-            SettingsToggleRow(
-                title: "Mute",
-                description: "Silence all game audio.",
-                isOn: persistedBinding(settings, \.audioMuted)
-            )
-            .accessibilityIdentifier("settings-mute")
+                SettingsToggleRow(
+                    title: "Mute",
+                    description: "Silence all game audio.",
+                    isOn: persistedBinding(settings, \.audioMuted)
+                )
+                .accessibilityIdentifier("settings-mute")
 
-            SettingsChoiceRow(
-                title: "Buffer size",
-                description: "Latency vs dropouts; change restarts audio once.",
-                choices: AudioBufferSize.allCases,
-                selection: persistedBinding(settings, \.audioBuffer),
-                label: { $0.title }
-            )
-            .accessibilityIdentifier("settings-buffer-size")
+                SettingsChoiceRow(
+                    title: "Buffer size",
+                    description: "Latency vs dropouts; change restarts audio once.",
+                    choices: AudioBufferSize.allCases,
+                    selection: persistedBinding(settings, \.audioBuffer),
+                    label: { $0.title }
+                )
+                .accessibilityIdentifier("settings-buffer-size")
+            } header: {
+                Text("Audio")
+            }
         }
     }
 }
@@ -1278,61 +1327,66 @@ struct DebugSettingsPage: View {
             // Read-only proof that the loaded game really executes AOT code: the
             // build's linked-code state, the runtime's recompiled flag and the
             // interpreted percentage it reports (see AOTDiagnostics).
-            SettingsSectionCaption(title: "AOT verification")
-            SettingsInfoRow(
-                title: "AOT status",
-                value: model.aotStatus.title
-            )
-            .accessibilityIdentifier("settings-aot-status")
-            SettingsInfoRow(
-                title: "AOT coverage",
-                value: settingsAOTPercentText(model.aotDiagnostics.aotPercent)
-            )
-            .accessibilityIdentifier("settings-aot-coverage")
-            SettingsInfoRow(
-                title: "Interpreted code",
-                value: settingsAOTPercentText(model.aotDiagnostics.interpretedPercent)
-            )
-            .accessibilityIdentifier("settings-aot-interpreted")
-            if let fallbacks = model.aotDiagnostics.instructionFallbacks {
+            Section {
                 SettingsInfoRow(
-                    title: "Instruction fallbacks",
-                    value: L10n.format("%ld", fallbacks)
+                    title: "AOT status",
+                    value: model.aotStatus.title
                 )
-                .accessibilityIdentifier("settings-aot-fallbacks")
+                .accessibilityIdentifier("settings-aot-status")
+                SettingsInfoRow(
+                    title: "AOT coverage",
+                    value: settingsAOTPercentText(model.aotDiagnostics.aotPercent)
+                )
+                .accessibilityIdentifier("settings-aot-coverage")
+                SettingsInfoRow(
+                    title: "Interpreted code",
+                    value: settingsAOTPercentText(model.aotDiagnostics.interpretedPercent)
+                )
+                .accessibilityIdentifier("settings-aot-interpreted")
+                if let fallbacks = model.aotDiagnostics.instructionFallbacks {
+                    SettingsInfoRow(
+                        title: "Instruction fallbacks",
+                        value: L10n.format("%ld", fallbacks)
+                    )
+                    .accessibilityIdentifier("settings-aot-fallbacks")
+                }
+            } header: {
+                Text("AOT verification")
             }
 
-            SettingsNavigationRow(
-                title: "Save Manager",
-                description: "Battery saves and instant save states for each game.",
-                identifier: "settings-save-manager"
-            ) {
-                SaveManagerView(model: model, saveStates: model.saveStates)
-            }
+            Section {
+                SettingsNavigationRow(
+                    title: "Save Manager",
+                    description: "Battery saves and instant save states for each game.",
+                    identifier: "settings-save-manager"
+                ) {
+                    SaveManagerView(model: model, saveStates: model.saveStates)
+                }
 
-            SettingsNavigationRow(
-                title: "CPU profiler",
-                description: "Record where the frame time goes while a game runs.",
-                identifier: "settings-cpu-profiler"
-            ) {
-                CPUProfilerView(model: model)
-            }
+                SettingsNavigationRow(
+                    title: "CPU profiler",
+                    description: "Record where the frame time goes while a game runs.",
+                    identifier: "settings-cpu-profiler"
+                ) {
+                    CPUProfilerView(model: model)
+                }
 
-            SettingsActionRow(
-                title: "Export logs",
-                description: "Write a diagnostics report and the session log, then share them.",
-                systemImage: "square.and.arrow.up",
-                identifier: "settings-export-logs"
-            ) {
-                exportDiagnostics()
-            }
-            if let diagnosticsHint {
-                Text(diagnosticsHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-                    .accessibilityIdentifier("settings-diagnostics-hint")
+                SettingsActionRow(
+                    title: "Export logs",
+                    description: "Write a diagnostics report and the session log, then share them.",
+                    systemImage: "square.and.arrow.up",
+                    identifier: "settings-export-logs"
+                ) {
+                    exportDiagnostics()
+                }
+            } header: {
+                Text("Tools")
+            } footer: {
+                if let diagnosticsHint {
+                    Text(diagnosticsHint)
+                        .textSelection(.enabled)
+                        .accessibilityIdentifier("settings-diagnostics-hint")
+                }
             }
         }
         .sheet(item: $shareItem) { item in

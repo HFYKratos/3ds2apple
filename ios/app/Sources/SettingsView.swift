@@ -4,14 +4,17 @@
 //
 //  Settings main page and the in-game quick display sheet.
 //
-//  0.1.7 reorganises Settings into a flat main menu and one page per category:
-//  General, System, Gamepad, Graphics, Layout, Sound, Debug and About, plus a
-//  real Reset All Settings action at the bottom. The main page is a plain dark
-//  list with a large SF Symbol and a label per row (no grouped cards, no
-//  separators, no chevrons); the category pages live in SettingsPages.swift.
-//  The design follows reference screenshots of another emulator's settings app
-//  for its layout only - all strings and code here are our own, and that
-//  project's GPL code/text is not copied.
+//  0.2.1 restyles Settings as the system Settings app: the main page is an
+//  inset-grouped List with a large title, one card of category rows and a
+//  destructive Reset All Settings card at the bottom. Each category row has a
+//  coloured rounded-square SF Symbol tile (29 pt, white glyph) and the system
+//  disclosure chevron, and every colour is semantic so light and dark follow
+//  the system appearance. The category pages live in SettingsPages.swift.
+//
+//  The page and row order (and the General page order) follow reference
+//  screenshots of another emulator's settings app for the layout only - all
+//  strings and code here are our own, and that project's GPL code/text is not
+//  copied.
 //
 //  The settings live in AppSettings; every control writes through a binding that
 //  also stores the new value in UserDefaults. The in-game quick display sheet
@@ -57,11 +60,14 @@ struct SettingsView: View {
             Section {
                 ForEach(SettingsCategory.allCases) { category in
                     NavigationLink(value: category) {
-                        Label {
+                        HStack(spacing: 12) {
+                            SettingsCategoryIconTile(
+                                systemImage: category.systemImage,
+                                tint: category.iconTint
+                            )
                             Text(category.title)
-                        } icon: {
-                            Image(systemName: category.systemImage)
-                                .foregroundStyle(.tint)
+                                .font(.body)
+                                .foregroundStyle(.primary)
                         }
                     }
                     .accessibilityIdentifier("settings-category-\(category.rawValue)")
@@ -74,15 +80,14 @@ struct SettingsView: View {
                 Button(role: .destructive) {
                     isResetConfirmationPresented = true
                 } label: {
-                    Label(L10n.tr("Reset All Settings"),
-                          systemImage: "arrow.counterclockwise")
+                    Text(L10n.tr("Reset All Settings"))
                 }
                 .accessibilityIdentifier("settings-reset-all")
             }
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
         .navigationDestination(for: SettingsCategory.self) { category in
             SettingsCategoryPage(category: category, settings: settings, model: model)
         }
@@ -117,26 +122,22 @@ struct SettingsView: View {
     }
 }
 
-/// One row of the main page: a large SF Symbol and a label. The whole row is the
-/// NavigationLink/Button label, so there is no disclosure chevron.
-private struct SettingsMainRow: View {
+/// The coloured rounded-square icon tile of one main-page row, like the icons in
+/// the system Settings app: a 29 pt tile with a white SF Symbol.
+private struct SettingsCategoryIconTile: View {
     let systemImage: String
-    let title: String
+    let tint: Color
 
     var body: some View {
-        HStack(spacing: 22) {
-            Image(systemName: systemImage)
-                .font(.system(size: 24, weight: .regular))
-                .foregroundStyle(.primary)
-                .frame(width: 38, alignment: .center)
-            Text(title)
-                .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(.primary)
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 21)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
+        RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(tint)
+            .frame(width: 29, height: 29)
+            .overlay {
+                Image(systemName: systemImage)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.white)
+            }
+            .accessibilityHidden(true)
     }
 }
 
