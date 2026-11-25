@@ -476,9 +476,9 @@ check "layout keeps the Settings button and drops the separate Menu control" \
 check "portrait keeps Settings in the skin HOME slot" \
   bash -c 'grep -Fq -- "ControlPlacement(x: 0.50242, y: 0.71652" ios/app/Sources/ControlLayout.swift'
 check "portrait puts SAVE/LOAD at the notch top corners" \
-  bash -c 'grep -Fq -- "ControlPlacement(x: 0.25, y: 0.045" ios/app/Sources/ControlLayout.swift && grep -Fq -- "ControlPlacement(x: 0.75, y: 0.045" ios/app/Sources/ControlLayout.swift'
-check "landscape puts SAVE/LOAD on the left notch edge" \
-  bash -c 'grep -Fq -- "ControlPlacement(x: 0.02902, y: 0.16425" ios/app/Sources/ControlLayout.swift && grep -Fq -- "ControlPlacement(x: 0.02902, y: 0.24155" ios/app/Sources/ControlLayout.swift'
+  bash -c 'grep -Fq -- "ControlPlacement(x: 0.25725, y: 0.03" ios/app/Sources/ControlLayout.swift && grep -Fq -- "ControlPlacement(x: 0.74275, y: 0.03" ios/app/Sources/ControlLayout.swift'
+check "landscape puts SAVE/LOAD symmetrically around the left notch" \
+  bash -c 'grep -Fq -- "ControlPlacement(x: 0.02902, y: 0.30" ios/app/Sources/ControlLayout.swift && grep -Fq -- "ControlPlacement(x: 0.02902, y: 0.70" ios/app/Sources/ControlLayout.swift'
 check "fast-forward and swap screens ship hidden behind the findable top row" \
   bash -c 'grep -Fq -- "return [.cStick, .buttonZL, .buttonZR, .fastForward, .swapScreens]" ios/app/Sources/AppSettings.swift && grep -Fq -- "ControlPlacement(x: 0.39, y: 0.13" ios/app/Sources/ControlLayout.swift && grep -Fq -- "ControlPlacement(x: 0.61, y: 0.13" ios/app/Sources/ControlLayout.swift'
 check "beta1/beta2 shipped defaults stay recognised for the one-time migration" \

@@ -588,8 +588,8 @@ struct ControlLayoutProfile: Codable, Equatable {
                 // The skin's SAVE / LOAD chips on the notch side: 0.2.1-beta4
                 // puts SAVE in the upper half and LOAD in the lower half,
                 // symmetric about the screen middle (x keeps the skin strip).
-                (.quickSave, ControlPlacement(x: 0.02902, y: 0.40, size: 0.07, opacity: 0.85)),
-                (.quickLoad, ControlPlacement(x: 0.02902, y: 0.60, size: 0.07, opacity: 0.85)),
+                (.quickSave, ControlPlacement(x: 0.02902, y: 0.30, size: 0.07, opacity: 0.85)),
+                (.quickLoad, ControlPlacement(x: 0.02902, y: 0.70, size: 0.07, opacity: 0.85)),
                 // Design fill-ins for the five controls neither skin draws
                 // (C-stick, ZL/ZR, fastForward, swapScreens): one row in the
                 // top-centre of the game area. They ship hidden by default
