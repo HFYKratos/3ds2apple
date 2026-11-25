@@ -845,13 +845,6 @@ struct PerformanceOverlaySettingsView: View {
                     isOn: persistedBinding(settings, \.performanceOverlayShowAvailableMemory)
                 )
                 .accessibilityIdentifier("settings-performance-overlay-available-memory")
-
-                SettingsToggleRow(
-                    title: "Show battery temperature",
-                    description: "Show the battery temperature in °C and °F; unavailable values say so.",
-                    isOn: persistedBinding(settings, \.performanceOverlayShowBatteryTemperature)
-                )
-                .accessibilityIdentifier("settings-performance-overlay-battery")
             } header: {
                 Text("Information")
             }
