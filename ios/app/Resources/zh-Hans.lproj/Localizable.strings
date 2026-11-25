@@ -644,7 +644,7 @@
 "Adjust opacity" = "调整透明度";
 "Reset virtual controls" = "重置虚拟按键";
 "Reset virtual controls?" = "重置虚拟按键？";
-"Restores the default control positions for both orientations, every size to 100% and the default hidden controls (C-stick, ZL and ZR) hidden again." = "恢复两个方向的默认按键位置、所有尺寸为 100%，并恢复默认隐藏项（C 杆、ZL、ZR）。";
+"Restores the default control positions for both orientations, every size to 100% and the default hidden controls (C-stick, ZL, ZR, Fast-forward and Swap screens) hidden again." = "恢复两个方向的默认按键位置、所有尺寸为 100%，并恢复默认隐藏项（C 杆、ZL、ZR、快进与交换屏幕）。";
 "Hidden controls are not drawn and do not respond to touches. The D-pad is toggled as one group." = "隐藏的按键不绘制也不响应触摸。十字方向键作为一组切换。";
 "The size scale multiplies each control (or the D-pad group) in the running overlay. 100% is the layout's own size." = "尺寸倍率会乘到运行时的每个按键（或十字方向键组）上；100% 为布局原始大小。";
 "The opacity applies to every on-screen control, including the sticks." = "透明度作用于所有屏幕按键，包括摇杆。";

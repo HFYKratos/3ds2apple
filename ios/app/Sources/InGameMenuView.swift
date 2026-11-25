@@ -150,7 +150,7 @@ struct InGameMenuView: View {
             }
             Button(L10n.tr("Cancel"), role: .cancel) {}
         } message: {
-            Text(L10n.tr("Restores the default control positions for both orientations, every size to 100% and all controls visible."))
+            Text(L10n.tr("Restores the default control positions for both orientations, every size to 100% and the default hidden controls (C-stick, ZL, ZR, Fast-forward and Swap screens) hidden again."))
         }
         .onAppear {
             // The slot refresh publishes new @Published state. Doing it inside
