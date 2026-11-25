@@ -24,7 +24,7 @@ views do not carry duplicated strings.
 |---|---|
 | **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`. Each card has a square art area at the icon's native 1:1 aspect: the game's own SMDH cover art (launcher-pushed `cover.png`, else the build's bundled cover, else the gradient placeholder) fills the square edge to edge with no inset frame (the gradient is only the placeholder when no cover is available), and a corner badge appears only when a game needs attention (**Checking** / **Data missing** / **Error**; a ready game has no AOT badge, since the app only runs AOT code and the AOT state stays in the log and the diagnostics export). Under the art the card is deliberately compact: the title for the app language (up to two lines, truncated), the publisher, then the pushed game size · last-played state. There is **no explanatory paragraph under the grid**. iPhone shows two columns, iPad three. Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Pull-to-refresh rescans Documents, and the library also rescans at launch and when the app returns to the foreground; there is no refresh button. Long-pressing a card opens its context menu; **Delete Game** asks a second confirmation and then deletes the game (see "Deleting a game" below). The empty state explains the desktop launcher. No on-phone import. Settings entry. |
 | **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback) arranged by the split landscape / portrait screen layout choices, filling the whole screen, with the on-screen controls floating over the picture, a floating FPS pill and pause button and the in-game menu. There is no title bar or reserved control pad any more. When a title starts the 3DS software keyboard, a full-screen keyboard overlay collects the text and the applet's buttons while the frame loop is stopped; answering resumes the game. |
-| **Settings** | An iOS inset-grouped List of eight category rows with SF Symbol icons (0.1.7-beta5): General, System, Gamepad, Graphics, Layout, Sound, Debug and Other, plus a real **Reset All Settings** action in its own section. Each category is a large-titled grouped page of rows with an explanation and a trailing control; the system semantic colours follow the light/dark appearance because the settings stack no longer forces dark. See "Settings screens (0.1.7)" below. |
+| **Settings** | A system-Settings-app style page (0.2.1): a large title, one inset-grouped card of eight category rows with coloured rounded-square SF Symbol tiles (General, System, Gamepad, Graphics, Layout, Sound, Debug and Other) and a separate card with a real **Reset All Settings** action. Each category is a large-titled page of inset-grouped cards with regular-weight row titles, secondary explanations and a trailing switch, slider, value or disclosure chevron; choice rows push a radio selection page. See "Settings screens (0.2.1)" below. |
 | **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. The page re-reads the selected game's files when it opens, when the library changes and after every action; there is no refresh button. |
 | **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the FPS appears only while a game is loaded; everything else stays in the log and the diagnostics. |
 | **In-game menu** | Opened from the floating gear button over the game: the same iOS-style card that slides up from the bottom in portrait and is centred (scaled in) in landscape, following the system light/dark appearance. The header now shows the running game's name (no cover art) with only the power (exit), restart (reset) and **X** (resume) buttons; quick save/load live in the Save state sub-page. The rows follow the reference emulator's in-game menu: **Save state**, **Virtual controls**, **Screen layout**, **Swap screens** (toggle), **Rotate screen clockwise**, **Global Settings**, **Per-Application Settings** (per-game overrides stored by title ID) and **Close game**. Sub-pages open inside the sheet through a native NavigationStack(path:) push/pop (Save state, Virtual controls, Screen layout, Per-Application Settings): content slides in from the right and the back button slides it out to the left while the card header stays put. Save Manager / Export logs / Fast-forward / Sound are intentionally not in this menu (they stay in Settings/Debug). Tapping the dimmed area above (portrait) or outside (landscape) the card resumes the game. |
@@ -54,10 +54,10 @@ on-screen controls, so no input or audio advances behind it.
 - On-screen buttons (D-pad, A/B/X/Y, L/R, Start/Select) with configurable
   opacity and optional haptic feedback, plus GameController support (MFi, Xbox,
   DualSense). The game picture fills the whole screen and the controls float over
-  it as a full-screen overlay in both orientations; the shipped default positions
-  are converted from the ModernCenteredX2 reference skin (round 5; geometry only),
-  a hand-edited layout can move them in-game, and the layout reflows when the
-  device rotates.
+  it as a full-screen overlay in both orientations; the 0.2.1 shipped defaults
+  follow two Delta reference skins read for geometry only (ModernFS in portrait,
+  ModernHybrid in landscape), a hand-edited layout can move them in-game, and the
+  layout reflows when the device rotates.
 - Audio through `zk_take_audio` and AVAudioEngine, with volume, mute and an IO
   buffer size preference.
 - Instant save states: three slots per game, one file per slot under
@@ -323,23 +323,30 @@ Omit the game-data fixture (or use an empty `-gamesRoot` folder) to see the
 exercise the per-game error state. The fixture files are user-owned local test
 data: never commit them, and remove the fixture from the container when done.
 
-## Settings screens (0.1.7)
+## Settings screens (0.2.1)
 
-Settings is an iOS **inset-grouped List** (0.1.7-beta4): one section of category
-rows with an SF Symbol and the category name, plus a separate section with the
-destructive **Reset All Settings** action. There is no forced dark appearance any
-more: the system semantic background, card, label and separator colours follow
-the light/dark appearance exactly like the rest of iOS. The navigation title is
-the localized **Settings** with the large-title style, and every category page is
-a large-titled inset-grouped list whose rows have a title, a one-line explanation
-and a trailing control (switch, value menu, slider or navigation arrow). The
-layout was sketched from reference
-screenshots of another emulator's settings app; no code or text from that
-project is used (it is GPL and reference-only for this repo).
+0.2.1 restyles Settings as the system Settings app: the main page has a large
+localized **Settings** title, one inset-grouped card of the eight category rows
+(a coloured rounded-square SF Symbol tile plus the category name) and a separate
+card with the destructive **Reset All Settings** action. Every category page is
+a large-titled inset-grouped stack of topic cards with the system section header
+and footer styling. Rows use the system semantic colours at the system's regular
+body weight (a row title is not bold; an explanation or sub-option uses the
+secondary footnote style) and end in a switch, an inline slider, a secondary
+value or a disclosure chevron. A choice row no longer opens a menu: it pushes the
+iOS selection page - one row per choice with the system blue checkmark on the
+current value - except the resolution choices, which stay an inline segmented
+picker because they read better side by side. There is no forced dark appearance:
+light/dark follow the system exactly like the rest of iOS. The page/category
+order and the General page order were sketched from reference screenshots of
+another emulator's settings app; every string and line of code is our own and
+that project's GPL code/text is not used (reference only).
 
 **General / System / Gamepad / Graphics / Layout / Sound / Debug / Other:**
 
-- **General** (0.2.0): **Run speed limit** (`settings.runSpeedLimit`, on by
+- **General** (0.2.1; two cards, rows in order: Run speed limit, Default speed,
+  Turbo limit, Turbo speed · Check for updates, Update channel, Update status):
+  **Run speed limit** (`settings.runSpeedLimit`, on by
   default). On, the game runs at the Default speed (or Turbo speed while Turbo
   is active) and is capped at 4×. Off, every presented frame advances guest
   frames until the 60 Hz hardware time budget is used — no 4× clamp — the
@@ -476,32 +483,39 @@ choice (six options) and an independent portrait choice (three options), each
 selected from its own radio picker, with the numeric custom pages and the
 round-4 drag editor described below.
 
-- **Default control layout (round 5 skin, round 6 device adjustments).** The shipped positions are converted
-  from the **ModernCenteredX2** reference skin (a Delta `.deltaskin` zip read
-  only for its numeric `items[].frame` rectangles; no artwork or text copied):
-  landscape mapping 896x414 pt and portrait 414x896 pt, centres and sizes
-  normalised to our full-screen overlay (skin frames divided by the mapping
-  size, five decimals; the delta-emulator reference itself scales the same way).
-  Round 6 (final screenshot revision) puts the whole **portrait** set in the free
-  band below the picture: the shoulder row ZL/L/Select/Start/R/ZR is one line at
-  y=0.755 just below the picture (bottom ~0.73), the main set sits at y=0.87 and
-  the C-stick goes to the bottom-right corner at (0.92, 0.935) with size 0.08;
-  the set occupies roughly 0.73–0.96. The **D-pad** is ONE cross-shaped control
-  (round 7): the four directions keep independent placements/elements as input,
-  visibility and size semantics (arm thickness 0.12681 in landscape / 0.12440
-  in portrait so it matches the skin D-pad frame; the placement centres are the
-  four arm positions), but the runtime and both editors draw and drag a single
-  rounded plus. A touch reports the arm under the finger and a press-and-slide
-  changes direction; old profiles need no migration. L/R and Start/Select match
-  their skin
-  frame heights; the capsule widthRatio is unchanged. The skin's ZL/ZR and
-  C-stick are absent, so ZL/ZR sit just above L/R and the landscape C-stick sits
-  above the A-B-X-Y cluster; all controls use opacity 0.85. An untouched beta3
-  (round-5) or older shipped profile migrates to this table; a customised
-  profile is kept. A stored profile that is still the previous
-  shipped default (compared within tolerance) is migrated to the new default on
-  load; a profile the user moved is kept. **Reset virtual controls** restores the
-  new default.
+- **Default control layout (0.2.1 Delta reference skins).** The shipped positions
+  follow the two Delta `.deltaskin` skins used as the 0.2.1 geometry reference,
+  read only for their numeric mapping size and `items[].frame` rectangles (no
+  artwork or text copied): **ModernFS** for portrait (mapping 414x896 pt) and
+  **ModernHybrid** for landscape (mapping 896x414 pt). Centres and sizes are
+  normalised to our full-screen overlay as before (centre = frame centre /
+  mapping size, size = frame width / shorter side except the wide L/R capsules,
+  which use the frame height; five decimals), and every control keeps opacity
+  0.85.
+  - **Portrait (ModernFS)** puts the whole set in the black band below the
+    picture: the shoulder row L/R plus Start/Select is one line at y=0.7165
+    (ZL/ZR outboard at x=0.058 / 0.942), the main set spans roughly
+    y=0.768-0.886 (the Circle Pad and A/Y at y=0.8259, the D-pad cross centred
+    at y=0.8571), the four app-only buttons (Fast-forward, Quick save, Quick
+    load, Swap screens) form the bottom row at y=0.94, and the C-stick uses the
+    free bottom-right corner at (0.92, 0.885) with size 0.08.
+  - **Landscape (ModernHybrid)** keeps the 0.2.0 control geometry unchanged
+    (Circle Pad, D-pad, A/B/X/Y, L/R, Start/Select, ZL/ZR and the C-stick are
+    the same placements); only the four app buttons moved, from the old
+    over-picture positions to the letterbox strip below the picture at y=0.945
+    (x 0.60 / 0.66 / 0.72 / 0.78, right of Start/Select and left of B).
+  - The **D-pad** is ONE cross-shaped control (round 7): the four directions
+    keep independent placements/elements as input, visibility and size semantics
+    (the placement centres are the four arm positions; arm thickness 0.12681 in
+    landscape / 0.12319 in portrait) while the runtime and both editors draw and
+    drag a single rounded plus. A touch reports the arm under the finger and a
+    press-and-slide changes direction.
+  - ZL/ZR and the C-stick are not in either skin, so they stay as design
+    fill-ins at the places above and start hidden (see the visibility defaults).
+    Migration: an untouched 0.2.0 shipped layout (the ModernCenteredX2-derived
+    table, compared within tolerance) and an untouched 0.2.0 shipped hidden set
+    are migrated to the new defaults once; a layout or visibility set the user
+    changed is kept. **Reset virtual controls** restores the new defaults.
 - **Controls (in-game pause menu).** The overlay draws the full New 3DS set:
   D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, the Circle Pad and the C-stick. It is
   a full-screen floating layer over the picture in both orientations and takes no
@@ -517,15 +531,17 @@ hint sits above it and the empty area stays inert) saves the current direction's
     leaves edit mode and resumes the game directly (no extra pause/resume).
   - **Toggle controls** opens a checkbox sheet for A, B, X, Y, L, R, ZL, ZR,
     Start, Select, the D-pad (all four directions as one group), the Circle Pad
-    and the C-stick. Visibility is global (not per orientation), persists, and a
-    hidden control is neither drawn nor hit-testable.
+    and the C-stick. Visibility is per orientation (the sheet edits the current
+    direction), persists, and a hidden control is neither drawn nor
+    hit-testable.
   - **Adjust size** opens one slider per row above, 10%-200% in 5% steps, default
     100%. The scale is global per row, applies to the running overlay (analog
     sticks included) and persists; the D-pad group scales all four directions.
   - **Adjust opacity** opens the existing global overlay-opacity slider
     (15%-100%).
   - **Reset virtual controls** asks for confirmation and restores the shipped
-    positions for both orientations, every row to 100% and all controls visible.
+    positions for both orientations, every row to 100% and the shipped hidden
+    set (C-stick and ZL/ZR hidden in both directions).
   - The D-pad is drawn and edited as **one cross**: dragging it moves all four
     directional placements together, snapping uses the cross centre, and the
     Toggle controls / Adjust size sheets keep their single D-pad row.
@@ -543,11 +559,16 @@ hint sits above it and the empty area stays inert) saves the current direction's
     drag gesture: the item is hit-tested on start, a local preview follows the
     finger and the profile is committed once on release (tap selects, moving
     controls no longer carry the gesture, so the jitter videos are fixed).
+  - 0.2.1 replaces the shipped default visibility set with the one the skins
+    draw: C-stick/ZL/ZR stay hidden in both directions and everything else -
+    including the portrait D-pad - is visible. An untouched 0.2.0 shipped hidden
+    set is migrated once; a customised set is kept.
   The old Settings → Gamepad full-screen editor and its Default/Custom mode are
   no longer exposed: every change is stored immediately from the in-game editor
-  (the profile archive and the per-row visibility/size scales are global). The
-  reference layout app's behaviour rows (slide buttons, relative stick centre,
-  D-pad slide, Combo Button) are not implemented; they are noted as future work.
+  (the profile archive and the per-row size scale are global; visibility is per
+  orientation). The reference layout app's behaviour rows (slide buttons,
+  relative stick centre, D-pad slide, Combo Button) are not implemented; they
+  are noted as future work.
   0.1.7-beta3 redesigned the whole in-game menu as a bottom card (portrait) /
   centred card (landscape) with a game-name header, power / restart / X icon
   buttons and grouped rows with SF Symbols; 0.1.7-beta4
@@ -996,12 +1017,12 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `GameView.swift` | Running game: full-bleed picture from the split landscape / portrait screen layout choices, the floating full-screen on-screen controls (per-row visibility and size scale), the optional floating FPS pill and pause button, in-game menu, round-4 in-game control edit mode and the 3DS software-keyboard overlay; also the ROM-free `-previewGameView` path. |
 | `GameViewPreview.swift` | Synthetic TOP / BOTTOM test images (gradient, 1 px grid, 400×240 and 320×240) for the ROM-free `-previewGameView` screenshots. |
 | `InGameMenuView.swift` | The 0.2.0 in-game menu: iOS-grouped bottom sheet in portrait / centred card in landscape, system semantic colours, the running game's name in the header with only power (exit) / restart (reset) / X (resume) buttons, tap-outside-to-resume, spring transitions, and the reference emulator's rows — Save state, Virtual controls, Screen layout, Swap screens, Rotate screen clockwise, Global Settings, Per-Application Settings (per-title-ID overrides) and Close game; secondary pages (Save state, Virtual controls, Screen layout, Per-Application Settings) use a native NavigationStack(path:) push/pop inside the sheet (content slides in from the right and back out to the left; header/top bar stay fixed). |
-| `SettingsView.swift` | Settings main page: an iOS inset-grouped List of the eight category rows (SF Symbol + label) in one section and the destructive **Reset All Settings** action in another, with the real reset (confirmation, `removePersistentDomain` for the app bundle and a relaunch prompt), the persisted-setting binding and the in-game quick display sheet. The category pages themselves live in `SettingsPages.swift`. |
-| `SettingsPages.swift` | The eight settings category pages and their shared iOS inset-grouped rows/captions (system semantic colours, light/dark follows the system, inline sub-page titles and no extra disclosure chevron). 0.1.7-beta5 layout: General (Check for updates + Update status, Turbo limit, Turbo speed 2×/3×/4×, Default speed 1×/2×/3×/4×), Layout (screen layout entry, rotation, orientation lock, swap screens and the Performance monitoring group), Gamepad, Graphics (resolution, Screen aspect, Integer scaling, the two experimental GPU switches; no Renderer row), System (Appearance + device/app info), Sound, Debug and Other (storage/version/language and the About page, moved from System). |
+| `SettingsView.swift` | Settings main page in the 0.2.1 system-Settings-app style: a large title, one inset-grouped card of the eight category rows with a coloured rounded-square SF Symbol tile (29 pt, white glyph) and a separate card with the destructive **Reset All Settings** action, with the real reset (confirmation, `removePersistentDomain` for the app bundle and a relaunch prompt), the persisted-setting binding and the in-game quick display sheet. The category pages themselves live in `SettingsPages.swift`. |
+| `SettingsPages.swift` | The eight 0.2.1 settings category pages and their shared system-Settings-app rows (`SettingsChoiceRow` pushes a radio selection page with the system blue checkmark; switches and sliders keep the system style; the resolution choices stay an inline segmented picker), with semantic colours so light/dark follow the system. General page order: the Speed card (Run speed limit, Default speed, Turbo limit, Turbo speed) then the Updates card (Check for updates, Update channel, Update status; the option set is unchanged), then Layout (screen layout entry, rotation, orientation lock, swap screens and the Performance monitoring group), Gamepad, Graphics (resolution, Screen aspect, Integer scaling, the two experimental GPU switches; no Renderer row), System (Appearance + device/app info), Sound, Debug and Other (storage/version/language and the About page, moved from System). |
 | `CPUProfilerView.swift` | The debug CPU profiler page: starts guest-PC sampling while a game runs and lists hot spots. Diagnosis only. |
 | `SaveManagerView.swift` | Game picker over the library, the selected game's battery save list (export as ZIP, import, delete) and its instant save-state slots (delete offline; save/load while that game runs), with progress and errors; re-reads the selected game's files on open, on library changes and after actions (no refresh button). |
 | `AboutView.swift` | Product page: app icon, name, version/build, project links, acknowledgements and legal notice; a compact runtime status card only while a game is loaded. |
-| `AppSettings.swift` | Persisted settings model (separate landscape and portrait screen layout enums, screen rotation, interface orientation, appearance, buffer size, frame cap, run speed limit, default/turbo playback speeds, Turbo limit, Check for updates, update channel, Metal HUD and FPS-counter switches, analog deadzone, built-in control appearance, the physical-controller button map, the two next-launch experimental GPU switches, the round-4 hidden-control rows, per-row size scales and the per-title-ID presentation + Gamepad profile overrides) and the UserDefaults keys, including the round-1 single-choice migration (`migratedScreenLayouts`) and the render scale (1×–4×). |
+| `AppSettings.swift` | Persisted settings model (separate landscape and portrait screen layout enums, screen rotation, interface orientation, appearance, buffer size, frame cap, run speed limit, default/turbo playback speeds, Turbo limit, Check for updates, update channel, Metal HUD and FPS-counter switches, analog deadzone, built-in control appearance, the physical-controller button map, the two next-launch experimental GPU switches, the per-orientation hidden-control rows (0.2.1 skin defaults with their one-time hidden-set migration), per-row size scales and the per-title-ID presentation + Gamepad profile overrides) and the UserDefaults keys, including the round-1 single-choice migration (`migratedScreenLayouts`) and the render scale (1×–4×). |
 | `UpdateChecker.swift` | GitHub release checker for the General page and the daily background update notification: /releases request, Stable/Beta channel filtering, semver comparison with CFBundleShortVersionString, a 24-hour background throttle and a local notification via UNUserNotificationCenter (permission requested on first use, one notification per version). |
 | `DiagnosticsReport.swift` | Diagnostics report text, the shared diagnostics file type and screen geometry helpers. |
 | `StorageInspector.swift` | Container folder sizes, save-data file list, pipeline-cache clearing, and `AtomicFileWriter` for temporary-file-then-rename writes. |
@@ -1024,7 +1045,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `InputState.swift` | Thread-safe merge of touch, overlay and controller input. |
 | `KeyboardRequest.swift` | One 3DS software-keyboard request: the schema-1 JSON decode, the applet's confirmation rules (`Request::accepts`), UTF-16 limit handling and the localized rejection lines. |
 | `KeyboardOverlayView.swift` | The full-screen overlay that answers a software-keyboard request: hint, pre-filled text field, character counter, applet buttons and validation; portrait and landscape, above the system keyboard. |
-| `ControlLayout.swift` | Editable control layout model: the full New 3DS control set, normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. The shipped defaults are converted from the ModernCenteredX2 reference skin (numeric frames only; round 6 puts the portrait shoulder row and main set in the band below the picture, round 7 renders the D-pad as one cross) and an untouched beta3/older shipped default is migrated on load. |
+| `ControlLayout.swift` | Editable control layout model: the full New 3DS control set, normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. The 0.2.1 shipped defaults are converted from the ModernFS (portrait, mapping 414x896) and ModernHybrid (landscape, mapping 896x414) Delta reference skins - numeric `items[].frame` rectangles only - so portrait puts the shoulder row at y≈0.7165, the main set around y≈0.826 and the four app buttons at y=0.94, while landscape keeps the 0.2.0 control geometry and puts the app buttons in the letterbox strip at y=0.945; ZL/ZR and the C-stick are design fill-ins. An untouched 0.2.0 (ModernCenteredX2-derived) or older shipped default is migrated on load and a customised one is kept; round 7 renders the D-pad as one cross. |
 | `VirtualControlsView.swift` | Runtime overlay: draws one button / analog stick per control with its own gesture (multi-touch), plus the single cross-shaped D-pad (`DpadCrossShape`) whose touch position selects the direction; reports ZK_BUTTON_* bits, Circle Pad and C-stick vectors; applies the analog deadzone, the built-in Standard / High contrast appearance, per-control visibility and the per-row size scale. |
 | `ControlLayoutEditorView.swift` | Legacy full-screen control layout editor kept for the `-openLayoutEditor control` screenshot hook; the app no longer links it (round-4 editing happens in-game). It draws/moves the D-pad as one cross and edits its group size/opacity/reset. |
 | `ControlLayoutSettingsView.swift` | Legacy control layout page (not linked from Settings since round 4); kept for compatibility of the old screenshot hook. |
@@ -1334,17 +1355,21 @@ Instant save states:
   fallback. The presenter side needs the
   round-0.1.6 library/patch 0009; an older library falls back to readback.
   The custom rectangles still apply from the next game load.
-- The shipped default controls come from the ModernCenteredX2 reference skin,
-  with the round-6 device-feedback adjustments: the portrait shoulder row sits
-  on one line at y=0.755 just below the picture and the main set at y=0.87, so
-  every control is in the free band; the D-pad is one cross-shaped control (the
-  four directions stay separate elements for input, visibility and size). The skin is read only for numbers; its artwork is not used. The
-  reference layout app's behaviour rows (slide buttons, relative stick centre,
-  D-pad slide, Combo Button) are future work; the available options are
-  visibility, size scale, opacity and reset.
+- The shipped default controls (0.2.1) follow two Delta reference skins read
+  for geometry only, **ModernFS** in portrait (mapping 414x896) and
+  **ModernHybrid** in landscape (mapping 896x414): portrait keeps every control
+  in the black band below the picture (shoulder row at y≈0.7165, main set around
+  y≈0.826, app-button row at y=0.94) and landscape keeps the 0.2.0 control
+  geometry with its four app buttons in the letterbox strip at y=0.945. ZL/ZR
+  and the C-stick are not in either skin, so they are design fill-ins and start
+  hidden; the D-pad is one cross-shaped control (the four directions stay
+  separate elements for input, visibility and size). The skins are read only for
+  numbers; their artwork is not used. The reference layout app's behaviour rows
+  (slide buttons, relative stick centre, D-pad slide, Combo Button) are future
+  work; the available options are visibility, size scale, opacity and reset.
 - Hidden controls are not drawn in the in-game editor either: re-enable a row in
   **Toggle controls** before moving it. The per-row size scale is global (one
-  value for both orientations), matching the visibility choice.
+  value for both orientations) while visibility is per orientation.
 - The two Custom layouts ignore the display-format box (they place each screen by
   a fraction of the whole game view); screen rotation and each screen's native
   shape still apply.
