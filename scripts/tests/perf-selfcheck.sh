@@ -66,6 +66,14 @@ check "GameView draws the performance overlay" contains ios/app/Sources/GameView
 check "performance overlay view tags its readout for UI smoke" contains ios/app/Sources/PerformanceOverlayView.swift 'performance-overlay'
 check "performance overlay is a persisted setting" contains ios/app/Sources/AppSettings.swift 'performanceOverlayEnabled'
 check "Settings exposes the performance overlay page" contains ios/app/Sources/SettingsPages.swift 'settings-performance-overlay'
+check "performance overlay draws FPS, frame time, speed and memory lines" \
+  bash -c 'grep -Fq -- "\"FPS: " ios/app/Sources/PerformanceOverlayView.swift && grep -Fq -- "\"Frame: " ios/app/Sources/PerformanceOverlayView.swift && grep -Fq -- "Process RAM: " ios/app/Sources/PerformanceOverlayView.swift && grep -Fq -- "Available RAM: " ios/app/Sources/PerformanceOverlayView.swift'
+check "performance overlay position offers six corners" \
+  bash -c 'for case in topLeft topCenter topRight bottomLeft bottomCenter bottomRight; do grep -Fq -- "case $case" ios/app/Sources/AppSettings.swift || exit 1; done'
+check "performance overlay settings page keeps its toggles and position row" \
+  bash -c 'for id in settings-performance-overlay-enabled settings-performance-overlay-background settings-performance-overlay-position settings-performance-overlay-fps settings-performance-overlay-frame-time settings-performance-overlay-speed settings-performance-overlay-process-memory settings-performance-overlay-available-memory settings-performance-overlay-battery; do grep -Fq -- "$id" ios/app/Sources/SettingsPages.swift || exit 1; done'
+check "old FPS switch migrates once to the overlay master switch" \
+  bash -c 'grep -Fq -- "UI.performanceOverlayMigrated" ios/app/Sources/AppSettings.swift && grep -Fq -- "UI.showFPS" ios/app/Sources/AppSettings.swift'
 check "diagnostics report has the FPS counter state" contains ios/app/Sources/DiagnosticsReport.swift 'fps_counter='
 check "diagnostics report has aot_percent" contains ios/app/Sources/DiagnosticsReport.swift 'aot_percent='
 check "diagnostics report has timing shares" contains ios/app/Sources/DiagnosticsReport.swift 'timing_share_run_pct='
