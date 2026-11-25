@@ -736,13 +736,13 @@ struct GameView: View {
                 ZStack {
                     presentedSurface(view: metalView, size: box)
                 }
-                // Portrait arrangements are top-aligned under the safe area (the
-                // original portrait layout shows the console stack at the top);
-                // landscape arrangements and the full-stage custom layout are
-                // centred.
+                // The picture box is top-aligned in the stage in both
+                // directions: portrait shows the console stack at the top and
+                // landscape removes the black band above the screens (the
+                // full-stage custom layout fills the box either way).
                 .frame(width: available.width,
                        height: available.height,
-                       alignment: isLandscape || layout == .custom ? .center : .top)
+                       alignment: .top)
             } else {
                 readbackArrangement(in: available, isLandscape: isLandscape)
             }
@@ -776,7 +776,7 @@ struct GameView: View {
             integerScale: presentedIntegerScale
         ) {
             readbackScreens(viewports, layoutBox: area, area: area,
-                            stretches: false, alignTop: false)
+                            stretches: false, alignTop: true)
         } else {
             let layout = settings.effectiveScreenLayout(isLandscape: isLandscape)
             let stretch = presentedScreenAspect == .stretch
@@ -796,10 +796,10 @@ struct GameView: View {
                 layout: layout,
                 rotation: presentedScreenRotation
             )
-            // Portrait arrangements are top-aligned under the safe area, like
-            // the presented layer; a stretched arrangement always fills the area.
+            // The arrangement box is top-aligned in both directions, like the
+            // presented layer; a stretched arrangement always fills the area.
             readbackScreens(viewports, layoutBox: layoutBox, area: area,
-                            stretches: stretch, alignTop: !isLandscape)
+                            stretches: stretch, alignTop: true)
         }
     }
 
