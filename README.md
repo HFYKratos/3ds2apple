@@ -96,16 +96,16 @@ Screen rotation and interface orientation are kept, and render resolution (1x–
 
 ## Controls and the pause menu
 
-The on-screen pad is the complete New 3DS set: D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a real analog Circle Pad and the New 3DS C-stick. The Circle Pad reports true analog values (-1 to 1 per axis, with a small dead zone so a resting finger reads exactly 0) instead of acting as a second D-pad, and the C-stick works the same way. Positions and sizes follow two Delta reference skins (geometry only): **ModernFS** in portrait and **ModernHybrid** in landscape. In portrait every control sits in the black band below the picture (shoulder row, then the main pad): the D-pad is drawn as a single cross — four direction zones, press and slide to change direction — instead of four separate buttons, and Fast-forward, Quick save, Quick load and Swap screens form the bottom row. Landscape keeps the previous control geometry, with those four app buttons moved into the letterbox strip below the picture.
+The on-screen pad is the complete New 3DS set: D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a real analog Circle Pad and the New 3DS C-stick. The Circle Pad reports true analog values (-1 to 1 per axis, with a small dead zone so a resting finger reads exactly 0) instead of acting as a second D-pad, and the C-stick works the same way. Positions and sizes follow two Delta reference skins (geometry only): **ModernFS** in portrait and **ModernHybrid** in landscape, including two app buttons taken from the skins' HOME and MENU keys: **Settings** opens the Settings page and **Menu** opens the in-game menu. In portrait the console controls sit in the black band below the picture (shoulder row, then the main pad): the D-pad is drawn as a single cross — four direction zones, press and slide to change direction — instead of four separate buttons, the skin's MENU chip is the menu button at the bottom-left, Fast-forward and Swap screens pair at the bottom-right, and Quick save / Quick load move to the top corners next to the notch (LOAD left, SAVE right). Landscape keeps the previous control geometry, with Quick save / Quick load beside the left notch edge (SAVE above LOAD) and Fast-forward / Swap screens in the letterbox strip below the picture. The skins' volume keys are intentionally not implemented.
 
 A hardware controller's left stick feeds the Circle Pad and its right stick feeds the C-stick; L2/R2 map to ZL/ZR, and several fingers can hold buttons and drag the sticks at the same time.
 
 The paused game's **Virtual controls** card is where the pad is customised:
 
 - **Show/hide the pad**, show the FPS readout, haptics.
-- **On-screen buttons** — a Fast-forward toggle (2x on/off) plus editable Quick save, Quick load and Swap screens buttons.
+- **On-screen buttons** — the Settings and Menu buttons, a Fast-forward toggle (2x on/off), Quick save, Quick load and Swap screens; like the console controls they can be moved, resized and shown or hidden.
 - **Edit layout** — drag the controls over the paused picture; the centred **Done** saves the current orientation and resumes.
-- **Toggle controls** — visibility is per orientation: C-stick, ZL and ZR start hidden in both, while every control the default skins draw, including the portrait D-pad, starts visible. An untouched 0.2.0 default set migrates to this once; a customised set is kept.
+- **Toggle controls** — visibility is per orientation: C-stick, ZL and ZR start hidden in both, while every control the default skins draw, including the portrait D-pad and the Settings/Menu buttons, starts visible. An untouched 0.2.0 or 0.2.1-beta1 default set migrates to this once; a customised set is kept.
 - **Adjust size** — 10%–200% per button or group, 100% default (global).
 - **Adjust opacity** and **Reset**.
 
