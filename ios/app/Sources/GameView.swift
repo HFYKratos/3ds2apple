@@ -321,7 +321,11 @@ struct GameView: View {
     /// The full-screen floating on-screen controls. They take no layout space, so
     /// hiding them never moves the picture.
     private func controlsOverlay(isLandscape: Bool) -> some View {
-        VirtualControlsView(
+        // Turning "Show virtual controls" off hides every button except the
+        // Settings button: it stays in its HOME slot and keeps opening the
+        // in-game menu. While the menu is paused the whole layer stays hidden.
+        let settingsOnly = !settings.showTouchControls
+        return VirtualControlsView(
             profile: settings.controlLayout(for: isLandscape ? .landscape : .portrait),
             opacityScale: settings.controlsBackgroundOpacity,
             deadzone: settings.effectiveAnalogDeadzone(titleID: presentationTitleID),
@@ -339,11 +343,12 @@ struct GameView: View {
             onQuickLoad: { performQuickLoad() },
             onSwapScreens: { performSwapScreens() },
             onSettings: { openInGameMenu() },
-            fastForwardActive: fastForwardToggled
+            fastForwardActive: fastForwardToggled,
+            showsOnlySettings: settingsOnly
         )
         .ignoresSafeArea()
-        .opacity(showsTouchControls ? 1 : 0)
-        .allowsHitTesting(showsTouchControls)
+        .opacity(showsTouchControls ? 1 : (settingsOnly && !model.isPaused ? 1 : 0))
+        .allowsHitTesting(showsTouchControls || (settingsOnly && !model.isPaused))
         .accessibilityIdentifier("touch-controls-overlay")
     }
 

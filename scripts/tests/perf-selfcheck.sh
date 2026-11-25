@@ -77,6 +77,9 @@ check "performance overlay settings page keeps its toggles and position row" \
   bash -c 'for id in settings-performance-overlay-enabled settings-performance-overlay-background settings-performance-overlay-position settings-performance-overlay-fps settings-performance-overlay-frame-time settings-performance-overlay-speed settings-performance-overlay-process-memory settings-performance-overlay-available-memory; do grep -Fq -- "$id" ios/app/Sources/SettingsPages.swift || exit 1; done'
 check "battery temperature is gone from the overlay settings and strings" \
   bash -c '! grep -rq -- "performanceOverlayShowBatteryTemperature\|settings-performance-overlay-battery" ios/app/Sources && ! grep -Fq -- "Show battery temperature" ios/app/Resources/en.lproj/Localizable.strings ios/app/Resources/zh-Hans.lproj/Localizable.strings'
+check "Settings stays visible when the virtual controls are switched off" \
+  bash -c 'grep -Fq -- "showsOnlySettings" ios/app/Sources/VirtualControlsView.swift && grep -Fq -- "showsOnlySettings: settingsOnly" ios/app/Sources/GameView.swift && grep -Fq -- "settingsOnly && !model.isPaused" ios/app/Sources/GameView.swift'
+
 check "the Settings button can never be hidden" \
   bash -c 'grep -Fq -- "var canToggleVisibility" ios/app/Sources/ControlLayout.swift && grep -Fq -- "toggleableItems" ios/app/Sources/ControlOptionsViews.swift && grep -Fq -- "guard item.canToggleVisibility" ios/app/Sources/AppSettings.swift'
 
