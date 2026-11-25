@@ -11,8 +11,8 @@
 //  directions as one group. They match the labels in the reference layout
 //  app's controller-options page, without its unimplemented behaviour rows.
 //  Every row is enumerated from ControlOptionItem.allCases, so a control the
-//  layout adds (the 0.2.1-beta2 Settings/Menu buttons) turns up in both sheets
-//  with no extra code.
+//  layout adds (the 0.2.1 Settings button) turns up in both sheets with no
+//  extra code; 0.2.1-beta3 removed the separate MENU row again.
 //
 
 import SwiftUI
