@@ -881,7 +881,6 @@
 "Show speed" = "显示速度";
 "Show app memory usage" = "显示应用内存使用情况";
 "Show available memory" = "显示可用内存";
-"Show battery temperature" = "显示电池温度";
 "Top left" = "左上";
 "Top center" = "中上";
 "Top right" = "右上";
@@ -897,6 +896,3 @@
 "Show the emulation speed as a percentage of real time." = "以百分比显示当前模拟速度。";
 "Show how much memory the emulator is using." = "显示模拟器占用的内存大小。";
 "Show how much memory the device still has free." = "显示设备可用的内存大小。";
-"Show the battery temperature in °C and °F; unavailable values say so." = "以摄氏度和华氏度显示当前电池温度；无法获取时显示不可用提示。";
-"Battery temperature is not available on this device." = "此设备无法获取电池温度。";
-"Not available" = "不可用";

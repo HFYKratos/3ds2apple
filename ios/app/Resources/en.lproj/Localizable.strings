@@ -879,7 +879,6 @@
 "Show speed" = "Show speed";
 "Show app memory usage" = "Show app memory usage";
 "Show available memory" = "Show available memory";
-"Show battery temperature" = "Show battery temperature";
 "Top left" = "Top left";
 "Top center" = "Top center";
 "Top right" = "Top right";
@@ -895,6 +894,3 @@
 "Show the emulation speed as a percentage of real time." = "Show the emulation speed as a percentage of real time.";
 "Show how much memory the emulator is using." = "Show how much memory the emulator is using.";
 "Show how much memory the device still has free." = "Show how much memory the device still has free.";
-"Show the battery temperature in °C and °F; unavailable values say so." = "Show the battery temperature in °C and °F; unavailable values say so.";
-"Battery temperature is not available on this device." = "Battery temperature is not available on this device.";
-"Not available" = "Not available";
