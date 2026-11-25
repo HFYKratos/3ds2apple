@@ -642,7 +642,7 @@
 "Adjust opacity" = "Adjust opacity";
 "Reset virtual controls" = "Reset virtual controls";
 "Reset virtual controls?" = "Reset virtual controls?";
-"Restores the default control positions for both orientations, every size to 100% and all controls visible." = "Restores the default control positions for both orientations, every size to 100% and all controls visible.";
+"Restores the default control positions for both orientations, every size to 100% and the default hidden controls (C-stick, ZL and ZR) hidden again." = "Restores the default control positions for both orientations, every size to 100% and the default hidden controls (C-stick, ZL and ZR) hidden again.";
 "Hidden controls are not drawn and do not respond to touches. The D-pad is toggled as one group." = "Hidden controls are not drawn and do not respond to touches. The D-pad is toggled as one group.";
 "The size scale multiplies each control (or the D-pad group) in the running overlay. 100% is the layout's own size." = "The size scale multiplies each control (or the D-pad group) in the running overlay. 100% is the layout's own size.";
 "The opacity applies to every on-screen control, including the sticks." = "The opacity applies to every on-screen control, including the sticks.";
