@@ -130,9 +130,14 @@ struct GameView: View {
                         onExit: { requestConfirmation(.exit) },
                         onLoadStateCompleted: resumeAfterStateLoad
                     )
+                    // One container spring only. Landscape animates opacity plus a
+                    // hair of scale (0.98 -> 1); portrait only fades, because the
+                    // sheet itself already animates its bottom-edge move (a second
+                    // move here made the sheet travel twice and stutter). The
+                    // in-game menu keeps no transition of its own.
                     .transition(isLandscape
-                                ? .scale(scale: 0.96).combined(with: .opacity)
-                                : .move(edge: .bottom))
+                                ? .opacity.combined(with: .scale(scale: 0.98))
+                                : .opacity)
                     .zIndex(1)
                 }
 
@@ -420,12 +425,18 @@ struct GameView: View {
     /// Glass pause button; opens the in-game menu and pauses the runtime.
     private func pauseButton(size: CGFloat) -> some View {
         Button {
-            withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
                 isMenuPresented = true
             }
-            // The preview has no runtime to pause.
+            // stopFrameLoop/stopAudio are main-thread work; run them after the
+            // overlay has animated in so they cannot delay the first animated
+            // frame (the dimmed overlay already owns touch input). The guard keeps
+            // a fast Resume from leaving the runtime paused behind a closed menu.
             if !isPreviewingGame {
-                model.pauseForMenu()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    guard isMenuPresented else { return }
+                    model.pauseForMenu()
+                }
             }
         } label: {
             Image(systemName: "gearshape.fill")
@@ -505,11 +516,14 @@ struct GameView: View {
             rotateScreensClockwise()
         case .openMenu:
             guard !isMenuPresented, !isEditingControls else { return }
-            withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
                 isMenuPresented = true
             }
             if !isPreviewingGame {
-                model.pauseForMenu()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    guard isMenuPresented else { return }
+                    model.pauseForMenu()
+                }
             }
         }
     }
