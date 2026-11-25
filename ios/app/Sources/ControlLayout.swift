@@ -511,7 +511,7 @@ struct ControlLayoutProfile: Codable, Equatable {
     ///   L (0.755022, 0.595411) R (0.915737, 0.592995) size 0.074879 (31 pt)
     ///   Start (0.546875, 0.900966) Select (0.452009, 0.900966) 0.082126 (34 pt)
     ///   settings HOME slot (0.498884, 0.900966) 0.082126 (34 x 34 pt)
-    ///   quickSave (0.029018, 0.40) quickLoad (0.029018, 0.60) 0.07
+    ///   quickSave (0.029018, 0.30) quickLoad (0.029018, 0.70) 0.07
     ///
     /// Portrait normalised table (mapping 414 x 896; ModernFS):
     ///   circlePad (0.164251, 0.825893) 0.241546 (100 x 100 pt)
