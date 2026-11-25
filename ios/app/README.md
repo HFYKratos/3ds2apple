@@ -23,10 +23,10 @@ views do not carry duplicated strings.
 | Page | Contents |
 |---|---|
 | **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games`. Each card has a square art area at the icon's native 1:1 aspect: the game's own SMDH cover art (launcher-pushed `cover.png`, else the build's bundled cover, else the gradient placeholder) fills the square edge to edge with no inset frame (the gradient is only the placeholder when no cover is available), and a corner badge appears only when a game needs attention (**Checking** / **Data missing** / **Error**; a ready game has no AOT badge, since the app only runs AOT code and the AOT state stays in the log and the diagnostics export). Under the art the card is deliberately compact: the title for the app language (up to two lines, truncated), the publisher, then the pushed game size · last-played state. There is **no explanatory paragraph under the grid**. iPhone shows two columns, iPad three. Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Pull-to-refresh rescans Documents, and the library also rescans at launch and when the app returns to the foreground; there is no refresh button. Long-pressing a card opens its context menu; **Delete Game** asks a second confirmation and then deletes the game (see "Deleting a game" below). The empty state explains the desktop launcher. No on-phone import. Settings entry. |
-| **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback) arranged by the split landscape / portrait screen layout choices, filling the whole screen, with the on-screen controls floating over the picture, a floating FPS pill (centred below the notch in portrait, in the top-right safe area in landscape; plus a floating pause/gear button only while the on-screen Settings button is hidden) and the in-game menu. The game view hides the system status bar. There is no title bar or reserved control pad any more. When a title starts the 3DS software keyboard, a full-screen keyboard overlay collects the text and the applet's buttons while the frame loop is stopped; answering resumes the game. |
+| **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback) arranged by the split landscape / portrait screen layout choices, filling the whole screen, with the on-screen controls floating over the picture, the performance overlay (top-left by default; FPS, frame time and app memory on by default, with optional speed, available memory and battery temperature; plus a floating pause/gear button only while the on-screen Settings button is hidden) and the in-game menu. The game view hides the system status bar. There is no title bar or reserved control pad any more. When a title starts the 3DS software keyboard, a full-screen keyboard overlay collects the text and the applet's buttons while the frame loop is stopped; answering resumes the game. |
 | **Settings** | A system-Settings-app style page (0.2.1): a large title, one inset-grouped card of eight category rows with coloured rounded-square SF Symbol tiles (General, System, Gamepad, Graphics, Layout, Sound, Debug and Other) and a separate card with a real **Reset All Settings** action. Each category is a large-titled page of inset-grouped cards with regular-weight row titles, secondary explanations and a trailing switch, slider, value or disclosure chevron; choice rows push a radio selection page. It opens from the home page and, while a game runs, from the in-game menu's Global Settings row (the on-screen Settings button opens that menu). See "Settings screens (0.2.1)" below. |
 | **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. The page re-reads the selected game's files when it opens, when the library changes and after every action; there is no refresh button. |
-| **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the FPS appears only while a game is loaded; everything else stays in the log and the diagnostics. |
+| **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the performance overlay appears only while a game is loaded; everything else stays in the log and the diagnostics. |
 | **In-game menu** | Opened from the on-screen **Settings** button (the skins' HOME slot; since 0.2.1-beta3 it is the only app-menu button) or, while that control is hidden, from the floating pause/gear button. It uses the same iOS-native grouped language as the Settings app: inset-grouped cards with a 29 pt coloured rounded-square SF Symbol tile per row, regular-weight titles, footnote secondary explanations and the system Toggle / segmented control instead of hand-drawn rows, and light/dark follow the system. Since 0.2.1-beta3 the presentation is one slide-up: the whole menu moves up from the bottom edge and fades in as a single container animation (the card and the backdrop keep no transition of their own), and the runtime pause is deferred until that animation has started, so opening the menu does not hitch. The header keeps the running game's name (no cover art) with only the power (exit), restart (reset) and **X** (resume) buttons; quick save/load live in the Save state sub-page. The rows follow the reference emulator's in-game menu: **Save state**, **Virtual controls**, **Screen layout**, **Swap screens** (toggle), **Rotate screen clockwise**, **Global Settings**, **Per-Application Settings** (per-game overrides stored by title ID) and **Close game**. Sub-pages open inside the sheet through a native NavigationStack(path:) push/pop (Save state, Virtual controls, Screen layout, Per-Application Settings): content slides in from the right and the back button slides it out to the left while the card header stays put. Save Manager / Export logs / Fast-forward / Sound are intentionally not in this menu (they stay in Settings/Debug). Tapping the dimmed area above (portrait) or outside (landscape) the card resumes the game. |
 
 Opening the in-game menu pauses emulation: the frame loop and the audio engine
@@ -103,15 +103,18 @@ audio advances behind it.
   (`CAMetalLayer.developerHUDProperties`, iOS 16) and existing installs are
   migrated to off once (the marker makes the migration run only once, so a
   manual switch afterwards wins). See "System Metal HUD" below.
-- Optional in-game FPS counter, **on by default**: the only performance readout
-  the game view draws. The switch lives in Settings → Layout → Performance monitoring; the counter is
-  a translucent pill floating at the top of the picture (centred just below the
-  notch in portrait, in the top-trailing safe-area corner in landscape); while the
-  on-screen Settings button is hidden, a floating pause/gear button joins it at the
-  top in portrait and sits at the bottom centre in landscape. Everything else
+- Optional in-game performance overlay, **on by default**: the only performance
+  readout the game view draws. Configure it under Settings → Layout → Performance
+  monitoring → **Performance overlay**: the master switch, a translucent background
+  behind the text, one of six places on the picture (top left by default) and one
+  switch per line. The shipped lines are FPS, frame generation time and the app's
+  memory use; speed, available memory and battery temperature can be added (the
+  battery temperature line is skipped on iOS, which does not expose it). The old
+  FPS switch migrated to the master switch, and the in-game Virtual controls
+  card's Show performance stats row toggles the same overlay. Everything else
   (AOT state, renderer path, CPU/present/read timings, Metal HUD state) stays in
-  the device log and the diagnostics export.
-  See "In-game FPS counter" below.
+  the device log and the diagnostics export. See "In-game performance overlay"
+  below.
 - Display settings: separate landscape and portrait screen layout choices (six
   landscape presets, three portrait presets, plus two numeric custom layout
   pages), screen rotation and interface orientation. Every layout preset is drawn
@@ -274,7 +277,7 @@ The shell can be driven headlessly without tapping:
 - `-previewGameView` shows the running-game view without a ROM or game pack: two
   synthetic screen images (gradient, 1 px grid and a clear TOP / BOTTOM label,
   400×240 and 320×240) are drawn through the real layout geometry, with the
-  floating FPS/pause controls and the on-screen control overlay. The preview path
+  floating performance overlay/pause controls and the on-screen control overlay. The preview path
   needs no ROM, pack or user data and never changes the normal game path.
 - `-previewScreenLayout <layout>` applies one screen layout choice for this
   launch only (in memory, never persisted). With `-previewLandscape` the values
@@ -375,9 +378,11 @@ that project's GPL code/text is not used (reference only).
 - **Layout**: the screen layout page entry (landscape/portrait preset rows and
   the two numeric custom pages), **Screen rotation**, **Orientation lock**
   (`settings.orientation`), the **Swap screens** switch (`settings.swapScreens`)
-  and a **Performance monitoring** group with the **FPS counter**
-  (`settings.showFPS`) and the **System Metal HUD** (`settings.systemMetalHUD`,
-  with the exact reason hint when the HUD cannot appear).
+  and a **Performance monitoring** group with the **Performance overlay** page
+  (master switch, background, six positions and the six line switches;
+  `settings.performanceOverlay*`) and the **System Metal HUD**
+  (`settings.systemMetalHUD`, with the exact reason hint when the HUD cannot
+  appear).
 - **Gamepad** (0.2.0 C): on-screen controls on/off, overlay opacity, haptics,
   **Deadzone** (`settings.analogDeadzone`, 0–30%, applied to the on-screen
   Circle Pad/C-stick and to both physical-controller thumbsticks as a radial
@@ -461,7 +466,7 @@ The old stored aspect/integer keys are kept but ignored.
 The 3DS screens stay upright in the app's interface, which iOS rotates with the
 device; `Screen rotation` turns the pictures inside their area for playing with
 the console held sideways. The running game fills the whole screen - there is no
-title bar, rounded card or reserved control pad any more - and the FPS/pause
+title bar, rounded card or reserved control pad any more - and the performance overlay/pause
 controls float over the picture. The layout presets are presenter arrangements;
 aspect ratio and integer scaling no longer have UI (round 4) and the custom
 layouts place each screen explicitly in the whole game view (screen rotation and
@@ -492,7 +497,7 @@ choice (six options) and an independent portrait choice (three options), each
 selected from its own radio picker, with the numeric custom pages and the
 round-4 drag editor described below.
 
-- **Default control layout (0.2.1-beta3 Delta reference skins).** The shipped
+- **Default control layout (0.2.1-beta4 Delta reference skins).** The shipped
   positions follow the two Delta `.deltaskin` skins used as the 0.2.1 geometry
   reference, read only for their numeric mapping size and `items[].frame`
   rectangles (no artwork, skin text or assets copied): **ModernFS** for portrait
@@ -500,22 +505,27 @@ round-4 drag editor described below.
   Centres and sizes are normalised to our full-screen overlay as before (centre =
   frame centre / mapping size, size = frame width / shorter side except the wide
   L/R capsules, which use the frame height; five decimals), and every control
-  keeps opacity 0.85. The skins' HOME slot is the single app-menu button,
-  **Settings** (it opens the in-game menu; 0.2.1-beta3 removed 0.2.1-beta2's
-  separate MENU button), the SAVE / LOAD chips are **Quick save** / **Quick
-  load**, and the skins' volume keys are deliberately not implemented.
+  keeps opacity 0.85. 0.2.1-beta4 only moves the four SAVE/LOAD chips next to the
+  notch; every other placement is 0.2.1-beta3's. The skins' HOME slot is the
+  single app-menu button, **Settings** (it opens the in-game menu; 0.2.1-beta3
+  removed 0.2.1-beta2's separate MENU button), the SAVE / LOAD chips are **Quick
+  save** / **Quick load**, and the skins' volume keys are deliberately not
+  implemented.
   - **Portrait (ModernFS)** puts the console controls in the black band below the
     picture: the shoulder row L/R plus Start/Select and Settings in the HOME slot
     at y=0.7165 (ZL/ZR hidden), the main set spanning y≈0.768-0.886 (Circle Pad
     and A/Y at y=0.8259, D-pad cross centred at y=0.8571), and Quick save / Quick
-    load in the top corners right under the notch (SAVE right x=0.75, LOAD left
-    x=0.25, y=0.045). The game view hides the system status bar, so the notch
+    load in the top corners flanking the notch at the exact ModernFS chip x (SAVE
+    right x=0.74275, LOAD left x=0.25725) and y=0.030 - closer to the notch top
+    edge than 0.2.1-beta3. The game view hides the system status bar, so the notch
     corners are free for them.
   - **Landscape (ModernHybrid)** keeps the 0.2.0 console-control geometry
     (Circle Pad, D-pad, A/B/X/Y, L/R, Start/Select, ZL/ZR and the C-stick are
     unchanged placements): Settings sits in the skin's HOME slot next to
     Start/Select (0.4989, 0.9010) and Quick save / Quick load in the left
-    notch-side chips (SAVE y=0.1643 above LOAD y=0.2416).
+    notch-side strip, SAVE in the upper half (x=0.0290, y=0.30) and LOAD in the
+    lower half (y=0.70), symmetric about the middle of the screen so the
+    landscape Dynamic Island area stays clear.
   - The five controls neither skin draws - ZL, ZR, the C-stick, Fast-forward and
     Swap screens - share one design fill-in row at the top-centre of the game
     area (y=0.13; ZL x=0.28, Fast-forward 0.39, C-stick 0.50, Swap screens 0.61,
@@ -529,22 +539,22 @@ round-4 drag editor described below.
     drag a single rounded plus. A touch reports the arm under the finger and a
     press-and-slide changes direction.
   - Migration: an untouched 0.2.0, 0.2.1-beta1, 0.2.1-beta2 (including its
-    removed MENU placement), beta3 (round-5) or round-4 shipped layout (compared
-    within tolerance) moves to this default once; a profile the user moved is
-    kept. A pre-beta2 profile has no Settings placement and `withDefaultsFilled`
-    heals it in from the current default. An untouched 0.2.1-beta1/beta2 shipped
-    hidden set becomes the new shipped set once (the five hidden rows above; the
-    older 0.2.0 set was migrated in 0.2.1-beta1); a customised set is kept.
-    **Reset virtual controls** restores the new defaults.
+    removed MENU placement), 0.2.1-beta3 (round-5) or round-4 shipped layout
+    (compared within tolerance) moves to this default once; a profile the user
+    moved is kept. A pre-beta2 profile has no Settings placement and
+    `withDefaultsFilled` heals it in from the current default. An untouched
+    0.2.1-beta1/beta2 shipped hidden set becomes the new shipped set once (the
+    five hidden rows above; the older 0.2.0 set was migrated in 0.2.1-beta1); a
+    customised set is kept. **Reset virtual controls** restores the new defaults.
 - **Controls (in-game pause menu).** The overlay draws the full New 3DS set:
   D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, the Circle Pad and the C-stick, plus
   the app-only Settings, Fast-forward, Quick save, Quick load and Swap screens
   buttons. It is a full-screen floating layer over the picture in both
   orientations and takes no layout space, so hiding it never moves the image. The pause menu's **Virtual
   controls** page (opened from the in-game menu's first row) has: **Show virtual controls**, **Show performance
-  stats** (the FPS pill), **Haptic feedback**, **Edit layout**, **Toggle
+  stats** (the performance overlay), **Haptic feedback**, **Edit layout**, **Toggle
   controls**, **Adjust size**, **Adjust opacity** and **Reset virtual controls**.
-  - **Edit layout** closes the menu, keeps the runtime paused, hides the pause/FPS
+  - **Edit layout** closes the menu, keeps the runtime paused, hides the pause/overlay
     HUD and returns to the frozen game picture with the on-screen controls
     draggable (a light haptic tick when a control is picked up). Dragging moves a
     control live; a **Done** pill in the exact centre of the screen (round 8; the
@@ -723,7 +733,7 @@ hint sits above it and the empty area stays inert) saves the current direction's
 | Frame cap | 60 / 30 fps | Immediately; the free-run loop never starts presented frames closer than 1/60 s (or 1/30 s). It is a cap, not a target. |
 | Fast-forward | 1× / 2× / 4× | Immediately (also from the in-game menu); the next presented frame uses the new value. |
 | System Metal HUD | On / off, **default off** | Immediately on the presented `CAMetalLayer`; remembered across launches and also written as `MTL_HUD_ENABLED` / `MetalHUDForceEnabled` for the next Metal device. 0.1.6-beta3 turns it off for every install once (`UI.systemMetalHUDDefaultOffMigrated`); after that the stored switch value wins. |
-| Show FPS counter | On / off, **default on** | The in-game FPS readout: a translucent floating pill in the top-trailing safe-area corner in both orientations; also toggled from the pause menu's Virtual controls card (Show performance stats). No other performance text is drawn over the game; the rest stays in the log and diagnostics. |
+| Performance overlay | On / off, **default on** | The Azahar-style in-game overlay (see "In-game performance overlay"): FPS, frame time, speed, app memory, available memory and battery temperature, each line switchable, with an optional background and six places (top left by default); also toggled from the pause menu's Virtual controls card (Show performance stats). No other performance text is drawn over the game; the rest stays in the log and diagnostics. |
 
 In 0.1.7-beta2 the rows above live on **Settings → Layout → Performance
 monitoring**; the experimental GPU switches are under **Graphics**, AOT
@@ -763,18 +773,26 @@ frames with `zk_run_frame` before the frame that is presented:
   stop the frame loop before touching the runtime, so a fast-forward group can
   never straddle a state change.
 
-## In-game FPS counter
+## In-game performance overlay
 
-Settings → Layout → Performance monitoring → **FPS counter** (on by default) is the only
-performance readout the game view draws. It is a small translucent pill floating
-at the top of the picture: centred just below the notch in portrait, in the
-top-trailing safe-area corner in landscape. While the on-screen Settings button
-is hidden, a floating pause/gear fallback joins it at the top in portrait and
-sits at the bottom centre in landscape (the top corners belong to L/R there).
-The old portrait title bar and the landscape top strip are gone.
+Settings → Layout → Performance monitoring → **Performance overlay** (on by
+default) is the only performance readout the game view draws. It is an
+Azahar-style text overlay built from the page's switches: the frame rate and the
+frame generation time on the first line, then the app's resident memory
+("Process RAM") on the second, with optional speed, available memory and battery
+temperature additions. The battery temperature line never appears on iOS because
+the public API does not expose it, and the settings row says so. The overlay
+sits in one of six places (top left by default), can draw a translucent
+background behind the text so it stays readable over bright scenes, and aligns
+inside the safe area, so a corner stays clear of the notch and the home
+indicator. While the on-screen Settings button is hidden, a floating pause/gear
+fallback joins it at the top in portrait and sits at the bottom centre in
+landscape (the top corners belong to L/R there). The old portrait title bar and
+the landscape top strip are gone.
 
-The counter shows the presented frames per second over the last 0.5 s window
-(`59 fps`, or `fps …` until the first frame is measured). The rest of the old
+The frame rate is the presented frames per second over the last 0.5 s window
+(`FPS: 59`, or `FPS: 0` until the first frame is measured); the frame time is
+the last presented frame's render time in milliseconds. The rest of the old
 status badge — AOT state, renderer path (`Metal GPU` / `Metal upload` / `CPU
 render`), Metal HUD state and the CPU/present/read timing breakdown — is still
 recorded and exported, but only in the device log and the diagnostics report.
@@ -821,7 +839,7 @@ records the same state (`system_metal_hud*` fields).
 ## AOT proof
 
 The old multi-segment badge (AOT / FPS / renderer / Metal HUD) is gone: the
-in-game overlay only shows the FPS counter. Every load still writes the AOT
+in-game overlay only shows the performance metrics. Every load still writes the AOT
 proof to the device log and to the diagnostics
 report — never just "assume it is AOT":
 
@@ -878,8 +896,8 @@ localized.
   restarts the audio engine.
 - The picture fills the whole game view; the on-screen **Settings** button opens
   the in-game menu, and while that control is hidden a floating pause/gear button
-  takes over (with the FPS pill at the top in portrait, at the bottom centre in
-  landscape). The in-game menu keeps the same z-order above the picture, the
+  takes over (with the performance overlay at the top in portrait, at the bottom
+  centre in landscape). The in-game menu keeps the same z-order above the picture, the
   controls and the HUD.
 - The picture box is top-aligned in the game view: portrait shows the console
   stack from the top and landscape removes the black band above **Large screen** /
@@ -1056,7 +1074,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `ApplicationDelegate.swift` | UIKit delegate used for the orientation preference. |
 | `ContentView.swift` | Root router: home page or game for the current session phase; applies settings to the session. |
 | `HomeView.swift` | Home page: the Documents/Games library grid (two columns on iPhone, three on iPad; square 1:1 SMDH cover art that fills the card edge to edge with no icon frame, an attention-state badge in the corner (no AOT badge on a ready game); compact title/publisher/size/last-played text; no explanatory paragraph under the grid), last-played dates, the exact per-game validation error on tap, the launcher empty state, a long-press context menu with the Delete Game action, its second confirmation and result banner, pull-to-refresh, settings entry. |
-| `GameView.swift` | Running game: full-bleed picture from the split landscape / portrait screen layout choices, the floating full-screen on-screen controls (per-row visibility and size scale), the optional floating FPS pill, the floating pause/gear fallback while the on-screen Settings button is hidden, the slide-up in-game menu (its runtime pause waits for the animation), the status-bar-hidden full-bleed picture (top-aligned in both orientations), round-4 in-game control edit mode and the 3DS software-keyboard overlay; also the ROM-free `-previewGameView` path. |
+| `GameView.swift` | Running game: full-bleed picture from the split landscape / portrait screen layout choices, the floating full-screen on-screen controls (per-row visibility and size scale), the optional in-game performance overlay, the floating pause/gear fallback while the on-screen Settings button is hidden, the slide-up in-game menu (its runtime pause waits for the animation), the status-bar-hidden full-bleed picture (top-aligned in both orientations), round-4 in-game control edit mode and the 3DS software-keyboard overlay; also the ROM-free `-previewGameView` path. |
 | `GameViewPreview.swift` | Synthetic TOP / BOTTOM test images (gradient, 1 px grid, 400×240 and 320×240) for the ROM-free `-previewGameView` screenshots. |
 | `InGameMenuView.swift` | The 0.2.1 in-game menu: system-Settings-app styled inset-grouped cards (29 pt coloured rounded-square SF Symbol tiles, regular-weight titles, footnote secondary explanations, the system Toggle / menu picker / segmented control and semantic colours), in a bottom sheet in portrait / centred card in landscape, with the running game's name and only power (exit) / restart (reset) / X (resume) buttons, tap-outside-to-resume, and the reference emulator's rows — Save state, Virtual controls, Screen layout, Swap screens, Rotate screen clockwise, Global Settings, Per-Application Settings (per-title-ID overrides) and Close game; secondary pages (Save state, Virtual controls, Screen layout, Per-Application Settings) use a native NavigationStack(path:) push/pop. The card has no transition of its own: GameView owns the single slide-up (move from the bottom edge + opacity) container animation and the runtime pause is deferred until it has started; the backdrop and the onAppear row refresh add no parallel animation. |
 | `SettingsView.swift` | Settings main page in the 0.2.1 system-Settings-app style: a large title, one inset-grouped card of the eight category rows with a coloured rounded-square SF Symbol tile (29 pt, white glyph) and a separate card with the destructive **Reset All Settings** action, with the real reset (confirmation, `removePersistentDomain` for the app bundle and a relaunch prompt), the persisted-setting binding and the in-game quick display sheet. The category pages themselves live in `SettingsPages.swift`. |
@@ -1064,7 +1082,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `CPUProfilerView.swift` | The debug CPU profiler page: starts guest-PC sampling while a game runs and lists hot spots. Diagnosis only. |
 | `SaveManagerView.swift` | Game picker over the library, the selected game's battery save list (export as ZIP, import, delete) and its instant save-state slots (delete offline; save/load while that game runs), with progress and errors; re-reads the selected game's files on open, on library changes and after actions (no refresh button). |
 | `AboutView.swift` | Product page: app icon, name, version/build, project links, acknowledgements and legal notice; a compact runtime status card only while a game is loaded. |
-| `AppSettings.swift` | Persisted settings model (separate landscape and portrait screen layout enums, screen rotation, interface orientation, appearance, buffer size, frame cap, run speed limit, default/turbo playback speeds, Turbo limit, Check for updates, update channel, Metal HUD and FPS-counter switches, analog deadzone, built-in control appearance, the physical-controller button map, the two next-launch experimental GPU switches, the per-orientation hidden-control rows (0.2.1-beta3 skin defaults - ZL/ZR/C-stick/Fast-forward/Swap screens hidden - with the beta1/beta2 hidden-set migration) and the shipped-default control-layout migration (0.2.0, 0.2.1-beta1, 0.2.1-beta2, beta3 and round-4 sources, applied in memory on load), per-row size scales and the per-title-ID presentation + Gamepad profile overrides) and the UserDefaults keys, including the round-1 single-choice migration (`migratedScreenLayouts`) and the render scale (1×–4×). |
+| `AppSettings.swift` | Persisted settings model (separate landscape and portrait screen layout enums, screen rotation, interface orientation, appearance, buffer size, frame cap, run speed limit, default/turbo playback speeds, Turbo limit, Check for updates, update channel, Metal HUD switch, the performance overlay settings (master switch, background, six positions and six line switches, migrated once from the old FPS switch), analog deadzone, built-in control appearance, the physical-controller button map, the two next-launch experimental GPU switches, the per-orientation hidden-control rows (0.2.1-beta3 skin defaults - ZL/ZR/C-stick/Fast-forward/Swap screens hidden - with the beta1/beta2 hidden-set migration) and the shipped-default control-layout migration (0.2.0, 0.2.1-beta1, 0.2.1-beta2, 0.2.1-beta3 and round-4 sources, applied in memory on load), per-row size scales and the per-title-ID presentation + Gamepad profile overrides) and the UserDefaults keys, including the round-1 single-choice migration (`migratedScreenLayouts`) and the render scale (1×–4×). |
 | `UpdateChecker.swift` | GitHub release checker for the General page and the daily background update notification: /releases request, Stable/Beta channel filtering, semver comparison with CFBundleShortVersionString, a 24-hour background throttle and a local notification via UNUserNotificationCenter (permission requested on first use, one notification per version). |
 | `DiagnosticsReport.swift` | Diagnostics report text, the shared diagnostics file type and screen geometry helpers. |
 | `StorageInspector.swift` | Container folder sizes, save-data file list, pipeline-cache clearing, and `AtomicFileWriter` for temporary-file-then-rename writes. |
@@ -1087,7 +1105,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `InputState.swift` | Thread-safe merge of touch, overlay and controller input. |
 | `KeyboardRequest.swift` | One 3DS software-keyboard request: the schema-1 JSON decode, the applet's confirmation rules (`Request::accepts`), UTF-16 limit handling and the localized rejection lines. |
 | `KeyboardOverlayView.swift` | The full-screen overlay that answers a software-keyboard request: hint, pre-filled text field, character counter, applet buttons and validation; portrait and landscape, above the system keyboard. |
-| `ControlLayout.swift` | Editable control layout model: the full New 3DS control set plus the app-only Settings, Fast-forward, Quick save, Quick load and Swap screens buttons (0.2.1-beta3 removes the separate MENU element), normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. The 0.2.1-beta3 shipped defaults are converted from the ModernFS (portrait, mapping 414x896) and ModernHybrid (landscape, mapping 896x414) Delta reference skins - numeric `items[].frame` rectangles only: the skins' HOME slot is the single Settings button (opens the in-game menu), SAVE/LOAD become Quick save/Quick load (portrait in the notch corners x=0.25/0.75 y=0.045; landscape left strip SAVE above LOAD), portrait keeps the console controls in the black band below the picture (shoulder row + Settings at y≈0.7165, main set y≈0.768-0.886), landscape keeps the 0.2.0 console geometry, and the five controls neither skin draws (ZL, ZR, C-stick, Fast-forward, Swap screens) share one top-centre fill-in row (y=0.13; x=0.28/0.39/0.50/0.61/0.72) and ship hidden. An untouched 0.2.0, 0.2.1-beta1, 0.2.1-beta2 (including its removed MENU placement), beta3 or round-4 shipped default is migrated on load, a customised one is kept, earlier profiles are healed by `withDefaultsFilled`, and round 7 renders the D-pad as one cross. |
+| `ControlLayout.swift` | Editable control layout model: the full New 3DS control set plus the app-only Settings, Fast-forward, Quick save, Quick load and Swap screens buttons (0.2.1-beta3 removes the separate MENU element), normalised placements (position, size, opacity), per-orientation profiles and their versioned Codable persistence. The 0.2.1-beta4 shipped defaults are converted from the ModernFS (portrait, mapping 414x896) and ModernHybrid (landscape, mapping 896x414) Delta reference skins - numeric `items[].frame` rectangles only: the skins' HOME slot is the single Settings button (opens the in-game menu), SAVE/LOAD become Quick save/Quick load (portrait in the notch top corners at the exact ModernFS chip x=0.25725/0.74275, y=0.030; landscape left strip with SAVE in the upper half y=0.30 and LOAD in the lower half y=0.70, symmetric about the screen middle), portrait keeps the console controls in the black band below the picture (shoulder row + Settings at y≈0.7165, main set y≈0.768-0.886), landscape keeps the 0.2.0 console geometry, and the five controls neither skin draws (ZL, ZR, C-stick, Fast-forward, Swap screens) share one top-centre fill-in row (y=0.13; x=0.28/0.39/0.50/0.61/0.72) and ship hidden. An untouched 0.2.0, 0.2.1-beta1, 0.2.1-beta2 (including its removed MENU placement), 0.2.1-beta3 or round-4 shipped default is migrated on load, a customised one is kept, earlier profiles are healed by `withDefaultsFilled`, and round 7 renders the D-pad as one cross. |
 | `VirtualControlsView.swift` | Runtime overlay: draws one button / analog stick per control with its own gesture (multi-touch), plus the single cross-shaped D-pad (`DpadCrossShape`) whose touch position selects the direction; its app-only Settings button opens the in-game menu (the other app buttons run their own actions) and reports no 3DS button bit; reports ZK_BUTTON_* bits, Circle Pad and C-stick vectors; applies the analog deadzone, the built-in Standard / High contrast appearance, per-control visibility and the per-row size scale. |
 | `ControlLayoutEditorView.swift` | Legacy full-screen control layout editor kept for the `-openLayoutEditor control` screenshot hook; the app no longer links it (round-4 editing happens in-game). It draws/moves the D-pad as one cross and edits its group size/opacity/reset. |
 | `ControlLayoutSettingsView.swift` | Legacy control layout page (not linked from Settings since round 4); kept for compatibility of the old screenshot hook. |
@@ -1100,6 +1118,8 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `GameControllerInput.swift` | GameController-to-3DS bridge: observes connect/disconnect, recomputes the button mask from each physical button through the user's remapping, applies the radial deadzone to both thumbsticks, forwards Circle Pad/C-stick vectors to InputState, detects 2–4 button hotkey combinations (suppressing their buttons from the guest while held) and exposes a recording callback for the Hotkeys page. |
 | `AudioOutput.swift` | Ring buffer and AVAudioEngine output (volume, mute, buffer duration). |
 | `FrameTiming.swift` | Per-phase frame timing for the diagnostics report and the fast-forward auto-fallback. |
+| `PerformanceOverlayView.swift` | The Azahar-style in-game performance overlay: builds its text lines from the Performance overlay settings (FPS, frame time, speed, app and available memory, battery temperature when available), draws an optional background and aligns the text to one of six places; hit-testing is disabled. |
+| `PerformanceMetrics.swift` | Optional live metrics for the overlay: resident (app) memory from Mach task info and available memory from `os_proc_available_memory`; battery temperature returns nil on iOS (the public API does not expose it), so the overlay skips that line. |
 | `GraphicsWarmUp.swift` | Pipeline-cache filesystem stats used by Storage and the diagnostics report. The first-load warm-up types in this file are no longer reachable: the option was removed in 0.1.1. |
 | `Localization.swift` | `L10n` lookup/format helpers, the resolved display language, and the locale-change observer that rebuilds the UI. |
 | `AppLog.swift` | In-app log capture and the diagnostics report assembly. |
@@ -1397,23 +1417,25 @@ Instant save states:
   fallback. The presenter side needs the
   round-0.1.6 library/patch 0009; an older library falls back to readback.
   The custom rectangles still apply from the next game load.
-- The shipped default controls (0.2.1-beta3) follow two Delta reference skins
+- The shipped default controls (0.2.1-beta4) follow two Delta reference skins
   read for geometry only, **ModernFS** in portrait (mapping 414x896) and
   **ModernHybrid** in landscape (mapping 896x414): the skins' HOME slot is the
   single Settings button (it opens the in-game menu; the Settings page is the
   menu's Global Settings row), SAVE/LOAD are Quick save/Quick load (portrait in
-  the notch corners: LOAD left, SAVE right; landscape left strip: SAVE above
-  LOAD), portrait keeps the console controls in the black band below the picture
-  (shoulder row + Settings at y≈0.7165, main set around y≈0.826) and landscape
-  keeps the 0.2.0 console geometry. The five controls neither skin draws - ZL,
-  ZR, the C-stick, Fast-forward and Swap screens - share one top-centre fill-in
-  row (y=0.13, x 0.28/0.39/0.50/0.61/0.72) and ship hidden; the skins' volume
-  keys are not implemented. The D-pad is one cross-shaped control (the four
-  directions stay separate elements for input, visibility and size). The skins
-  are read only for numbers; their artwork is not used. The reference layout app's
-  behaviour rows (slide buttons, relative stick centre, D-pad slide, Combo
-  Button) are future work; the available options are visibility, size scale,
-  opacity and reset.
+  the notch top corners at x=0.25725/0.74275 y=0.03: LOAD left, SAVE right;
+  landscape left strip: SAVE in the upper half at y=0.30, LOAD in the lower half
+  at y=0.70, symmetric about the screen middle and clear of the landscape
+  Dynamic Island), portrait keeps the console controls in the black band below
+  the picture (shoulder row + Settings at y≈0.7165, main set around y≈0.826) and
+  landscape keeps the 0.2.0 console geometry. The five controls neither skin
+  draws - ZL, ZR, the C-stick, Fast-forward and Swap screens - share one
+  top-centre fill-in row (y=0.13, x 0.28/0.39/0.50/0.61/0.72) and ship hidden;
+  the skins' volume keys are not implemented. The D-pad is one cross-shaped
+  control (the four directions stay separate elements for input, visibility and
+  size). The skins are read only for numbers; their artwork is not used. The
+  reference layout app's behaviour rows (slide buttons, relative stick centre,
+  D-pad slide, Combo Button) are future work; the available options are
+  visibility, size scale, opacity and reset.
 - Hidden controls are not drawn in the in-game editor either: re-enable a row in
   **Toggle controls** before moving it. The per-row size scale is global (one
   value for both orientations) while visibility is per orientation.
@@ -1448,7 +1470,8 @@ Instant save states:
 
 ## Diagnostics
 
-The game view draws only the FPS counter (`59 fps`); the AOT source, the renderer
+The game view draws only the performance overlay (its frame-rate line reads
+`FPS: 59` by default); the AOT source, the renderer
 and the Metal HUD state are no longer shown over the game. They remain in the
 in-game menu and the diagnostics report, which also keep the fuller status line,
 including `fast-forward: 2×` and `(auto)` markers that appear only above 1×. The
@@ -1741,14 +1764,15 @@ existing 0.5 s stats boundary). The same numbers are appended to the periodic
 - renderer path: `display=`, `hardware=`, `metal_moltenvk_embedded=`;
 - HUD state: `system_metal_hud=`, `system_metal_hud_build_enabled=`,
   `system_metal_hud_plist=`;
-- FPS counter / warm-up state: `fps_counter=`, `warmup_enabled=` (always 0 since
+- performance overlay / warm-up state: `fps_counter=` (the legacy field name;
+  it mirrors the overlay's master switch), `warmup_enabled=` (always 0 since
   0.1.1, when the first-load warm-up was removed), `warmup_note=`;
 - the `stutter_*` block (0.1.2 adds `stutter_gpu_walk_bound_frames=` and
   `stutter_pipeline_compile_suspects=`) and `pipeline_cache_at_load=`, plus the
   `perf:`/`zk_perf` lines in the current-session log around the hitch;
 - whether the hitch appeared on the first run after install or on later runs,
   and which non-default settings (frame cap, render scale, fast-forward, Metal
-  HUD, FPS counter) were active.
+  HUD, performance overlay) were active.
 
 The same export is also reachable from the home page's Settings page (More ->
 Export logs). The frame and stutter counters are cleared when a game is unloaded,
