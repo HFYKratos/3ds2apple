@@ -36,7 +36,7 @@
 <p align="center"><sub><b>最新稳定版：v0.2.1</b> · Windows 10/11 启动器（已验证路径）· macOS 13+ 启动器（开发者预览，见 <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>）· iOS App 由启动器用你自己的 Apple ID 合成、签名并安装，因此没有单独的 iOS 下载。</sub></p>
 
 <p align="center">
-  <img src="docs/assets/hero.png" width="880" alt="3ds2apple 在 iPhone 与 iPad 上运行，以及 Windows 与 macOS 启动器">
+  <img src="docs/assets/hero.png" width="880" alt="0.2.1 hero image: synthetic portrait and landscape previews with the wordmark.">
 </p>
 
 > [!NOTE]
@@ -49,19 +49,19 @@
 ## 演示
 
 <p align="center">
-  <img src="docs/assets/demo.gif" width="720" alt="合成演示轮播：竖屏按键、横屏按键、暂停菜单虚拟按键选项与屏幕布局设置">
+  <img src="docs/assets/demo.gif" width="720" alt="0.2.1 合成动画预览：纵向按键与 HOME 槽设置按钮、贴顶的横向按键、游戏内菜单，以及性能覆盖层设置。">
 </p>
 
 <p align="center"><sub>合成预览，不含游戏数据：竖屏按键 → 横屏按键 → 暂停菜单虚拟按键选项 → 屏幕布局设置。</sub></p>
 
-## 0.2.0 新特性（2026-11-25）
+## 0.2.1 新特性（2026-11-25）
 
-- **全新的 iOS 体验。** 设置采用 iOS 26/27 分组样式，游戏内菜单重做：原生 push/pop 子页面、标题显示当前游戏名、仅保留电源 / 重启 / 关闭按钮，选项按功能分组呈现。
-- **设置说明一眼读完。** 每条设置说明都精简为两行白话，标题改为居中 inline；分类为 General / System / Gamepad / Graphics / Layout / Sound / Debug / Other。
-- **更多图形控制。** 新增「Screen aspect」（Fit / 4:3 / Stretch）与「Integer scaling」；移除「Renderer」行。
-- **真正的速度控制。** 「Run speed limit」与「Turbo limit」成为真正的限制（关闭限制即为真正不限速），「Default speed」/「Turbo speed」可在 1x–4x 间选择。
-- **更新与手柄。** GitHub 更新通道（Stable / Beta），每天后台检查并发送本地通知；手柄新增摇杆死区、完整物理按键重映射、2–4 键组合热键、Standard / High contrast 控件样式与按游戏的手柄配置。
-- **按游戏设置（Per-Application Settings）。** 可为单款游戏覆盖一小部分设置，而不影响全局默认值。
+- **画面贴到顶边。** 横屏「大屏幕」「并排屏幕」「混合式屏幕」现在贴住画面顶边——上方黑边消失——同时保持水平居中、宽高比与整数缩放不变。
+- **性能覆盖层取代 FPS 胶囊。** Azahar 风格覆盖层贴在画面最顶端：帧率、帧生成时间、速度、应用内存与可用内存逐行开关，六种位置与可选背景；无法获取的电池温度行已移除。
+- **设置按钮永不隐藏。** 游戏内设置按钮固定在皮肤 HOME 槽，始终打开游戏内菜单；「切换控制」不再列出它，「调整大小」仍可改尺寸，旧存档里隐藏它的设置会自动清除。
+- **默认布局来自两套参考皮肤。** 默认虚拟按键竖屏 ModernFS、横屏 ModernHybrid，快速存档/快速读取位于刘海旁；未改动过的旧布局一次性迁移，自定义布局保留。
+- **游戏内菜单细节打磨。** 沿用 iOS 分组语言：竖屏单一上滑动画、横屏居中卡片、原生 push/pop 子页，标题显示当前游戏名。
+- **细节同步。** 设置页保持 iOS 26/27 inset-grouped 风格；默认隐藏集为 ZL、ZR、C 杆、快进与交换屏幕；SAVE/LOAD 回到刘海顶角。
 - **仍不支持：** Delta 皮肤导入、金手指、说明书、amiibo、麦克风、摄像头、网络/联机，以及 JIT。
 
 ## 功能一览
@@ -125,14 +125,14 @@
 
 | Windows 启动器 | Windows 启动器（简体中文） | macOS 启动器 |
 |:---:|:---:|:---:|
-| <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="Windows 启动器游戏库，英文界面"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="Windows 启动器游戏库，中文界面"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS 启动器空游戏库，深色主题"> |
+| <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> |
 | 游戏库（English） | 游戏库（中文） | 空游戏库（深色） |
 
 **iOS App**——虚拟按键的合成预览；不含游戏数据。
 
 | 竖屏 | 横屏 |
 |:---:|:---:|
-| <img src="docs/assets/portrait.png" width="280" alt="竖屏虚拟按键合成预览"> | <img src="docs/assets/landscape.png" width="520" alt="横屏虚拟按键合成预览"> |
+| <img src="docs/assets/portrait.png" width="280" alt="0.2.1 合成横向预览：贴顶的屏幕虚拟按键"> | <img src="docs/assets/landscape.png" width="520" alt="0.2.1 合成横向预览：贴顶的屏幕虚拟按键"> |
 | 竖屏按键 | 横屏按键 |
 
 ## 快速开始

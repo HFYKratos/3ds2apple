@@ -1,67 +1,66 @@
 # Media credits and provenance
 
-All images on this site and in the press kit are **project-owned synthetic media**. No
-commercial game screenshots, logos, box art, ROM data, save data or game assets appear
-anywhere, and no commercial game name is used in any filename, caption or alt text.
+All images on this site, in the press kit and in the READMEs are **project-owned synthetic
+media**. No commercial game screenshots, logos, box art, ROM data, save data or game assets
+appear anywhere, and no commercial game name is used in any filename, caption or alt text.
 
-The images are unchanged from the synthetic 0.1.5 preview archive and are reused for the
-0.2.0 media kit; no new screenshots were added. The 0.1.6 and 0.2.0 UI changes are described
-in the text files (and on the site) rather than in new media.
+These assets are the 0.2.1 refresh: every app screenshot and launcher screenshot was captured
+from the 0.2.1 build, and the hero, Open Graph card, social preview and demo GIF were rebuilt
+from those captures. Old 0.1.5/0.2.0 screenshots were removed.
 
 ## Sources
 
 | Committed file | Built from |
 |---|---|
-| docs/assets/portrait.png | out/archive/0.1.5/sim-shots-all.tar.gz → 20261120-r7/01-portrait-controls-final.png (iOS Simulator, 1290×2796) |
-| docs/assets/landscape.png | same archive → 20261120-r7/02-landscape-controls-final.png |
-| docs/assets/hero.png | generated composite of the two previews above (1600×900) |
-| docs/assets/og.png | generated Open Graph / Twitter card (1200×630) |
-| docs/assets/demo.gif | 4-slide slideshow: portrait controls → landscape controls → pause menu Virtual controls → display/screen-layout settings (see below) |
-| docs/assets/* | copies of the five files above, plus project icon variants and the social preview |
-| docs/assets/screenshots/* | app previews from the same archive (see list) and launcher screenshots from the repository |
-| docs/assets/readme-icon.png | original 3ds2apple app icon (project-owned, 1024×1024), moved here by the README media consolidation |
-| docs/assets/social-preview.png | repository social preview artwork (1280×640) |
+| docs/assets/portrait.png | out/sim-shots/20261125-0.2.1-final/01-preview-portrait.png (iOS Simulator synthetic preview, 1290x2796 -> 900x1951) |
+| docs/assets/landscape.png | out/sim-shots/20261125-0.2.1-final/02-preview-landscape.png (2796x1290 -> 1400x646) |
+| docs/assets/hero.png | generated composite of the two previews above (1600x900) |
+| docs/assets/og.png | generated Open Graph / Twitter card (1200x630) |
+| docs/assets/social-preview.png | generated repository social preview (1280x640) |
+| docs/assets/demo-poster.png | first demo slide composite (960x640) |
+| docs/assets/demo.gif | 4-slide 0.2.1 slideshow: portrait controls -> landscape controls -> in-game menu -> performance overlay settings (960x640) |
+| docs/assets/screenshots/*.png | 0.2.1 app screenshots from out/sim-shots/20261125-0.2.1-final/ and launcher screenshots from the Windows (1120x820) and macOS (2360x...) 0.2.1 UI smoke runs |
+| docs/assets/readme-icon.png | original 3ds2apple app icon (project-owned, 1024x1024) |
+| docs/assets/logo-*.png, favicon*, apple-touch-icon.png | project-owned app icon variants |
 
-App previews in docs/assets/screenshots/ come from:
+App screenshots in docs/assets/screenshots/ come from the 20261125-0.2.1-final run:
 
-- 20261120-r2/landscape-{large,single,side,hybrid,original,custom}.png, portrait-{default,original,custom}.png, settings-en.png, custom-values-landscape-en.png;
-- 20261120-r3/hybrid-preview.png;
-- 20261120-r4/1080w/{01-pause-portrait,02-controls-visibility,03-controls-size,05-control-edit-portrait,07-screen-editor,08-display-settings}.png.
+- 03-settings-main -> settings.png
+- 04-settings-performance-overlay -> performance-overlay.png
+- 05-settings-layout -> display-settings.png
+- 06-settings-overlay-position -> overlay-position.png
+- 07-menu-portrait -> pause-virtual-controls.png
+- 09-preview-portrait-controls-hidden -> controls-hidden.png
+- 14b-menu-toggle-controls-scrolled -> controls-visibility.png
+- 15b-menu-adjust-size-scrolled -> controls-size.png
+- 11-landscape-large, 12-landscape-side, 13-landscape-hybrid -> layout-large/side/hybrid.png
 
-Launcher screenshots in this directory come from the repository:
+Launcher screenshots:
 
-- launcher/windows/docs/ui/v4-library-en.png and v4-library-zh.png;
-- launcher/macos/screenshots/launcher-library-empty-dark-en.png.
+- Windows 0.2.1 UI smoke (/tmp/win201): library-en/zh, deploy-en, settings-en (1120x820), copied to docs/assets/screenshots/launcher-windows-*.png and launcher/windows/docs/ui/v4-*.png;
+- macOS 0.2.1 UI smoke (/tmp/mac201/screenshots): launcher-library-empty-dark-en and launcher-settings-dark-en -> launcher-macos-empty/settings.png; the full 18-shot set overwrote launcher/macos/screenshots/.
 
 ## Why the screenshots are synthetic
 
-The iOS screenshots are Simulator captures of the app's -previewGameView test harness,
-not a game: the two "screens" are flat blue and purple grids labelled **TOP 400×240** and
-**BOTTOM 320×240**, with the real control overlay on top. The pause menu, settings,
-control editor and screen-layout screens are the app's real UI. No ROM is loaded and no game
-data is rendered. The Windows/macOS launcher screenshots show the launchers' built-in
-synthetic demo entries (Synthetic Demo Game, Synthetic No-Icon Game, publisher
-Synthetic Studio), not real games.
-
-The source archive (out/archive/0.1.5/sim-shots-all.tar.gz) is a local, git-ignored
-build artifact. Every extracted preview was reviewed before use: they are grids, labels and
-app chrome only.
+The iOS screenshots are Simulator captures of the app's preview test harness, not a game: the two
+"screens" are flat blue and purple grids labelled **TOP 400x240** and **BOTTOM 320x240**, with the
+real 0.2.1 control overlay, in-game menu and Settings UI. No ROM is loaded and no game data is
+rendered. The Windows/macOS launcher screenshots show the launchers' built-in synthetic demo
+entries or an empty library, never a real game.
 
 ## How the media was produced
 
-- Pillow (Python) composition, resizing (Lanczos), rounded cards, shadows, captions and
-  Open Graph artwork.
-- demo.gif: 960×640, 4 slides, per-slide captions, shared 128-colour palette with
-  Floyd–Steinberg dithering, ~11 s loop, under 1 MB.
-- PNGs are palette-quantised (128 colours for screenshots and the GIF, 256 for the two
-  large previews) to keep the whole committed media set well under the ~12 MB budget; the
-  Open Graph image and hero stay full RGB.
-- No CDN, no external font, no tracker: system fonts only for the site, and the only image
-  assets are the files in this directory.
+- Pillow (Python) composition, Lanczos resizing, rounded cards, shadows, captions and Open
+  Graph artwork.
+- demo.gif: 960x640, 4 slides, per-slide captions, adaptive 96-colour palette, ~5 s loop,
+  under 200 KB.
+- PNG screenshots are palette-quantised to keep the committed media set small; hero, OG,
+  social preview and the two large previews stay full RGB.
+- No CDN, no external font, no tracker: system fonts only for the site.
 
 ## Licence and press use
 
-The app icon and these composite images are © 2026 3ds2apple contributors and covered by the
+The app icon and these composite images are (c) 2026 3ds2apple contributors and covered by the
 repository's Apache-2.0 licence. Press and reviewers may reuse them unmodified with credit to
 "3ds2apple (HFYKratos)" and must not imply endorsement by the project or by Nintendo.
 
