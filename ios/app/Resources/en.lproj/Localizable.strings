@@ -866,3 +866,35 @@
 
 /* --- 0.2.1-beta2 controls: skin HOME/MENU buttons ----------------------- */
 "Menu" = "Menu";
+
+/* --- 0.2.1-beta4 performance overlay settings --------------------------- */
+"Performance overlay" = "Performance overlay";
+"Enable performance overlay" = "Enable performance overlay";
+"Overlay background" = "Overlay background";
+"Overlay position" = "Overlay position";
+"Visibility" = "Visibility";
+"Information" = "Information";
+"Show frame rate" = "Show frame rate";
+"Show frame time" = "Show frame time";
+"Show speed" = "Show speed";
+"Show app memory usage" = "Show app memory usage";
+"Show available memory" = "Show available memory";
+"Show battery temperature" = "Show battery temperature";
+"Top left" = "Top left";
+"Top center" = "Top center";
+"Top right" = "Top right";
+"Bottom left" = "Bottom left";
+"Bottom center" = "Bottom center";
+"Bottom right" = "Bottom right";
+"Frame rate, frame time, speed and memory over the game." = "Frame rate, frame time, speed and memory over the game.";
+"Draw the overlay over the game picture." = "Draw the overlay over the game picture.";
+"Add a background behind the overlay so it is easier to read." = "Add a background behind the overlay so it is easier to read.";
+"Which place over the game the overlay uses." = "Which place over the game the overlay uses.";
+"Show the current frames per second." = "Show the current frames per second.";
+"Show how long the current frame took to draw." = "Show how long the current frame took to draw.";
+"Show the emulation speed as a percentage of real time." = "Show the emulation speed as a percentage of real time.";
+"Show how much memory the emulator is using." = "Show how much memory the emulator is using.";
+"Show how much memory the device still has free." = "Show how much memory the device still has free.";
+"Show the battery temperature in °C and °F; unavailable values say so." = "Show the battery temperature in °C and °F; unavailable values say so.";
+"Battery temperature is not available on this device." = "Battery temperature is not available on this device.";
+"Not available" = "Not available";

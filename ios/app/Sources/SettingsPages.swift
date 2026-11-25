@@ -14,11 +14,11 @@
 //  still force one if the user asks for it).
 //
 //  Page layout: General (speed limit, default speed, turbo, update checks),
-//  Layout (screens and performance monitoring), System (appearance and the
-//  device/version facts), Gamepad (on-screen controls and the controller
-//  subpages), Graphics (resolution/aspect plus the experimental GPU switches),
-//  Sound (volume/mute/buffer), Debug (AOT verification and tools), and Other
-//  (storage, version, language, About).
+//  Layout (screens, the performance overlay and the Metal HUD), System
+//  (appearance and the device/version facts), Gamepad (on-screen controls and
+//  their subpages), Graphics (resolution/aspect plus the experimental GPU
+//  switches), Sound (volume/mute/buffer), Debug (AOT verification and tools),
+//  and Other (storage, version, language, About).
 //
 //  The General page order follows reference screenshots of another emulator's
 //  settings app for the order only; every string below is our own and is
@@ -734,12 +734,13 @@ struct LayoutSettingsPage: View {
             }
 
             Section {
-                SettingsToggleRow(
-                    title: "FPS counter",
-                    description: "Show a small frames-per-second pill over the game.",
-                    isOn: persistedBinding(settings, \.showFPS)
-                )
-                .accessibilityIdentifier("settings-fps-hud")
+                SettingsNavigationRow(
+                    title: "Performance overlay",
+                    description: "Frame rate, frame time, speed and memory over the game.",
+                    identifier: "settings-performance-overlay"
+                ) {
+                    PerformanceOverlaySettingsView(settings: settings)
+                }
 
                 SettingsToggleRow(
                     title: "System Metal HUD",
@@ -763,6 +764,98 @@ struct LayoutSettingsPage: View {
             return L10n.tr("The game is on the CPU readback path, so the HUD has no Metal layer to attach to.")
         }
         return nil
+    }
+}
+
+// MARK: - Performance overlay
+
+/// The performance overlay page (0.2.1-beta4). It replaces the old FPS pill
+/// row: two groups, Visibility (the master switch, the background behind the
+/// text and the place on screen, which pushes a radio selection page) and
+/// Information (one switch per line the overlay can show).
+///
+/// The page order and the shipped defaults follow reference screenshots of
+/// another emulator's settings app; every string here is our own and is
+/// localized through Localizable.strings / L10n. The overlay itself is drawn
+/// by GameView; this page only stores the choices in AppSettings.
+struct PerformanceOverlaySettingsView: View {
+    @ObservedObject var settings: AppSettings
+
+    var body: some View {
+        SettingsPageScaffold(title: "Performance overlay") {
+            Section {
+                SettingsToggleRow(
+                    title: "Enable performance overlay",
+                    description: "Draw the overlay over the game picture.",
+                    isOn: persistedBinding(settings, \.performanceOverlayEnabled)
+                )
+                .accessibilityIdentifier("settings-performance-overlay-enabled")
+
+                SettingsToggleRow(
+                    title: "Overlay background",
+                    description: "Add a background behind the overlay so it is easier to read.",
+                    isOn: persistedBinding(settings, \.performanceOverlayBackground)
+                )
+                .accessibilityIdentifier("settings-performance-overlay-background")
+
+                SettingsChoiceRow(
+                    title: "Overlay position",
+                    description: "Which place over the game the overlay uses.",
+                    choices: PerformanceOverlayPosition.allCases,
+                    selection: persistedBinding(settings, \.performanceOverlayPosition),
+                    label: { $0.title }
+                )
+                .accessibilityIdentifier("settings-performance-overlay-position")
+            } header: {
+                Text("Visibility")
+            }
+
+            Section {
+                SettingsToggleRow(
+                    title: "Show frame rate",
+                    description: "Show the current frames per second.",
+                    isOn: persistedBinding(settings, \.performanceOverlayShowFPS)
+                )
+                .accessibilityIdentifier("settings-performance-overlay-fps")
+
+                SettingsToggleRow(
+                    title: "Show frame time",
+                    description: "Show how long the current frame took to draw.",
+                    isOn: persistedBinding(settings, \.performanceOverlayShowFrameTime)
+                )
+                .accessibilityIdentifier("settings-performance-overlay-frame-time")
+
+                SettingsToggleRow(
+                    title: "Show speed",
+                    description: "Show the emulation speed as a percentage of real time.",
+                    isOn: persistedBinding(settings, \.performanceOverlayShowSpeed)
+                )
+                .accessibilityIdentifier("settings-performance-overlay-speed")
+
+                SettingsToggleRow(
+                    title: "Show app memory usage",
+                    description: "Show how much memory the emulator is using.",
+                    isOn: persistedBinding(settings, \.performanceOverlayShowProcessMemory)
+                )
+                .accessibilityIdentifier("settings-performance-overlay-process-memory")
+
+                SettingsToggleRow(
+                    title: "Show available memory",
+                    description: "Show how much memory the device still has free.",
+                    isOn: persistedBinding(settings, \.performanceOverlayShowAvailableMemory)
+                )
+                .accessibilityIdentifier("settings-performance-overlay-available-memory")
+
+                SettingsToggleRow(
+                    title: "Show battery temperature",
+                    description: "Show the battery temperature in °C and °F; unavailable values say so.",
+                    isOn: persistedBinding(settings, \.performanceOverlayShowBatteryTemperature)
+                )
+                .accessibilityIdentifier("settings-performance-overlay-battery")
+            } header: {
+                Text("Information")
+            }
+        }
     }
 }
 

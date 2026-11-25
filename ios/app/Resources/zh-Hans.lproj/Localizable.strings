@@ -868,3 +868,35 @@
 
 /* --- 0.2.1-beta2 控制：皮肤 HOME/MENU 按钮 ------------------------------ */
 "Menu" = "菜单";
+
+/* --- 0.2.1-beta4 性能参数覆盖设置 ---------------------------------------- */
+"Performance overlay" = "性能参数覆盖";
+"Enable performance overlay" = "启用性能参数覆盖";
+"Overlay background" = "覆盖背景";
+"Overlay position" = "覆盖位置";
+"Visibility" = "可见度";
+"Information" = "信息";
+"Show frame rate" = "显示帧率";
+"Show frame time" = "显示帧生成时间";
+"Show speed" = "显示速度";
+"Show app memory usage" = "显示应用内存使用情况";
+"Show available memory" = "显示可用内存";
+"Show battery temperature" = "显示电池温度";
+"Top left" = "左上";
+"Top center" = "中上";
+"Top right" = "右上";
+"Bottom left" = "左下";
+"Bottom center" = "中下";
+"Bottom right" = "右下";
+"Frame rate, frame time, speed and memory over the game." = "在游戏画面上显示帧率、帧生成时间、速度和内存。";
+"Draw the overlay over the game picture." = "在游戏画面上显示性能参数覆盖。";
+"Add a background behind the overlay so it is easier to read." = "在覆盖层后面添加背景，便于识别。";
+"Which place over the game the overlay uses." = "覆盖层贴靠在游戏画面上的位置。";
+"Show the current frames per second." = "显示当前每秒帧数。";
+"Show how long the current frame took to draw." = "显示当前帧的生成时间。";
+"Show the emulation speed as a percentage of real time." = "以百分比显示当前模拟速度。";
+"Show how much memory the emulator is using." = "显示模拟器占用的内存大小。";
+"Show how much memory the device still has free." = "显示设备可用的内存大小。";
+"Show the battery temperature in °C and °F; unavailable values say so." = "以摄氏度和华氏度显示当前电池温度；无法获取时显示不可用提示。";
+"Battery temperature is not available on this device." = "此设备无法获取电池温度。";
+"Not available" = "不可用";
