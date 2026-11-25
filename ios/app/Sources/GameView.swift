@@ -130,14 +130,10 @@ struct GameView: View {
                         onExit: { requestConfirmation(.exit) },
                         onLoadStateCompleted: resumeAfterStateLoad
                     )
-                    // One container spring only. Landscape animates opacity plus a
-                    // hair of scale (0.98 -> 1); portrait only fades, because the
-                    // sheet itself already animates its bottom-edge move (a second
-                    // move here made the sheet travel twice and stutter). The
-                    // in-game menu keeps no transition of its own.
-                    .transition(isLandscape
-                                ? .opacity.combined(with: .scale(scale: 0.98))
-                                : .opacity)
+                    // One container animation only: the whole menu slides up from
+                    // the bottom edge and fades in (the in-game menu itself keeps
+                    // no transition, so nothing animates twice and stutters).
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(1)
                 }
 
@@ -261,6 +257,9 @@ struct GameView: View {
         } message: {
             Text(confirmationMessage)
         }
+        // The game owns the whole screen: hide the clock, battery and signal
+        // (the skin's SAVE/LOAD chips sit next to the notch at the very top).
+        .statusBarHidden(true)
     }
 
     // MARK: - Full-bleed layout
@@ -339,19 +338,7 @@ struct GameView: View {
             onQuickSave: { performQuickSave() },
             onQuickLoad: { performQuickLoad() },
             onSwapScreens: { performSwapScreens() },
-            onMenu: {
-                guard !isMenuPresented, !isEditingControls else { return }
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
-                    isMenuPresented = true
-                }
-                if !isPreviewingGame {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        guard isMenuPresented else { return }
-                        model.pauseForMenu()
-                    }
-                }
-            },
-            onSettings: { sheet = .settings },
+            onSettings: { openInGameMenu() },
             fastForwardActive: fastForwardToggled
         )
         .ignoresSafeArea()
@@ -374,25 +361,28 @@ struct GameView: View {
                         .padding(.top, GameViewLayout.floatingHUDTopPadding)
                 }
                 if !isMenuPresented,
-                   !settings.isControlVisible(.menu, orientation: .landscape) {
-                    // The layout's MENU button opens the in-game menu; the
+                   !settings.isControlVisible(.settings, orientation: .landscape) {
+                    // The on-screen Settings button opens the in-game menu; the
                     // floating gear is only the fallback when it is hidden.
                     pauseButton(size: GameViewLayout.floatingPauseSize)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                         .padding(.bottom, GameViewLayout.landscapePauseBottomPadding)
                 }
             } else {
+                // Portrait hides the status bar and the skin's SAVE/LOAD chips
+                // own the notch corners, so the FPS pill sits centred just below
+                // the notch. The floating gear is only the fallback shown when the
+                // on-screen Settings button is hidden.
                 HStack(spacing: GameViewLayout.floatingHUDSpacing) {
                     if settings.showFPS {
                         fpsPill
                     }
-                    if !settings.isControlVisible(.menu, orientation: .portrait) {
+                    if !settings.isControlVisible(.settings, orientation: .portrait) {
                         pauseButton(size: GameViewLayout.floatingPauseSize)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(.horizontal, GameViewLayout.floatingHUDHorizontalPadding)
-                .padding(.top, GameViewLayout.floatingHUDTopPadding)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(.top, 64)
             }
         }
     }
@@ -440,22 +430,27 @@ struct GameView: View {
 
     // MARK: - Menu
 
+    /// Opens the in-game menu: one slide-up spring for the card, and the runtime
+    /// pause (frame-loop/audio teardown on the main thread) runs after the
+    /// animation starts so it cannot delay the first animated frame. The guard
+    /// keeps a fast Resume from leaving the runtime paused behind a closed menu.
+    private func openInGameMenu() {
+        guard !isMenuPresented, !isEditingControls else { return }
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
+            isMenuPresented = true
+        }
+        if !isPreviewingGame {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                guard isMenuPresented else { return }
+                model.pauseForMenu()
+            }
+        }
+    }
+
     /// Glass pause button; opens the in-game menu and pauses the runtime.
     private func pauseButton(size: CGFloat) -> some View {
         Button {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
-                isMenuPresented = true
-            }
-            // stopFrameLoop/stopAudio are main-thread work; run them after the
-            // overlay has animated in so they cannot delay the first animated
-            // frame (the dimmed overlay already owns touch input). The guard keeps
-            // a fast Resume from leaving the runtime paused behind a closed menu.
-            if !isPreviewingGame {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    guard isMenuPresented else { return }
-                    model.pauseForMenu()
-                }
-            }
+            openInGameMenu()
         } label: {
             Image(systemName: "gearshape.fill")
                 .font(.system(size: size * 0.36, weight: .bold))
@@ -533,16 +528,7 @@ struct GameView: View {
         case .rotateScreen:
             rotateScreensClockwise()
         case .openMenu:
-            guard !isMenuPresented, !isEditingControls else { return }
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
-                isMenuPresented = true
-            }
-            if !isPreviewingGame {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    guard isMenuPresented else { return }
-                    model.pauseForMenu()
-                }
-            }
+            openInGameMenu()
         }
     }
 

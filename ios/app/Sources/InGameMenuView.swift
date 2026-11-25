@@ -121,7 +121,6 @@ struct InGameMenuView: View {
                                           geometry.size.height - 60),
                               width: geometry.size.width,
                               topCornersOnly: true)
-                            .transition(.move(edge: .bottom))
                     }
                     .ignoresSafeArea(edges: .bottom)
                 } else {
