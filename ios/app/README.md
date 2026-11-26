@@ -30,7 +30,7 @@ views do not carry duplicated strings.
 | Page | Contents |
 |---|---|
 | **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games` (or the ROM embedded in a self-contained single-game IPA). Each card has a square art area at the icon's native 1:1 aspect: the game's own SMDH cover art (launcher-pushed `cover.png`, else the build's bundled cover, else the gradient placeholder) fills the square edge to edge with no inset frame (the gradient is only the placeholder when no cover is available), and a corner badge appears only when a game needs attention (**Checking** / **Data missing** / **Error**; a ready game has no AOT badge, since the app only runs AOT code and the AOT state stays in the log and the diagnostics export). Under the art the card is deliberately compact: the title for the app language (up to two lines, truncated), the publisher, then the pushed game size · last-played state. There is **no explanatory paragraph under the grid**. iPhone shows two columns, iPad three. Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Pull-to-refresh rescans Documents, and the library also rescans at launch and when the app returns to the foreground; there is no refresh button. Long-pressing a card opens its context menu; **Delete Game** asks a second confirmation and then deletes the game (see "Deleting a game" below). The empty state explains the desktop launcher. No on-phone import. Settings entry. |
-| **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback) arranged by the split landscape / portrait screen layout choices, filling the whole screen, with the on-screen controls floating over the picture, the performance overlay (at the very top edge of the picture, top left by default; FPS, frame time and app memory on by default, with optional speed and available memory) and the in-game menu. The on-screen Settings button is always visible and is the only in-game menu entry; with **Show virtual controls** off, only that button stays on screen (at its normal HOME-slot place). The game view hides the system status bar. There is no title bar or reserved control pad any more. When a title starts the 3DS software keyboard, a full-screen keyboard overlay collects the text and the applet's buttons while the frame loop is stopped; answering resumes the game. |
+| **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback) arranged by the split landscape / portrait screen layout choices, filling the whole screen, with the on-screen controls floating over the picture, the performance overlay (off by default; when enabled it sits at the very top edge of the picture, top left, with only the frame-rate line on — frame time, speed, app memory and available memory are opt-in) and the in-game menu. The on-screen Settings button is always visible and is the only in-game menu entry; with **Show virtual controls** off, only that button stays on screen (at its normal HOME-slot place). The game view hides the system status bar. There is no title bar or reserved control pad any more. When a title starts the 3DS software keyboard, a full-screen keyboard overlay collects the text and the applet's buttons while the frame loop is stopped; answering resumes the game. |
 | **Settings** | A system-Settings-app style page (0.2.1): a large title, one inset-grouped card of nine category rows with coloured rounded-square SF Symbol tiles (General, System, Gamepad, Cheats, Graphics, Layout, Sound, Debug and Other) and a separate card with a real **Reset All Settings** action. Each category is a large-titled page of inset-grouped cards with regular-weight row titles, secondary explanations and a trailing switch, slider, value or disclosure chevron; choice rows push a radio selection page. It opens from the home page and, while a game runs, from the in-game menu's Global Settings row (the on-screen Settings button opens that menu). See "Settings screens (0.2.1)" below. |
 | **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. The page re-reads the selected game's files when it opens, when the library changes and after every action; there is no refresh button. |
 | **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the performance overlay appears only while a game is loaded; everything else stays in the log and the diagnostics. |
@@ -110,13 +110,16 @@ audio advances behind it.
   (`CAMetalLayer.developerHUDProperties`, iOS 16) and existing installs are
   migrated to off once (the marker makes the migration run only once, so a
   manual switch afterwards wins). See "System Metal HUD" below.
-- Optional in-game performance overlay, **on by default**: the only performance
-  readout the game view draws. Configure it under Settings → Layout → Performance
-  monitoring → **Performance overlay**: the master switch, a translucent background
-  behind the text, one of six places at the top edge of the game picture (top
-  left by default) and one switch per line. The shipped lines are
-  FPS, frame generation time and the app's memory use; speed and available
-  memory can be added. The old FPS switch migrated to the master switch, and the
+- Optional in-game performance overlay, **off by default** (opt-in): the only
+  performance readout the game view draws. Configure it under Settings → Layout →
+  Performance monitoring → **Performance overlay**: the master switch, a
+  translucent background behind the text, one of six places at the top edge of the
+  game picture (top left by default) and one switch per line. Only the frame-rate
+  line ships on; frame generation time, speed, the app's memory use and the
+  available memory are off until enabled. An install still on the old defaults
+  (overlay on with the frame-rate, frame-time and app-memory lines) is moved to
+  the new defaults once, and a customised combination is kept. The old FPS switch
+  migrated to the master switch, and the
   in-game Virtual controls card's Show performance stats row toggles the same
   overlay. Everything else (AOT state, renderer path, CPU/present/read timings,
   Metal HUD state) stays in the device log and the diagnostics export. See
@@ -800,7 +803,7 @@ hint sits above it and the empty area stays inert) saves the current direction's
 | Frame cap | 60 / 30 fps | Immediately; the free-run loop never starts presented frames closer than 1/60 s (or 1/30 s). It is a cap, not a target. |
 | Fast-forward | 1× / 2× / 4× | Immediately (also from the in-game menu); the next presented frame uses the new value. |
 | System Metal HUD | On / off, **default off** | Immediately on the presented `CAMetalLayer`; remembered across launches and also written as `MTL_HUD_ENABLED` / `MetalHUDForceEnabled` for the next Metal device. 0.1.6-beta3 turns it off for every install once (`UI.systemMetalHUDDefaultOffMigrated`); after that the stored switch value wins. |
-| Performance overlay | On / off, **default on** | The Azahar-style in-game overlay (see "In-game performance overlay"): FPS, frame time, speed, app memory and available memory, each line switchable, drawn at the top edge of the picture in one of six places (top left by default) with an optional background; also toggled from the pause menu's Virtual controls card (Show performance stats). No other performance text is drawn over the game; the rest stays in the log and diagnostics. |
+| Performance overlay | On / off, **default off (opt-in)** | The Azahar-style in-game overlay (see "In-game performance overlay"): FPS, frame time, speed, app memory and available memory, each line switchable, drawn at the top edge of the picture in one of six places (top left by default) with an optional background; when first enabled only the frame-rate line is on, and the other lines stay off until enabled. Also toggled from the pause menu's Virtual controls card (Show performance stats). Older installs on the previous default combination are migrated once to the new default and custom settings are kept. No other performance text is drawn over the game; the rest stays in the log and diagnostics. |
 
 In 0.1.7-beta2 the rows above live on **Settings → Layout → Performance
 monitoring**; the experimental GPU switches are under **Graphics**, AOT
@@ -842,12 +845,15 @@ frames with `zk_run_frame` before the frame that is presented:
 
 ## In-game performance overlay
 
-Settings → Layout → Performance monitoring → **Performance overlay** (on by
-default) is the only performance readout the game view draws. It is an
-Azahar-style text overlay built from the page's switches: the frame rate and the
-frame generation time on the first line, then the app's resident memory
-("Process RAM") on the second, with optional speed and available memory
-additions. The overlay sits at the very top edge of the game picture, in one of
+Settings → Layout → Performance monitoring → **Performance overlay** (off by
+default; opt-in) is the only performance readout the game view draws. It is an
+Azahar-style text overlay built from the page's switches. A fresh install starts
+with only the frame-rate line on; the frame generation time, speed, the app's
+resident memory ("Process RAM") and the available memory are separate opt-in
+lines. An install still on the old default combination (overlay on, frame rate,
+frame time and app memory on, speed/available memory/background off, top left)
+is migrated once to the new default, and any customised combination is kept. The
+overlay sits at the very top edge of the game picture, in one of
 six places (top left by default): in portrait it hugs the top safe-area edge
 (0.2.1 removed the extra 62 pt downward inset) and in landscape it sits a
 little below the stage's top edge. It can draw a translucent background behind
@@ -1150,7 +1156,7 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 | `CPUProfilerView.swift` | The debug CPU profiler page: starts guest-PC sampling while a game runs and lists hot spots. Diagnosis only. |
 | `SaveManagerView.swift` | Game picker over the library, the selected game's battery save list (export as ZIP, import, delete) and its instant save-state slots (delete offline; save/load while that game runs), with progress and errors; re-reads the selected game's files on open, on library changes and after actions (no refresh button). |
 | `AboutView.swift` | Product page: app icon, name, version/build, project links, acknowledgements and legal notice; a compact runtime status card only while a game is loaded. |
-| `AppSettings.swift` | Persisted settings model (separate landscape and portrait screen layout enums, screen rotation, interface orientation, appearance, buffer size, frame cap, run speed limit, default/turbo playback speeds, Turbo limit, Check for updates, update channel, Metal HUD switch, the performance overlay settings (master switch, background, six positions and five line switches, migrated once from the old FPS switch), analog deadzone, built-in control appearance, the physical-controller button map, the two next-launch experimental GPU switches, the per-orientation hidden-control rows (0.2.1-beta3 skin defaults - ZL/ZR/C-stick/Fast-forward/Swap screens hidden - with the beta1/beta2 hidden-set migration and the 0.2.1-beta5 cleanup that drops the Settings row from stored hidden sets) and the shipped-default control-layout migration (0.2.0, 0.2.1-beta1, 0.2.1-beta2, 0.2.1-beta3 and round-4 sources, applied in memory on load), per-row size scales and the per-title-ID presentation + Gamepad profile overrides) and the UserDefaults keys, including the round-1 single-choice migration (`migratedScreenLayouts`) and the render scale (1×–4×). |
+| `AppSettings.swift` | Persisted settings model (separate landscape and portrait screen layout enums, screen rotation, interface orientation, appearance, buffer size, frame cap, run speed limit, default/turbo playback speeds, Turbo limit, Check for updates, update channel, Metal HUD switch, the performance overlay settings (master switch, background, six positions and five line switches, migrated once from the old FPS switch and once to the opt-in frame-rate-only default; a custom combination is kept), analog deadzone, built-in control appearance, the physical-controller button map, the two next-launch experimental GPU switches, the per-orientation hidden-control rows (0.2.1-beta3 skin defaults - ZL/ZR/C-stick/Fast-forward/Swap screens hidden - with the beta1/beta2 hidden-set migration and the 0.2.1-beta5 cleanup that drops the Settings row from stored hidden sets) and the shipped-default control-layout migration (0.2.0, 0.2.1-beta1, 0.2.1-beta2, 0.2.1-beta3 and round-4 sources, applied in memory on load), per-row size scales and the per-title-ID presentation + Gamepad profile overrides) and the UserDefaults keys, including the round-1 single-choice migration (`migratedScreenLayouts`) and the render scale (1×–4×). |
 | `UpdateChecker.swift` | GitHub release checker for the General page and the daily background update notification: /releases request, Stable/Beta channel filtering, semver comparison with CFBundleShortVersionString, a 24-hour background throttle and a local notification via UNUserNotificationCenter (permission requested on first use, one notification per version). |
 | `DiagnosticsReport.swift` | Diagnostics report text, the shared diagnostics file type and screen geometry helpers. |
 | `StorageInspector.swift` | Container folder sizes, save-data file list, pipeline-cache clearing, and `AtomicFileWriter` for temporary-file-then-rename writes. |

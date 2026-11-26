@@ -52,13 +52,14 @@ tooltip and the log — there is no manual "check" button).
 - **Library** - game cards with the ROM's own SMDH icon (packages/<TITLEID>/
   cover.png), the localized SMDH title for the app language, publisher,
   title/Title ID, phase badge, ROM/GamePack sizes and one staged-data line. Import
-  is the single **导入 ROM / Import ROM** button that opens the file picker and
-  imports the chosen decrypted .3ds/.cci in one action; the header also has one
-  **导入 / Import** button for `.32a` build packages, whose save panel title is
-  **导入构建包 / Import build package** and whose file types are filtered to `.32a`.
-  A game whose ROM has no SMDH icon keeps the initials placeholder. Importing a ROM
-  that is already in the library re-imports its package with ``--force`` (SMDH
-  cover/metadata self-heal, built GamePack kept).
+  is the single **导入 / Import** button in the header: one file picker (title
+  **导入 ROM 或构建包 / Import ROM or build package**, multi-select) accepts decrypted
+  ROMs (.3ds/.cci/.ncch/.cxi) and `.32a` build packages, and the extension dispatches
+  to the ROM import (headers only, single or multi) or the build-package import with
+  its replace-conflict flow. Missing or unsupported files are reported and nothing is
+  imported for them. A game whose ROM has no SMDH icon keeps the initials placeholder.
+  Importing a ROM that is already in the library re-imports its package with
+  ``--force`` (SMDH cover/metadata self-heal, built GamePack kept).
   Each card has text-only **导出 / Export** (disabled until a real AOT GamePack
   exists; the card points at building it first) and a red destructive **移除 /
   Remove** with its confirmation alert; the buttons sit in a wrapping row so the

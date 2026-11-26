@@ -19,16 +19,16 @@ UI, log and diagnostics export. The current development checkout adds a Deploy
 window-close cleanup (a running deploy is stopped and its 3dsrecomp/clang/lld/
 devpush/plumesign processes are terminated before the launcher exits), and merges the
 two duplicate "not built yet" Library strings into one status line. This checkout compiles cleanly (0 errors, warnings as
-errors) and its **266 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
-`--self-test` on Linux/WSL with the embedded payload (32 PASS / 0 FAIL / 0 WARN), and on a
-Windows host natively through `scripts/release/win-selftest.sh` (32 PASS / 0 FAIL / 0 WARN).
+errors) and its **272 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
+`--self-test` on Linux/WSL with the embedded payload (33 PASS / 0 FAIL / 0 WARN), and on a
+Windows host natively through `scripts/release/win-selftest.sh` (33 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a Settings page; it is
-localized (English / 简体中文) and uses the iOS app icon. The Library has one
-**Export** action per built game that opens a format/destination dialog (a portable
-`.32a` build package or an unsigned single-game IPA), one header **Import** for
-`.32a` build packages (the ROM import is **Import ROM**), **Build now** on every card
-and a red destructive **Remove**; the advanced AOT build settings moved from Deploy
-to Settings. The user-facing package is a ZIP
+localized (English / 简体中文) and uses the iOS app icon. The Library has one **Export** action per built game that opens a format/destination
+dialog (a portable `.32a` build package or an unsigned single-game IPA), one header
+**Import** whose picker accepts decrypted ROMs (.3ds/.cci/.ncch/.cxi, multi-select)
+and `.32a` build packages (dispatched by extension), **Build now** on every card and
+a red destructive **Remove**; the advanced AOT build settings moved from Deploy to
+Settings. The user-facing package is a ZIP
 with exactly one self-contained exe (the 0.1.5 package: 157,455,106 B, SHA-256
 `e37a924e…b2e16`; the 0.1.4 package was 157,292,331 B; the package
 embeds the LLVM 23.1.6 Windows toolchain, which dominates its size).
@@ -76,10 +76,13 @@ travels as an internal devpush/plumesign command argument.
 
 ## What it does
 
-1. **Library**: import a decrypted .3ds/.cci you own with **Import ROM**. Only headers
-   are read (title ID, product code, name) by the existing 3ds2apple-pack CLI; the ROM is
-   not copied. The header also has one **Import** for a `.32a` build package (its picker
-   is filtered to `.32a` and titled **Import build package**). **Build now** on one card
+1. **Library**: the header has one **Import** action. Its picker accepts decrypted ROMs
+   (.3ds/.cci/.ncch/.cxi, multi-select) and `.32a` build packages, and the extension
+   decides the path: ROMs are read header-only (title ID, product code, name) by the
+   existing 3ds2apple-pack CLI and added to the library without copying the ROM, while a
+   `.32a` goes through the build-package import and its replace-conflict flow. Missing or
+   unsupported files are reported and nothing is imported for them; re-importing a ROM
+   already in the library refreshes its SMDH metadata. **Build now** on one card
    or **Build all** in the header compiles the GamePack ahead of a deploy and shows
    progress plus the recorded cache state. Cards show the title, publisher, ROM size,
    GamePack size/state and the build-cache label (`Built · cache b1a2b3c4` or the exact
@@ -183,11 +186,12 @@ install/push, and a marker write failure only warns (the next deploy treats the 
 state as unknown and updates once). The macOS launcher keeps the previous full deploy
 path for now: this incremental behaviour is Windows-only.
 
-### Library export dialog and build-package import
+### Library Export dialog, Import picker and build packages
 
 The Library has one **Export** action per card (enabled only for a real AOT GamePack;
 the card explains that Export becomes available after the GamePack exists) and one
-header **Import** for `.32a` build packages. **Export** opens an in-window dialog:
+header **Import** whose picker accepts decrypted ROMs and `.32a` build packages.
+**Export** opens an in-window dialog:
 
 - **Format**: **.32a build package** or **Unsigned single-game IPA**.
 - **Destination**: a folder for the .32a (default `workspace/builds`) or a save-file
@@ -201,9 +205,8 @@ a ZIP with `manifest.json` (schema v1), `GamePack-<TITLEID>.dylib`, `GameInfo.js
 optional `cover.png` and the user's `GameRom.<ext>` when the CLI can find it (the
 package copy, the queued ROM path or `workspace/launcher-roms`). Without a ROM the
 export still succeeds and the UI states that deploying it needs the original ROM.
-**Import** opens its
-picker filtered to `.32a` with the title **Import build package**, validates the
-ZIP/manifest/SHA-256/Mach-O structure, installs into
+Picking a `.32a` in the header **Import** runs the build-package import: it validates
+the ZIP/manifest/SHA-256/Mach-O structure, installs into
 `workspace/out/packages/<TITLEID>/`, marks the queue built and refreshes the Library
 so the game is immediately deployable. An existing package is reported as a conflict
 with a **Replace existing package** confirmation (unrelated user files in the package
@@ -288,7 +291,7 @@ generator, missing cover fallback, template/pack/catalog failures).
   Deploy pipeline + device-aware deploy planner + composed-IPA verifier, IPA composition,
   signing, push, localization catalog, embedded single-file payload, build-compatibility
   cache) / ThreeDsTwoApple.Launcher.Desktop (Avalonia shell) /
-  ThreeDsTwoApple.Launcher.Core.Tests (240 xUnit tests).
+  ThreeDsTwoApple.Launcher.Core.Tests (272 xUnit tests).
 - All external work goes through CLI tools passed as argument arrays (never a
   shell string): 3ds2apple-pack, devpush, the official plumesign.
   The launcher never re-implements ROM parsing, the AOT compile/link,
@@ -326,7 +329,7 @@ generator, missing cover fallback, template/pack/catalog failures).
       Hardware/                           logical/physical cores + RAM probe for the compile line
       src/Launcher.Desktop/             Avalonia UI (Program, App, MainWindow, view model,
                                         Localization/LocalizedText, Assets/app.ico + placeholder)
-      tests/ThreeDsTwoApple.Launcher.Core.Tests/   266 xUnit tests (incl. DeployFlowTests + DeviceDeployTests +
+      tests/ThreeDsTwoApple.Launcher.Core.Tests/   272 xUnit tests (incl. DeployFlowTests + DeviceDeployTests +
                                                   DeployCancellationTests + ProcessRunnerTests + BuildCacheTests +
                                                   ComposedIpaVerifierTests)
       vendor/impactor/             PINS.json + MIT / MPL-2.0 licence texts + source note
