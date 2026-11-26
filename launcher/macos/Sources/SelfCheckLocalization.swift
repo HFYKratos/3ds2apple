@@ -95,7 +95,7 @@ enum SelfCheckLocalization {
         // 22. Formatting helpers keep numbers/values.
         expect("i18n: games count keeps the number", english.gamesCount(3).contains("3") && chinese.gamesCount(3).contains("3"))
         expect("i18n: deploy button keeps the count", english.deployButton(2).contains("2") && chinese.deployButton(2).contains("2"))
-        expect("i18n: about version keeps version", english.aboutVersion("0.2.1", "3").contains("0.2.1") && chinese.aboutVersion("0.2.1", "3").contains("0.2.1"))
+        expect("i18n: about version keeps version", english.aboutVersion("0.2.2", "3").contains("0.2.2") && chinese.aboutVersion("0.2.2", "3").contains("0.2.2"))
         expect("i18n: signing assets format keeps counts", english.signingAssets(2, 3).contains("2") && chinese.signingAssets(2, 3).contains("3"))
 
         // 23. Settings override is persisted (and bad stored values fall back).
