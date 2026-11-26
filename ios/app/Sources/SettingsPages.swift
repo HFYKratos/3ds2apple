@@ -780,10 +780,12 @@ struct LayoutSettingsPage: View {
 /// text and the place on screen, which pushes a radio selection page) and
 /// Information (one switch per line the overlay can show).
 ///
-/// The page order and the shipped defaults follow reference screenshots of
-/// another emulator's settings app; every string here is our own and is
-/// localized through Localizable.strings / L10n. The overlay itself is drawn
-/// by GameView; this page only stores the choices in AppSettings.
+/// The page order follows reference screenshots of another emulator's settings
+/// app; every string here is our own and is localized through
+/// Localizable.strings / L10n. Since 0.2.2-beta3 the shipped default is off with
+/// only the frame-rate line on (an install still on the old default combination
+/// is migrated once in AppSettings.init). The overlay itself is drawn by
+/// GameView; this page only stores the choices in AppSettings.
 struct PerformanceOverlaySettingsView: View {
     @ObservedObject var settings: AppSettings
 
