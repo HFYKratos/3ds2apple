@@ -49,14 +49,12 @@
             <TextBlock Text="{Binding L.LibrarySubtitle}" Classes="muted" MaxWidth="820" HorizontalAlignment="Left" />
           </StackPanel>
 
-          <!-- Exactly one import action: opens the file picker and imports the selected ROM(s).
-               No path box, no name override, no explanatory card. Imported games render below. -->
+          <!-- Exactly one import action: one picker for decrypted ROMs (multi-select) and
+               .32a build packages; the extension decides the path. No path box/name override. -->
           <!-- WrapPanel: the action row stays inside the window at the minimum width. -->
           <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-            <Button Content="{Binding L.LibraryImportAction}" Click="BrowseRomClicked" Classes="primary" Margin="0,0,14,8" />
+            <Button Content="{Binding L.LibraryImportAction}" Click="BrowseImportClicked" Classes="primary" Margin="0,0,14,8" />
             <Button Content="{Binding BuildAllLabel}" Command="{Binding BuildAllCommand}" Classes="ghost" Margin="0,0,14,8" />
-            <!-- One build-package import (.32a); the ROM import stays the primary action. -->
-            <Button Content="{Binding L.LibraryImportBuildPackageAction}" Command="{Binding ImportBuildPackageCommand}" Classes="ghost" Margin="0,0,14,8" />
             <ProgressBar Width="240" Value="{Binding ProgressValue}" IsVisible="{Binding IsImportRunning}" VerticalAlignment="Center" Margin="0,0,14,8" />
             <ProgressBar Width="240" Value="{Binding ProgressValue}" IsVisible="{Binding IsLibraryBuildProgressVisible}" VerticalAlignment="Center" Margin="0,0,14,8" />
             <TextBlock Text="{Binding GameCountText}" Classes="caption" VerticalAlignment="Center" Margin="0,0,0,8" />

@@ -65,7 +65,6 @@ public partial class MainWindow : Window
         if (ViewModel is { } viewModel)
         {
             viewModel.ExportLogRequested += OnExportLogRequested;
-            viewModel.ImportBuildPackageRequested += OnImportBuildPackageRequested;
             viewModel.BrowseExportDestinationRequested += OnBrowseExportDestinationRequested;
             ((INotifyCollectionChanged)viewModel.LogLines).CollectionChanged += (_, _) => ScrollLogToEnd();
         }
@@ -86,11 +85,11 @@ public partial class MainWindow : Window
         });
     }
 
-    private async void BrowseRomClicked(object? sender, RoutedEventArgs e)
+    private async void BrowseImportClicked(object? sender, RoutedEventArgs e)
     {
         try
         {
-            await PickRomAsync();
+            await PickImportAsync();
         }
         catch (Exception exception)
         {
@@ -98,7 +97,11 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task PickRomAsync()
+    /// <summary>
+    /// One Library Import picker: decrypted ROMs (.3ds/.cci/.ncch/.cxi, multi-select)
+    /// and portable .32a build packages. The view-model dispatches by extension.
+    /// </summary>
+    private async Task PickImportAsync()
     {
         if (ViewModel is not { } viewModel)
         {
@@ -110,7 +113,12 @@ public partial class MainWindow : Window
             AllowMultiple = true,
             FileTypeFilter = new[]
             {
+                new FilePickerFileType("3DS ROM or 3ds2apple build package")
+                {
+                    Patterns = new[] { "*.3ds", "*.cci", "*.ncch", "*.cxi", "*.32a" },
+                },
                 new FilePickerFileType("3DS ROM") { Patterns = new[] { "*.3ds", "*.cci", "*.ncch", "*.cxi" } },
+                new FilePickerFileType("3ds2apple build package") { Patterns = new[] { "*.32a" } },
                 FilePickerFileTypes.All,
             },
         });
@@ -119,36 +127,7 @@ public partial class MainWindow : Window
         {
             return;
         }
-        await viewModel.ImportAsync(paths);
-    }
-
-    private async void OnImportBuildPackageRequested()
-    {
-        try
-        {
-            if (ViewModel is not { } viewModel)
-            {
-                return;
-            }
-            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-            {
-                Title = viewModel.L.LibraryImportBuildPackageTitle,
-                AllowMultiple = false,
-                FileTypeFilter = new[]
-                {
-                    new FilePickerFileType("3ds2apple build package") { Patterns = new[] { "*.32a" } },
-                    FilePickerFileTypes.All,
-                },
-            });
-            if (files.Count > 0 && files[0].TryGetLocalPath() is { } path)
-            {
-                await viewModel.ImportBuildPackageAsync(path);
-            }
-        }
-        catch (Exception exception)
-        {
-            ViewModel?.Log("file picker failed: " + exception.Message);
-        }
+        await viewModel.ImportSelectionAsync(paths);
     }
 
     /// <summary>Export dialog "Choose…": a folder for .32a, a save file for the unsigned IPA.</summary>

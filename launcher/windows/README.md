@@ -423,6 +423,17 @@ there. `THREEDS2APPLE_DIST` and the multi-file layout still work for development
 Staged payload inputs are git-ignored (`Bin/`, `shell/*.ipa`, `shell/manifest.json`,
 `vendor/impactor/*.exe`); the release ZIP is never committed.
 
+### Bundled pack CLI freshness gate (0.2.2-beta3)
+
+`prepare-dist-singlefile.sh` / `.ps1` always rebuild `Bin/3ds2apple-pack.exe` and
+`Bin/devpush.exe` from this checkout's `builder/` + `tools/devpush` sources for
+`x86_64-pc-windows-gnu`, then refuse to package unless the pack CLI embeds the
+current `builder/Cargo.toml` version and the `builds` + `catalog --auto-launch`
+commands. (0.2.2-beta2 shipped a stale 0.2.0 CLI, so both Library exports failed
+with "For more information, try '--help'.".) A missing cargo / rustup target /
+mingw-w64 toolchain aborts packaging instead of reusing an old binary; the shipped
+`--self-test` also probes the same capabilities statically.
+
 The shell template IPA is a macOS build product (ROM-free, empty catalogue) —
 follow [shell/README.md](shell/README.md). It is deliberately absent from git.
 

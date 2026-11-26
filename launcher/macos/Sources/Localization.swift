@@ -112,8 +112,8 @@ struct LauncherStrings {
     var libraryCountFormat: String
     var libraryIPALabel: String
     // Portable .32a build packages (Library export/import; user data, never uploaded)
-    var buildPackageImport: String
-    var buildPackageImportTitle: String
+    var importPickerTitle: String
+    var importUnsupportedFormat: String
     var buildPackageReplace: String
     var buildPackageNeedsPack: String
     var buildPackageWithRom: String
@@ -345,8 +345,11 @@ struct LauncherStrings {
         librarySubtitle = t("Your own games, one shell", "你自己的游戏，一个外壳")
         libraryCountFormat = t("%d game(s) in the library", "游戏库中有 %d 个游戏")
         libraryIPALabel = t("Library IPA", "游戏库 IPA")
-        buildPackageImport = t("Import", "导入")
-        buildPackageImportTitle = t("Import build package", "导入构建包")
+        importPickerTitle = t("Import ROM or build package", "导入 ROM 或构建包")
+        importUnsupportedFormat = t(
+            "Nothing was imported: choose a decrypted .3ds/.cci/.ncch/.cxi ROM or a .32a build package.",
+            "未导入任何内容：请选择解密的 .3ds/.cci/.ncch/.cxi ROM 或 .32a 构建包。"
+        )
         buildPackageReplace = t("Replace existing package", "覆盖现有包")
         buildPackageNeedsPack = t(
             "Build the GamePack first: Export becomes available once the GamePack exists.",

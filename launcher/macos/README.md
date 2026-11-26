@@ -169,6 +169,16 @@ The checkout is still auto-detected for the read-only tool inputs in this order:
 `THREEDS2APPLE_ROOT`, walking up from the executable, then `~/3ds2apple`,
 `~/Projects/3ds2apple`, `~/repos/3ds2apple`. Tool binaries (3ds2apple-pack,
 devpush, xcodegen) are auto-detected in the app bundle, the checkout and PATH.
+
+### Pack CLI version requirement (0.2.2-beta3)
+
+The launcher drives `3ds2apple-pack` and must use a CLI built from the current
+`builder/` sources: it needs `builds export|import|list` and
+`catalog --auto-launch`. Toolchain lookup prefers the repo/dev-preview checkout
+(`$HOME/zk017/zakuro/builder/target/…`, then `<checkout>/builder/target/…`) before
+PATH, so rebuild it on the Mac before a VM build:
+`cd builder && cargo build --release`. A stale CLI is reported as an actionable
+"rebuild 3ds2apple-pack" error instead of the bare clap `--help` line.
 Settings persist in `UserDefaults`; the launcher writes only inside the portable
 data root (and regenerable build products in the checkout when a developer runs
 it from a source tree).

@@ -200,6 +200,16 @@ public static class SelfTest
             var runner = new ProcessRunner();
             var locator = new ToolLocator(distribution.Root);
             var packPath = locator.FindPackCli();
+            // 4a. Capability gate for the bundled CLI: the 0.2.2-beta2 packaging bug shipped
+            //     a 0.2.0 CLI whose clap parser rejected the new "builds" / "catalog
+            //     --auto-launch" commands. The static scan runs on the PE payload even on a
+            //     Linux host, so it covers both the clean-folder Linux and Windows self-test.
+            var packCapabilities = packPath is null ? null : PackCli.InspectBinaryCapabilities(packPath);
+            Line(packPath is null ? "WARN" : packCapabilities!.Ok ? "PASS" : "FAIL",
+                "3ds2apple-pack capabilities (builds + catalog --auto-launch)",
+                packPath is null
+                    ? "not found — ROM/package import and both Library exports are unavailable"
+                    : packCapabilities!.Describe());
             if (IsForeignWindowsBinary(packPath))
             {
                 Line("PASS", "3ds2apple-pack", "bundled Windows binary present: " + packPath + " (execution skipped on this host; --self-test on Windows probes the version)");

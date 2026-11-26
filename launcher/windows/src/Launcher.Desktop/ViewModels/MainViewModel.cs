@@ -477,11 +477,6 @@ public sealed class MainViewModel : ObservableObject
         ExportLogCommand = new RelayCommand(() => ExportLogRequested?.Invoke());
         ToggleDiagnosticsCommand = new RelayCommand(ToggleDiagnostics);
         ToggleDeployLogCommand = new RelayCommand(ToggleDeployLog);
-        ImportBuildPackageCommand = new AsyncRelayCommand(() =>
-        {
-            ImportBuildPackageRequested?.Invoke();
-            return Task.CompletedTask;
-        }, () => !IsBusy);
         ConfirmImportReplaceCommand = new AsyncRelayCommand(ConfirmImportReplaceAsync, () => CanConfirmImportReplace);
         ResetAdvancedBuildCommand = new RelayCommand(() => UpdateBuildOptions(AdvancedBuildOptions.Default), () => !IsBusy);
         BrowseExportDestinationCommand = new RelayCommand(
@@ -521,9 +516,6 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Raised by the settings "Export log" button; the view shows a save picker.</summary>
     public event Action? ExportLogRequested;
 
-    /// <summary>Raised by the Library import-build-package button; the view shows a file picker.</summary>
-    public event Action? ImportBuildPackageRequested;
-
     /// <summary>Raised by the export dialog "Choose" button; true = IPA save file, false = .32a folder.</summary>
     public event Action<bool>? BrowseExportDestinationRequested;
 
@@ -546,7 +538,6 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand ExportLogCommand { get; }
     public RelayCommand ToggleDiagnosticsCommand { get; }
     public RelayCommand ToggleDeployLogCommand { get; }
-    public AsyncRelayCommand ImportBuildPackageCommand { get; }
     public AsyncRelayCommand ConfirmImportReplaceCommand { get; }
     public RelayCommand ResetAdvancedBuildCommand { get; }
     public RelayCommand BrowseExportDestinationCommand { get; }
@@ -1011,6 +1002,40 @@ public sealed class MainViewModel : ObservableObject
         {
             IsImportRunning = false;
             SetBusy(false, Loc.T("status.ready"));
+        }
+    }
+
+    /// <summary>
+    /// Library "Import": one picker for decrypted ROMs (.3ds/.cci/.ncch/.cxi, multi-select)
+    /// and portable .32a build packages. Dispatch by extension: ROMs go through the ROM
+    /// import (headers only), .32a files through the existing build-package import with
+    /// its replace-conflict flow.
+    /// </summary>
+    public async Task ImportSelectionAsync(IReadOnlyList<string> paths)
+    {
+        if (IsBusy || paths.Count == 0)
+        {
+            return;
+        }
+        var selection = LibraryImportPlanner.Classify(paths);
+        foreach (var error in selection.Errors)
+        {
+            Log("import: " + error);
+        }
+        if (!selection.HasWork)
+        {
+            var detail = selection.Errors.Count > 0 ? selection.Errors[0] : "no files were selected";
+            SetBuildPackageStatus(Loc.T("library.import.noUsableFiles", detail), warning: true);
+            return;
+        }
+        Log("import: " + LibraryImportPlanner.Describe(selection));
+        if (selection.HasRom)
+        {
+            await ImportAsync(selection.RomPaths).ConfigureAwait(true);
+        }
+        foreach (var package in selection.BuildPackagePaths)
+        {
+            await ImportBuildPackageAsync(package).ConfigureAwait(true);
         }
     }
 
@@ -2539,7 +2564,7 @@ public sealed class MainViewModel : ObservableObject
                  {
                      DeployCommand, ConfirmOrphanedDeployCommand, StopDeployCommand, BuildAllCommand, RefreshDevicesCommand, RefreshPrerequisitesCommand,
                      RefreshStatusCommand, RefreshReadinessCommand, OpenImpactorCommand,
-                     ImportBuildPackageCommand, ConfirmImportReplaceCommand, ResetAdvancedBuildCommand,
+                     ConfirmImportReplaceCommand, ResetAdvancedBuildCommand,
                      BrowseExportDestinationCommand, ConfirmExportCommand, CancelExportCommand,
                  })
         {

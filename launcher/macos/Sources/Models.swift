@@ -9,6 +9,53 @@
 
 import Foundation
 
+// MARK: - Library import dispatch
+
+/// One Library "Import" picker selection split by file type. Decrypted ROMs go
+/// through the ROM import (headers only, single or multi select); .32a files go
+/// through the build-package import with its replace-conflict flow.
+enum LibraryImportPlanner {
+    static let romExtensions = ["3ds", "cci", "ncch", "cxi"]
+    static let buildPackageExtension = "32a"
+
+    static func isBuildPackage(_ path: String) -> Bool {
+        (path as NSString).pathExtension.lowercased() == buildPackageExtension
+    }
+
+    static func isROM(_ path: String) -> Bool {
+        romExtensions.contains((path as NSString).pathExtension.lowercased())
+    }
+
+    static func classify(_ paths: [String]) -> (roms: [String], packages: [String], errors: [String]) {
+        var roms: [String] = []
+        var packages: [String] = []
+        var errors: [String] = []
+        var seen = Set<String>()
+        let manager = FileManager.default
+        for raw in paths {
+            let path = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if path.isEmpty || !seen.insert(path).inserted {
+                continue
+            }
+            if !manager.fileExists(atPath: path) {
+                errors.append("File not found: " + path)
+                continue
+            }
+            if isBuildPackage(path) {
+                packages.append(path)
+                continue
+            }
+            if isROM(path) {
+                roms.append(path)
+                continue
+            }
+            errors.append("Unsupported file: " + (path as NSString).lastPathComponent
+                + ". Choose a decrypted .3ds/.cci/.ncch/.cxi ROM, or a .32a build package.")
+        }
+        return (roms, packages, errors)
+    }
+}
+
 // MARK: - Logging
 
 enum LogLevel: String, CaseIterable, Codable {
