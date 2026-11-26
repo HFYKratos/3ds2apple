@@ -17,6 +17,7 @@ is not vendored here.
 | [Impactor](https://github.com/claration/impactor) v2.7.3 + plumesign | MIT (Copyright 2025 Samara M) | Official signing/install tool bundled unmodified by the Windows launcher; SHA-256 pinned in launcher/windows/vendor/impactor/PINS.json |
 | [apple-codesign](https://github.com/claration/impactor/tree/v2.7.3/3rdparty/apple-codesign-0.29.0) 0.29.0 | MPL-2.0 | Code-signing engine embedded inside the official Impactor binary; MPL text kept in licenses/impactor/ |
 | [Avalonia](https://github.com/AvaloniaUI/Avalonia) 12.1.6 | MIT | .NET desktop UI framework used by the Windows launcher (launcher/windows, shipped self-contained) |
+| [SkiaSharp](https://github.com/mono/SkiaSharp) 3.119.4 | MIT | 2D graphics (Skia) bindings used by the Windows launcher to scale the SMDH cover into the AppIcon PNGs of a single-game IPA; already a transitive dependency of Avalonia, pinned explicitly by the launcher Core project (launcher/windows, shipped self-contained) |
 | [.NET](https://github.com/dotnet/runtime) 10 | MIT | Runtime/SDK used by the Windows launcher and its self-contained Windows publish |
 
 The official Impactor/plumesign release files are downloaded from
