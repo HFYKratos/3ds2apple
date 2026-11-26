@@ -274,6 +274,9 @@ enum DiagnosticsExporter {
         game=\(model.currentGame.map { "\($0.title) (\($0.titleID))" } ?? "none")
         auto_launch=\(AutoLaunch.diagnosticsLine)
         auto_launch_definition=the optional "autoLaunch" flag in the bundle GameCatalog.json is honoured once per process: a single-game IPA starts its one game after the Documents scan and the ROM SHA-256 check; a game whose data is missing or fails the check stays on the home page and this line says why. not requested for a normal multi-game shell
+        cheats_file=\(CheatManager.diagnosticsLine(titleID: model.currentGame?.titleID))
+        cheats_runtime=\(CheatRuntime.shared.snapshot.diagnosticsLine)
+        cheats_definition=cheat codes are the player's own Citra/Azahar text file at Documents/Cheats/<TITLEID>.txt, loaded through zk_cheats_load() at game start; the file is the authority (no code database ships in the app). cheats_file is the file on disk (entries, enabled, lines the runtime keeps but does not run), cheats_runtime is the loaded runtime list (loaded/enabled counts), both absent when no game is loaded. cheats_runtime is published by the game load and by an in-game toggle, which also calls zk_cheats_save()
         paused=\(model.isPaused ? 1 : 0)
         background_suspended=\(model.isBackgroundSuspended ? 1 : 0)
         background_snapshot=\(model.backgroundSnapshotDiagnostics)

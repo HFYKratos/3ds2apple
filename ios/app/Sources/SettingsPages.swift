@@ -42,6 +42,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
     case general
     case system
     case gamepad
+    case cheats
     case graphics
     case layout
     case sound
@@ -56,6 +57,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .general: return L10n.tr("General")
         case .system: return L10n.tr("System")
         case .gamepad: return L10n.tr("Gamepad")
+        case .cheats: return L10n.tr("Cheats")
         case .graphics: return L10n.tr("Graphics")
         case .layout: return L10n.tr("Layout")
         case .sound: return L10n.tr("Sound")
@@ -70,6 +72,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .general: return "gearshape.fill"
         case .system: return "iphone"
         case .gamepad: return "gamecontroller.fill"
+        case .cheats: return "wand.and.stars"
         case .graphics: return "square.grid.2x2.fill"
         case .layout: return "rectangle.split.2x1"
         case .sound: return "speaker.wave.2.fill"
@@ -84,6 +87,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .general: return .gray
         case .system: return .blue
         case .gamepad: return .green
+        case .cheats: return .yellow
         case .graphics: return .purple
         case .layout: return .orange
         case .sound: return .pink
@@ -109,6 +113,8 @@ struct SettingsCategoryPage: View {
                 SystemSettingsPage(settings: settings, model: model)
             case .gamepad:
                 GamepadSettingsPage(settings: settings, model: model)
+            case .cheats:
+                CheatsSettingsPage()
             case .graphics:
                 GraphicsSettingsPage(settings: settings, model: model)
             case .layout:
