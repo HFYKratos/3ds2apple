@@ -24,6 +24,17 @@ public partial class App : Application
             var initialize = viewModel.InitializeAsync();
             if (desktop.Args?.Contains("--ui-smoke") == true)
             {
+                // Dev-only: render at a chosen window width so QA can prove the Library
+                // card/button rows do not overflow at the minimum window width.
+                var smokeWidth = Environment.GetEnvironmentVariable("THREEDS2APPLE_UI_SMOKE_WIDTH");
+                if (double.TryParse(smokeWidth, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var width) && width >= 640)
+                {
+                    if (desktop.MainWindow is { } smokeWindow)
+                    {
+                        smokeWindow.MinWidth = Math.Min(smokeWindow.MinWidth, width);
+                        smokeWindow.Width = width;
+                    }
+                }
                 var view = Environment.GetEnvironmentVariable("THREEDS2APPLE_UI_SMOKE_VIEW");
                 if (string.Equals(view, "settings", StringComparison.OrdinalIgnoreCase))
                 {
@@ -60,6 +71,19 @@ public partial class App : Application
                         // ComboBox pick uses AFTER the window is live, then render: the
                         // screenshot proves the language box keeps showing the selected
                         // language after a switch (task-20 L3).
+                        // Dev-only deterministic Library rows so screenshots show real cards
+                        // (including the Export/Remove row at the minimum window width).
+                        var smokeFixture = Environment.GetEnvironmentVariable("THREEDS2APPLE_UI_SMOKE_FIXTURE");
+                        if (!string.IsNullOrWhiteSpace(smokeFixture))
+                        {
+                            viewModel.SeedDeveloperSmokeFixtures(smokeFixture);
+                            await Task.Delay(200);
+                        }
+                        if (string.Equals(Environment.GetEnvironmentVariable("THREEDS2APPLE_UI_SMOKE_OPEN_EXPORT"), "1", StringComparison.Ordinal))
+                        {
+                            viewModel.OpenExportDialogForSmoke();
+                            await Task.Delay(250);
+                        }
                         var smokeLanguage = Environment.GetEnvironmentVariable("THREEDS2APPLE_UI_SMOKE_LANGUAGE");
                         if (!string.IsNullOrWhiteSpace(smokeLanguage))
                         {

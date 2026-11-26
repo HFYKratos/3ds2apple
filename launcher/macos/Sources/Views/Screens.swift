@@ -54,6 +54,9 @@ struct LibraryScreen: View {
                 }
             }
         }
+        .sheet(isPresented: $model.exportPresented) {
+            LibraryExportSheet(model: model, strings: strings)
+        }
     }
 
     /// The whole import area is exactly one button: it opens the file picker and
@@ -68,12 +71,7 @@ struct LibraryScreen: View {
             Button {
                 chooseROM()
             } label: {
-                Label(strings.importButton, systemImage: "plus")
-            }
-            Button {
-                chooseROM()
-            } label: {
-                Label(strings.importButton, systemImage: "plus")
+                Label(strings.importROMButton, systemImage: "plus")
             }
             .buttonStyle(PrimaryButtonStyle())
             .disabled(model.isBusy)
@@ -126,7 +124,7 @@ struct LibraryScreen: View {
         if let type = UTType(filenameExtension: "32a") {
             panel.allowedContentTypes = [type]
         }
-        panel.message = strings.buildPackageImport
+        panel.message = strings.buildPackageImportTitle
         panel.prompt = strings.choose
         if panel.runModal() == .OK, let url = panel.url {
             Task { await model.importBuildPackage(at: url.path) }
@@ -149,6 +147,72 @@ struct LibraryScreen: View {
         if panel.runModal() == .OK, let url = panel.url {
             Task { await model.importROM(at: url.path) }
         }
+    }
+}
+
+/// Library "Export" dialog: one action, choose the format and the destination.
+/// Both formats warn that the output contains the user's own game data, stays
+/// local and is never uploaded; the IPA is unsigned and must be self-signed.
+private struct LibraryExportSheet: View {
+    @ObservedObject var model: AppModel
+    let strings: LauncherStrings
+
+    private var isIpa: Bool { model.exportFormat == .ipa }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(strings.exportTitleFormat(model.exportTargetTitle))
+                .font(LauncherTheme.rounded(17, weight: .bold))
+            Picker("", selection: Binding(
+                get: { model.exportFormat },
+                set: { model.setExportFormat($0) }
+            )) {
+                Text(strings.exportFormatBuildPackage).tag(LaunchExportFormat.buildPackage)
+                Text(strings.exportFormatIpa).tag(LaunchExportFormat.ipa)
+            }
+            .pickerStyle(.radioGroup)
+            .labelsHidden()
+            Text(isIpa ? strings.exportDetailIpa : strings.exportDetailBuildPackage)
+                .font(.system(size: 11))
+                .foregroundStyle(LauncherTheme.mutedText)
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(isIpa ? strings.exportDestinationIpa : strings.exportDestinationBuildPackage)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(LauncherTheme.mutedText)
+                HStack(spacing: 8) {
+                    Text(model.exportDestination)
+                        .font(LauncherTheme.mono(10.5))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 8)
+                    Button(strings.exportBrowse) {
+                        model.chooseExportDestination()
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .disabled(model.isBusy)
+                }
+            }
+            Text(isIpa ? strings.exportWarningsIpa : strings.exportWarningsBuildPackage)
+                .font(.system(size: 11))
+                .foregroundStyle(LauncherTheme.warning)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(strings.exportCancel) {
+                    model.cancelExport()
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(model.isBusy)
+                Button(strings.exportConfirm) {
+                    Task { await model.confirmExport() }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(model.isBusy || model.exportDestination.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 520, maxWidth: 620)
     }
 }
 
@@ -217,37 +281,41 @@ private struct GameCard: View {
                     .foregroundStyle(LauncherTheme.mutedText)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if !game.packIsReal {
+                Text(strings.buildPackageNeedsPack)
+                    .font(.system(size: 10))
+                    .foregroundStyle(LauncherTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            // Text-only actions keep the row inside the minimum card width; the single
+            // Export button opens a format/location dialog, Remove is destructive red.
             HStack(spacing: 8) {
                 Button {
                     Task {
                         await model.refreshLibrary()
                     }
                 } label: {
-                    Label(strings.refresh, systemImage: "arrow.clockwise")
+                    Text(strings.refresh)
+                        .lineLimit(1)
                 }
                 .buttonStyle(SecondaryButtonStyle())
                 .disabled(model.isBusy)
-                if game.packIsReal {
-                    Button {
-                        Task { await model.exportBuildPackage(for: game) }
-                    } label: {
-                        Label(strings.buildPackageExport, systemImage: "shippingbox.and.arrow.backward")
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(model.isBusy)
-                    Button {
-                        Task { await model.exportIpa(for: game) }
-                    } label: {
-                        Label(strings.exportIpa, systemImage: "arrow.down.app")
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(model.isBusy)
-                }
-                Spacer(minLength: 0)
                 Button {
+                    model.openExport(for: game)
+                } label: {
+                    Text(strings.exportButton)
+                        .lineLimit(1)
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(model.isBusy || !game.packIsReal)
+                .help(game.packIsReal ? strings.exportButton : strings.buildPackageNeedsPack)
+                Spacer(minLength: 0)
+                Button(role: .destructive) {
                     showingRemove = true
                 } label: {
                     Text(strings.remove)
+                        .lineLimit(1)
+                        .foregroundStyle(LauncherTheme.danger)
                 }
                 .buttonStyle(SecondaryButtonStyle())
                 .disabled(model.isBusy)
@@ -291,7 +359,6 @@ struct DeployScreen: View {
                 emptyState
             } else {
                 deviceCard
-                advancedSettingsCard
                 selectionCard
                 if let report = model.deployReport {
                     DeployReportCard(report: report, model: model, strings: strings)
@@ -353,76 +420,6 @@ struct DeployScreen: View {
                     value: settings.installedBundleID.isEmpty ? strings.deployNotInstalledBundle : settings.installedBundleID,
                     mono: true
                 )
-            }
-        }
-    }
-
-    /// Deploy -> Advanced build settings: collapsed by default; the defaults keep
-    /// the documented -O2 / no LTO / no fast-math behaviour. Changing an option
-    /// applies to the next build (builder CLI flags -> THREEDS2APPLE_AOT_* -> scripts).
-    private var advancedSettingsCard: some View {
-        Card {
-            DisclosureGroup {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(strings.advancedBuildBody)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(LauncherTheme.mutedText)
-                        .fixedSize(horizontal: false, vertical: true)
-                    HStack(spacing: 8) {
-                        Text(strings.advancedBuildOptLevel)
-                            .font(.system(size: 11.5))
-                        Picker("", selection: Binding(
-                            get: { settings.advancedBuildOptions.optLevel },
-                            set: { level in
-                                settings.setAdvancedBuildOptions(AdvancedBuildOptions(
-                                    optLevel: level,
-                                    lto: settings.advancedAotLto,
-                                    fastMath: settings.advancedAotFastMath
-                                ))
-                            }
-                        )) {
-                            ForEach(AdvancedBuildOptions.optLevels, id: \.self) { level in
-                                Text(level).tag(level)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 90)
-                    }
-                    Toggle(strings.advancedBuildLto, isOn: Binding(
-                        get: { settings.advancedAotLto },
-                        set: { value in
-                            settings.setAdvancedBuildOptions(AdvancedBuildOptions(
-                                optLevel: settings.advancedAotOptLevel,
-                                lto: value,
-                                fastMath: settings.advancedAotFastMath
-                            ))
-                        }
-                    ))
-                    .toggleStyle(.switch)
-                    Toggle(strings.advancedBuildFastMath, isOn: Binding(
-                        get: { settings.advancedAotFastMath },
-                        set: { value in
-                            settings.setAdvancedBuildOptions(AdvancedBuildOptions(
-                                optLevel: settings.advancedAotOptLevel,
-                                lto: settings.advancedAotLto,
-                                fastMath: value
-                            ))
-                        }
-                    ))
-                    .toggleStyle(.switch)
-                    Text(strings.advancedBuildSummary(settings.advancedBuildOptions.describe))
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(LauncherTheme.mutedText)
-                    Button(strings.advancedBuildReset) {
-                        settings.resetAdvancedBuildOptions()
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(model.isBusy)
-                }
-                .padding(.top, 6)
-            } label: {
-                Text(strings.advancedBuildTitle)
-                    .font(LauncherTheme.rounded(13, weight: .semibold))
             }
         }
     }

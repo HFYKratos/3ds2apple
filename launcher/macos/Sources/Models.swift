@@ -43,6 +43,16 @@ struct LogEntry: Identifiable, Equatable {
     }
 }
 
+// MARK: - Library export format
+
+/// One Library "Export" action, two output formats (chosen in the export dialog).
+enum LaunchExportFormat: String, CaseIterable, Identifiable {
+    case buildPackage
+    case ipa
+
+    var id: String { rawValue }
+}
+
 // MARK: - Advanced build settings
 
 /// Deploy -> "Advanced build settings": AOT codegen options applied to the next

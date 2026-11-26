@@ -51,15 +51,16 @@
 
           <!-- Exactly one import action: opens the file picker and imports the selected ROM(s).
                No path box, no name override, no explanatory card. Imported games render below. -->
-          <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
-            <Button Content="{Binding L.LibraryImportAction}" Click="BrowseRomClicked" Classes="primary" />
-            <Button Content="{Binding BuildAllLabel}" Command="{Binding BuildAllCommand}" Classes="ghost" />
-            <!-- Portable .32a build package: export the selected game row, or import one. -->
-            <Button Content="{Binding L.LibraryImportBuildPackageAction}" Command="{Binding ImportBuildPackageCommand}" Classes="ghost" />
-            <ProgressBar Width="260" Value="{Binding ProgressValue}" IsVisible="{Binding IsImportRunning}" VerticalAlignment="Center" />
-            <ProgressBar Width="260" Value="{Binding ProgressValue}" IsVisible="{Binding IsLibraryBuildProgressVisible}" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding GameCountText}" Classes="caption" VerticalAlignment="Center" />
-          </StackPanel>
+          <!-- WrapPanel: the action row stays inside the window at the minimum width. -->
+          <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <Button Content="{Binding L.LibraryImportAction}" Click="BrowseRomClicked" Classes="primary" Margin="0,0,14,8" />
+            <Button Content="{Binding BuildAllLabel}" Command="{Binding BuildAllCommand}" Classes="ghost" Margin="0,0,14,8" />
+            <!-- One build-package import (.32a); the ROM import stays the primary action. -->
+            <Button Content="{Binding L.LibraryImportBuildPackageAction}" Command="{Binding ImportBuildPackageCommand}" Classes="ghost" Margin="0,0,14,8" />
+            <ProgressBar Width="240" Value="{Binding ProgressValue}" IsVisible="{Binding IsImportRunning}" VerticalAlignment="Center" Margin="0,0,14,8" />
+            <ProgressBar Width="240" Value="{Binding ProgressValue}" IsVisible="{Binding IsLibraryBuildProgressVisible}" VerticalAlignment="Center" Margin="0,0,14,8" />
+            <TextBlock Text="{Binding GameCountText}" Classes="caption" VerticalAlignment="Center" Margin="0,0,0,8" />
+          </WrapPanel>
 
           <!-- .32a export path / import result / replace conflict (user data; never upload it). -->
           <Border Classes="card" IsVisible="{Binding HasBuildPackageStatus}">
@@ -108,12 +109,13 @@
                       <TextBlock Text="{Binding TitleIdLine}" Classes="caption" />
                       <TextBlock Text="{Binding RomLine}" Classes="caption" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,14,0,0">
-                      <Button Content="{Binding BuildNowLabel}" Command="{Binding BuildCommand}" Classes="primary" ToolTip.Tip="{Binding BuildStatusText}" />
-                      <Button Content="{Binding ExportBuildPackageLabel}" Command="{Binding ExportBuildPackageCommand}" Classes="ghost" />
-                      <Button Content="{Binding ExportIpaLabel}" Command="{Binding ExportIpaCommand}" Classes="ghost" />
-                      <Button Content="{Binding RemoveLabel}" Command="{Binding RemoveCommand}" Classes="ghost" />
-                    </StackPanel>
+                    <!-- One Export button (format/location dialog) + destructive Remove; WrapPanel
+                         keeps the row inside the 330 px card at the minimum window width. -->
+                    <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,14,0,0">
+                      <Button Content="{Binding BuildNowLabel}" Command="{Binding BuildCommand}" Classes="primary" ToolTip.Tip="{Binding BuildStatusText}" Margin="0,0,8,6" />
+                      <Button Content="{Binding ExportLabel}" Command="{Binding ExportCommand}" Classes="ghost" ToolTip.Tip="{Binding BuildStatusText}" Margin="0,0,8,6" />
+                      <Button Content="{Binding RemoveLabel}" Command="{Binding RemoveCommand}" Classes="danger" Margin="0,0,0,6" />
+                    </WrapPanel>
                   </Grid>
                 </Border>
               </DataTemplate>
@@ -170,25 +172,6 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
             </StackPanel>
-          </Border>
-
-          <!-- Advanced build settings: collapsed by default; defaults keep the current
-               behaviour (O2 / LTO off / fast-math off). Changing an option invalidates
-               the build cache and applies to the next build. -->
-          <Border Classes="card">
-            <Expander Header="{Binding L.DeployAdvancedTitle}" IsExpanded="False">
-              <StackPanel Spacing="10">
-                <TextBlock Text="{Binding L.DeployAdvancedBody}" Classes="muted" TextWrapping="Wrap" />
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                  <TextBlock Text="{Binding L.DeployAdvancedOptLevel}" VerticalAlignment="Center" />
-                  <ComboBox ItemsSource="{Binding AotOptLevelOptions}" SelectedItem="{Binding SelectedAotOptLevel}" Width="120" />
-                </StackPanel>
-                <CheckBox Content="{Binding L.DeployAdvancedLto}" IsChecked="{Binding AotLto}" />
-                <CheckBox Content="{Binding L.DeployAdvancedFastMath}" IsChecked="{Binding AotFastMath}" />
-                <TextBlock Text="{Binding AdvancedBuildSummary}" Classes="caption" TextWrapping="Wrap" />
-                <Button Content="{Binding L.DeployAdvancedReset}" Command="{Binding ResetAdvancedBuildCommand}" Classes="ghost" HorizontalAlignment="Left" />
-              </StackPanel>
-            </Expander>
           </Border>
 
           <!-- Device-aware incremental deploy: what is installed and what this run will do. -->
@@ -336,6 +319,25 @@
                   <TextBlock Text="{Binding L.DevicePrereqUnlock}" Classes="caption" />
                 </StackPanel>
               </Border>
+              <!-- Advanced build settings live in Settings (not Deploy): every option states
+                   its effect; defaults keep O2 / LTO off / fast-math off. -->
+              <Border Classes="card">
+                <StackPanel Spacing="8">
+                  <TextBlock Text="{Binding L.SettingsAdvancedTitle}" Classes="h2" />
+                  <TextBlock Text="{Binding L.SettingsAdvancedBody}" Classes="caption" />
+                  <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="{Binding L.SettingsAdvancedOptLevel}" VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{Binding AotOptLevelOptions}" SelectedItem="{Binding SelectedAotOptLevel}" Width="110" />
+                  </StackPanel>
+                  <TextBlock Text="{Binding L.SettingsAdvancedOptLevelHint}" Classes="caption" />
+                  <CheckBox Content="{Binding L.SettingsAdvancedLto}" IsChecked="{Binding AotLto}" />
+                  <TextBlock Text="{Binding L.SettingsAdvancedLtoHint}" Classes="caption" />
+                  <CheckBox Content="{Binding L.SettingsAdvancedFastMath}" IsChecked="{Binding AotFastMath}" />
+                  <TextBlock Text="{Binding L.SettingsAdvancedFastMathHint}" Classes="caption" />
+                  <TextBlock Text="{Binding AdvancedBuildSummary}" Classes="caption" TextWrapping="Wrap" />
+                  <Button Content="{Binding L.SettingsAdvancedReset}" Command="{Binding ResetAdvancedBuildCommand}" Classes="ghost" HorizontalAlignment="Left" />
+                </StackPanel>
+              </Border>
             </StackPanel>
 
             <StackPanel Grid.Column="2" Spacing="12">
@@ -409,6 +411,32 @@
           <ProgressBar Width="220" Height="6" Minimum="0" Maximum="100" Value="{Binding ProgressValue}" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
         </StackPanel>
       </Grid>
+    </Border>
+    <!-- Library export dialog: one "Export" action with format + destination + warnings.
+         An in-window overlay card (not a separate window) so it works at any window size. -->
+    <Border Grid.Row="0" Grid.RowSpan="3" Background="#B3000000" IsVisible="{Binding IsExportDialogVisible}">
+      <Border Classes="card" Width="620" MaxWidth="760" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel Spacing="12">
+          <TextBlock Text="{Binding ExportDialogTitle}" Classes="h2" TextWrapping="Wrap" />
+          <RadioButton GroupName="exportFormat" Content="{Binding L.ExportFormatBuildPackage}"
+                       IsChecked="{Binding IsExportFormatBuildPackage, Mode=TwoWay}" />
+          <RadioButton GroupName="exportFormat" Content="{Binding L.ExportFormatIpa}"
+                       IsChecked="{Binding IsExportFormatIpa, Mode=TwoWay}" />
+          <TextBlock Text="{Binding ExportFormatDetail}" Classes="muted" TextWrapping="Wrap" />
+          <StackPanel Spacing="4">
+            <TextBlock Text="{Binding ExportDestinationLabel}" Classes="caption" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Text="{Binding ExportDestination, Mode=TwoWay}" />
+              <Button Grid.Column="1" Content="{Binding L.ExportBrowse}" Command="{Binding BrowseExportDestinationCommand}" Classes="ghost" Margin="8,0,0,0" />
+            </Grid>
+          </StackPanel>
+          <TextBlock Text="{Binding ExportWarnings}" FontSize="11" Foreground="{DynamicResource AppWarningBrush}" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{Binding L.ExportCancel}" Command="{Binding CancelExportCommand}" Classes="ghost" />
+            <Button Content="{Binding L.ExportConfirm}" Command="{Binding ConfirmExportCommand}" Classes="primary" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
     </Border>
   </Grid>
 </Window>
