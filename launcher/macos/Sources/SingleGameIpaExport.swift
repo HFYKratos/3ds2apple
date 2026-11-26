@@ -77,6 +77,7 @@ final class SingleGameIpaExporter {
         romPath: String,
         version: String,
         outputDirectory: String,
+        outputFileName: String? = nil,
         writeCatalog: (String, String) async throws -> Void,
         onLine: @escaping (LogLevel, String) -> Void
     ) async throws -> SingleGameIpaExportResult {
@@ -275,7 +276,17 @@ final class SingleGameIpaExporter {
         warnings.append("This IPA contains your own game data (" + romRelative + ", "
             + FileProbe.formatBytes(romBytes) + "). Keep it local, never upload or share it, and sign it yourself (Sideloadly/AltStore).")
 
-        let fileName = Self.outputFileName(displayName: displayName, titleID: titleID, version: version)
+        let defaultName = Self.outputFileName(displayName: displayName, titleID: titleID, version: version)
+        let fileName = (outputFileName?.isEmpty == false) ? outputFileName! : defaultName
+        if !fileName.lowercased().hasSuffix(".ipa") {
+            throw LauncherFailure(
+                code: "ipa_name_invalid",
+                message: "The IPA file name must end with .ipa (got " + fileName + ").",
+                hint: "Choose a file name ending in .ipa in the export dialog.",
+                detail: outputDirectory,
+                exitCode: nil
+            )
+        }
         let outputPath = (outputDirectory as NSString).appendingPathComponent(fileName)
         if fileManager.fileExists(atPath: outputPath) {
             try? fileManager.removeItem(atPath: outputPath)

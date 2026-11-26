@@ -66,6 +66,7 @@ public partial class MainWindow : Window
         {
             viewModel.ExportLogRequested += OnExportLogRequested;
             viewModel.ImportBuildPackageRequested += OnImportBuildPackageRequested;
+            viewModel.BrowseExportDestinationRequested += OnBrowseExportDestinationRequested;
             ((INotifyCollectionChanged)viewModel.LogLines).CollectionChanged += (_, _) => ScrollLogToEnd();
         }
         ScrollLogToEnd();
@@ -131,7 +132,7 @@ public partial class MainWindow : Window
             }
             var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = viewModel.L.LibraryImportBuildPackageAction,
+                Title = viewModel.L.LibraryImportBuildPackageTitle,
                 AllowMultiple = false,
                 FileTypeFilter = new[]
                 {
@@ -147,6 +148,51 @@ public partial class MainWindow : Window
         catch (Exception exception)
         {
             ViewModel?.Log("file picker failed: " + exception.Message);
+        }
+    }
+
+    /// <summary>Export dialog "Choose…": a folder for .32a, a save file for the unsigned IPA.</summary>
+    private async void OnBrowseExportDestinationRequested(bool isIpa)
+    {
+        try
+        {
+            if (ViewModel is not { } viewModel)
+            {
+                return;
+            }
+            if (isIpa)
+            {
+                var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+                {
+                    Title = viewModel.ExportDestinationLabel,
+                    SuggestedFileName = Path.GetFileName(viewModel.ExportDestination),
+                    DefaultExtension = "ipa",
+                    FileTypeChoices = new[]
+                    {
+                        new FilePickerFileType("Unsigned single-game IPA") { Patterns = new[] { "*.ipa" } },
+                    },
+                });
+                if (file?.TryGetLocalPath() is { } path)
+                {
+                    viewModel.ExportDestination = path;
+                }
+            }
+            else
+            {
+                var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+                {
+                    Title = viewModel.ExportDestinationLabel,
+                    AllowMultiple = false,
+                });
+                if (folders.Count > 0 && folders[0].TryGetLocalPath() is { } path)
+                {
+                    viewModel.ExportDestination = path;
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            ViewModel?.Log("export destination picker failed: " + exception.Message);
         }
     }
 

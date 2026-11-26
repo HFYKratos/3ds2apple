@@ -21,6 +21,7 @@
 
 import Foundation
 import AppKit
+import UniformTypeIdentifiers
 
 enum MockScenario: String, CaseIterable {
     case importDetected
@@ -73,6 +74,12 @@ final class AppModel: ObservableObject {
     @Published var buildPackageWarning = false
     /// Set when an import hit an existing package: the UI offers "replace".
     @Published var pendingImportReplacePath: String?
+    /// Library "Export" dialog: one action, format + destination, local-only user data.
+    @Published var exportPresented = false
+    @Published var exportTargetID: String?
+    @Published var exportTargetTitle = ""
+    @Published var exportFormat: LaunchExportFormat = .buildPackage
+    @Published var exportDestination = ""
     @Published private(set) var scenario: MockScenario?
 
     let settings: LauncherSettings
@@ -482,8 +489,95 @@ final class AppModel: ObservableObject {
         pack.outRoot.appendingPathComponent("builds", isDirectory: true).path
     }
 
-    /// Library card "Export .32a": write the portable build package for one game.
-    func exportBuildPackage(for game: GameEntry) async {
+    /// Workspace directory that holds the exported unsigned single-game IPAs.
+    var exportsDirectory: String {
+        pack.outRoot.appendingPathComponent("exports", isDirectory: true).path
+    }
+
+    /// Default full IPA path for the export dialog (workspace/exports/<slug>-<version>-unsigned.ipa).
+    func defaultIpaPath(for game: GameEntry) -> String {
+        let name = SingleGameIpaExporter.outputFileName(
+            displayName: game.displayName,
+            titleID: game.titleID,
+            version: LauncherInfo.version
+        )
+        return exportsDirectory + "/" + name
+    }
+
+    /// Library card "Export": open the format/location dialog for a built game.
+    func openExport(for game: GameEntry) {
+        guard !isBusy, game.packIsReal else { return }
+        exportTargetID = game.titleID
+        exportTargetTitle = game.displayName
+        exportFormat = .buildPackage
+        exportDestination = buildPackagesDirectory
+        exportPresented = true
+    }
+
+    /// Switch the export format and reset the destination to that format's default.
+    func setExportFormat(_ format: LaunchExportFormat) {
+        exportFormat = format
+        guard let id = exportTargetID, let game = game(id: id) else { return }
+        exportDestination = format == .ipa ? defaultIpaPath(for: game) : buildPackagesDirectory
+    }
+
+    /// Close the export dialog without exporting.
+    func cancelExport() {
+        exportPresented = false
+        exportTargetID = nil
+    }
+
+    /// Choose the destination: a folder for .32a, a save file for the unsigned IPA.
+    func chooseExportDestination() {
+        if exportFormat == .ipa {
+            let panel = NSSavePanel()
+            if let type = UTType(filenameExtension: "ipa") {
+                panel.allowedContentTypes = [type]
+            }
+            panel.nameFieldStringValue = (exportDestination as NSString).lastPathComponent
+            let directory = (exportDestination as NSString).deletingLastPathComponent
+            if !directory.isEmpty {
+                panel.directoryURL = URL(fileURLWithPath: directory, isDirectory: true)
+            }
+            panel.title = strings.exportDestinationIpa
+            panel.prompt = strings.exportConfirm
+            if panel.runModal() == .OK, let url = panel.url {
+                exportDestination = url.path
+            }
+        } else {
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.canCreateDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.directoryURL = URL(fileURLWithPath: exportDestination, isDirectory: true)
+            panel.title = strings.exportDestinationBuildPackage
+            panel.prompt = strings.exportConfirm
+            if panel.runModal() == .OK, let url = panel.url {
+                exportDestination = url.path
+            }
+        }
+    }
+
+    /// Confirm the export dialog; nothing is signed or uploaded.
+    func confirmExport() async {
+        guard let id = exportTargetID, let game = game(id: id) else {
+            cancelExport()
+            return
+        }
+        let format = exportFormat
+        let destination = exportDestination
+        exportPresented = false
+        exportTargetID = nil
+        if format == .ipa {
+            await exportIpa(for: game, savePath: destination)
+        } else {
+            await exportBuildPackage(for: game, destination: destination)
+        }
+    }
+
+    /// Library "Export .32a": write the portable build package for one game.
+    func exportBuildPackage(for game: GameEntry, destination: String? = nil) async {
         guard !isBusy else { return }
         if !game.packIsReal {
             setBuildPackageStatus(strings.buildPackageNeedsPack, warning: true)
@@ -491,7 +585,11 @@ final class AppModel: ObservableObject {
         }
         guard beginBusy() else { return }
         defer { endBusy() }
-        let directory = buildPackagesDirectory
+        let directory = destination ?? buildPackagesDirectory
+        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        if !directory.isEmpty {
+            appendLog(.info, "build", "export folder: " + directory)
+        }
         appendLog(.command, "build", "builds export --title-id " + game.titleID + " --output-dir " + directory + " --json")
         do {
             let package = try await pack.exportBuildPackage(titleID: game.titleID, outputDirectory: directory)
@@ -566,7 +664,7 @@ final class AppModel: ObservableObject {
     /// Roms/<TITLEID>.<ext> + autoLaunch/romFile catalogue + SMDH app icons).
     /// Nothing is signed, installed or uploaded; the IPA contains the user's own
     /// game data, stays in the local portable workspace and must never be shared.
-    func exportIpa(for game: GameEntry) async {
+    func exportIpa(for game: GameEntry, savePath: String? = nil) async {
         guard !isBusy else { return }
         guard game.packIsReal, let packPath = game.packPath, !packPath.isEmpty else {
             setBuildPackageStatus(strings.buildPackageNeedsPack, warning: true)
@@ -584,7 +682,16 @@ final class AppModel: ObservableObject {
         guard beginBusy() else { return }
         defer { endBusy() }
         let template = settings.repoRoot + "/" + ShellRuntime.pinnedTemplateRelativePath
-        let outputDirectory = pack.outRoot.appendingPathComponent("exports", isDirectory: true).path
+        let outputDirectory: String
+        let outputFileName: String?
+        if let savePath, !savePath.isEmpty {
+            let url = URL(fileURLWithPath: savePath)
+            outputDirectory = url.deletingLastPathComponent().path
+            outputFileName = url.lastPathComponent
+        } else {
+            outputDirectory = exportsDirectory
+            outputFileName = nil
+        }
         let packBackend = pack
         let titleID = game.titleID
         appendLog(.command, "ipa", "single-game IPA: template " + template + ", pack " + packPath
@@ -600,6 +707,7 @@ final class AppModel: ObservableObject {
                 romPath: romSource,
                 version: LauncherInfo.version,
                 outputDirectory: outputDirectory,
+                outputFileName: outputFileName,
                 writeCatalog: { catalogOut, romFile in
                     try await packBackend.writeAutoLaunchCatalog(titleID: titleID, romFile: romFile, catalogOut: catalogOut)
                 },

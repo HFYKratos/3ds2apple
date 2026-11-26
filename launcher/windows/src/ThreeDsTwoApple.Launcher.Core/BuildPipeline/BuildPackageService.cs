@@ -59,33 +59,35 @@ public sealed class BuildPackageService
         IReadOnlyList<string> titleIds,
         BuildCompatibility? compatibility,
         IReadOnlyList<string>? romDirectories = null,
+        string? outputDirectory = null,
         CancellationToken cancellationToken = default)
     {
+        var targetDirectory = string.IsNullOrWhiteSpace(outputDirectory) ? BuildsDirectory : Path.GetFullPath(outputDirectory);
         if (_packCli is null)
         {
             return new BuildPackageExportOutcome(
                 Array.Empty<ExportedBuildPackageInfo>(),
                 Array.Empty<string>(),
-                BuildsDirectory,
+                targetDirectory,
                 "3ds2apple-pack was not found; reinstall the launcher package so Bin/3ds2apple-pack.exe exists.");
         }
         try
         {
-            Directory.CreateDirectory(BuildsDirectory);
+            Directory.CreateDirectory(targetDirectory);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
             return new BuildPackageExportOutcome(
                 Array.Empty<ExportedBuildPackageInfo>(),
                 Array.Empty<string>(),
-                BuildsDirectory,
-                "The builds directory could not be created: " + BuildsDirectory + ": " + exception.Message);
+                targetDirectory,
+                "The export folder could not be created: " + targetDirectory + ": " + exception.Message);
         }
         var clang = VersionOrEmpty(compatibility?.ClangVersion);
         var llvm = VersionOrEmpty(compatibility?.Ld64Version);
         var result = await _packCli.ExportBuildsAsync(
             titleIds,
-            BuildsDirectory,
+            targetDirectory,
             LauncherInfo.Version,
             LauncherInfo.Version,
             clang,
@@ -100,7 +102,7 @@ public sealed class BuildPackageService
             : result.Errors.Count > 0
                 ? null
                 : PackCli.FirstMeaningfulLine(result.Process);
-        return new BuildPackageExportOutcome(result.Packages, result.Errors, result.OutputDirectory ?? BuildsDirectory, error);
+        return new BuildPackageExportOutcome(result.Packages, result.Errors, result.OutputDirectory ?? targetDirectory, error);
     }
 
     /// <summary>

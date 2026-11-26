@@ -243,6 +243,31 @@ public sealed class SingleGameIpaExportTests
     }
 
     [Fact]
+    public async Task HonoursACustomOutputFileName()
+    {
+        using var temp = new TempDir();
+        var template = BuildTemplate(temp);
+        var packPath = temp.Bytes("GamePack.dylib", MachOMagic);
+        var rom = FakeRomFile(temp);
+        var exporter = new SingleGameIpaExporter(new PackCli(CatalogRunner(CatalogJson()), "pack", Path.Combine(temp.Path, "out")));
+        var outputDir = Path.Combine(temp.Path, "exports");
+
+        var result = await exporter.ExportAsync(
+            template,
+            new ComposedPack(TitleId, "Demo", null, 1, packPath),
+            null,
+            rom,
+            "0.2.2",
+            outputDir,
+            outputFileName: "my-game-unsigned.ipa");
+
+        Assert.True(result.Ok, result.Error);
+        Assert.Equal(Path.Combine(outputDir, "my-game-unsigned.ipa"), result.IpaPath);
+        Assert.True(File.Exists(result.IpaPath));
+        Assert.True(SingleGameIpaExporter.VerifyStructure(result.IpaPath!, TitleId).Ok);
+    }
+
+    [Fact]
     public async Task MissingRomFailsWithAnActionableError()
     {
         using var temp = new TempDir();

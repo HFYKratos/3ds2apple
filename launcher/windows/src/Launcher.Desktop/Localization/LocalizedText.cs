@@ -39,8 +39,16 @@ public sealed class LocalizedText
 
     // Library portable build packages (.32a export/import).
     public string LibraryImportBuildPackageAction => Loc.T("library.buildPackage.import");
-    public string LibraryExportBuildPackage => Loc.T("library.buildPackage.export");
+    public string LibraryImportBuildPackageTitle => Loc.T("library.buildPackage.import.title");
+    public string LibraryExport => Loc.T("library.export");
     public string LibraryConfirmImportReplace => Loc.T("library.buildPackage.confirmReplace");
+
+    // Library -> single Export dialog (format + destination + warnings).
+    public string ExportFormatBuildPackage => Loc.T("library.export.formatBuildPackage");
+    public string ExportFormatIpa => Loc.T("library.export.formatIpa");
+    public string ExportBrowse => Loc.T("library.export.browse");
+    public string ExportConfirm => Loc.T("library.export.confirm");
+    public string ExportCancel => Loc.T("library.export.cancel");
 
     // Deploy
     public string DeployTitle => Loc.T("deploy.title");
@@ -116,13 +124,16 @@ public sealed class LocalizedText
         _ => string.Empty,
     };
 
-    // Deploy -> Advanced build settings (AOT codegen options).
-    public string DeployAdvancedTitle => Loc.T("deploy.advanced.title");
-    public string DeployAdvancedBody => Loc.T("deploy.advanced.body");
-    public string DeployAdvancedOptLevel => Loc.T("deploy.advanced.optLevel");
-    public string DeployAdvancedLto => Loc.T("deploy.advanced.lto");
-    public string DeployAdvancedFastMath => Loc.T("deploy.advanced.fastMath");
-    public string DeployAdvancedReset => Loc.T("deploy.advanced.reset");
+    // Settings -> Advanced build settings (AOT codegen options).
+    public string SettingsAdvancedTitle => Loc.T("settings.advanced.title");
+    public string SettingsAdvancedBody => Loc.T("settings.advanced.body");
+    public string SettingsAdvancedOptLevel => Loc.T("settings.advanced.optLevel");
+    public string SettingsAdvancedOptLevelHint => Loc.T("settings.advanced.optLevelHint");
+    public string SettingsAdvancedLto => Loc.T("settings.advanced.lto");
+    public string SettingsAdvancedLtoHint => Loc.T("settings.advanced.ltoHint");
+    public string SettingsAdvancedFastMath => Loc.T("settings.advanced.fastMath");
+    public string SettingsAdvancedFastMathHint => Loc.T("settings.advanced.fastMathHint");
+    public string SettingsAdvancedReset => Loc.T("settings.advanced.reset");
 
     // Settings
     public string SettingsTitle => Loc.T("settings.title");

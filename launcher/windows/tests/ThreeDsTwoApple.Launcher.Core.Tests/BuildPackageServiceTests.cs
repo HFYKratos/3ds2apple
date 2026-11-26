@@ -126,6 +126,24 @@ public sealed class BuildPackageServiceTests
     }
 
     [Fact]
+    public async Task ExportHonoursACustomOutputFolder()
+    {
+        using var temp = new TempDir();
+        var custom = Path.Combine(temp.Path, "picked-folder");
+        var (workspace, cli, runner) = Create(temp,
+            _ => new ProcessResult(0, ExportJson(custom), string.Empty, false, true));
+        var service = new BuildPackageService(workspace, cli);
+
+        var outcome = await service.ExportAsync(new[] { TitleID }, compatibility: null, outputDirectory: custom);
+
+        Assert.True(outcome.Ok, outcome.Error);
+        Assert.True(Directory.Exists(custom));
+        Assert.Equal(custom, outcome.OutputDirectory);
+        var arguments = Assert.Single(runner.Requests).Arguments.ToList();
+        Assert.Equal(custom, arguments[arguments.IndexOf("--output-dir") + 1]);
+    }
+
+    [Fact]
     public async Task ExportWithoutTitleIdsExportsEveryBuiltPackage()
     {
         using var temp = new TempDir();

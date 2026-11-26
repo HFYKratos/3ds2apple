@@ -104,6 +104,7 @@ public sealed class SingleGameIpaExporter
         string? romPath,
         string version,
         string outputDirectory,
+        string? outputFileName = null,
         Action<string>? log = null,
         CancellationToken cancellationToken = default)
     {
@@ -176,7 +177,13 @@ public sealed class SingleGameIpaExporter
                     : "The game's cover.png could not be read; the template app icon was kept.");
             }
 
-            var fileName = OutputFileName(pack.DisplayName, title, version);
+            var fileName = string.IsNullOrWhiteSpace(outputFileName)
+                ? OutputFileName(pack.DisplayName, title, version)
+                : Path.GetFileName(outputFileName);
+            if (!fileName.EndsWith(".ipa", StringComparison.OrdinalIgnoreCase))
+            {
+                return SingleGameIpaExportResult.Failure("The IPA file name must end with .ipa (got " + fileName + ").");
+            }
             var finalPath = Path.Combine(outputDirectory, fileName);
             var replacedIcons = RewriteIpa(
                 composed.IpaPath,

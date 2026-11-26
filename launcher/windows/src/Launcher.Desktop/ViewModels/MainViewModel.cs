@@ -32,8 +32,7 @@ public sealed class GameRow : ObservableObject
         Entry = entry;
         RemoveCommand = new AsyncRelayCommand(() => _owner.RemoveGameAsync(this), () => !_owner.IsBusy);
         BuildCommand = new AsyncRelayCommand(() => _owner.BuildGameAsync(this), () => !_owner.IsBusy);
-        ExportBuildPackageCommand = new AsyncRelayCommand(() => _owner.ExportBuildPackageAsync(this), () => !_owner.IsBusy && HasRealPack);
-        ExportIpaCommand = new AsyncRelayCommand(() => _owner.ExportIpaAsync(this), () => !_owner.IsBusy && HasRealPack);
+        ExportCommand = new RelayCommand(() => _owner.OpenExportDialog(this), () => !_owner.IsBusy && HasRealPack);
         Refresh();
     }
 
@@ -101,17 +100,12 @@ public sealed class GameRow : ObservableObject
     /// <summary>"Build now": compile this game's GamePack ahead of a deploy (or reuse the cache).</summary>
     public AsyncRelayCommand BuildCommand { get; }
 
-    /// <summary>"Export .32a": write this game's portable build package into workspace/builds.</summary>
-    public AsyncRelayCommand ExportBuildPackageCommand { get; }
-
-    /// <summary>"Export IPA": compose an unsigned single-game IPA into workspace/exports.</summary>
-    public AsyncRelayCommand ExportIpaCommand { get; }
+    /// <summary>"Export": open the export dialog (.32a build package or unsigned single-game IPA).</summary>
+    public RelayCommand ExportCommand { get; }
 
     public string BuildNowLabel => Loc.T("library.buildNow");
 
-    public string ExportBuildPackageLabel => Loc.T("library.buildPackage.export");
-
-    public string ExportIpaLabel => Loc.T("library.exportIpa");
+    public string ExportLabel => Loc.T("library.export");
 
     /// <summary>Built/cache label or the exact rebuild reason (recorded buildCompatVersion + ROM fingerprint).</summary>
     public string BuildStatusText
@@ -149,16 +143,14 @@ public sealed class GameRow : ObservableObject
         OnPropertyChanged(nameof(RomLine));
         OnPropertyChanged(nameof(RemoveLabel));
         OnPropertyChanged(nameof(BuildNowLabel));
-        OnPropertyChanged(nameof(ExportBuildPackageLabel));
-        OnPropertyChanged(nameof(ExportIpaLabel));
+        OnPropertyChanged(nameof(ExportLabel));
     }
 
     public void RaiseCommandStates()
     {
         RemoveCommand.RaiseCanExecuteChanged();
         BuildCommand.RaiseCanExecuteChanged();
-        ExportBuildPackageCommand.RaiseCanExecuteChanged();
-        ExportIpaCommand.RaiseCanExecuteChanged();
+        ExportCommand.RaiseCanExecuteChanged();
     }
 
     /// <summary>Recompute the cache label; cheap (size/mtime only, never reads the ROM).</summary>
@@ -450,6 +442,10 @@ public sealed class MainViewModel : ObservableObject
     private bool _isBuildPackageWarning;
     private string? _pendingImportReplacePath;
     private string _orphanedGamesWarning = string.Empty;
+    private GameRow? _exportRow;
+    private bool _exportDialogVisible;
+    private bool _exportFormatIpa;
+    private string _exportDestination = string.Empty;
 
     public MainViewModel() : this(LauncherServices.Create())
     {
@@ -488,6 +484,11 @@ public sealed class MainViewModel : ObservableObject
         }, () => !IsBusy);
         ConfirmImportReplaceCommand = new AsyncRelayCommand(ConfirmImportReplaceAsync, () => CanConfirmImportReplace);
         ResetAdvancedBuildCommand = new RelayCommand(() => UpdateBuildOptions(AdvancedBuildOptions.Default), () => !IsBusy);
+        BrowseExportDestinationCommand = new RelayCommand(
+            () => BrowseExportDestinationRequested?.Invoke(_exportFormatIpa),
+            () => IsExportDialogVisible && !IsBusy);
+        ConfirmExportCommand = new AsyncRelayCommand(ConfirmExportAsync, () => CanConfirmExport);
+        CancelExportCommand = new RelayCommand(CancelExportDialog, () => IsExportDialogVisible && !IsBusy);
         RebuildLanguageOptions();
         RebuildDeploySteps();
         Log($"workspace: {_services.Workspace.Root} ({_services.Workspace.RootReason})");
@@ -520,8 +521,11 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Raised by the settings "Export log" button; the view shows a save picker.</summary>
     public event Action? ExportLogRequested;
 
-    /// <summary>Raised by the Library "Import .32a" button; the view shows a file picker.</summary>
+    /// <summary>Raised by the Library import-build-package button; the view shows a file picker.</summary>
     public event Action? ImportBuildPackageRequested;
+
+    /// <summary>Raised by the export dialog "Choose" button; true = IPA save file, false = .32a folder.</summary>
+    public event Action<bool>? BrowseExportDestinationRequested;
 
     public RelayCommand ShowLibraryCommand { get; }
     public RelayCommand ShowDeployCommand { get; }
@@ -545,6 +549,9 @@ public sealed class MainViewModel : ObservableObject
     public AsyncRelayCommand ImportBuildPackageCommand { get; }
     public AsyncRelayCommand ConfirmImportReplaceCommand { get; }
     public RelayCommand ResetAdvancedBuildCommand { get; }
+    public RelayCommand BrowseExportDestinationCommand { get; }
+    public AsyncRelayCommand ConfirmExportCommand { get; }
+    public RelayCommand CancelExportCommand { get; }
 
     /// <summary>Localized UI strings; replaced whenever the language changes.</summary>
     public LocalizedText L { get => _localized; private set => SetProperty(ref _localized, value); }
@@ -576,6 +583,7 @@ public sealed class MainViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(IsNotBusy));
                 OnPropertyChanged(nameof(CanDeploy));
+                OnPropertyChanged(nameof(CanConfirmExport));
                 RaiseCommandStates();
             }
         }
@@ -642,7 +650,161 @@ public sealed class MainViewModel : ObservableObject
 
     public bool IsLibraryEmpty => Games.Count == 0;
 
-    // --- Deploy -> Advanced settings (AOT codegen options, applied to the next build) ---
+    // --- Library -> single "Export" dialog (.32a build package or unsigned IPA) ---
+
+    /// <summary>True while the export dialog overlay is open.</summary>
+    public bool IsExportDialogVisible => _exportDialogVisible;
+
+    /// <summary>Radio: .32a build package (default).</summary>
+    public bool IsExportFormatBuildPackage
+    {
+        get => !_exportFormatIpa;
+        set
+        {
+            if (value)
+            {
+                SetExportFormat(ipa: false);
+            }
+        }
+    }
+
+    /// <summary>Radio: unsigned single-game IPA with the user's game data embedded.</summary>
+    public bool IsExportFormatIpa
+    {
+        get => _exportFormatIpa;
+        set
+        {
+            if (value)
+            {
+                SetExportFormat(ipa: true);
+            }
+        }
+    }
+
+    /// <summary>Selected destination: a folder for .32a exports, a save-file path for the IPA.</summary>
+    public string ExportDestination
+    {
+        get => _exportDestination;
+        set
+        {
+            if (SetProperty(ref _exportDestination, value))
+            {
+                OnPropertyChanged(nameof(CanConfirmExport));
+            }
+        }
+    }
+
+    public string ExportDialogTitle => _exportRow is { } row
+        ? Loc.T("library.export.title", row.DisplayName)
+        : Loc.T("library.export");
+
+    public bool IsExportDestinationFolder => !_exportFormatIpa;
+
+    public string ExportDestinationLabel => Loc.T(_exportFormatIpa
+        ? "library.export.destinationIpa"
+        : "library.export.destinationBuildPackage");
+
+    public string ExportFormatDetail => Loc.T(_exportFormatIpa
+        ? "library.export.detailIpa"
+        : "library.export.detailBuildPackage");
+
+    public string ExportWarnings => Loc.T(_exportFormatIpa
+        ? "library.export.warningsIpa"
+        : "library.export.warningsBuildPackage");
+
+    public bool CanConfirmExport => _exportDialogVisible && !IsBusy && !string.IsNullOrWhiteSpace(_exportDestination);
+
+    /// <summary>Library card "Export": open the format/location dialog for one built game.</summary>
+    public void OpenExportDialog(GameRow row)
+    {
+        if (IsBusy || !row.HasRealPack)
+        {
+            return;
+        }
+        _exportRow = row;
+        _exportFormatIpa = false;
+        _exportDestination = DefaultBuildPackageDestination();
+        _exportDialogVisible = true;
+        RaiseExportDialogProperties();
+    }
+
+    /// <summary>Close the export dialog without exporting.</summary>
+    public void CancelExportDialog()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+        _exportRow = null;
+        _exportDialogVisible = false;
+        RaiseExportDialogProperties();
+    }
+
+    private void SetExportFormat(bool ipa)
+    {
+        if (_exportFormatIpa == ipa)
+        {
+            return;
+        }
+        _exportFormatIpa = ipa;
+        if (_exportRow is { } row)
+        {
+            _exportDestination = ipa ? DefaultIpaDestination(row) : DefaultBuildPackageDestination();
+        }
+        RaiseExportDialogProperties();
+    }
+
+    private string DefaultBuildPackageDestination() =>
+        Path.Combine(_services.Workspace.Root, "builds");
+
+    private string DefaultIpaDestination(GameRow row) =>
+        Path.Combine(_services.Workspace.Root, SingleGameIpaExporter.ExportsDirectoryName,
+            SingleGameIpaExporter.OutputFileName(row.Entry.DisplayName, row.TitleID, LauncherInfo.Version));
+
+    private void RaiseExportDialogProperties()
+    {
+        OnPropertyChanged(nameof(IsExportDialogVisible));
+        OnPropertyChanged(nameof(IsExportFormatIpa));
+        OnPropertyChanged(nameof(IsExportFormatBuildPackage));
+        OnPropertyChanged(nameof(ExportDestination));
+        OnPropertyChanged(nameof(ExportDestinationLabel));
+        OnPropertyChanged(nameof(IsExportDestinationFolder));
+        OnPropertyChanged(nameof(ExportDialogTitle));
+        OnPropertyChanged(nameof(ExportFormatDetail));
+        OnPropertyChanged(nameof(ExportWarnings));
+        OnPropertyChanged(nameof(CanConfirmExport));
+        RaiseCommandStates();
+    }
+
+    private async Task ConfirmExportAsync()
+    {
+        if (IsBusy || _exportRow is not { } row)
+        {
+            return;
+        }
+        var destination = _exportDestination.Trim();
+        if (destination.Length == 0)
+        {
+            return;
+        }
+        var ipa = _exportFormatIpa;
+        _exportRow = null;
+        _exportDialogVisible = false;
+        RaiseExportDialogProperties();
+        if (ipa)
+        {
+            var path = destination.EndsWith(".ipa", StringComparison.OrdinalIgnoreCase)
+                ? destination
+                : destination + ".ipa";
+            await ExportIpaAsync(row, path).ConfigureAwait(true);
+        }
+        else
+        {
+            await ExportBuildPackageAsync(row, destination).ConfigureAwait(true);
+        }
+    }
+
+    // --- Settings -> Advanced build settings (AOT codegen options, applied to the next build) ---
 
     public IReadOnlyList<string> AotOptLevelOptions => AdvancedBuildOptions.OptLevels;
 
@@ -687,7 +849,7 @@ public sealed class MainViewModel : ObservableObject
 
     public bool IsAdvancedBuildCustomized => !_services.Workspace.BuildOptions.IsDefault;
 
-    public string AdvancedBuildSummary => Loc.T("deploy.advanced.summary", _services.Workspace.BuildOptions.Describe());
+    public string AdvancedBuildSummary => Loc.T("settings.advanced.summary", _services.Workspace.BuildOptions.Describe());
 
     /// <summary>Persist one advanced-option change; the cache key includes it, so affected packs rebuild.</summary>
     private void UpdateBuildOptions(AdvancedBuildOptions options)
@@ -1050,8 +1212,8 @@ public sealed class MainViewModel : ObservableObject
 
     // --- library build packages (.32a) -------------------------------------
 
-    /// <summary>Library card "Export .32a": write the portable build package for one game.</summary>
-    public async Task ExportBuildPackageAsync(GameRow row)
+    /// <summary>Export one game as a .32a build package into the chosen folder (default workspace/builds).</summary>
+    public async Task ExportBuildPackageAsync(GameRow row, string? outputDirectory = null)
     {
         if (IsBusy)
         {
@@ -1063,7 +1225,7 @@ public sealed class MainViewModel : ObservableObject
         {
             var compatibility = _buildCompatibility ?? await _services.BuildCompatibility.ResolveAsync().ConfigureAwait(true);
             _buildCompatibility = compatibility;
-            var outcome = await service.ExportAsync(new[] { row.TitleID }, compatibility).ConfigureAwait(true);
+            var outcome = await service.ExportAsync(new[] { row.TitleID }, compatibility, outputDirectory: outputDirectory).ConfigureAwait(true);
             if (!outcome.Ok)
             {
                 var detail = outcome.Errors.Count > 0 ? string.Join("; ", outcome.Errors) : outcome.Error ?? "no build package was written";
@@ -1170,8 +1332,8 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>Library card "Export IPA": compose one unsigned single-game IPA from the shell template.</summary>
-    public async Task ExportIpaAsync(GameRow row)
+    /// <summary>Export one game as an unsigned single-game IPA (default workspace/exports).</summary>
+    public async Task ExportIpaAsync(GameRow row, string? savePath = null)
     {
         if (IsBusy)
         {
@@ -1204,7 +1366,11 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             var template = Path.Combine(_services.ShellDirectory, shell.FileName);
-            var outputDirectory = Path.Combine(_services.Workspace.Root, SingleGameIpaExporter.ExportsDirectoryName);
+            var outputDirectory = string.IsNullOrWhiteSpace(savePath)
+                ? Path.Combine(_services.Workspace.Root, SingleGameIpaExporter.ExportsDirectoryName)
+                : Path.GetDirectoryName(Path.GetFullPath(savePath))
+                    ?? Path.Combine(_services.Workspace.Root, SingleGameIpaExporter.ExportsDirectoryName);
+            var outputFileName = string.IsNullOrWhiteSpace(savePath) ? null : Path.GetFileName(savePath);
             var exporter = new SingleGameIpaExporter(packCli);
             var pack = new ComposedPack(row.TitleID, row.Entry.DisplayName, row.Entry.ProductCode, 1, packPath);
             var result = await exporter.ExportAsync(
@@ -1214,6 +1380,7 @@ public sealed class MainViewModel : ObservableObject
                 romPath,
                 LauncherInfo.Version,
                 outputDirectory,
+                outputFileName,
                 line => Log("[ipa] " + line)).ConfigureAwait(true);
             if (!result.Ok)
             {
@@ -1267,6 +1434,65 @@ public sealed class MainViewModel : ObservableObject
             }
         }
         return null;
+    }
+
+    /// <summary>Developer-only (`--ui-smoke`): deterministic Library rows for UI screenshots.</summary>
+    public void SeedDeveloperSmokeFixtures(string fixtureDirectory)
+    {
+        Directory.CreateDirectory(fixtureDirectory);
+        var packPath = Path.Combine(fixtureDirectory, "GamePack-smoke.dylib");
+        var packBytes = new byte[] { 0xCF, 0xFA, 0xED, 0xFE, 0, 0, 0, 0 };
+        File.WriteAllBytes(packPath, packBytes);
+        var romPath = Path.Combine(fixtureDirectory, "Example Game.cci");
+        File.WriteAllBytes(romPath, new byte[] { 0x4E, 0x43, 0x53, 0x44, 0, 0, 0, 0 });
+        Games.Clear();
+        var built = new LibraryEntry
+        {
+            TitleID = "0004000000055E00",
+            DisplayName = "Example Game",
+            DisplayNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Example Game",
+                ["zh-Hans"] = "示例游戏",
+            },
+            Publisher = "Example Publisher",
+            ProductCode = "CTR-P-EXMP",
+            RomPath = romPath,
+            PackageDir = fixtureDirectory,
+            PackPath = packPath,
+            Pack = new PackRecord(new string('a', 64), packBytes.Length, "macho"),
+            State = "built",
+        };
+        var queued = new LibraryEntry
+        {
+            TitleID = "000400000011C500",
+            DisplayName = "Second Example",
+            DisplayNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = "Second Example",
+                ["zh-Hans"] = "第二个示例",
+            },
+            Publisher = "Example Publisher",
+            ProductCode = "CTR-P-EXM2",
+            RomPath = Path.Combine(fixtureDirectory, "Second Example.cci"),
+            PackageDir = fixtureDirectory,
+            State = "queued",
+        };
+        Games.Add(new GameRow(this, built));
+        Games.Add(new GameRow(this, queued));
+        OnPropertyChanged(nameof(IsLibraryEmpty));
+        OnPropertyChanged(nameof(GameCountText));
+        RaiseCommandStates();
+    }
+
+    /// <summary>Developer-only: open the export dialog for the first built smoke row.</summary>
+    public void OpenExportDialogForSmoke()
+    {
+        var row = Games.FirstOrDefault(candidate => candidate.HasRealPack) ?? Games.FirstOrDefault();
+        if (row is not null)
+        {
+            OpenExportDialog(row);
+        }
     }
 
     private void SetBuildPackageStatus(string text, bool warning)
@@ -2168,6 +2394,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(GameCountText));
         OnPropertyChanged(nameof(BuildAllLabel));
         OnPropertyChanged(nameof(AdvancedBuildSummary));
+        RaiseExportDialogProperties();
         OnPropertyChanged(nameof(DeploySelectedCountText));
         OnPropertyChanged(nameof(DeployStateLabel));
         OnPropertyChanged(nameof(DeployMessage));
@@ -2313,6 +2540,7 @@ public sealed class MainViewModel : ObservableObject
                      DeployCommand, ConfirmOrphanedDeployCommand, StopDeployCommand, BuildAllCommand, RefreshDevicesCommand, RefreshPrerequisitesCommand,
                      RefreshStatusCommand, RefreshReadinessCommand, OpenImpactorCommand,
                      ImportBuildPackageCommand, ConfirmImportReplaceCommand, ResetAdvancedBuildCommand,
+                     BrowseExportDestinationCommand, ConfirmExportCommand, CancelExportCommand,
                  })
         {
             switch (command)

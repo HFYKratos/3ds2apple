@@ -81,6 +81,7 @@ struct SettingsSheetView: View {
             languageCard
             signingCard
             deviceCard
+            advancedBuildCard
             logsCard
             aboutCard
         }
@@ -91,6 +92,7 @@ struct SettingsSheetView: View {
             VStack(alignment: .leading, spacing: 14) {
                 languageCard
                 signingCard
+                advancedBuildCard
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -226,6 +228,83 @@ struct SettingsSheetView: View {
     }
 
     // MARK: Logs
+
+    // MARK: Advanced build settings
+
+    /// AOT codegen options for the next build. Defaults keep the shipped behaviour
+    /// (O2 / LTO off / fast-math off); every row states its build/runtime effect.
+    private var advancedBuildCard: some View {
+        Card(title: strings.advancedBuildTitle) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(strings.advancedBuildBody)
+                    .font(.system(size: 11))
+                    .foregroundStyle(LauncherTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10) {
+                    Text(strings.advancedBuildOptLevel)
+                        .font(.system(size: 11.5))
+                    Picker("", selection: Binding(
+                        get: { settings.advancedBuildOptions.optLevel },
+                        set: { level in
+                            settings.setAdvancedBuildOptions(AdvancedBuildOptions(
+                                optLevel: level,
+                                lto: settings.advancedAotLto,
+                                fastMath: settings.advancedAotFastMath
+                            ))
+                        }
+                    )) {
+                        ForEach(AdvancedBuildOptions.optLevels, id: \.self) { level in
+                            Text(level).tag(level)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 100)
+                }
+                Text(strings.advancedBuildOptLevelHint)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(LauncherTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+                Toggle(strings.advancedBuildLto, isOn: Binding(
+                    get: { settings.advancedAotLto },
+                    set: { value in
+                        settings.setAdvancedBuildOptions(AdvancedBuildOptions(
+                            optLevel: settings.advancedAotOptLevel,
+                            lto: value,
+                            fastMath: settings.advancedAotFastMath
+                        ))
+                    }
+                ))
+                .toggleStyle(.switch)
+                Text(strings.advancedBuildLtoHint)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(LauncherTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+                Toggle(strings.advancedBuildFastMath, isOn: Binding(
+                    get: { settings.advancedAotFastMath },
+                    set: { value in
+                        settings.setAdvancedBuildOptions(AdvancedBuildOptions(
+                            optLevel: settings.advancedAotOptLevel,
+                            lto: settings.advancedAotLto,
+                            fastMath: value
+                        ))
+                    }
+                ))
+                .toggleStyle(.switch)
+                Text(strings.advancedBuildFastMathHint)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(LauncherTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(strings.advancedBuildSummary(settings.advancedBuildOptions.describe))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(LauncherTheme.mutedText)
+                Button(strings.advancedBuildReset) {
+                    settings.resetAdvancedBuildOptions()
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(model.isBusy)
+            }
+        }
+    }
 
     private var logsCard: some View {
         Card(title: strings.logsTitle) {

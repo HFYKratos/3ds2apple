@@ -113,7 +113,7 @@ struct LauncherStrings {
     var libraryIPALabel: String
     // Portable .32a build packages (Library export/import; user data, never uploaded)
     var buildPackageImport: String
-    var buildPackageExport: String
+    var buildPackageImportTitle: String
     var buildPackageReplace: String
     var buildPackageNeedsPack: String
     var buildPackageWithRom: String
@@ -123,8 +123,21 @@ struct LauncherStrings {
     var buildPackageExportFailedFormat: String
     var buildPackageImportFailedFormat: String
     var buildPackageConflictFormat: String
-    // Unsigned single-game IPA export (Library card "Export IPA")
-    var exportIpa: String
+    // Library -> single Export dialog (format + destination + warnings)
+    var exportButton: String
+    var exportTitleFormat: String
+    var exportFormatBuildPackage: String
+    var exportFormatIpa: String
+    var exportDetailBuildPackage: String
+    var exportDetailIpa: String
+    var exportDestinationBuildPackage: String
+    var exportDestinationIpa: String
+    var exportWarningsBuildPackage: String
+    var exportWarningsIpa: String
+    var exportBrowse: String
+    var exportConfirm: String
+    var exportCancel: String
+    // Unsigned single-game IPA export (result/log strings)
     var ipaExportedFormat: String
     var ipaExportFailedFormat: String
     var ipaUnsignedHint: String
@@ -133,6 +146,7 @@ struct LauncherStrings {
     var emptyLibraryMessage: String
     var importGame: String
     var importButton: String
+    var importROMButton: String
     var openLibrary: String
     var addFirstGame: String
     var remove: String
@@ -199,8 +213,11 @@ struct LauncherStrings {
     var advancedBuildTitle: String
     var advancedBuildBody: String
     var advancedBuildOptLevel: String
+    var advancedBuildOptLevelHint: String
     var advancedBuildLto: String
+    var advancedBuildLtoHint: String
     var advancedBuildFastMath: String
+    var advancedBuildFastMathHint: String
     var advancedBuildSummaryFormat: String
     var advancedBuildReset: String
     var deployDeviceTitle: String
@@ -328,12 +345,12 @@ struct LauncherStrings {
         librarySubtitle = t("Your own games, one shell", "你自己的游戏，一个外壳")
         libraryCountFormat = t("%d game(s) in the library", "游戏库中有 %d 个游戏")
         libraryIPALabel = t("Library IPA", "游戏库 IPA")
-        buildPackageImport = t("Import .32a", "导入 .32a")
-        buildPackageExport = t("Export .32a", "导出 .32a")
+        buildPackageImport = t("Import", "导入")
+        buildPackageImportTitle = t("Import build package", "导入构建包")
         buildPackageReplace = t("Replace existing package", "覆盖现有包")
         buildPackageNeedsPack = t(
-            "Build the GamePack first: only a real AOT pack can be exported.",
-            "请先构建 GamePack：只有真实 AOT 包才能导出。"
+            "Build the GamePack first: Export becomes available once the GamePack exists.",
+            "请先构建 GamePack：生成后才能导出。"
         )
         buildPackageWithRom = t(
             "(includes game data; keep it local, never upload or commit it)",
@@ -351,7 +368,31 @@ struct LauncherStrings {
             "A package for this game already exists. %@",
             "该游戏已存在构建包。%@"
         )
-        exportIpa = t("Export IPA", "导出 IPA")
+        exportButton = t("Export", "导出")
+        exportTitleFormat = t("Export %@", "导出 %@")
+        exportFormatBuildPackage = t(".32a build package", ".32a 构建包")
+        exportFormatIpa = t("Unsigned single-game IPA", "未签名单游戏 IPA")
+        exportDetailBuildPackage = t(
+            "Writes <slug>.32a into the selected folder (portable build package: GamePack + GameInfo + cover; includes game data when it can be found).",
+            "把 <slug>.32a 写入所选文件夹（便携构建包：GamePack + GameInfo + 封面；能找到游戏数据时一并包含）。"
+        )
+        exportDetailIpa = t(
+            "Composes an unsigned single-game IPA with this game's AOT pack, the shell, the app icons and your own game data embedded, so it opens directly after signing/installing.",
+            "组合未签名单游戏 IPA：内嵌本游戏的 AOT 包、外壳、App 图标以及你自己的游戏数据，自签安装后可直接进入游戏。"
+        )
+        exportDestinationBuildPackage = t("Destination folder (default: workspace/builds)", "目标文件夹（默认 workspace/builds）")
+        exportDestinationIpa = t("Save IPA as (default: workspace/exports)", "保存 IPA 为（默认 workspace/exports）")
+        exportWarningsBuildPackage = t(
+            "May contain your own game data. Keep the file local; never upload, share or commit it.",
+            "可能包含你自己的游戏数据；仅保存在本地，切勿上传、外传或提交。"
+        )
+        exportWarningsIpa = t(
+            "Contains your own game data and is NOT signed: sign it yourself with Sideloadly or AltStore. Keep it local; never upload or share it.",
+            "包含你自己的游戏数据且未签名：请自行用 Sideloadly 或 AltStore 签名；仅保存在本地，切勿上传或外传。"
+        )
+        exportBrowse = t("Choose…", "选择…")
+        exportConfirm = t("Export", "导出")
+        exportCancel = t("Cancel", "取消")
         ipaExportedFormat = t("Exported %@ (%@)  %@", "已导出 %@（%@）  %@")
         ipaExportFailedFormat = t("IPA export failed: %@", "IPA 导出失败：%@")
         ipaUnsignedHint = t(
@@ -369,6 +410,7 @@ struct LauncherStrings {
         )
         importGame = t("Import game", "导入游戏")
         importButton = t("Import", "导入")
+        importROMButton = t("Import ROM", "导入 ROM")
         openLibrary = t("Go to Library", "去游戏库导入")
         addFirstGame = t("Import your first game", "导入第一个游戏")
         remove = t("Remove", "移除")
@@ -437,13 +479,25 @@ struct LauncherStrings {
         deployNoGames = t("Your library is empty. Import a game first.", "游戏库还是空的，请先导入游戏。")
         advancedBuildTitle = t("Advanced build settings", "高级构建设置")
         advancedBuildBody = t(
-            "Applied to the next build. The defaults keep the current behaviour; the same options are part of the Windows launcher's build cache key.",
-            "应用于下一次构建。默认值保持现有行为；这些选项也是 Windows 启动器构建缓存 key 的一部分。"
+            "Applied to the next build. The defaults keep the current behaviour; changing an option invalidates the build cache for the affected games. The same options are part of the Windows launcher's build-cache key.",
+            "应用于下一次构建。默认值保持现有行为；改动选项会让受影响游戏的构建缓存失效。这些选项也是 Windows 启动器构建缓存 key 的一部分。"
         )
-        advancedBuildOptLevel = t("Optimization level", "优化级别")
-        advancedBuildLto = t("Link-time optimization (LTO)", "链接时优化（LTO）")
-        advancedBuildFastMath = t("Fast-math (changes guest float results)", "fast-math（改变 guest 浮点结果）")
-        advancedBuildSummaryFormat = t("Current: %@. Applied to the next build.", "当前：%@。应用于下一次构建。")
+        advancedBuildOptLevel = t("Optimization level (default O2)", "优化级别（默认 O2）")
+        advancedBuildOptLevelHint = t(
+            "O1 / O2 / O3 / Oz. Higher levels build slower; game performance may improve (measure on a device first).",
+            "O1 / O2 / O3 / Oz。级别越高端构建越慢，游戏性能可能更好（请先在真机上测量）。"
+        )
+        advancedBuildLto = t("Link-time optimization (LTO, default off)", "链接时优化 LTO（默认关）")
+        advancedBuildLtoHint = t(
+            "Enables -flto: the build/link takes longer; performance may improve slightly.",
+            "启用 -flto：构建/链接时间更长，性能可能略有提升。"
+        )
+        advancedBuildFastMath = t("Fast-math (default off)", "fast-math（默认关）")
+        advancedBuildFastMathHint = t(
+            "Changes guest floating-point results; use for measurement/experiments only. The shipped default build does not enable it.",
+            "会改变 guest 浮点结果，仅用于测量/实验；默认发布构建不会开启。"
+        )
+        advancedBuildSummaryFormat = t("Current: %@. Applied to the next build (build-cache key included).", "当前：%@。应用于下一次构建（已计入构建缓存 key）。")
         advancedBuildReset = t("Reset to defaults", "恢复默认值")
         deployDeviceTitle = t("Target device", "目标设备")
         deployDeviceNone = t("No iPhone/iPad detected. Connect it, unlock it and tap Trust.", "未检测到 iPhone/iPad。请连接、解锁并点按信任。")
