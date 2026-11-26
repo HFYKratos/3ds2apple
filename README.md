@@ -290,7 +290,7 @@ On a physical iPhone, **one retail title** run through the Windows launcher path
 ## Repository layout
 
 ```text
-assets/            app icon used by this README
+docs/assets/       app icon, hero and preview art used by this README
 .github/           issue report and pull request templates
 ios/app/           iOS app: library, in-game menu, touch controls, save states
 ios/zakuro-ios/    Zakuro iOS C ABI: GamePack loader, Metal presenter, perf counters

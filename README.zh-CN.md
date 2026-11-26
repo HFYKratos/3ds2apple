@@ -290,7 +290,7 @@ Windows 与 macOS 各有一个启动器。导入你自有的已解密 `.3ds`/`.c
 ## 仓库结构
 
 ```text
-assets/            本 README 使用的 App 图标
+docs/assets/       本 README 使用的 App 图标、hero 与预览图
 .github/           问题报告与 PR 模板
 ios/app/           iOS App：游戏库、游戏内菜单、触摸控制、即时存档
 ios/zakuro-ios/    Zakuro iOS C ABI：GamePack 加载器、Metal presenter、性能计数

@@ -293,7 +293,7 @@ Windows 用と macOS 用のランチャーがあります。自分で吸い出�
 ## リポジトリ構成
 
 ```text
-assets/            この README で使うアプリアイコン
+docs/assets/       この README で使うアプリアイコン、ヒーロー画像とプレビュー
 .github/           問題報告とプルリクエストのテンプレート
 ios/app/           iOS アプリ：ライブラリ、ゲーム内メニュー、タッチコントロール、セーブステート
 ios/zakuro-ios/    Zakuro iOS C ABI：GamePack ローダー、Metal プレゼンター、パフォーマンスカウンター

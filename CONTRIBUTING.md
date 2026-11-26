@@ -69,11 +69,11 @@ minimal: users download one package, and GitHub provides the asset digests.
 
 ### Repository page branding
 
-- The repository README shows the app icon from `assets/icon.png`.
+- The repository README shows the app icon from `docs/assets/readme-icon.png`.
 - GitHub does **not** expose an API for a repository's social preview (and a
   user-owned repository's avatar is the account avatar). Upload
-  `assets/social-preview.png` (1280x640) once in **Settings -> Social preview**
-  so link previews show the app icon.
+  `docs/assets/social-preview.png` (1280x640) once in **Settings -> Social
+  preview** so link previews show the app icon.
 
 ### Assets (exactly two)
 

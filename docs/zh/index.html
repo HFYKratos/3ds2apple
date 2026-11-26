@@ -217,7 +217,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v18M3 12h18M12 3l3 3M12 3 9 6M12 21l3-3M12 21l-3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>
           <h3>游戏内编辑按键</h3>
-          <p>暂停 → <em>虚拟按键选项 → 编辑布局</em>：在暂停画面上拖动每个控件，点中央的<em>完成</em>保存并继续游戏。0.1.6 的编辑器改为全屏、单一静止画布，松手时一次性提交。</p>
+          <p>暂停 → <em>虚拟按键选项 → 编辑布局</em>：在暂停画面上拖动每个控件，点中央的<em>完成</em>保存并继续游戏。编辑器为全屏、单一静止画布，松手时一次性提交。</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h8M8 13h8M8 17h5"/></svg>
@@ -269,7 +269,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         <h3>纵向 <span class="count">3 种预设</span></h3>
         <p>纵向时整组虚拟按键位于画面下方的空白带，不会遮挡屏幕；默认纵向画面与 HOME 槽设置按钮见上方虚拟按键一节。</p>
       </div>
-      <p class="fine">屏幕旋转与方向保留，自定义布局现在也随 GPU presenter 旋转与交换；若无法创建 GPU presenter，会回退到屏幕回读路径。渲染分辨率（1x–4x）仍在下次加载游戏时生效；0.2.0 在 设置 → 图形 重新加入 Integer scaling 与 Screen aspect（适应 / 4:3 / 拉伸），并移除只读的 Renderer 行。</p>
+      <p class="fine">屏幕旋转与方向保留，自定义布局现在也随 GPU presenter 旋转与交换；若无法创建 GPU presenter，会回退到屏幕回读路径。渲染分辨率（1x–4x）仍在下次加载游戏时生效；设置 → 图形 下提供 Integer scaling 与 Screen aspect（适应 / 4:3 / 拉伸），渲染器自动选择（不再显示旧的只读 Renderer 行）。</p>
     </div>
   </section>
 
@@ -278,7 +278,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
       <div class="section-head">
         <p class="eyebrow">虚拟按键</p>
         <h2>完整的 3DS 虚拟按键。</h2>
-        <p>屏幕上的按键是完整的 New 3DS 键位，带真模拟量摇杆，并可在暂停菜单里逐项自定义。0.2.1 默认布局基于两套 Delta 参考皮肤（竖屏 ModernFS、横屏 ModernHybrid），关闭虚拟按键后设置按钮仍常显；快进、快速保存、快速读取、交换屏幕是可编辑的屏幕按钮。</p>
+        <p>屏幕上的按键是完整的 New 3DS 键位，带真模拟量摇杆，并可在暂停菜单里逐项自定义。默认布局基于两套 Delta 参考皮肤（竖屏 ModernFS、横屏 ModernHybrid），关闭虚拟按键后设置按钮仍常显；快进、快速保存、快速读取、交换屏幕是可编辑的屏幕按钮。</p>
       </div>
       <div class="controls-grid">
         <div class="two-shots">
@@ -295,11 +295,11 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
           <h3>完整的 New 3DS 键位</h3>
           <ul class="control-list">
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg><div><b>真模拟量 Circle Pad</b><span>每轴输出 −1…1，带小死区，手指静止时精确为 0——不是第二套十字键。</span></div></li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg><div><b>New 3DS C 杆</b><span>与 Circle Pad 同理；需要游戏本身读取 New 3DS 摇杆，且壳必须用当前运行库构建。0.1.6 起默认隐藏——在「切换控制」里为读取摇杆的游戏开启。</span></div></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg><div><b>New 3DS C 杆</b><span>与 Circle Pad 同理；需要游戏本身读取 New 3DS 摇杆，且壳必须用当前运行库构建。默认隐藏——在「切换控制」里为读取摇杆的游戏开启。</span></div></li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 4v16M4 12h16M12 4l-3 3M12 4l3 3M12 20l-3-3M12 20l3-3M4 12l3-3M4 12l3 3M20 12l-3-3M20 12l-3 3"/></svg><div><b>单个十字键</b><span>一个十字形控件：四个方向按压区，按住可滑动换向，按下时有触感反馈。</span></div></li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="4"/><path d="M7 11v2M6 12h2M15 11.5h.01M17.5 13.5h.01"/></svg><div><b>全部按键</b><span>A/B/X/Y、L/R、ZL/ZR、Start/Select。手柄左摇杆映射 Circle Pad、右摇杆映射 C 杆，L2/R2 映射 ZL/ZR；0.2.0 新增模拟死区、物理按键重映射、2–4 键 hotkey、Standard / High contrast 屏幕控件外观与按游戏 Gamepad profile。</span></div></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="4"/><path d="M7 11v2M6 12h2M15 11.5h.01M17.5 13.5h.01"/></svg><div><b>全部按键</b><span>A/B/X/Y、L/R、ZL/ZR、Start/Select。手柄左摇杆映射 Circle Pad、右摇杆映射 C 杆，L2/R2 映射 ZL/ZR；模拟死区、物理按键重映射、2–4 键 hotkey、Standard / High contrast 屏幕控件外观与按游戏 Gamepad profile 均可配置。</span></div></li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3"/><rect x="4" y="11" width="16" height="10" rx="2"/></svg><div><b>多点触控 + 触感</b><span>多根手指可同时按按键、拖摇杆；触感反馈可开关。</span></div></li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><div><b>动作按钮（0.1.6）</b><span>快进（2× 切换）、快速保存、快速读取与交换屏幕，都会出现在「切换控制」与「调整大小」里。</span></div></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><div><b>动作按钮</b><span>快进（2× 切换）、快速保存、快速读取与交换屏幕，都会出现在「切换控制」与「调整大小」里。</span></div></li>
           </ul>
           <div class="vc-card">
             <h3>暂停菜单 → 虚拟按键选项</h3>
@@ -358,7 +358,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
             <li>下载并解压 <code>3ds2apple-&lt;version&gt;-windows-x64.zip</code> 到一个可写目录（不要放 <em>Program Files</em>）。安装 <em>Apple Devices</em>，让手机可通过 USB 连接。</li>
             <li>运行 <code>3ds2apple-launcher.exe</code>。exe 未做代码签名：先核对摘要，再选择「更多信息 → 仍要运行」。运行一次 <em>Settings → self-test</em>，应显示绿色通过。</li>
             <li><b>Library → Import</b> 导入你自有的已解密 <code>.3ds</code>/<code>.cci</code>。只读取 ROM 头与 SMDH 图标/元数据。</li>
-            <li>勾选游戏并按 <b>Deploy</b>：编译 GamePack、用内置 Impactor（你自己的 Apple ID）签名并安装一个不含 ROM 的 IPA，然后只推送游戏数据。0.1.6 起启动器先读取手机状态并增量更新；覆盖安装保留 Documents 与存档，手机独有的游戏数据永不删除。</li>
+            <li>勾选游戏并按 <b>Deploy</b>：编译 GamePack、用内置 Impactor（你自己的 Apple ID）签名并安装一个不含 ROM 的 IPA，然后只推送游戏数据。启动器先读取手机状态并增量更新；覆盖安装保留 Documents 与存档，手机独有的游戏数据永不删除。</li>
             <li>打开 App 开玩。增删游戏后再部署一次；彻底卸载会清除已推送的数据。</li>
           </ol>
         </article>
@@ -409,7 +409,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         </details>
         <details>
           <summary>启动器具体做了什么？</summary>
-          <div class="a"><p>读取 ROM 头与 SMDH 元数据，用本机 LLVM 或 Apple clang 为每款选中的游戏编译 GamePack，把不含 ROM 的基础 IPA 与 GameCatalog 合成，用你的 Apple ID 签名安装，然后只把 <code>GameRom.cci</code> 与 <code>GameInfo.json</code> 推送到 App 的 Documents 目录。Windows 启动器自 0.1.6 起还会先检查已装 App 与游戏数据，做设备感知的增量部署：覆盖更新不丢 Documents 与存档，只推送缺失的数据。</p></div>
+          <div class="a"><p>读取 ROM 头与 SMDH 元数据，用本机 LLVM 或 Apple clang 为每款选中的游戏编译 GamePack，把不含 ROM 的基础 IPA 与 GameCatalog 合成，用你的 Apple ID 签名安装，然后只把 <code>GameRom.cci</code> 与 <code>GameInfo.json</code> 推送到 App 的 Documents 目录。Windows 启动器还会先检查已装 App 与游戏数据，做设备感知的增量部署：覆盖更新不丢 Documents 与存档，只推送缺失的数据。</p></div>
         </details>
         <details>
           <summary>macOS 启动器可以正常用了吗？</summary>
@@ -425,7 +425,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         </details>
         <details>
           <summary>如何从旧版本升级？</summary>
-          <div class="a"><p>用 0.2.1 启动器重新部署即可。Windows 启动器会先读取手机上的 App 与游戏状态并做增量更新——不会卸载 App，因此 Documents 与存档都会保留，手机独有的游戏数据也不会被删除。macOS 仍按原来的 导入 → 部署 流程操作。</p></div>
+          <div class="a"><p>用当前启动器重新部署即可。Windows 启动器会先读取手机上的 App 与游戏状态并做增量更新——不会卸载 App，因此 Documents 与存档都会保留，手机独有的游戏数据也不会被删除。macOS 仍按原来的 导入 → 部署 流程操作。</p></div>
         </details>
         <details>
           <summary>我能帮什么忙？</summary>
@@ -447,7 +447,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>macOS 仍是开发者预览</h3><p>macOS 启动器尚未自包含，真机安装尚未验证——<a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a>。Windows 路径才是已验证的。</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>C 杆取决于游戏</h3><p>它通过 New 3DS 摇杆 API 上报；不读取该 API 的游戏会忽略它，用旧运行库构建的壳也不提供。默认隐藏——游戏读取摇杆时在「切换控制」里开启。</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>不承诺兼容性与性能</h3><p>部分游戏可能无法启动或运行较慢。README 里的参考数据来自维护者对特定游戏的实测，不构成保证。</p></div></article>
-        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>0.2.1 未包含</h3><p>Delta 风格皮肤导入、金手指管理器、游戏说明书查看器、amiibo、麦克风、摄像头与网络/在线功能不在 0.2.1 内——这些需要模拟器核心工作。CPU JIT、着色器 JIT、RPC 与 LLE 模块设置不适用于纯 AOT 架构。</p></div></article>
+        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>尚未包含</h3><p>Delta 风格皮肤导入、金手指管理器、游戏说明书查看器、amiibo、麦克风、摄像头与网络/在线功能暂不包含——这些需要模拟器核心工作。CPU JIT、着色器 JIT、RPC 与 LLE 模块设置不适用于纯 AOT 架构。</p></div></article>
         <article class="limit legal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 4 7v5c0 5 3.5 8 8 9 4.5-1 8-4 8-9V7l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg><div><h3>法律边界</h3><p>不提供 ROM、密钥、BIOS、系统文件或游戏资源，也不提供盗版支持。请只使用你合法拥有并自行导出的游戏。3ds2apple 与 Nintendo 无任何隶属关系。</p></div></article>
       </div>
     </div>
@@ -458,7 +458,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
       <div class="panel">
         <div>
           <h2>自备游戏，开始游玩。</h2>
-          <p>v0.2.1 现已提供 Windows 与 macOS 版本。完整指南、诊断流程与全部已知限制都在 README 里。</p>
+          <p>3ds2apple 现已提供 Windows 与 macOS 版本。完整指南、诊断流程与全部已知限制都在 README 里。</p>
         </div>
         <div class="cta-row">
           <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.2.1" rel="noopener">获取 v0.2.1</a>

@@ -293,7 +293,7 @@ Windows용과 macOS용 런처가 있습니다. 직접 덤프한 복호화 `.3ds`
 ## 저장소 구조
 
 ```text
-assets/            이 README에서 쓰는 앱 아이콘
+docs/assets/       이 README에서 쓰는 앱 아이콘, 히어로 이미지와 미리보기
 .github/           이슈 보고와 풀 리퀘스트 템플릿
 ios/app/           iOS 앱: 라이브러리, 게임 내 메뉴, 터치 컨트롤, 세이브 스테이트
 ios/zakuro-ios/    Zakuro iOS C ABI: GamePack 로더, Metal 프레젠터, 성능 카운터
