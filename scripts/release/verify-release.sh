@@ -34,7 +34,7 @@
 #                 the canonical zip file name (see check_windows_exe_version)
 #   optional      --win-selftest-log FILE: the log written by
 #                 scripts/release/win-selftest.sh must show exit code 0,
-#                 SELF-TEST OK, 32 PASS, 0 FAIL, 0 WARN and the expected
+#                 SELF-TEST OK, 33 PASS, 0 FAIL, 0 WARN and the expected
 #                 3ds2apple-launcher-windows/<ver> line (+1 PASS)
 #   always        prints byte size and SHA-256 of each verified asset, and the
 #                 uncompressed byte size of the Windows exe
@@ -87,7 +87,7 @@ Options:
   --win-selftest-log FILE
                       Log produced by scripts/release/win-selftest.sh on the
                       Windows host; adds one PASS when it proves exit code 0,
-                      SELF-TEST OK, 32 PASS, 0 FAIL, 0 WARN and the expected
+                      SELF-TEST OK, 33 PASS, 0 FAIL, 0 WARN and the expected
                       launcher version line.
   -h, --help          Show this help and exit.
 
@@ -236,7 +236,7 @@ check_win_selftest_log() {
   fail_lines="$(tr -d '\r' < "$log" 2>/dev/null | LC_ALL=C grep -a -c '^\[FAIL\]' || true)"
   warn_lines="$(tr -d '\r' < "$log" 2>/dev/null | LC_ALL=C grep -a -c '^\[WARN\]' || true)"
   if [ "$pass_lines" -ne 32 ]; then
-    problems="$problems 32 PASS lines expected, found $pass_lines;"
+    problems="$problems 33 PASS lines expected, found $pass_lines;"
   fi
   if [ "$fail_lines" -ne 0 ]; then
     problems="$problems $fail_lines FAIL lines;"
@@ -264,9 +264,9 @@ check_win_selftest_log() {
   fi
   if [ -z "$problems" ]; then
     if [ -n "$expected" ]; then
-      pass "windows zip: --win-selftest-log: 32 PASS / 0 FAIL / 0 WARN, SELF-TEST OK, exit code 0, 3ds2apple-launcher-windows/$expected ($log)"
+      pass "windows zip: --win-selftest-log: 33 PASS / 0 FAIL / 0 WARN, SELF-TEST OK, exit code 0, 3ds2apple-launcher-windows/$expected ($log)"
     else
-      pass "windows zip: --win-selftest-log: 32 PASS / 0 FAIL / 0 WARN, SELF-TEST OK, exit code 0 ($log)"
+      pass "windows zip: --win-selftest-log: 33 PASS / 0 FAIL / 0 WARN, SELF-TEST OK, exit code 0 ($log)"
     fi
   else
     fail "windows zip: --win-selftest-log does not prove a clean native self-test:$problems ($log)"
