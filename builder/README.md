@@ -39,6 +39,18 @@ target/debug/3ds2apple-pack catalog --all
 target/debug/3ds2apple-pack pack --all --execute --fake-shell --ipa-out ../IPA
 ```
 
+Advanced build settings (Deploy page, collapsed by default) change the AOT codegen
+attributes of the next build; the defaults reproduce the documented baseline:
+
+    target/debug/3ds2apple-pack build --queued --execute --opt-level O3 --lto --fast-math
+    # validation: --opt-level is O1|O2|O3|Oz; an unknown value is rejected
+
+Every plan step/command carries `THREEDS2APPLE_AOT_OPT` / `_LTO` / `_FAST_MATH`
+(the AOT scripts read them, see [scripts/README.md](../scripts/README.md) §5.1), so
+the default `-O2` build command is byte-for-byte unchanged. The macOS plan JSON
+also reports `buildOptions` and `cacheMarker` (`opt=...;lto=...;fastmath=...`),
+the same marker the launchers record in their build-cache key.
+
 Self-contained packages copy the user's ROM into the package as
 `GameRom.<ext>`, hashed and recorded as `romFile`/`romSha256`/`romBytes`, so the
 phone never imports game data. Pass `--include-rom` to `packages add`,
@@ -88,12 +100,54 @@ it after `packages add` and copy the fields they need. `GameCatalog.json`
    "packABIVersion":1}]}
 ```
 
+The optional root field `autoLaunch: true` marks a single-game catalogue: the shell
+opens the only listed game as soon as its library is ready instead of showing the
+game list (`3ds2apple-pack catalog --auto-launch`, used by the launchers' single-game
+IPA export). It is rejected for multi-game catalogues.
+
 `packFile` is app-bundle-relative, games are sorted by title ID and unique (the
 allocation is deterministic), and schema-1 (legacy static-link) catalogues are
 still accepted. The GamePack C ABI is versioned by `GAMEPACK_ABI_VERSION`
 (currently 1), declared by `ios/zakuro-ios/include/zakuro_gamepack.h` and
 implemented by the runtime in `ios/zakuro-ios`; a pack registers itself with
 `zk_gamepack_register` when the shell `dlopen()`s it.
+
+## Portable .32a build packages
+
+`3ds2apple-pack builds` writes and reads the portable, self-contained build
+package the desktop launchers expose as **Export .32a / Import .32a**. It is a
+ZIP container named `<build-slug>.32a` with these root entries:
+
+    manifest.json                  schema v1, the single source of truth (first entry)
+    GamePack-<TITLEID>.dylib       real arm64 Mach-O GamePack
+    GameInfo.json                  package manifest as exported (records the bundled ROM)
+    cover.png                      optional SMDH cover
+    GameRom.<ext>                  optional copy of the user's ROM
+
+manifest schema v1 fields: `format` (`3ds2apple-build`), `schemaVersion` (1),
+`titleID`, `displayName`, `productCode`, `aotVersion`, `appVersion`, `builtAt`
+(ISO-8601 UTC), `platform`, `toolchain` (`clang`, `llvm`), `buildOptions`
+(`optLevel` O1|O2|O3|Oz, `lto`, `fastMath`), `pack` (`file`, `bytes`,
+`sha256`, `format` `gamepack-macho`, `abiVersion`), `gameInfoSha256`,
+optional `coverSha256`, `rom` (`included`, optional `file`/`bytes`/`sha256`)
+and `sourceLauncher` (`os`, `version`).
+
+    target/debug/3ds2apple-pack --out out builds export --title-id <TITLEID>
+    target/debug/3ds2apple-pack --out out builds export --all
+    target/debug/3ds2apple-pack --out out builds list --json
+    target/debug/3ds2apple-pack --out out builds import <file>.32a [--replace]
+
+Export writes atomically into `<out>/builds/` and bundles the user's ROM when it
+can find one (the package's `GameRom.<ext>`, the queued ROM path, then
+`<out>/launcher-roms` or `<out>/../launcher-roms`); without a ROM the export
+still succeeds with a warning that deploying it needs the original ROM. Import
+validates the ZIP structure, manifest schema/version, title ID, pack SHA-256 +
+Mach-O magic, `GameInfo.json` hash/shape and every optional payload hash before
+installing into `<out>/packages/<TITLEID>/`; an existing package is only
+replaced with `--replace`, and unrelated files in it are never deleted.
+
+**A .32a can contain the user's game data.** It is user data like `out/`: keep it
+in the gitignored launcher workspace, never commit or upload it.
 
 ## Where the compile really runs
 

@@ -36,6 +36,10 @@ final class LauncherSettings: ObservableObject {
     /// from the signed app, or confirmed through the device bridge). The
     /// Documents push always uses this value, never a template default.
     @Published var installedBundleID: String
+    /// Deploy -> Advanced build settings (persisted; defaults keep -O2/no LTO/no fast-math).
+    @Published var advancedAotOptLevel: String
+    @Published var advancedAotLto: Bool
+    @Published var advancedAotFastMath: Bool
     /// Human summary when the previous <checkout>/out workspace was adopted on
     /// this launch (nil when there was nothing to migrate).
     @Published var migrationSummary: String?
@@ -64,6 +68,29 @@ final class LauncherSettings: ObservableObject {
         let installedAt = persist ? defaults.double(forKey: Keys.libraryInstalledAt) : 0
         libraryInstalledAt = installedAt > 0 ? Date(timeIntervalSince1970: installedAt) : nil
         installedBundleID = persist ? defaults.string(forKey: Keys.installedBundleID) ?? "" : ""
+        advancedAotOptLevel = persist ? defaults.string(forKey: Keys.aotOptLevel) ?? "O2" : "O2"
+        advancedAotLto = persist ? defaults.bool(forKey: Keys.aotLto) : false
+        advancedAotFastMath = persist ? defaults.bool(forKey: Keys.aotFastMath) : false
+    }
+
+    /// Current advanced codegen options (normalised to a supported level).
+    var advancedBuildOptions: AdvancedBuildOptions {
+        AdvancedBuildOptions(optLevel: advancedAotOptLevel, lto: advancedAotLto, fastMath: advancedAotFastMath).normalized
+    }
+
+    /// Persist one advanced-options change (applies to the next build; the same
+    /// options are part of the Windows launcher's build-cache key).
+    func setAdvancedBuildOptions(_ options: AdvancedBuildOptions) {
+        let normalized = options.normalized
+        advancedAotOptLevel = normalized.optLevel
+        advancedAotLto = normalized.lto
+        advancedAotFastMath = normalized.fastMath
+        save()
+    }
+
+    /// Reset the advanced build settings to the documented defaults.
+    func resetAdvancedBuildOptions() {
+        setAdvancedBuildOptions(AdvancedBuildOptions())
     }
 
     func save() {
@@ -74,6 +101,9 @@ final class LauncherSettings: ObservableObject {
         defaults.set(libraryIPAPath, forKey: Keys.libraryIPA)
         defaults.set(libraryInstalledAt?.timeIntervalSince1970 ?? 0, forKey: Keys.libraryInstalledAt)
         defaults.set(installedBundleID, forKey: Keys.installedBundleID)
+        defaults.set(advancedAotOptLevel, forKey: Keys.aotOptLevel)
+        defaults.set(advancedAotLto, forKey: Keys.aotLto)
+        defaults.set(advancedAotFastMath, forKey: Keys.aotFastMath)
     }
 
     // MARK: - Portable data root paths
@@ -139,6 +169,9 @@ final class LauncherSettings: ObservableObject {
         static let libraryIPA = "zl.libraryIPA"
         static let libraryInstalledAt = "zl.libraryInstalledAt"
         static let installedBundleID = "zl.installedBundleID"
+        static let aotOptLevel = "zl.aotOptLevel"
+        static let aotLto = "zl.aotLto"
+        static let aotFastMath = "zl.aotFastMath"
     }
 }
 

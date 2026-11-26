@@ -397,7 +397,7 @@ public sealed class DeployOrchestrator
                 }
                 var buildProgress = new BuildProgressAdapter(progress, entry.TitleID, displayName, index, buildTargets.Count);
                 var outcome = await _buildProvider.BuildAsync(
-                    new PackBuildRequest(entry.TitleID, displayName, entry.ProductCode, entry.RomPath, _workspace.WorkDirectory),
+                    new PackBuildRequest(entry.TitleID, displayName, entry.ProductCode, entry.RomPath, _workspace.WorkDirectory, _workspace.BuildOptions),
                     buildProgress,
                     line => log?.Invoke("[build] " + line),
                     cancellationToken).ConfigureAwait(false);
@@ -879,7 +879,7 @@ public sealed class DeployOrchestrator
         try
         {
             var outcome = await _buildProvider.BuildAsync(
-                new PackBuildRequest(entry.TitleID, displayName, entry.ProductCode, entry.RomPath, _workspace.WorkDirectory),
+                new PackBuildRequest(entry.TitleID, displayName, entry.ProductCode, entry.RomPath, _workspace.WorkDirectory, _workspace.BuildOptions),
                 progress: null,
                 line => log?.Invoke("[build] " + line),
                 cancellationToken).ConfigureAwait(false);

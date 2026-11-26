@@ -45,6 +45,15 @@ public sealed class LauncherStateDocument
     /// <summary>Tool binary overrides (tool key -> absolute path).</summary>
     public Dictionary<string, string> ToolOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Advanced AOT optimization level (O1/O2/O3/Oz; default O2).</summary>
+    public string AotOptLevel { get; set; } = "O2";
+
+    /// <summary>Advanced setting: link-time optimization for the AOT build.</summary>
+    public bool AotLto { get; set; }
+
+    /// <summary>Advanced setting: fast-math (changes guest float results).</summary>
+    public bool AotFastMath { get; set; }
+
     public List<LibraryEntry> Games { get; set; } = new();
 
     public PackBuildMode Mode =>
@@ -224,6 +233,23 @@ public sealed class LauncherWorkspace
     }
 
     public string CurrentLogPath => Path.Combine(LogsDirectory, $"launcher-{DateTimeOffset.Now:yyyyMMdd}.log");
+
+    /// <summary>Advanced AOT codegen options applied to the next build (persisted).</summary>
+    public AdvancedBuildOptions BuildOptions =>
+        new AdvancedBuildOptions(State.AotOptLevel, State.AotLto, State.AotFastMath).Normalized();
+
+    /// <summary>Persist the advanced build options (portable state.json).</summary>
+    public void SetBuildOptions(AdvancedBuildOptions options)
+    {
+        var normalized = options.Normalized();
+        lock (_stateLock)
+        {
+            State.AotOptLevel = normalized.OptLevel;
+            State.AotLto = normalized.Lto;
+            State.AotFastMath = normalized.FastMath;
+        }
+        SaveState();
+    }
 
     private static LauncherWorkspace OpenAt(string resolved, DataRootDecision location, WorkspaceMigrationResult? migration)
     {

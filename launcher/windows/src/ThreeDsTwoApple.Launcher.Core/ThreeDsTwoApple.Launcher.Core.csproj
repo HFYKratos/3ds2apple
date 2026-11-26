@@ -40,4 +40,10 @@
     <!-- Optional local build toolchain payload (whole tree, staged by the dist script). -->
     <EmbeddedResource Include="$(LauncherWindowsRoot)/Bin/llvm/**/*" LogicalName="Payload/Bin/llvm/%(RecursiveDir)%(Filename)%(Extension)" Condition="Exists('$(LauncherWindowsRoot)/Bin/llvm')" />
   </ItemGroup>
+  <!-- Single-game IPA export replaces the template AppIcon*.png files with the
+       game's SMDH cover (SkiaSharp; Avalonia already ships it, this pins the
+       version for the headless Core project). -->
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+  </ItemGroup>
 </Project>

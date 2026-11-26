@@ -241,6 +241,24 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
             ["CPATH"] = _tools.DarwinStubsDirectory!,
             ["PATH"] = _tools.LlvmBinDirectory + Path.PathSeparator + (Environment.GetEnvironmentVariable("PATH") ?? string.Empty),
         };
+        var advanced = (request.AdvancedOptions ?? AdvancedBuildOptions.Default).Normalized();
+        if (!advanced.IsDefault)
+        {
+            try
+            {
+                env["CC"] = WriteCompilerWrapper(_tools, advanced, root, request.WorkDirectory);
+            }
+            catch (IOException error)
+            {
+                return PackBuildOutcome.Failure(RecompFailedCode,
+                    "Could not prepare the advanced build compiler wrapper: " + error.Message);
+            }
+            log?.Invoke("Advanced build settings: " + advanced.Describe());
+            if (advanced.FastMath)
+            {
+                log?.Invoke("warning: fast-math changes guest float results; measurement builds only");
+            }
+        }
 
         log?.Invoke($"Local build: {request.RomPath} -> {buildName} (3dsrecomp, then LLVM/LLD)");
         progress?.Report(new BuildProgress("recomp", 0, "Running 3dsrecomp (ROM -> C -> arm64 objects)…"));
@@ -333,6 +351,47 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
         progress?.Report(new BuildProgress("done", 100, "Real GamePack built locally"));
         log?.Invoke($"Local build done: {dylibPath} ({packRecord.Bytes} bytes, sha256 {packRecord.Sha256}, compat {(compatibility?.ShortVersion ?? "?")}, rom sha256 {BuildCachePolicy.ShortHash(romSha256)})");
         return new PackBuildOutcome(true, true, dylibPath, packRecord, null, null, buildName, compatibility, romSha256, romBytes);
+    }
+
+    /// <summary>
+    /// 3dsrecomp compiles the generated C with a fixed -O2 after CC's leading
+    /// arguments, so a changed optimization level needs a wrapper that appends the
+    /// codegen flags after the fixed ones. Returns the CC value for the recompiler:
+    /// on Windows a space-free relative path run through cmd.exe (the recompiler's
+    /// working directory is the launcher work directory); elsewhere a shell wrapper.
+    /// The default options never reach this method, so the default build command is
+    /// byte-for-byte unchanged.
+    /// </summary>
+    internal static string WriteCompilerWrapper(
+        LocalToolchain tools,
+        AdvancedBuildOptions options,
+        string root,
+        string workDirectory)
+    {
+        var codegenDirectory = Path.Combine(root, "codegen");
+        Directory.CreateDirectory(codegenDirectory);
+        var suffix = options.CompilerArgumentSuffix();
+        if (OperatingSystem.IsWindows())
+        {
+            var wrapper = Path.Combine(codegenDirectory, "clang-wrapper.cmd");
+            var content = "@echo off\r\n\"" + tools.ClangPath + "\" --target=arm64-apple-ios16.0 %* " + suffix + "\r\n";
+            File.WriteAllText(wrapper, content);
+            var relative = Path.GetRelativePath(workDirectory, wrapper).Replace(Path.DirectorySeparatorChar, '/');
+            return "cmd.exe /c " + relative;
+        }
+        var shellWrapper = Path.Combine(codegenDirectory, "clang-wrapper.sh");
+        File.WriteAllText(shellWrapper,
+            "#!/bin/sh\nexec \"" + tools.ClangPath + "\" --target=arm64-apple-ios16.0 \"$@\" " + suffix + "\n");
+        try
+        {
+            File.SetUnixFileMode(shellWrapper,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+        catch (IOException)
+        {
+            // best effort: the product provider runs on Windows
+        }
+        return shellWrapper;
     }
 
     private void OnRecompLine(string line, IProgress<BuildProgress>? progress, Action<string>? log)

@@ -94,6 +94,11 @@ pub struct GameCatalog {
     /// Schema version: 2 for this pipeline, 1 for legacy static-link catalogs.
     #[serde(rename = "schemaVersion")]
     pub schema_version: u32,
+    /// Optional single-game launch marker (0.2.2 single-game IPA): the shell
+    /// starts the only catalogue entry as soon as its library is ready instead
+    /// of showing the game list. Additive root field; absent = normal library.
+    #[serde(rename = "autoLaunch", default, skip_serializing_if = "Option::is_none")]
+    pub auto_launch: Option<bool>,
     /// Games, sorted by title ID.
     pub games: Vec<CatalogGame>,
 }
@@ -173,6 +178,7 @@ impl GameCatalog {
         games.sort_by(|a, b| a.title_id.cmp(&b.title_id));
         let catalog = Self {
             schema_version: crate::CATALOG_SCHEMA_VERSION,
+            auto_launch: None,
             games,
         };
         catalog.validate()?;
@@ -184,6 +190,11 @@ impl GameCatalog {
         // Version 1 is the legacy statically-linked catalog; version 2 is what
         // this pipeline writes and what the AOT shell reads. Reject anything
         // newer than this pipeline understands instead of guessing.
+        if self.auto_launch == Some(true) && self.games.len() != 1 {
+            return Err(PackError::invalid(
+                "autoLaunch is only valid for a single-game catalogue (games must contain exactly one entry)",
+            ));
+        }
         if !matches!(self.schema_version, 1 | 2) {
             return Err(PackError::invalid(format!(
                 "unsupported catalogue schemaVersion {} (expected 1 or {})",
@@ -553,6 +564,7 @@ mod tests {
         again.rom_file = Some("Roms/0004000000055E00.cci".to_string());
         let second = GameCatalog {
             schema_version: catalog.schema_version,
+            auto_launch: catalog.auto_launch,
             games: vec![again],
         };
         assert_eq!(second.to_json().unwrap(), text);
@@ -570,5 +582,32 @@ mod tests {
         let mut valid = catalog.clone();
         valid.games[0].rom_file = Some("Roms/0004000000055E00.3ds".to_string());
         assert!(valid.validate().is_ok());
+    }
+
+    #[test]
+    fn auto_launch_is_only_valid_for_one_game() {
+        let mut catalog = GameCatalog::from_json(GOLDEN, Path::new("GameCatalog.json")).unwrap();
+        assert_eq!(catalog.auto_launch, None);
+        catalog.auto_launch = Some(true);
+        assert!(
+            catalog.validate().is_err(),
+            "a multi-game catalogue must not auto-launch"
+        );
+        catalog.games.truncate(1);
+        catalog.validate().unwrap();
+        let json = catalog.to_json().unwrap();
+        assert!(json.contains("\"autoLaunch\":true"), "{json}");
+        let reparsed = GameCatalog::from_json(&json, Path::new("GameCatalog.json")).unwrap();
+        assert_eq!(reparsed.auto_launch, Some(true));
+        let mut disabled = reparsed.clone();
+        disabled.auto_launch = Some(false);
+        let json = disabled.to_json().unwrap();
+        assert!(json.contains("\"autoLaunch\":false"), "{json}");
+        assert_eq!(
+            GameCatalog::from_json(&json, Path::new("GameCatalog.json"))
+                .unwrap()
+                .auto_launch,
+            Some(false)
+        );
     }
 }

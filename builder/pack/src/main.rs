@@ -25,6 +25,7 @@ use std::path::{Path, PathBuf};
 use clap::{Args, Parser, Subcommand};
 use serde_json::{json, Value};
 
+use builder_pack::builds;
 use builder_pack::error::PackError;
 use builder_pack::gameinfo::{self, PackageSummary};
 use builder_pack::ops::{self, ImportOptions, ImportStatus, RecordOptions};
@@ -69,6 +70,11 @@ enum Command {
     Catalog(CatalogArgs),
     /// Allocate built packages into one shell IPA (delegates app staging to scripts/).
     Pack(PackArgs),
+    /// Export, import and list portable .32a build packages (game data included).
+    Builds {
+        #[command(subcommand)]
+        command: BuildsCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -181,6 +187,15 @@ struct BuildArgs {
     /// resulting package is self-contained.
     #[arg(long)]
     include_rom: bool,
+    /// AOT optimization level passed to the build scripts (default O2).
+    #[arg(long, default_value = "O2", value_name = "O1|O2|O3|Oz")]
+    opt_level: String,
+    /// Enable link-time optimization (-flto) in the AOT build.
+    #[arg(long)]
+    lto: bool,
+    /// Enable fast-math (-ffast-math); changes guest float results.
+    #[arg(long = "fast-math")]
+    fast_math: bool,
 }
 
 #[derive(Debug, Args)]
@@ -194,6 +209,10 @@ struct CatalogArgs {
     /// Write the catalogue here (default: <out>/packages/GameCatalog.json).
     #[arg(long, value_name = "FILE")]
     catalog_out: Option<PathBuf>,
+    /// Mark the catalogue for a single-game IPA: the shell opens the only game
+    /// as soon as its library is ready (additive root field autoLaunch).
+    #[arg(long)]
+    auto_launch: bool,
 }
 
 #[derive(Debug, Args)]
@@ -222,6 +241,66 @@ struct PackArgs {
     /// Run scripts/build-multi-game-ipa.sh instead of printing its command.
     #[arg(long)]
     execute: bool,
+}
+
+#[derive(Debug, Subcommand)]
+enum BuildsCommand {
+    /// Write .32a build packages for built games into the builds directory.
+    Export(BuildsExportArgs),
+    /// Validate and install a .32a build package into the packages directory.
+    Import(BuildsImportArgs),
+    /// List the .32a build packages in the builds directory.
+    List,
+}
+
+#[derive(Debug, Args)]
+struct BuildsExportArgs {
+    /// Titles to export (repeatable).
+    #[arg(long = "title-id", value_name = "TITLE_ID")]
+    title_ids: Vec<String>,
+    /// Export every built package.
+    #[arg(long)]
+    all: bool,
+    /// Output directory (default: <out>/builds).
+    #[arg(long, value_name = "DIR")]
+    output_dir: Option<PathBuf>,
+    /// Platform tag recorded in the manifest (default: this host).
+    #[arg(long, value_name = "OS")]
+    platform: Option<String>,
+    /// App/shell version recorded in the manifest.
+    #[arg(long, value_name = "VERSION")]
+    app_version: Option<String>,
+    /// Launcher version recorded under sourceLauncher.
+    #[arg(long, value_name = "VERSION")]
+    launcher_version: Option<String>,
+    /// Clang version recorded in the manifest toolchain block.
+    #[arg(long, value_name = "VERSION")]
+    toolchain_clang: Option<String>,
+    /// LLVM version recorded in the manifest toolchain block.
+    #[arg(long, value_name = "VERSION")]
+    toolchain_llvm: Option<String>,
+    /// AOT optimization level recorded in the manifest.
+    #[arg(long, default_value = "O2", value_name = "O1|O2|O3|Oz")]
+    opt_level: String,
+    /// Record link-time optimization in the manifest.
+    #[arg(long)]
+    lto: bool,
+    /// Record fast-math in the manifest.
+    #[arg(long = "fast-math")]
+    fast_math: bool,
+    /// Extra directory searched for the user's ROM (repeatable).
+    #[arg(long = "rom-dir", value_name = "DIR")]
+    rom_dirs: Vec<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+struct BuildsImportArgs {
+    /// The .32a file to import.
+    #[arg(value_name = "FILE")]
+    file: PathBuf,
+    /// Replace the existing package for the same title (unrelated files are kept).
+    #[arg(long)]
+    replace: bool,
 }
 
 /// Entry point.
@@ -253,6 +332,11 @@ fn run(cli: Cli) -> Result<i32> {
         Command::Build(args) => cmd_build(out, args, json),
         Command::Catalog(args) => cmd_catalog(out, args, json),
         Command::Pack(args) => cmd_pack(out, args, json),
+        Command::Builds { command } => match command {
+            BuildsCommand::Export(args) => cmd_builds_export(out, args, json),
+            BuildsCommand::Import(args) => cmd_builds_import(out, args, json),
+            BuildsCommand::List => cmd_builds_list(out, json),
+        },
     }
 }
 
@@ -609,6 +693,12 @@ fn cmd_build(out: &Path, args: BuildArgs, json: bool) -> Result<i32> {
             "--display-name applies to a single ROM; import one ROM at a time to rename",
         ));
     }
+    let codegen = plan::CodegenOptions {
+        opt_level: args.opt_level.clone(),
+        lto: args.lto,
+        fast_math: args.fast_math,
+    };
+    codegen.validate()?;
     let mut errors: Vec<Value> = Vec::new();
     let mut titles: Vec<String> = Vec::new();
     if !args.roms.is_empty() {
@@ -733,7 +823,7 @@ fn cmd_build(out: &Path, args: BuildArgs, json: bool) -> Result<i32> {
                 )));
             }
         }
-        if let Err(error) = plan::execute(&entries, out, &repo_root) {
+        if let Err(error) = plan::execute(&entries, out, &repo_root, &codegen) {
             for entry in &entries {
                 let _ = ops::mark_failed(out, &entry.title_id, &error.to_string());
             }
@@ -769,25 +859,41 @@ fn cmd_build(out: &Path, args: BuildArgs, json: bool) -> Result<i32> {
     }
 
     // Default: print the macOS plan without running anything.
-    let text = plan::render_plan(&entries, out);
+    let text = plan::render_plan(&entries, out, &codegen);
     if json {
-        let commands: Vec<Vec<String>> = entries
+        let commands: Vec<Value> = entries
             .iter()
-            .flat_map(|entry| plan::steps(entry, out))
+            .flat_map(|entry| plan::steps(entry, out, &codegen))
             .map(|step| {
                 let mut command = vec![step.program.clone()];
                 command.extend(step.args.iter().cloned());
-                command
+                let env: std::collections::BTreeMap<String, String> = step
+                    .env
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect();
+                json!({"program": step.program, "args": command[1..].to_vec(), "env": env})
             })
             .collect();
         println!(
             "{}",
-            serde_json::to_string_pretty(
-                &json!({"mode": "plan", "commands": commands, "errors": errors})
-            )?
+            serde_json::to_string_pretty(&json!({
+                "mode": "plan",
+                "commands": commands,
+                "buildOptions": {
+                    "optLevel": codegen.opt_level,
+                    "lto": codegen.lto,
+                    "fastMath": codegen.fast_math,
+                },
+                "cacheMarker": codegen.cache_marker(),
+                "errors": errors,
+            }))?
         );
     } else {
         println!("{text}");
+        if codegen.fast_math {
+            println!("# warning: --fast-math changes guest float results; use it for measurement builds only");
+        }
         println!("# real build: run the commands above from the repository root on macOS,");
         println!(
             "# or run 'build --queued --execute' on the Mac; '--fake' writes placeholders here."
@@ -804,7 +910,7 @@ fn cmd_catalog(out: &Path, args: CatalogArgs, json: bool) -> Result<i32> {
             "catalog takes either --package-dir or --title-id, not both",
         ));
     }
-    let (catalog, packages) = if !args.package_dirs.is_empty() {
+    let (mut catalog, packages) = if !args.package_dirs.is_empty() {
         ops::allocate_dirs(&args.package_dirs)?
     } else {
         let filter = if args.title_ids.is_empty() {
@@ -814,6 +920,10 @@ fn cmd_catalog(out: &Path, args: CatalogArgs, json: bool) -> Result<i32> {
         };
         ops::allocate(out, filter)?
     };
+    if args.auto_launch {
+        catalog.auto_launch = Some(true);
+        catalog.validate()?;
+    }
     let path = args
         .catalog_out
         .unwrap_or_else(|| gameinfo::catalog_path(out));
@@ -824,6 +934,7 @@ fn cmd_catalog(out: &Path, args: CatalogArgs, json: bool) -> Result<i32> {
             serde_json::to_string_pretty(&json!({
                 "catalog": path.display().to_string(),
                 "summary": catalog.summary(),
+                "autoLaunch": catalog.auto_launch,
                 "games": catalog.games,
                 "packages": packages.iter().map(|package| package.title_id.clone()).collect::<Vec<_>>(),
             }))?
@@ -969,6 +1080,155 @@ fn cmd_pack(out: &Path, args: PackArgs, json: bool) -> Result<i32> {
         );
     }
     Ok(0)
+}
+
+// --- builds (.32a) ---------------------------------------------------------
+
+fn cmd_builds_export(out: &Path, args: BuildsExportArgs, json: bool) -> Result<i32> {
+    if args.all && !args.title_ids.is_empty() {
+        return Err(PackError::invalid(
+            "builds export takes either --title-id or --all, not both",
+        ));
+    }
+    if !args.all && args.title_ids.is_empty() {
+        return Err(PackError::invalid(
+            "builds export needs --title-id TITLE_ID (repeatable) or --all",
+        ));
+    }
+    let title_ids = (!args.all).then(|| args.title_ids.clone());
+    let options = builds::ExportOptions {
+        output_dir: args.output_dir.clone(),
+        platform: args
+            .platform
+            .clone()
+            .unwrap_or_else(|| std::env::consts::OS.to_string()),
+        app_version: args
+            .app_version
+            .clone()
+            .unwrap_or_else(|| builder_pack::VERSION.to_string()),
+        launcher_version: args
+            .launcher_version
+            .clone()
+            .unwrap_or_else(|| builder_pack::VERSION.to_string()),
+        toolchain: builds::BuildToolchain {
+            clang: args.toolchain_clang.clone().unwrap_or_default(),
+            llvm: args.toolchain_llvm.clone().unwrap_or_default(),
+        },
+        build_options: builds::BuildOptions {
+            opt_level: args.opt_level.clone(),
+            lto: args.lto,
+            fast_math: args.fast_math,
+        },
+        rom_search_dirs: args.rom_dirs.clone(),
+        built_at: None,
+    };
+    let report = builds::export(out, title_ids.as_deref(), &options)?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        println!(
+            "{} build package(s) in {}",
+            report.builds.len(),
+            report.output_dir
+        );
+        for build in &report.builds {
+            println!("  {}", build.path);
+            println!(
+                "    {}  {}  {} bytes  rom {}",
+                build.title_id,
+                build.display_name,
+                build.bytes,
+                if build.rom_included {
+                    "included"
+                } else {
+                    "not included"
+                }
+            );
+            for warning in &build.warnings {
+                println!("    warning: {warning}");
+            }
+        }
+        for error in &report.errors {
+            eprintln!("error: {}: {}", error.title_id, error.error);
+        }
+        if report.builds.iter().any(|build| build.rom_included) {
+            println!(
+                "note: a .32a can contain the user's game data; keep it local and never upload or commit it"
+            );
+        }
+    }
+    Ok(if report.errors.is_empty() { 0 } else { 1 })
+}
+
+fn cmd_builds_import(out: &Path, args: BuildsImportArgs, json: bool) -> Result<i32> {
+    let options = builds::ImportOptions {
+        replace: args.replace,
+    };
+    let imported = builds::import(out, &args.file, &options)?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({ "imported": imported }))?
+        );
+    } else {
+        println!("imported {}  {}", imported.title_id, imported.display_name);
+        println!("  package: {}", imported.package_dir);
+        println!(
+            "  pack: {} bytes sha256 {}",
+            imported.pack_bytes, imported.pack_sha256
+        );
+        if imported.replaced {
+            println!("  replaced the existing package build files");
+        }
+        for warning in &imported.warnings {
+            println!("  warning: {warning}");
+        }
+        println!("  run 'packages verify' and deploy from the launcher");
+    }
+    Ok(0)
+}
+
+fn cmd_builds_list(out: &Path, json: bool) -> Result<i32> {
+    let (summaries, errors) = builds::list(out)?;
+    if json {
+        let values: Vec<Value> = summaries
+            .iter()
+            .map(|summary| serde_json::to_value(summary))
+            .collect::<std::result::Result<_, _>>()?;
+        let error_values: Vec<Value> = errors
+            .iter()
+            .map(|(path, error)| json!({ "path": path.display().to_string(), "error": error }))
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({ "builds": values, "errors": error_values }))?
+        );
+        return Ok(if errors.is_empty() { 0 } else { 1 });
+    }
+    if summaries.is_empty() && errors.is_empty() {
+        println!(
+            "no .32a build packages in {}; export one with 'builds export --title-id TITLE_ID'",
+            builds::builds_root(out).display()
+        );
+        return Ok(0);
+    }
+    for summary in &summaries {
+        println!(
+            "{}  {:<8}  {:<32}  {:>10}  {}  {:<8}  rom={}  {}",
+            summary.title_id,
+            format!("v{}", summary.schema_version),
+            truncate(&summary.display_name, 32),
+            format_bytes(summary.bytes),
+            summary.built_at,
+            summary.platform,
+            if summary.rom_included { "yes" } else { "no" },
+            summary.path
+        );
+    }
+    for (path, error) in &errors {
+        eprintln!("warning: {}: {error}", path.display());
+    }
+    Ok(if errors.is_empty() { 0 } else { 1 })
 }
 
 // --- helpers ---------------------------------------------------------------

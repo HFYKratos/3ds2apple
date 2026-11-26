@@ -54,10 +54,24 @@
           <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
             <Button Content="{Binding L.LibraryImportAction}" Click="BrowseRomClicked" Classes="primary" />
             <Button Content="{Binding BuildAllLabel}" Command="{Binding BuildAllCommand}" Classes="ghost" />
+            <!-- Portable .32a build package: export the selected game row, or import one. -->
+            <Button Content="{Binding L.LibraryImportBuildPackageAction}" Command="{Binding ImportBuildPackageCommand}" Classes="ghost" />
             <ProgressBar Width="260" Value="{Binding ProgressValue}" IsVisible="{Binding IsImportRunning}" VerticalAlignment="Center" />
             <ProgressBar Width="260" Value="{Binding ProgressValue}" IsVisible="{Binding IsLibraryBuildProgressVisible}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding GameCountText}" Classes="caption" VerticalAlignment="Center" />
           </StackPanel>
+
+          <!-- .32a export path / import result / replace conflict (user data; never upload it). -->
+          <Border Classes="card" IsVisible="{Binding HasBuildPackageStatus}">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding BuildPackageStatus}" FontSize="12" TextWrapping="Wrap"
+                         Foreground="{DynamicResource AppWarningBrush}" IsVisible="{Binding IsBuildPackageWarning}" />
+              <TextBlock Text="{Binding BuildPackageStatus}" FontSize="12" TextWrapping="Wrap"
+                         Foreground="{DynamicResource AppAccentBrush}" IsVisible="{Binding !IsBuildPackageWarning}" />
+              <Button Content="{Binding L.LibraryConfirmImportReplace}" Command="{Binding ConfirmImportReplaceCommand}"
+                      Classes="ghost" HorizontalAlignment="Left" IsVisible="{Binding CanConfirmImportReplace}" />
+            </StackPanel>
+          </Border>
 
           <ItemsControl ItemsSource="{Binding Games}">
             <ItemsControl.ItemsPanel>
@@ -96,6 +110,8 @@
                     </StackPanel>
                     <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,14,0,0">
                       <Button Content="{Binding BuildNowLabel}" Command="{Binding BuildCommand}" Classes="primary" ToolTip.Tip="{Binding BuildStatusText}" />
+                      <Button Content="{Binding ExportBuildPackageLabel}" Command="{Binding ExportBuildPackageCommand}" Classes="ghost" />
+                      <Button Content="{Binding ExportIpaLabel}" Command="{Binding ExportIpaCommand}" Classes="ghost" />
                       <Button Content="{Binding RemoveLabel}" Command="{Binding RemoveCommand}" Classes="ghost" />
                     </StackPanel>
                   </Grid>
@@ -154,6 +170,25 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
             </StackPanel>
+          </Border>
+
+          <!-- Advanced build settings: collapsed by default; defaults keep the current
+               behaviour (O2 / LTO off / fast-math off). Changing an option invalidates
+               the build cache and applies to the next build. -->
+          <Border Classes="card">
+            <Expander Header="{Binding L.DeployAdvancedTitle}" IsExpanded="False">
+              <StackPanel Spacing="10">
+                <TextBlock Text="{Binding L.DeployAdvancedBody}" Classes="muted" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <TextBlock Text="{Binding L.DeployAdvancedOptLevel}" VerticalAlignment="Center" />
+                  <ComboBox ItemsSource="{Binding AotOptLevelOptions}" SelectedItem="{Binding SelectedAotOptLevel}" Width="120" />
+                </StackPanel>
+                <CheckBox Content="{Binding L.DeployAdvancedLto}" IsChecked="{Binding AotLto}" />
+                <CheckBox Content="{Binding L.DeployAdvancedFastMath}" IsChecked="{Binding AotFastMath}" />
+                <TextBlock Text="{Binding AdvancedBuildSummary}" Classes="caption" TextWrapping="Wrap" />
+                <Button Content="{Binding L.DeployAdvancedReset}" Command="{Binding ResetAdvancedBuildCommand}" Classes="ghost" HorizontalAlignment="Left" />
+              </StackPanel>
+            </Expander>
           </Border>
 
           <!-- Device-aware incremental deploy: what is installed and what this run will do. -->

@@ -172,6 +172,80 @@ install/push, and a marker write failure only warns (the next deploy treats the 
 state as unknown and updates once). The macOS launcher keeps the previous full deploy
 path for now: this incremental behaviour is Windows-only.
 
+### Portable .32a build packages (Library export/import)
+
+Each Library card has **Export .32a** next to **Build now** (enabled only for a
+real AOT GamePack) and the Library header has **Import .32a**. The launcher only
+passes paths and parses the pack CLI JSON; the Rust CLI
+(`3ds2apple-pack builds export|import|list`, see
+[builder/README.md](../../builder/README.md)) is the single writer/validator of
+the format.
+
+- Export writes `<portable data root>/workspace/builds/<build-slug>.32a`, a ZIP
+  with `manifest.json` (schema v1), `GamePack-<TITLEID>.dylib`, `GameInfo.json`,
+  optional `cover.png` and the user's `GameRom.<ext>` when the CLI can find it
+  (the package copy, the queued ROM path or `workspace/launcher-roms`). Without a
+  ROM the export still succeeds and the UI states that deploying it needs the
+  original ROM.
+- Import validates the ZIP/manifest/SHA-256/Mach-O structure, installs into
+  `workspace/out/packages/<TITLEID>/`, marks the queue built and refreshes the
+  Library so the game is immediately deployable. An existing package is reported
+  as a conflict with a **Replace existing package** confirmation (unrelated user
+  files in the package directory are kept).
+- The result path (or the exact error) is shown inline in the Library and in the
+  launcher log; the UI states that **a .32a can contain game data, so it must stay
+  local** (never upload or commit it). Nothing is signed, installed or uploaded.
+- Tests: `BuildPackageServiceTests.cs` (argument mapping, JSON parsing,
+  conflict/replace, missing CLI, workspace state) and the Rust `builder/pack`
+  tests (`builds::tests` + the CLI round trip in `tests/cli_local.rs`).
+
+### Advanced build settings (Deploy page, collapsed by default)
+
+The Deploy page has a collapsed **Advanced build settings** section with the AOT
+optimization level (O1/O2/O3/Oz), link-time optimization and fast-math, plus a
+**Reset to defaults** button. The defaults are exactly the shipped behaviour
+(O2 / LTO off / fast-math off) and keep the default build command unchanged.
+
+- The values persist in the portable `state.json` and apply to the **next**
+  build. Changing one invalidates the build-cache key: `buildCompatVersion`
+  now includes `opts=opt=..;lto=..;fastmath=..`, so affected games rebuild on the
+  next **Build now**/**Deploy** instead of reusing a stale pack (unchanged
+  defaults keep reusing existing packs until the toolchain marker changes).
+- The Windows local build (3dsrecomp + LLVM) compiles the generated C with a
+  fixed `-O2` after CC's leading arguments, so a non-default option writes a
+  small compiler wrapper (a `.cmd` invoked through `cmd.exe` with a space-free
+  relative path) that appends `-O3`/`-flto`/`-ffast-math` after the fixed flags.
+  The command is unchanged for the defaults.
+- The macOS launcher passes the same options to `3ds2apple-pack build`, which
+  forwards `THREEDS2APPLE_AOT_*` to `scripts/`.
+- Unverified on Windows hardware: the wrapper path is unit-tested but a real
+  native build with non-default options still needs a Windows/QA pass.
+
+### Unsigned single-game IPA export (Library row "Export IPA")
+
+Each Library card with a real AOT GamePack has **Export IPA** next to
+**Export .32a**/**Build now**. It composes one unsigned single-game IPA from the
+pinned ROM-free shell template:
+
+1. the pack CLI writes a schema-2 `GameCatalog.json` for the one title with
+   `--auto-launch` (the additive root field `autoLaunch: true`; the iOS shell
+   opens the game as soon as its library is ready);
+2. `IpaComposer` composes the template + the single `Frameworks/GamePack-<TITLEID>.dylib`
+   into a ROM-free app IPA;
+3. the IPA is rewritten to carry the autoLaunch catalogue and to replace every
+   template `AppIcon*.png` with the game's SMDH cover resized to the template
+   pixel size (SkiaSharp; the 48x48 SMDH icon is upscaled, which is soft but
+   recognisable). A missing/unreadable cover keeps the template icons and adds a
+   warning;
+4. the result is verified (Payload/*.app, no `Roms/`, schema-2 catalogue with the
+   title + autoLaunch, GamePack present, SHA-256) and written to
+   `<portable data root>/workspace/exports/<build-slug>-<version>-unsigned.ipa`.
+
+The UI shows the output path plus **unsigned IPA: sign it with Sideloadly or
+AltStore before installing**. Nothing is signed, installed or uploaded. Tests:
+`SingleGameIpaExportTests` (icon generator, IPA structure/catalogue, missing
+cover fallback, template/pack/catalog failures).
+
 ## Stack
 
 - .NET 10 + **Avalonia 12.1.6** desktop UI (same stack family S2Arm's Windows

@@ -26,7 +26,8 @@ public sealed record PackBuildRequest(
     string DisplayName,
     string? ProductCode,
     string RomPath,
-    string WorkDirectory);
+    string WorkDirectory,
+    AdvancedBuildOptions? AdvancedOptions = null);
 
 /// <summary>Progress from a pack build (stage + optional percent + human message).</summary>
 public sealed record BuildProgress(string Stage, double? Percent, string Message);

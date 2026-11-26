@@ -26,6 +26,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_debug_implementations)]
 
+pub mod builds;
 pub mod catalog;
 pub mod error;
 pub mod gameinfo;

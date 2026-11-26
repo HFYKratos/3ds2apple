@@ -232,6 +232,47 @@ public sealed class LocalWinbuildPackProviderTests
     }
 
     [Fact]
+    public async Task AdvancedOptions_ChangeTheRecompCompilerToAWrapper()
+    {
+        using var temp = new TempDir();
+        var toolchain = CreateToolchain(temp);
+        var rom = Path.Combine(temp.Path, "game.cci");
+        File.WriteAllBytes(rom, new byte[] { 1 });
+        string? seenCc = null;
+        var runner = new FakeProcessRunner(request =>
+        {
+            if (request.FileName == toolchain.RecompilerPath)
+            {
+                seenCc = request.Environment!["CC"];
+                return new ProcessResult(1, string.Empty, "stop after capturing the environment", false, true);
+            }
+            return new ProcessResult(1, string.Empty, "unexpected tool", false, true);
+        });
+        var provider = new LocalWinbuildPackProvider(toolchain, new PackCli(runner, toolchain.PackCliPath!, Path.Combine(temp.Path, "out")), runner);
+        var workDirectory = Path.Combine(temp.Path, "work");
+        var request = new PackBuildRequest(TitleId, "Demo", null, rom, workDirectory,
+            new AdvancedBuildOptions("O3", Lto: true, FastMath: true));
+
+        var outcome = await provider.BuildAsync(request, null, null);
+
+        Assert.False(outcome.Success);
+        Assert.Equal(LocalWinbuildPackProvider.RecompFailedCode, outcome.ErrorCode);
+        Assert.NotNull(seenCc);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.StartsWith("cmd.exe /c local-build/", seenCc, StringComparison.Ordinal);
+        }
+        var wrapper = Path.Combine(
+            workDirectory,
+            "local-build",
+            BuildSlug.From("Demo", TitleId),
+            "codegen",
+            OperatingSystem.IsWindows() ? "clang-wrapper.cmd" : "clang-wrapper.sh");
+        Assert.True(File.Exists(wrapper), wrapper);
+        Assert.Contains("-O3 -flto -ffast-math", File.ReadAllText(wrapper), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void LocalBuildIsTheDefaultDeployProvider_NoFeatureFlag()
     {
         using var temp = new TempDir();

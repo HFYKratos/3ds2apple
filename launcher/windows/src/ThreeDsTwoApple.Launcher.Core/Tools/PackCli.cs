@@ -41,6 +41,50 @@ public sealed record PackageListResult(
     IReadOnlyList<string> Errors,
     ProcessResult Process);
 
+/// <summary>One .32a reported by <c>builds export --json</c>.</summary>
+public sealed record ExportedBuildPackageInfo(
+    string TitleID,
+    string DisplayName,
+    string Path,
+    long Bytes,
+    string Sha256,
+    bool RomIncluded,
+    long PackBytes,
+    string PackSha256,
+    IReadOnlyList<string> Warnings);
+
+/// <summary>Result of <c>builds export --json</c>.</summary>
+public sealed record BuildPackageExportResult(
+    IReadOnlyList<ExportedBuildPackageInfo> Packages,
+    IReadOnlyList<string> Errors,
+    string? OutputDirectory,
+    ProcessResult Process)
+{
+    public bool Ok => Errors.Count == 0 && Packages.Count > 0 && Process.Ok;
+}
+
+/// <summary>One imported .32a reported by <c>builds import --json</c>.</summary>
+public sealed record ImportedBuildPackageInfo(
+    string TitleID,
+    string DisplayName,
+    string Path,
+    string PackageDir,
+    long PackBytes,
+    string PackSha256,
+    bool RomIncluded,
+    bool Replaced,
+    IReadOnlyList<string> Warnings);
+
+/// <summary>Result of <c>builds import --json</c>.</summary>
+public sealed record BuildPackageImportResult(
+    ImportedBuildPackageInfo? Package,
+    IReadOnlyList<string> Warnings,
+    string? Error,
+    ProcessResult Process)
+{
+    public bool Ok => Package is not null && Error is null && Process.Ok;
+}
+
 /// <summary>Probe result for the desktop pack CLI.</summary>
 public sealed record PackCliProbe(bool Ready, string? Path, string? Version, string? Error);
 
@@ -241,7 +285,7 @@ public sealed class PackCli
     /// remains the single catalogue schema writer; the launcher only copies the
     /// file it produced (and fills the optional registrationSymbol contract field).
     /// </summary>
-    public async Task<ProcessResult> CatalogAsync(IReadOnlyList<string> titleIds, string catalogOutPath, CancellationToken cancellationToken = default)
+    public async Task<ProcessResult> CatalogAsync(IReadOnlyList<string> titleIds, string catalogOutPath, bool autoLaunch = false, CancellationToken cancellationToken = default)
     {
         var arguments = new List<string> { "catalog" };
         foreach (var titleId in titleIds)
@@ -251,7 +295,168 @@ public sealed class PackCli
         }
         arguments.Add("--catalog-out");
         arguments.Add(catalogOutPath);
+        if (autoLaunch)
+        {
+            arguments.Add("--auto-launch");
+        }
         return await RunPackAsync(arguments, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Host platform tag recorded in build package manifests.</summary>
+    public static string PlatformTag() =>
+        OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsMacOS() ? "macos" : "linux";
+
+    /// <summary>
+    /// Export portable .32a build packages for the given titles (empty list = every
+    /// built package). The Rust CLI owns the manifest format; this wrapper only
+    /// passes paths/versions and parses the JSON it prints.
+    /// </summary>
+    public async Task<BuildPackageExportResult> ExportBuildsAsync(
+        IReadOnlyList<string> titleIds,
+        string outputDirectory,
+        string appVersion,
+        string launcherVersion,
+        string? clangVersion,
+        string? llvmVersion,
+        string optLevel,
+        bool lto,
+        bool fastMath,
+        IReadOnlyList<string> romDirectories,
+        CancellationToken cancellationToken = default)
+    {
+        var arguments = new List<string> { "builds", "export" };
+        if (titleIds.Count == 0)
+        {
+            arguments.Add("--all");
+        }
+        else
+        {
+            foreach (var titleId in titleIds)
+            {
+                arguments.Add("--title-id");
+                arguments.Add(titleId);
+            }
+        }
+        arguments.Add("--output-dir");
+        arguments.Add(outputDirectory);
+        arguments.Add("--platform");
+        arguments.Add(PlatformTag());
+        arguments.Add("--app-version");
+        arguments.Add(appVersion);
+        arguments.Add("--launcher-version");
+        arguments.Add(launcherVersion);
+        if (!string.IsNullOrWhiteSpace(clangVersion))
+        {
+            arguments.Add("--toolchain-clang");
+            arguments.Add(clangVersion!);
+        }
+        if (!string.IsNullOrWhiteSpace(llvmVersion))
+        {
+            arguments.Add("--toolchain-llvm");
+            arguments.Add(llvmVersion!);
+        }
+        arguments.Add("--opt-level");
+        arguments.Add(optLevel);
+        if (lto)
+        {
+            arguments.Add("--lto");
+        }
+        if (fastMath)
+        {
+            arguments.Add("--fast-math");
+        }
+        foreach (var romDirectory in romDirectories)
+        {
+            if (!string.IsNullOrWhiteSpace(romDirectory))
+            {
+                arguments.Add("--rom-dir");
+                arguments.Add(romDirectory);
+            }
+        }
+
+        var process = await RunPackAsync(arguments, cancellationToken).ConfigureAwait(false);
+        var packages = new List<ExportedBuildPackageInfo>();
+        var errors = new List<string>();
+        string? outputDir = outputDirectory;
+        using var document = Json.TryParse(process.StdOut);
+        if (document is not null)
+        {
+            outputDir = Json.String(document.RootElement, "outputDir") ?? outputDirectory;
+            foreach (var element in Json.Array(document.RootElement, "builds"))
+            {
+                var titleId = Json.String(element, "titleID", "titleId", "title_id");
+                var path = Json.String(element, "path");
+                if (string.IsNullOrWhiteSpace(titleId) || string.IsNullOrWhiteSpace(path))
+                {
+                    continue;
+                }
+                packages.Add(new ExportedBuildPackageInfo(
+                    titleId.ToUpperInvariant(),
+                    Json.String(element, "displayName") ?? titleId,
+                    path!,
+                    Json.Long(element, "bytes") ?? 0,
+                    Json.String(element, "sha256") ?? string.Empty,
+                    Json.Bool(element, "romIncluded") ?? false,
+                    Json.Long(element, "packBytes") ?? 0,
+                    Json.String(element, "packSha256") ?? string.Empty,
+                    Json.Array(element, "warnings").Select(item => item.GetString() ?? item.GetRawText()).ToList()));
+            }
+            foreach (var element in Json.Array(document.RootElement, "errors"))
+            {
+                errors.Add(Json.String(element, "error") ?? element.GetRawText());
+            }
+        }
+        else if (!process.Ok)
+        {
+            errors.Add(FirstMeaningfulLine(process));
+        }
+        return new BuildPackageExportResult(packages, errors, outputDir, process);
+    }
+
+    /// <summary>Validate and install one .32a build package into the packages directory.</summary>
+    public async Task<BuildPackageImportResult> ImportBuildAsync(
+        string packagePath,
+        bool replace,
+        CancellationToken cancellationToken = default)
+    {
+        var arguments = new List<string> { "builds", "import", packagePath };
+        if (replace)
+        {
+            arguments.Add("--replace");
+        }
+        var process = await RunPackAsync(arguments, cancellationToken).ConfigureAwait(false);
+        using var document = Json.TryParse(process.StdOut);
+        if (document is null || !process.Ok)
+        {
+            var error = process.Ok
+                ? "the pack CLI reported success but printed no JSON"
+                : FirstMeaningfulLine(process);
+            return new BuildPackageImportResult(null, Array.Empty<string>(), error, process);
+        }
+        var importedElement = Json.Obj(document.RootElement, "imported");
+        if (importedElement is null)
+        {
+            return new BuildPackageImportResult(null, Array.Empty<string>(), "the pack CLI JSON has no imported build package", process);
+        }
+        var titleId = Json.String(importedElement.Value, "titleID", "titleId", "title_id");
+        if (string.IsNullOrWhiteSpace(titleId))
+        {
+            return new BuildPackageImportResult(null, Array.Empty<string>(), "the imported build package JSON has no titleID", process);
+        }
+        var warnings = Json.Array(importedElement.Value, "warnings")
+            .Select(item => item.GetString() ?? item.GetRawText())
+            .ToList();
+        var package = new ImportedBuildPackageInfo(
+            titleId.ToUpperInvariant(),
+            Json.String(importedElement.Value, "displayName") ?? titleId,
+            Json.String(importedElement.Value, "path") ?? packagePath,
+            Json.String(importedElement.Value, "packageDir") ?? string.Empty,
+            Json.Long(importedElement.Value, "packBytes") ?? 0,
+            Json.String(importedElement.Value, "packSha256") ?? string.Empty,
+            Json.Bool(importedElement.Value, "romIncluded") ?? false,
+            Json.Bool(importedElement.Value, "replaced") ?? false,
+            warnings);
+        return new BuildPackageImportResult(package, warnings, null, process);
     }
 
     private Task<ProcessResult> RunPackAsync(IReadOnlyList<string> command, CancellationToken cancellationToken)

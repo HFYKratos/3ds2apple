@@ -106,7 +106,7 @@ public sealed class LauncherServices
         var plumeSignPath = _locator.FindPlumeSign();
         PlumeSign = plumeSignPath is null ? null : new PlumeSignRunner(_runner, plumeSignPath, _workspace.LogsDirectory);
         LocalTools = LocalToolchainResolver.Resolve(_locator);
-        BuildCompatibility = new ToolchainBuildCompatibilityProvider(_runner, LocalTools);
+        BuildCompatibility = new ToolchainBuildCompatibilityProvider(_runner, LocalTools, () => _workspace.BuildOptions);
     }
 
     private DevPushClient? BuildDevPush()
@@ -190,6 +190,9 @@ public sealed class LauncherServices
 
     /// <summary>"Build now" service for the Library page (one game or every imported game).</summary>
     public LibraryBuildService CreateLibraryBuildService() => new(_workspace, CreateDeployBuildProvider(), BuildCompatibility);
+
+    /// <summary>Library "Export .32a" / "Import .32a" service (user-data build packages).</summary>
+    public BuildPackageService CreateBuildPackageService() => new(_workspace, Pack);
 
     /// <summary>
     /// Deploy pre-check: the five green/red prerequisites the Deploy page shows before the

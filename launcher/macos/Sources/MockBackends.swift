@@ -381,6 +381,11 @@ final class MockPackBackend: PackBackend {
     /// re-import passes --force while a first import does not.
     private(set) var importCalls: [ImportCall] = []
 
+    /// Captured "builds export/import" requests so the headless self-check can prove
+    /// the .32a paths and the replace confirmation without a real CLI.
+    private(set) var exportBuildCalls: [(titleID: String, outputDirectory: String)] = []
+    private(set) var importBuildCalls: [(path: String, replace: Bool)] = []
+
     func inspectROM(_ path: String) async throws -> DetectedROM {
         try? await Task.sleep(nanoseconds: 60_000_000)
         var rom = MockFixtures.detectedROM()
@@ -442,7 +447,7 @@ final class MockPackBackend: PackBackend {
         }
     }
 
-    func build(titleIDs: [String], mode buildMode: BuildMode, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage] {
+    func build(titleIDs: [String], mode buildMode: BuildMode, advancedOptions: AdvancedBuildOptions, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage] {
         if buildMode == .dryRun {
             onLine(.info, "dry run: printed the macOS command plan; nothing was built")
             return []
@@ -516,6 +521,54 @@ final class MockPackBackend: PackBackend {
         )
     }
 
+    func exportBuildPackage(titleID: String, outputDirectory: String) async throws -> ExportedBuildPackage {
+        try? await Task.sleep(nanoseconds: 60_000_000)
+        exportBuildCalls.append((titleID: titleID, outputDirectory: outputDirectory))
+        let directory = URL(fileURLWithPath: outputDirectory, isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let path = directory.appendingPathComponent("mock-build-" + titleID + ".32a").path
+        try? Data("mock .32a layout only, not a real build package\n".utf8).write(to: URL(fileURLWithPath: path))
+        let fixture = MockFixtures.builtManifest(for: titleID)
+        return ExportedBuildPackage(
+            titleID: titleID,
+            displayName: fixture.displayName,
+            path: path,
+            bytes: 64,
+            sha256: String(repeating: "0", count: 64),
+            romIncluded: true,
+            packBytes: fixture.packBytes ?? 0,
+            packSha256: fixture.packSha256 ?? "",
+            warnings: []
+        )
+    }
+
+    func writeAutoLaunchCatalog(titleID: String, catalogOut: String) async throws {
+        let game = "{\"titleID\":\"" + titleID + "\",\"displayName\":\"Mock Game\",\"productCode\":\"CTR-P-MOCK\",\"aot\":true,\"aotVersion\":1,\"packFile\":\"Frameworks/GamePack-" + titleID + ".dylib\",\"packABIVersion\":1}"
+        let json = "{\"schemaVersion\":2,\"autoLaunch\":true,\"games\":[" + game + "]}"
+        try? Data(json.utf8).write(to: URL(fileURLWithPath: catalogOut))
+    }
+
+    func importBuildPackage(path: String, replace: Bool) async throws -> ImportedBuildPackage {
+        try? await Task.sleep(nanoseconds: 60_000_000)
+        importBuildCalls.append((path: path, replace: replace))
+        let titleID = MockFixtures.titlePokemonY
+        builtTitles.insert(titleID)
+        MockFixtures.ensurePackageTree()
+        let fixture = MockFixtures.builtManifest(for: titleID)
+        let packageDir = outRoot.appendingPathComponent("packages/" + titleID).path
+        return ImportedBuildPackage(
+            titleID: titleID,
+            displayName: fixture.displayName,
+            path: path,
+            packageDir: packageDir,
+            packBytes: fixture.packBytes ?? 0,
+            packSha256: fixture.packSha256 ?? "",
+            romIncluded: true,
+            replaced: replace,
+            warnings: []
+        )
+    }
+
     func readManifest(titleID: String) async throws -> PackageManifest {
         if builtTitles.contains(titleID) {
             return MockFixtures.builtManifest(for: titleID)
@@ -559,9 +612,13 @@ final class MissingPackBackend: PackBackend {
     func inspectROM(_ path: String) async throws -> DetectedROM { throw missing() }
     func importROM(_ path: String, displayName: String?, includeROM: Bool, force: Bool) async throws -> DetectedPackage { throw missing() }
     func listPackages() async throws -> [DetectedPackage] { throw missing() }
-    func build(titleIDs: [String], mode: BuildMode, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage] { throw missing() }
+    func build(titleIDs: [String], mode: BuildMode, advancedOptions: AdvancedBuildOptions, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage] { throw missing() }
     func verify() async throws -> [String] { throw missing() }
     func readManifest(titleID: String) async throws -> PackageManifest { throw missing() }
+    func exportBuildPackage(titleID: String, outputDirectory: String) async throws -> ExportedBuildPackage { throw missing() }
+    func importBuildPackage(path: String, replace: Bool) async throws -> ImportedBuildPackage { throw missing() }
+    func writeAutoLaunchCatalog(titleID: String, catalogOut: String) async throws { throw missing() }
+
     func buildLibraryIPA(
         titleIDs: [String],
         baseAppPath: String,

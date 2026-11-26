@@ -20,6 +20,39 @@ struct LibraryIPAResult: Equatable {
     var summary: String?
 }
 
+/// One exported .32a build package (Library "Export .32a").
+struct ExportedBuildPackage: Identifiable, Equatable {
+    var id: String { titleID }
+    var titleID: String
+    var displayName: String
+    var path: String
+    var bytes: Int64
+    var sha256: String
+    var romIncluded: Bool
+    var packBytes: Int64
+    var packSha256: String
+    var warnings: [String]
+}
+
+/// One imported .32a build package (Library "Import .32a").
+struct ImportedBuildPackage: Equatable {
+    var titleID: String
+    var displayName: String
+    var path: String
+    var packageDir: String
+    var packBytes: Int64
+    var packSha256: String
+    var romIncluded: Bool
+    var replaced: Bool
+    var warnings: [String]
+}
+
+/// Parsed "builds import --json" output.
+struct BuildPackageImportParseResult: Equatable {
+    var package: ImportedBuildPackage?
+    var error: String?
+}
+
 protocol PackBackend: AnyObject {
     var mode: LauncherRunMode { get }
     var outRoot: URL { get }
@@ -31,9 +64,21 @@ protocol PackBackend: AnyObject {
     /// an already built GamePack. First imports must not force.
     func importROM(_ path: String, displayName: String?, includeROM: Bool, force: Bool) async throws -> DetectedPackage
     func listPackages() async throws -> [DetectedPackage]
-    func build(titleIDs: [String], mode: BuildMode, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage]
+    /// Batch build; the advanced AOT codegen options are passed to the pack CLI
+    /// (which forwards the THREEDS2APPLE_AOT_* variables to the scripts) and apply to this build.
+    func build(titleIDs: [String], mode: BuildMode, advancedOptions: AdvancedBuildOptions, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage]
     func verify() async throws -> [String]
     func readManifest(titleID: String) async throws -> PackageManifest
+    /// Export one game's portable .32a build package into workspace/builds. The
+    /// Rust CLI owns the manifest format and bundles the ROM it can find (the
+    /// package copy, the queued ROM path or workspace/launcher-roms).
+    func exportBuildPackage(titleID: String, outputDirectory: String) async throws -> ExportedBuildPackage
+    /// Validate and install one .32a build package into workspace/packages.
+    /// An existing package is only replaced when replace is true.
+    func importBuildPackage(path: String, replace: Bool) async throws -> ImportedBuildPackage
+    /// Write a single-game schema-2 GameCatalog.json with autoLaunch=true through
+    /// the pack CLI (the single catalogue schema writer) for a single-game IPA.
+    func writeAutoLaunchCatalog(titleID: String, catalogOut: String) async throws
     /// Allocate the selected built GamePacks into one shell app/IPA. The app is
     /// ROM-free by construction (packages hold no bundled GameRom); the IPA only
     /// carries Frameworks/GamePack-<TITLEID>.dylib + GameCatalog.json.
@@ -145,6 +190,56 @@ enum PackJSON {
         )
     }
 
+    static func parseBuildsExport(_ data: Data) -> (builds: [ExportedBuildPackage], errors: [String]) {
+        guard let root = object(data) else { return ([], ["Could not parse the build package export output."]) }
+        var builds: [ExportedBuildPackage] = []
+        for item in root["builds"] as? [[String: Any]] ?? [] {
+            let titleID = item["titleID"] as? String ?? ""
+            let path = item["path"] as? String ?? ""
+            if titleID.isEmpty || path.isEmpty { continue }
+            builds.append(ExportedBuildPackage(
+                titleID: titleID.uppercased(),
+                displayName: item["displayName"] as? String ?? titleID,
+                path: path,
+                bytes: int64(item["bytes"]),
+                sha256: item["sha256"] as? String ?? "",
+                romIncluded: item["romIncluded"] as? Bool ?? false,
+                packBytes: int64(item["packBytes"]),
+                packSha256: item["packSha256"] as? String ?? "",
+                warnings: item["warnings"] as? [String] ?? []
+            ))
+        }
+        let errors = (root["errors"] as? [[String: Any]] ?? []).compactMap { $0["error"] as? String }
+        return (builds, errors)
+    }
+
+    static func parseBuildImport(_ data: Data) -> BuildPackageImportParseResult {
+        guard let root = object(data) else {
+            return BuildPackageImportParseResult(package: nil, error: "Could not parse the build package import output.")
+        }
+        guard let item = root["imported"] as? [String: Any] else {
+            return BuildPackageImportParseResult(package: nil, error: "The import output has no imported build package.")
+        }
+        let titleID = item["titleID"] as? String ?? ""
+        if titleID.isEmpty {
+            return BuildPackageImportParseResult(package: nil, error: "The imported build package has no title ID.")
+        }
+        return BuildPackageImportParseResult(
+            package: ImportedBuildPackage(
+                titleID: titleID.uppercased(),
+                displayName: item["displayName"] as? String ?? titleID,
+                path: item["path"] as? String ?? "",
+                packageDir: item["packageDir"] as? String ?? "",
+                packBytes: int64(item["packBytes"]),
+                packSha256: item["packSha256"] as? String ?? "",
+                romIncluded: item["romIncluded"] as? Bool ?? false,
+                replaced: item["replaced"] as? Bool ?? false,
+                warnings: item["warnings"] as? [String] ?? []
+            ),
+            error: nil
+        )
+    }
+
     /// "displayNames" object -> [language: name]; missing/empty maps to [:].
     static func stringMap(_ value: Any?) -> [String: String] {
         guard let object = value as? [String: Any] else { return [:] }
@@ -221,12 +316,18 @@ final class PackCLI: PackBackend {
         return PackJSON.parsePackages(Data(result.stdout.utf8)).packages
     }
 
-    func build(titleIDs: [String], mode: BuildMode, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage] {
+    func build(titleIDs: [String], mode: BuildMode, advancedOptions: AdvancedBuildOptions, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage] {
         var arguments = ["build", "--queued"]
         switch mode {
         case .dryRun: break
         case .fake: arguments.append("--fake")
         case .real: arguments.append("--execute")
+        }
+        let codegen = advancedOptions.normalized
+        if !codegen.isDefault {
+            arguments.append(contentsOf: ["--opt-level", codegen.optLevel])
+            if codegen.lto { arguments.append("--lto") }
+            if codegen.fastMath { arguments.append("--fast-math") }
         }
         arguments.append("--json")
         let result = try await run(arguments, onLine: onLine)
@@ -308,6 +409,62 @@ final class PackCLI: PackBackend {
             )
         }
         return LibraryIPAResult(ipaPath: ipaPath, titles: titleIDs, executed: true, command: command, summary: summary)
+    }
+
+    func exportBuildPackage(titleID: String, outputDirectory: String) async throws -> ExportedBuildPackage {
+        let arguments = [
+            "builds", "export",
+            "--title-id", titleID,
+            "--output-dir", outputDirectory,
+            "--platform", "macos",
+            "--app-version", LauncherInfo.version,
+            "--launcher-version", LauncherInfo.version,
+            "--json",
+        ]
+        let result = try await run(arguments)
+        let parsed = PackJSON.parseBuildsExport(Data(result.stdout.utf8))
+        guard result.succeeded, let package = parsed.builds.first else {
+            throw LauncherFailure(
+                code: "build_package_export_failed",
+                message: "Could not export the .32a build package.",
+                hint: parsed.errors.first ?? tailHint(result),
+                detail: result.combined,
+                exitCode: result.exitCode
+            )
+        }
+        return package
+    }
+
+    func writeAutoLaunchCatalog(titleID: String, catalogOut: String) async throws {
+        let arguments = ["catalog", "--title-id", titleID, "--catalog-out", catalogOut, "--auto-launch", "--json"]
+        let result = try await run(arguments)
+        if !result.succeeded {
+            throw LauncherFailure(
+                code: "catalog_failed",
+                message: "Could not write the single-game GameCatalog.json.",
+                hint: tailHint(result),
+                detail: result.combined,
+                exitCode: result.exitCode
+            )
+        }
+    }
+
+    func importBuildPackage(path: String, replace: Bool) async throws -> ImportedBuildPackage {
+        var arguments = ["builds", "import", path]
+        if replace { arguments.append("--replace") }
+        arguments.append("--json")
+        let result = try await run(arguments)
+        let parsed = PackJSON.parseBuildImport(Data(result.stdout.utf8))
+        guard result.succeeded, let package = parsed.package else {
+            throw LauncherFailure(
+                code: "build_package_import_failed",
+                message: "Could not import the .32a build package.",
+                hint: parsed.error ?? tailHint(result),
+                detail: result.combined,
+                exitCode: result.exitCode
+            )
+        }
+        return package
     }
 
     func readManifest(titleID: String) async throws -> PackageManifest {

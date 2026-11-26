@@ -37,6 +37,11 @@ public sealed class LocalizedText
     public string LibraryBuildNow => Loc.T("library.buildNow");
     public string LibraryBuildAll => Loc.T("library.buildAll");
 
+    // Library portable build packages (.32a export/import).
+    public string LibraryImportBuildPackageAction => Loc.T("library.buildPackage.import");
+    public string LibraryExportBuildPackage => Loc.T("library.buildPackage.export");
+    public string LibraryConfirmImportReplace => Loc.T("library.buildPackage.confirmReplace");
+
     // Deploy
     public string DeployTitle => Loc.T("deploy.title");
     public string DeploySubtitle => Loc.T("deploy.subtitle");
@@ -110,6 +115,14 @@ public sealed class LocalizedText
         DeployPrerequisiteKind.ShellTemplate => Loc.T("deploy.prereq.shell.hint"),
         _ => string.Empty,
     };
+
+    // Deploy -> Advanced build settings (AOT codegen options).
+    public string DeployAdvancedTitle => Loc.T("deploy.advanced.title");
+    public string DeployAdvancedBody => Loc.T("deploy.advanced.body");
+    public string DeployAdvancedOptLevel => Loc.T("deploy.advanced.optLevel");
+    public string DeployAdvancedLto => Loc.T("deploy.advanced.lto");
+    public string DeployAdvancedFastMath => Loc.T("deploy.advanced.fastMath");
+    public string DeployAdvancedReset => Loc.T("deploy.advanced.reset");
 
     // Settings
     public string SettingsTitle => Loc.T("settings.title");

@@ -111,6 +111,23 @@ struct LauncherStrings {
     var librarySubtitle: String
     var libraryCountFormat: String
     var libraryIPALabel: String
+    // Portable .32a build packages (Library export/import; user data, never uploaded)
+    var buildPackageImport: String
+    var buildPackageExport: String
+    var buildPackageReplace: String
+    var buildPackageNeedsPack: String
+    var buildPackageWithRom: String
+    var buildPackageWithoutRom: String
+    var buildPackageExportedFormat: String
+    var buildPackageImportedFormat: String
+    var buildPackageExportFailedFormat: String
+    var buildPackageImportFailedFormat: String
+    var buildPackageConflictFormat: String
+    // Unsigned single-game IPA export (Library card "Export IPA")
+    var exportIpa: String
+    var ipaExportedFormat: String
+    var ipaExportFailedFormat: String
+    var ipaUnsignedHint: String
     var emptyLibraryTitle: String
     var emptyLibraryMessage: String
     var importGame: String
@@ -177,6 +194,14 @@ struct LauncherStrings {
     var deployButtonFormat: String
     var deployNoSelection: String
     var deployNoGames: String
+    // Deploy -> Advanced build settings (AOT codegen options)
+    var advancedBuildTitle: String
+    var advancedBuildBody: String
+    var advancedBuildOptLevel: String
+    var advancedBuildLto: String
+    var advancedBuildFastMath: String
+    var advancedBuildSummaryFormat: String
+    var advancedBuildReset: String
     var deployDeviceTitle: String
     var deployDeviceNone: String
     var deployDetectDevice: String
@@ -302,6 +327,36 @@ struct LauncherStrings {
         librarySubtitle = t("Your own games, one shell", "你自己的游戏，一个外壳")
         libraryCountFormat = t("%d game(s) in the library", "游戏库中有 %d 个游戏")
         libraryIPALabel = t("Library IPA", "游戏库 IPA")
+        buildPackageImport = t("Import .32a", "导入 .32a")
+        buildPackageExport = t("Export .32a", "导出 .32a")
+        buildPackageReplace = t("Replace existing package", "覆盖现有包")
+        buildPackageNeedsPack = t(
+            "Build the GamePack first: only a real AOT pack can be exported.",
+            "请先构建 GamePack：只有真实 AOT 包才能导出。"
+        )
+        buildPackageWithRom = t(
+            "(includes game data; keep it local, never upload or commit it)",
+            "（包含游戏数据——仅保留在本地，切勿上传或提交）"
+        )
+        buildPackageWithoutRom = t(
+            "(no game data; deploying it needs the original ROM)",
+            "（不含游戏数据——部署时需要原始 ROM）"
+        )
+        buildPackageExportedFormat = t("Exported %@  %@", "已导出 %@  %@")
+        buildPackageImportedFormat = t("Imported %@ into %@", "已导入 %@ 到 %@")
+        buildPackageExportFailedFormat = t("Export failed: %@", "导出失败：%@")
+        buildPackageImportFailedFormat = t("Import failed: %@", "导入失败：%@")
+        buildPackageConflictFormat = t(
+            "A package for this game already exists. %@",
+            "该游戏已存在构建包。%@"
+        )
+        exportIpa = t("Export IPA", "导出 IPA")
+        ipaExportedFormat = t("Exported %@  %@", "已导出 %@  %@")
+        ipaExportFailedFormat = t("IPA export failed: %@", "IPA 导出失败：%@")
+        ipaUnsignedHint = t(
+            "Unsigned IPA: sign it with Sideloadly or AltStore before installing.",
+            "未签名 IPA：安装前请用 Sideloadly 或 AltStore 自签名。"
+        )
         emptyLibraryTitle = t("Your library is empty", "游戏库还是空的")
         emptyLibraryMessage = t(
             "Import a decrypted .3ds/.cci file that you own. The Deploy tab compiles one native AOT pack per game and installs a single shell on the iPhone/iPad.",
@@ -375,6 +430,16 @@ struct LauncherStrings {
         deployButtonFormat = t("Deploy %d game(s) to phone", "一键部署（%d 个游戏）")
         deployNoSelection = t("Select at least one game to deploy.", "请至少勾选一个游戏再部署。")
         deployNoGames = t("Your library is empty. Import a game first.", "游戏库还是空的，请先导入游戏。")
+        advancedBuildTitle = t("Advanced build settings", "高级构建设置")
+        advancedBuildBody = t(
+            "Applied to the next build. The defaults keep the current behaviour; the same options are part of the Windows launcher's build cache key.",
+            "应用于下一次构建。默认值保持现有行为；这些选项也是 Windows 启动器构建缓存 key 的一部分。"
+        )
+        advancedBuildOptLevel = t("Optimization level", "优化级别")
+        advancedBuildLto = t("Link-time optimization (LTO)", "链接时优化（LTO）")
+        advancedBuildFastMath = t("Fast-math (changes guest float results)", "fast-math（改变 guest 浮点结果）")
+        advancedBuildSummaryFormat = t("Current: %@. Applied to the next build.", "当前：%@。应用于下一次构建。")
+        advancedBuildReset = t("Reset to defaults", "恢复默认值")
         deployDeviceTitle = t("Target device", "目标设备")
         deployDeviceNone = t("No iPhone/iPad detected. Connect it, unlock it and tap Trust.", "未检测到 iPhone/iPad。请连接、解锁并点按信任。")
         deployDetectDevice = t("Detect device", "检测设备")
@@ -531,6 +596,40 @@ struct LauncherStrings {
     /// "Publisher: Nintendo" line on a Library card.
     func publisher(_ value: String) -> String {
         String(format: publisherFormat, value)
+    }
+
+    // MARK: - Portable .32a build packages
+
+    func buildPackageExported(_ path: String, _ rom: String) -> String {
+        String(format: buildPackageExportedFormat, path, rom)
+    }
+
+    func buildPackageImported(_ name: String, _ packageDir: String) -> String {
+        String(format: buildPackageImportedFormat, name, packageDir)
+    }
+
+    func buildPackageExportFailed(_ message: String) -> String {
+        String(format: buildPackageExportFailedFormat, message)
+    }
+
+    func buildPackageImportFailed(_ message: String) -> String {
+        String(format: buildPackageImportFailedFormat, message)
+    }
+
+    func buildPackageConflict(_ message: String) -> String {
+        String(format: buildPackageConflictFormat, message)
+    }
+
+    func ipaExported(_ path: String, _ hint: String) -> String {
+        String(format: ipaExportedFormat, path, hint)
+    }
+
+    func ipaExportFailed(_ message: String) -> String {
+        String(format: ipaExportFailedFormat, message)
+    }
+
+    func advancedBuildSummary(_ describe: String) -> String {
+        String(format: advancedBuildSummaryFormat, describe)
     }
 
     /// Compile hardware line: cores + RAM + 3dsrecomp's automatic parallelism.

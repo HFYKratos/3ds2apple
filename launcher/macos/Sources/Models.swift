@@ -43,6 +43,35 @@ struct LogEntry: Identifiable, Equatable {
     }
 }
 
+// MARK: - Advanced build settings
+
+/// Deploy -> "Advanced build settings": AOT codegen options applied to the next
+/// build. The defaults keep the documented -O2 / no LTO / no fast-math baseline;
+/// the same options are part of the Windows launcher's build-cache key.
+struct AdvancedBuildOptions: Equatable {
+    static let optLevels = ["O1", "O2", "O3", "Oz"]
+
+    var optLevel: String = "O2"
+    var lto: Bool = false
+    var fastMath: Bool = false
+
+    var isDefault: Bool { optLevel == "O2" && !lto && !fastMath }
+
+    var normalized: AdvancedBuildOptions {
+        AdvancedBuildOptions.optLevels.contains(optLevel)
+            ? self
+            : AdvancedBuildOptions(optLevel: "O2", lto: lto, fastMath: fastMath)
+    }
+
+    var cacheMarker: String {
+        "opt=" + optLevel + ";lto=" + (lto ? "1" : "0") + ";fastmath=" + (fastMath ? "1" : "0")
+    }
+
+    var describe: String {
+        "opt=" + optLevel + ", lto=" + (lto ? "on" : "off") + ", fast-math=" + (fastMath ? "on" : "off")
+    }
+}
+
 // MARK: - Library / games
 
 enum GamePhase: String, Codable, CaseIterable {

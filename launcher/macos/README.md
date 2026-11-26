@@ -58,6 +58,28 @@ tooltip and the log — there is no manual "check" button).
   explanatory card). A game whose ROM has no SMDH icon keeps the initials
   placeholder. Importing a ROM that is already in the library re-imports its
   package with ``--force`` (SMDH cover/metadata self-heal, built GamePack kept).
+  Each card also has **导出 .32a / Export .32a** (enabled only for a real AOT
+  GamePack) and the header has **导入 .32a / Import .32a**. The portable build
+  package goes to `workspace/builds/<build-slug>.32a`: the GamePack, GameInfo,
+  optional cover and the user's ROM when the CLI can find one
+  (package copy, queued ROM path or `workspace/launcher-roms`). Import is
+  validated by the Rust CLI (`3ds2apple-pack builds`) before anything is
+  installed into `workspace/packages/<TITLEID>/`; an existing package asks for
+  confirmation before it is replaced. Nothing is signed, installed or uploaded:
+  a .32a can contain game data, so it stays local.
+  **Export IPA** (also on each real-pack card) composes one unsigned single-game
+  IPA from the pinned shell template: the GamePack + a `GameCatalog.json` with
+  `autoLaunch: true` (written by `3ds2apple-pack catalog --auto-launch`) + the
+  SMDH cover replacing every template `AppIcon*.png` (NSImage), zipped with
+  `ditto` into `workspace/exports/<build-slug>-<version>-unsigned.ipa`. The UI
+  shows the path and asks the user to sign it with Sideloadly/AltStore; nothing is
+  signed, installed or uploaded.
+  The Deploy page also has a collapsed **高级构建设置 / Advanced build settings**
+  disclosure: optimization level (O1/O2/O3/Oz), LTO and fast-math, persisted in
+  the launcher settings with **恢复默认值 / Reset to defaults**. Defaults keep the
+  -O2 / no-LTO / no-fast-math baseline; the options are passed to
+  `3ds2apple-pack build` (`--opt-level/--lto/--fast-math`), which forwards
+  `THREEDS2APPLE_AOT_*` to the scripts for the next build.
 - **Deploy** - device status, the checkbox selection list (one or several games),
   the single **一键部署 / Deploy selected** button, the detected compile-hardware
   line (logical cores · RAM · 3dsrecomp's automatic full-core parallelism), then

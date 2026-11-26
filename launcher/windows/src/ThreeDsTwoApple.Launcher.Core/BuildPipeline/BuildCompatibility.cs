@@ -22,7 +22,8 @@ public sealed record BuildCompatibility(
     int GameInfoSchemaVersion,
     string RecompilerVersion,
     string ClangVersion,
-    string Ld64Version)
+    string Ld64Version,
+    string BuildOptions = "opt=O2;lto=0;fastmath=0")
 {
     /// <summary>Bumped when this compatibility model itself changes shape.</summary>
     public const int CurrentFormatVersion = 1;
@@ -39,7 +40,11 @@ public sealed record BuildCompatibility(
     public const string UnknownVersion = "unknown";
 
     /// <summary>Build the compatibility identity for this launcher + toolchain.</summary>
-    public static BuildCompatibility Create(string? recompilerVersion = null, string? clangVersion = null, string? ld64Version = null) => new(
+    public static BuildCompatibility Create(
+        string? recompilerVersion = null,
+        string? clangVersion = null,
+        string? ld64Version = null,
+        string? buildOptions = null) => new(
         CurrentFormatVersion,
         CurrentRecompilerAbi,
         LauncherInfo.GamePackAbiVersion,
@@ -48,7 +53,8 @@ public sealed record BuildCompatibility(
         LauncherInfo.GameInfoSchemaVersion,
         Normalize(recompilerVersion),
         Normalize(clangVersion),
-        Normalize(ld64Version));
+        Normalize(ld64Version),
+        string.IsNullOrWhiteSpace(buildOptions) ? AdvancedBuildOptions.Default.CacheMarker : buildOptions.Trim());
 
     /// <summary>
     /// Canonical version marker recorded in the build artifact. It intentionally
@@ -66,6 +72,7 @@ public sealed record BuildCompatibility(
         "recompiler=" + RecompilerVersion,
         "clang=" + ClangVersion,
         "ld64=" + Ld64Version,
+        "opts=" + BuildOptions,
     });
 
     /// <summary>Short stable label for the UI ("b1a2b3c4"); derived from the canonical string.</summary>
@@ -104,39 +111,67 @@ public sealed class ToolchainBuildCompatibilityProvider : IBuildCompatibilityPro
 
     private readonly IProcessRunner _runner;
     private readonly LocalToolchain? _tools;
+    private readonly Func<AdvancedBuildOptions>? _optionsProvider;
     private readonly object _gate = new();
+    private (string Recompiler, string Clang, string Ld64)? _versions;
     private BuildCompatibility? _cached;
+    private string? _cachedOptionsMarker;
     private Task<BuildCompatibility>? _pending;
 
-    public ToolchainBuildCompatibilityProvider(IProcessRunner runner, LocalToolchain? tools)
+    public ToolchainBuildCompatibilityProvider(
+        IProcessRunner runner,
+        LocalToolchain? tools,
+        Func<AdvancedBuildOptions>? optionsProvider = null)
     {
         _runner = runner;
         _tools = tools;
+        _optionsProvider = optionsProvider;
+    }
+
+    /// <summary>Current advanced codegen options marker (invalidate the cache when it changes).</summary>
+    private string OptionsMarker()
+    {
+        try
+        {
+            return (_optionsProvider?.Invoke() ?? AdvancedBuildOptions.Default).Normalized().CacheMarker;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ObjectDisposedException)
+        {
+            return AdvancedBuildOptions.Default.CacheMarker;
+        }
     }
 
     public Task<BuildCompatibility> ResolveAsync(CancellationToken cancellationToken = default)
     {
+        var marker = OptionsMarker();
         lock (_gate)
         {
-            if (_cached is { } cached)
+            if (_cached is { } cached && string.Equals(_cachedOptionsMarker, marker, StringComparison.Ordinal))
             {
                 return Task.FromResult(cached);
             }
             // The probe result is process-wide and toolchain paths cannot change without a
             // launcher rebuild/settings reload, so a cancelled caller must not poison the cache.
-            return _pending ??= ResolveCoreAsync(CancellationToken.None);
+            return _pending ??= ResolveCoreAsync(marker, CancellationToken.None);
         }
     }
 
-    private async Task<BuildCompatibility> ResolveCoreAsync(CancellationToken cancellationToken)
+    private async Task<BuildCompatibility> ResolveCoreAsync(string optionsMarker, CancellationToken cancellationToken)
     {
-        var recompiler = await ProbeVersionAsync(_tools?.RecompilerPath, cancellationToken).ConfigureAwait(false);
-        var clang = await ProbeVersionAsync(_tools?.ClangPath, cancellationToken).ConfigureAwait(false);
-        var ld64 = await ProbeVersionAsync(_tools?.Ld64LldPath, cancellationToken).ConfigureAwait(false);
-        var compatibility = BuildCompatibility.Create(recompiler, clang, ld64);
+        if (_versions is not { } versions)
+        {
+            versions = (
+                await ProbeVersionAsync(_tools?.RecompilerPath, cancellationToken).ConfigureAwait(false),
+                await ProbeVersionAsync(_tools?.ClangPath, cancellationToken).ConfigureAwait(false),
+                await ProbeVersionAsync(_tools?.Ld64LldPath, cancellationToken).ConfigureAwait(false));
+            _versions = versions;
+        }
+        var compatibility = BuildCompatibility.Create(versions.Recompiler, versions.Clang, versions.Ld64, optionsMarker);
         lock (_gate)
         {
             _cached = compatibility;
+            _cachedOptionsMarker = optionsMarker;
+            _pending = null;
         }
         return compatibility;
     }
