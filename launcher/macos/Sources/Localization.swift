@@ -691,6 +691,11 @@ struct LauncherStrings {
         String(format: advancedBuildSummaryFormat, describe)
     }
 
+    /// "Export <game name>" title of the single Library export dialog.
+    func exportTitle(_ name: String) -> String {
+        String(format: exportTitleFormat, name)
+    }
+
     /// Compile hardware line: cores + RAM + 3dsrecomp's automatic parallelism.
     func hardwareLine(_ profile: HardwareProfile) -> String {
         String(format: hardwareLineFormat, profile.logicalCores, profile.totalMemoryGBText, profile.compileJobs)

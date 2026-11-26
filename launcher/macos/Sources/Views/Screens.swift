@@ -161,7 +161,7 @@ private struct LibraryExportSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(strings.exportTitleFormat(model.exportTargetTitle))
+            Text(strings.exportTitle(model.exportTargetTitle))
                 .font(LauncherTheme.rounded(17, weight: .bold))
             Picker("", selection: Binding(
                 get: { model.exportFormat },
