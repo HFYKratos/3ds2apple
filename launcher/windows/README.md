@@ -172,6 +172,33 @@ install/push, and a marker write failure only warns (the next deploy treats the 
 state as unknown and updates once). The macOS launcher keeps the previous full deploy
 path for now: this incremental behaviour is Windows-only.
 
+### Portable .32a build packages (Library export/import)
+
+Each Library card has **Export .32a** next to **Build now** (enabled only for a
+real AOT GamePack) and the Library header has **Import .32a**. The launcher only
+passes paths and parses the pack CLI JSON; the Rust CLI
+(`3ds2apple-pack builds export|import|list`, see
+[builder/README.md](../../builder/README.md)) is the single writer/validator of
+the format.
+
+- Export writes `<portable data root>/workspace/builds/<build-slug>.32a`, a ZIP
+  with `manifest.json` (schema v1), `GamePack-<TITLEID>.dylib`, `GameInfo.json`,
+  optional `cover.png` and the user's `GameRom.<ext>` when the CLI can find it
+  (the package copy, the queued ROM path or `workspace/launcher-roms`). Without a
+  ROM the export still succeeds and the UI states that deploying it needs the
+  original ROM.
+- Import validates the ZIP/manifest/SHA-256/Mach-O structure, installs into
+  `workspace/out/packages/<TITLEID>/`, marks the queue built and refreshes the
+  Library so the game is immediately deployable. An existing package is reported
+  as a conflict with a **Replace existing package** confirmation (unrelated user
+  files in the package directory are kept).
+- The result path (or the exact error) is shown inline in the Library and in the
+  launcher log; the UI states that **a .32a can contain game data, so it must stay
+  local** (never upload or commit it). Nothing is signed, installed or uploaded.
+- Tests: `BuildPackageServiceTests.cs` (argument mapping, JSON parsing,
+  conflict/replace, missing CLI, workspace state) and the Rust `builder/pack`
+  tests (`builds::tests` + the CLI round trip in `tests/cli_local.rs`).
+
 ## Stack
 
 - .NET 10 + **Avalonia 12.1.6** desktop UI (same stack family S2Arm's Windows

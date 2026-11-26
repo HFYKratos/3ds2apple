@@ -58,6 +58,15 @@ tooltip and the log — there is no manual "check" button).
   explanatory card). A game whose ROM has no SMDH icon keeps the initials
   placeholder. Importing a ROM that is already in the library re-imports its
   package with ``--force`` (SMDH cover/metadata self-heal, built GamePack kept).
+  Each card also has **导出 .32a / Export .32a** (enabled only for a real AOT
+  GamePack) and the header has **导入 .32a / Import .32a**. The portable build
+  package goes to `workspace/builds/<build-slug>.32a`: the GamePack, GameInfo,
+  optional cover and the user's ROM when the CLI can find one
+  (package copy, queued ROM path or `workspace/launcher-roms`). Import is
+  validated by the Rust CLI (`3ds2apple-pack builds`) before anything is
+  installed into `workspace/packages/<TITLEID>/`; an existing package asks for
+  confirmation before it is replaced. Nothing is signed, installed or uploaded:
+  a .32a can contain game data, so it stays local.
 - **Deploy** - device status, the checkbox selection list (one or several games),
   the single **一键部署 / Deploy selected** button, the detected compile-hardware
   line (logical cores · RAM · 3dsrecomp's automatic full-core parallelism), then

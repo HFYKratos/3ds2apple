@@ -32,6 +32,7 @@ public sealed class GameRow : ObservableObject
         Entry = entry;
         RemoveCommand = new AsyncRelayCommand(() => _owner.RemoveGameAsync(this), () => !_owner.IsBusy);
         BuildCommand = new AsyncRelayCommand(() => _owner.BuildGameAsync(this), () => !_owner.IsBusy);
+        ExportBuildPackageCommand = new AsyncRelayCommand(() => _owner.ExportBuildPackageAsync(this), () => !_owner.IsBusy && HasRealPack);
         Refresh();
     }
 
@@ -99,7 +100,12 @@ public sealed class GameRow : ObservableObject
     /// <summary>"Build now": compile this game's GamePack ahead of a deploy (or reuse the cache).</summary>
     public AsyncRelayCommand BuildCommand { get; }
 
+    /// <summary>"Export .32a": write this game's portable build package into workspace/builds.</summary>
+    public AsyncRelayCommand ExportBuildPackageCommand { get; }
+
     public string BuildNowLabel => Loc.T("library.buildNow");
+
+    public string ExportBuildPackageLabel => Loc.T("library.buildPackage.export");
 
     /// <summary>Built/cache label or the exact rebuild reason (recorded buildCompatVersion + ROM fingerprint).</summary>
     public string BuildStatusText
@@ -137,12 +143,14 @@ public sealed class GameRow : ObservableObject
         OnPropertyChanged(nameof(RomLine));
         OnPropertyChanged(nameof(RemoveLabel));
         OnPropertyChanged(nameof(BuildNowLabel));
+        OnPropertyChanged(nameof(ExportBuildPackageLabel));
     }
 
     public void RaiseCommandStates()
     {
         RemoveCommand.RaiseCanExecuteChanged();
         BuildCommand.RaiseCanExecuteChanged();
+        ExportBuildPackageCommand.RaiseCanExecuteChanged();
     }
 
     /// <summary>Recompute the cache label; cheap (size/mtime only, never reads the ROM).</summary>
@@ -429,6 +437,10 @@ public sealed class MainViewModel : ObservableObject
     private string _deployPlanStatus = string.Empty;
     private string _deviceOrphanStatus = string.Empty;
     private bool _hasOrphanedGamesBlock;
+    private string _buildPackageStatus = string.Empty;
+    private bool _hasBuildPackageStatus;
+    private bool _isBuildPackageWarning;
+    private string? _pendingImportReplacePath;
     private string _orphanedGamesWarning = string.Empty;
 
     public MainViewModel() : this(LauncherServices.Create())
@@ -461,6 +473,12 @@ public sealed class MainViewModel : ObservableObject
         ExportLogCommand = new RelayCommand(() => ExportLogRequested?.Invoke());
         ToggleDiagnosticsCommand = new RelayCommand(ToggleDiagnostics);
         ToggleDeployLogCommand = new RelayCommand(ToggleDeployLog);
+        ImportBuildPackageCommand = new AsyncRelayCommand(() =>
+        {
+            ImportBuildPackageRequested?.Invoke();
+            return Task.CompletedTask;
+        }, () => !IsBusy);
+        ConfirmImportReplaceCommand = new AsyncRelayCommand(ConfirmImportReplaceAsync, () => CanConfirmImportReplace);
         RebuildLanguageOptions();
         RebuildDeploySteps();
         Log($"workspace: {_services.Workspace.Root} ({_services.Workspace.RootReason})");
@@ -493,6 +511,9 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Raised by the settings "Export log" button; the view shows a save picker.</summary>
     public event Action? ExportLogRequested;
 
+    /// <summary>Raised by the Library "Import .32a" button; the view shows a file picker.</summary>
+    public event Action? ImportBuildPackageRequested;
+
     public RelayCommand ShowLibraryCommand { get; }
     public RelayCommand ShowDeployCommand { get; }
     public RelayCommand OpenSettingsCommand { get; }
@@ -512,6 +533,8 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand ExportLogCommand { get; }
     public RelayCommand ToggleDiagnosticsCommand { get; }
     public RelayCommand ToggleDeployLogCommand { get; }
+    public AsyncRelayCommand ImportBuildPackageCommand { get; }
+    public AsyncRelayCommand ConfirmImportReplaceCommand { get; }
 
     /// <summary>Localized UI strings; replaced whenever the language changes.</summary>
     public LocalizedText L { get => _localized; private set => SetProperty(ref _localized, value); }
@@ -627,6 +650,28 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public bool IsLibraryBuildProgressVisible => _libraryBuildRunning;
+
+    /// <summary>Result of the last .32a export/import: output path or the exact error/conflict.</summary>
+    public string BuildPackageStatus
+    {
+        get => _buildPackageStatus;
+        private set => SetProperty(ref _buildPackageStatus, value);
+    }
+
+    public bool HasBuildPackageStatus
+    {
+        get => _hasBuildPackageStatus;
+        private set => SetProperty(ref _hasBuildPackageStatus, value);
+    }
+
+    /// <summary>true: the status is a warning/conflict (red); false: a success path (accent).</summary>
+    public bool IsBuildPackageWarning
+    {
+        get => _isBuildPackageWarning;
+        private set => SetProperty(ref _isBuildPackageWarning, value);
+    }
+
+    public bool CanConfirmImportReplace => _pendingImportReplacePath is not null && !IsBusy;
 
     /// <summary>Current local-build recipe identity; null until the toolchain probe finished.</summary>
     public BuildCompatibility? CurrentBuildCompatibility => _buildCompatibility;
@@ -920,6 +965,137 @@ public sealed class MainViewModel : ObservableObject
             await ResolveBuildCompatibilityAsync().ConfigureAwait(true);
             await RefreshLibraryAsync().ConfigureAwait(true);
         }
+    }
+
+    // --- library build packages (.32a) -------------------------------------
+
+    /// <summary>Library card "Export .32a": write the portable build package for one game.</summary>
+    public async Task ExportBuildPackageAsync(GameRow row)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+        var service = _services.CreateBuildPackageService();
+        SetBusy(true, Loc.T("status.buildPackageExport"));
+        try
+        {
+            var compatibility = _buildCompatibility ?? await _services.BuildCompatibility.ResolveAsync().ConfigureAwait(true);
+            _buildCompatibility = compatibility;
+            var outcome = await service.ExportAsync(new[] { row.TitleID }, compatibility).ConfigureAwait(true);
+            if (!outcome.Ok)
+            {
+                var detail = outcome.Errors.Count > 0 ? string.Join("; ", outcome.Errors) : outcome.Error ?? "no build package was written";
+                SetBuildPackageStatus(Loc.T("library.buildPackage.exportFailed", detail), warning: true);
+                Log("build package export failed (" + row.TitleID + "): " + detail);
+                StatusText = Loc.T("status.buildPackageExportFailed");
+                return;
+            }
+            var package = outcome.Packages[0];
+            var rom = package.RomIncluded
+                ? Loc.T("library.buildPackage.withRom")
+                : Loc.T("library.buildPackage.withoutRom");
+            SetBuildPackageStatus(Loc.T("library.buildPackage.exported", package.Path, rom), warning: !package.RomIncluded);
+            Log("exported build package " + package.TitleID + " -> " + package.Path
+                + " (" + package.Bytes + " bytes, sha256 " + package.Sha256
+                + ", rom " + (package.RomIncluded ? "included" : "not included") + ")");
+            if (!package.RomIncluded)
+            {
+                Log("warning: the .32a does not contain game data; deploy it together with the original ROM.");
+            }
+            Log("warning: a .32a can contain game data; keep it local and never upload or commit it.");
+            foreach (var warning in package.Warnings)
+            {
+                Log("build package: " + warning);
+            }
+            StatusText = Loc.T("status.buildPackageExported");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            SetBuildPackageStatus(Loc.T("library.buildPackage.exportFailed", exception.Message), warning: true);
+            Log("build package export failed: " + exception.Message);
+            StatusText = Loc.T("status.buildPackageExportFailed");
+        }
+        finally
+        {
+            SetBusy(false, Loc.T("status.ready"));
+        }
+    }
+
+    /// <summary>Library "Import .32a": called by the view after its file picker.</summary>
+    public Task ImportBuildPackageAsync(string path) => ImportBuildPackageCoreAsync(path, replace: false);
+
+    private async Task ConfirmImportReplaceAsync()
+    {
+        var path = _pendingImportReplacePath;
+        if (path is null)
+        {
+            return;
+        }
+        await ImportBuildPackageCoreAsync(path, replace: true).ConfigureAwait(true);
+    }
+
+    private async Task ImportBuildPackageCoreAsync(string path, bool replace)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+        var service = _services.CreateBuildPackageService();
+        SetBusy(true, Loc.T("status.buildPackageImport"));
+        try
+        {
+            var outcome = await service.ImportAsync(path, replace).ConfigureAwait(true);
+            if (!outcome.Ok)
+            {
+                var message = outcome.Error ?? "unknown error";
+                if (!replace && message.Contains("--replace", StringComparison.OrdinalIgnoreCase))
+                {
+                    _pendingImportReplacePath = path;
+                    SetBuildPackageStatus(Loc.T("library.buildPackage.conflict", message), warning: true);
+                    Log("build package import needs confirmation: " + message);
+                    StatusText = Loc.T("status.buildPackageConflict");
+                    return;
+                }
+                _pendingImportReplacePath = null;
+                SetBuildPackageStatus(Loc.T("library.buildPackage.importFailed", message), warning: true);
+                Log("build package import failed: " + message);
+                StatusText = Loc.T("status.buildPackageImportFailed");
+                return;
+            }
+            _pendingImportReplacePath = null;
+            var package = outcome.Package!;
+            SetBuildPackageStatus(Loc.T("library.buildPackage.imported", package.DisplayName, package.PackageDir), warning: false);
+            foreach (var warning in outcome.Warnings)
+            {
+                Log("build package: " + warning);
+            }
+            await RefreshLibraryAsync().ConfigureAwait(true);
+            Log("imported build package " + package.TitleID + " from " + package.Path + " -> " + package.PackageDir
+                + " (pack sha256 " + package.PackSha256 + ", rom " + (package.RomIncluded ? "included" : "not included") + ")");
+            StatusText = Loc.T("status.buildPackageImported");
+            ShowLibrary();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            _pendingImportReplacePath = null;
+            SetBuildPackageStatus(Loc.T("library.buildPackage.importFailed", exception.Message), warning: true);
+            Log("build package import failed: " + exception.Message);
+            StatusText = Loc.T("status.buildPackageImportFailed");
+        }
+        finally
+        {
+            SetBusy(false, Loc.T("status.ready"));
+        }
+    }
+
+    private void SetBuildPackageStatus(string text, bool warning)
+    {
+        BuildPackageStatus = text;
+        IsBuildPackageWarning = warning;
+        HasBuildPackageStatus = !string.IsNullOrWhiteSpace(text);
+        OnPropertyChanged(nameof(CanConfirmImportReplace));
+        RaiseCommandStates();
     }
 
     /// <summary>Probe the local build recipe (toolchain ABI + versions) for the cache labels.</summary>
@@ -1955,6 +2131,7 @@ public sealed class MainViewModel : ObservableObject
                  {
                      DeployCommand, ConfirmOrphanedDeployCommand, StopDeployCommand, BuildAllCommand, RefreshDevicesCommand, RefreshPrerequisitesCommand,
                      RefreshStatusCommand, RefreshReadinessCommand, OpenImpactorCommand,
+                     ImportBuildPackageCommand, ConfirmImportReplaceCommand,
                  })
         {
             switch (command)

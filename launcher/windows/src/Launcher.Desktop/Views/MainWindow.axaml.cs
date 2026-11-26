@@ -65,6 +65,7 @@ public partial class MainWindow : Window
         if (ViewModel is { } viewModel)
         {
             viewModel.ExportLogRequested += OnExportLogRequested;
+            viewModel.ImportBuildPackageRequested += OnImportBuildPackageRequested;
             ((INotifyCollectionChanged)viewModel.LogLines).CollectionChanged += (_, _) => ScrollLogToEnd();
         }
         ScrollLogToEnd();
@@ -118,6 +119,35 @@ public partial class MainWindow : Window
             return;
         }
         await viewModel.ImportAsync(paths);
+    }
+
+    private async void OnImportBuildPackageRequested()
+    {
+        try
+        {
+            if (ViewModel is not { } viewModel)
+            {
+                return;
+            }
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = viewModel.L.LibraryImportBuildPackageAction,
+                AllowMultiple = false,
+                FileTypeFilter = new[]
+                {
+                    new FilePickerFileType("3ds2apple build package") { Patterns = new[] { "*.32a" } },
+                    FilePickerFileTypes.All,
+                },
+            });
+            if (files.Count > 0 && files[0].TryGetLocalPath() is { } path)
+            {
+                await viewModel.ImportBuildPackageAsync(path);
+            }
+        }
+        catch (Exception exception)
+        {
+            ViewModel?.Log("file picker failed: " + exception.Message);
+        }
     }
 
     private async void OnExportLogRequested()

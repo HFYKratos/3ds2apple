@@ -37,6 +37,11 @@ public sealed class LocalizedText
     public string LibraryBuildNow => Loc.T("library.buildNow");
     public string LibraryBuildAll => Loc.T("library.buildAll");
 
+    // Library portable build packages (.32a export/import).
+    public string LibraryImportBuildPackageAction => Loc.T("library.buildPackage.import");
+    public string LibraryExportBuildPackage => Loc.T("library.buildPackage.export");
+    public string LibraryConfirmImportReplace => Loc.T("library.buildPackage.confirmReplace");
+
     // Deploy
     public string DeployTitle => Loc.T("deploy.title");
     public string DeploySubtitle => Loc.T("deploy.subtitle");

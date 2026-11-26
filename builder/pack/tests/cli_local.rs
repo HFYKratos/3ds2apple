@@ -861,3 +861,123 @@ fn imports_local_rom_metadata_into_a_temp_package() {
     // The temp tree holds only the package output: nothing leaked into the repo.
     assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 1);
 }
+
+/// Portable .32a build packages: export -> list -> import -> replace through the
+/// real binary (a synthetic ROM header and a fake Mach-O-magic pack; no game data).
+#[test]
+fn builds_export_list_and_import_round_trip() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("root");
+    let root2 = temp.path().join("root2");
+    let title = format!("{:016X}", POKEMON_Y);
+    let rom = temp.path().join("Example Game.cci");
+    std::fs::write(&rom, synthetic_ncsd(POKEMON_Y, "CTR-P-EK2A")).unwrap();
+    let root_arg = root.display().to_string();
+    let base = || vec!["--out".to_string(), root_arg.clone()];
+
+    let mut add = base();
+    add.extend([
+        "packages".to_string(),
+        "add".to_string(),
+        "--roms".to_string(),
+        rom.display().to_string(),
+    ]);
+    let added = run(&add);
+    assert!(added.success, "packages add failed: {}", added.stderr);
+
+    let mut fake = vec![0_u8; 4096];
+    fake[..4].copy_from_slice(&[0xCF, 0xFA, 0xED, 0xFE]);
+    let pack = temp.path().join("fake-GamePack.dylib");
+    std::fs::write(&pack, &fake).unwrap();
+    let mut record = base();
+    record.extend([
+        "packages".to_string(),
+        "record".to_string(),
+        "--title-id".to_string(),
+        title.clone(),
+        "--pack".to_string(),
+        pack.display().to_string(),
+    ]);
+    let recorded = run(&record);
+    assert!(recorded.success, "packages record failed: {}", recorded.stderr);
+
+    let mut export = base();
+    export.extend([
+        "--json".to_string(),
+        "builds".to_string(),
+        "export".to_string(),
+        "--title-id".to_string(),
+        title.clone(),
+        "--app-version".to_string(),
+        "9.9.9".to_string(),
+    ]);
+    let exported = run(&export);
+    assert!(
+        exported.success,
+        "builds export failed: {}\n{}",
+        exported.stdout, exported.stderr
+    );
+    let exported_json: serde_json::Value = serde_json::from_str(&exported.stdout).unwrap();
+    assert_eq!(exported_json["errors"].as_array().unwrap().len(), 0);
+    let build = &exported_json["builds"][0];
+    assert_eq!(build["titleID"], title.as_str());
+    assert_eq!(build["romIncluded"], true);
+    let package_path = PathBuf::from(build["path"].as_str().unwrap());
+    assert!(package_path.is_file());
+    assert!(package_path
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .ends_with(".32a"));
+
+    let mut list = base();
+    list.extend(["--json".to_string(), "builds".to_string(), "list".to_string()]);
+    let listed = run(&list);
+    assert!(listed.success, "builds list failed: {}", listed.stderr);
+    let listed_json: serde_json::Value = serde_json::from_str(&listed.stdout).unwrap();
+    assert_eq!(listed_json["builds"].as_array().unwrap().len(), 1);
+    assert_eq!(listed_json["builds"][0]["titleID"], title.as_str());
+
+    let root2_arg = root2.display().to_string();
+    let import_args = || {
+        let mut args = vec!["--out".to_string(), root2_arg.clone()];
+        args.extend([
+            "--json".to_string(),
+            "builds".to_string(),
+            "import".to_string(),
+            package_path.display().to_string(),
+        ]);
+        args
+    };
+    let imported = run(&import_args());
+    assert!(
+        imported.success,
+        "builds import failed: {}\n{}",
+        imported.stdout, imported.stderr
+    );
+    let imported_json: serde_json::Value = serde_json::from_str(&imported.stdout).unwrap();
+    assert_eq!(imported_json["imported"]["titleID"], title.as_str());
+    assert_eq!(imported_json["imported"]["romIncluded"], true);
+
+    let verify = run(&[
+        "--out".to_string(),
+        root2.display().to_string(),
+        "packages".to_string(),
+        "verify".to_string(),
+    ]);
+    assert!(verify.success, "verify failed: {}\n{}", verify.stdout, verify.stderr);
+
+    let refused = run(&import_args());
+    assert!(!refused.success, "a conflicting import must be refused");
+
+    let mut replace = import_args();
+    replace.push("--replace".to_string());
+    let replaced = run(&replace);
+    assert!(
+        replaced.success,
+        "replace import failed: {}\n{}",
+        replaced.stdout, replaced.stderr
+    );
+    let replaced_json: serde_json::Value = serde_json::from_str(&replaced.stdout).unwrap();
+    assert_eq!(replaced_json["imported"]["replaced"], true);
+}

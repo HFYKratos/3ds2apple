@@ -11,3 +11,4 @@
 #![warn(missing_debug_implementations)]
 
 pub mod hash;
+pub mod zip;

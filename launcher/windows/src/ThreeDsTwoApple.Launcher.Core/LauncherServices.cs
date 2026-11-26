@@ -191,6 +191,9 @@ public sealed class LauncherServices
     /// <summary>"Build now" service for the Library page (one game or every imported game).</summary>
     public LibraryBuildService CreateLibraryBuildService() => new(_workspace, CreateDeployBuildProvider(), BuildCompatibility);
 
+    /// <summary>Library "Export .32a" / "Import .32a" service (user-data build packages).</summary>
+    public BuildPackageService CreateBuildPackageService() => new(_workspace, Pack);
+
     /// <summary>
     /// Deploy pre-check: the five green/red prerequisites the Deploy page shows before the
     /// user presses Deploy. Every probe is best-effort, so a missing tool, an unreachable

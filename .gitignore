@@ -24,6 +24,9 @@ exefs/
 DerivedData/
 Payload/
 *.ipa
+# Portable launcher build packages and single-game IPA exports (may contain game data)
+*.32a
+3ds2apple-data/
 *.app/
 *.dylib
 *.a

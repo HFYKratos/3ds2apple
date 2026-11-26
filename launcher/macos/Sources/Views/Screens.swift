@@ -41,6 +41,9 @@ struct LibraryScreen: View {
                 BannerView(banner: banner) { model.banner = nil }
             }
             header
+            if model.buildPackageStatus != nil || model.pendingImportReplacePath != nil {
+                buildPackageStatusView()
+            }
             if model.games.isEmpty {
                 emptyLibrary
             } else {
@@ -67,7 +70,19 @@ struct LibraryScreen: View {
             } label: {
                 Label(strings.importButton, systemImage: "plus")
             }
+            Button {
+                chooseROM()
+            } label: {
+                Label(strings.importButton, systemImage: "plus")
+            }
             .buttonStyle(PrimaryButtonStyle())
+            .disabled(model.isBusy)
+            Button {
+                chooseBuildPackage()
+            } label: {
+                Label(strings.buildPackageImport, systemImage: "shippingbox")
+            }
+            .buttonStyle(SecondaryButtonStyle())
             .disabled(model.isBusy)
         }
     }
@@ -79,6 +94,45 @@ struct LibraryScreen: View {
             message: ""
         )
     }
+
+    /// .32a export/import result: the output path on success or the exact error;
+    /// an import conflict offers the explicit replace action.
+    private func buildPackageStatusView() -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let status = model.buildPackageStatus {
+                Text(status)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(model.buildPackageWarning ? LauncherTheme.danger : LauncherTheme.accentDeep)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if model.pendingImportReplacePath != nil {
+                Button {
+                    Task { await model.confirmReplaceBuildPackage() }
+                } label: {
+                    Text(strings.buildPackageReplace)
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(model.isBusy)
+            }
+        }
+        .launcherCard()
+    }
+
+    private func chooseBuildPackage() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        if let type = UTType(filenameExtension: "32a") {
+            panel.allowedContentTypes = [type]
+        }
+        panel.message = strings.buildPackageImport
+        panel.prompt = strings.choose
+        if panel.runModal() == .OK, let url = panel.url {
+            Task { await model.importBuildPackage(at: url.path) }
+        }
+    }
+
 
     private func chooseROM() {
         let panel = NSOpenPanel()
@@ -173,6 +227,15 @@ private struct GameCard: View {
                 }
                 .buttonStyle(SecondaryButtonStyle())
                 .disabled(model.isBusy)
+                if game.packIsReal {
+                    Button {
+                        Task { await model.exportBuildPackage(for: game) }
+                    } label: {
+                        Label(strings.buildPackageExport, systemImage: "shippingbox.and.arrow.backward")
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .disabled(model.isBusy)
+                }
                 Spacer(minLength: 0)
                 Button {
                     showingRemove = true

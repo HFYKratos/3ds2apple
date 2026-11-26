@@ -67,6 +67,12 @@ final class AppModel: ObservableObject {
 
     // Misc
     @Published var lastExportPath: String?
+    /// Result of the last Library .32a export/import (shown inline in the Library).
+    @Published var buildPackageStatus: String?
+    /// true when buildPackageStatus is a warning/conflict (red) instead of a path (accent).
+    @Published var buildPackageWarning = false
+    /// Set when an import hit an existing package: the UI offers "replace".
+    @Published var pendingImportReplacePath: String?
     @Published private(set) var scenario: MockScenario?
 
     let settings: LauncherSettings
@@ -467,6 +473,92 @@ final class AppModel: ObservableObject {
             await importDetected()
         }
     }
+
+    // MARK: - Portable .32a build packages (Library export/import)
+
+    /// Workspace directory that holds the exported .32a user-data files.
+    /// A .32a can contain game data: it stays local and is never uploaded.
+    var buildPackagesDirectory: String {
+        pack.outRoot.appendingPathComponent("builds", isDirectory: true).path
+    }
+
+    /// Library card "Export .32a": write the portable build package for one game.
+    func exportBuildPackage(for game: GameEntry) async {
+        guard !isBusy else { return }
+        if !game.packIsReal {
+            setBuildPackageStatus(strings.buildPackageNeedsPack, warning: true)
+            return
+        }
+        guard beginBusy() else { return }
+        defer { endBusy() }
+        let directory = buildPackagesDirectory
+        appendLog(.command, "build", "builds export --title-id " + game.titleID + " --output-dir " + directory + " --json")
+        do {
+            let package = try await pack.exportBuildPackage(titleID: game.titleID, outputDirectory: directory)
+            let rom = package.romIncluded ? strings.buildPackageWithRom : strings.buildPackageWithoutRom
+            setBuildPackageStatus(strings.buildPackageExported(package.path, rom), warning: !package.romIncluded)
+            appendLog(.success, "build", "exported .32a for " + package.titleID + " -> " + package.path
+                + " (" + FileProbe.formatBytes(package.bytes) + ", sha256 " + package.sha256
+                + ", rom " + (package.romIncluded ? "included" : "not included") + ")")
+            appendLog(.info, "build", "note: a .32a can contain game data; keep it local and never upload or commit it")
+            for warning in package.warnings {
+                appendLog(.warn, "build", warning)
+            }
+        } catch {
+            let failure = error.launcherFailure()
+            setBuildPackageStatus(strings.buildPackageExportFailed(failure.message), warning: true)
+            appendLog(.error, "build", "build package export failed: " + failure.message + " " + failure.hint)
+        }
+    }
+
+    /// Library "Import .32a": called by the view after its file picker.
+    func importBuildPackage(at path: String) async {
+        guard !path.isEmpty else { return }
+        await importBuildPackageCore(path: path, replace: false)
+    }
+
+    /// "Replace existing package" after an import conflict.
+    func confirmReplaceBuildPackage() async {
+        guard let path = pendingImportReplacePath else { return }
+        await importBuildPackageCore(path: path, replace: true)
+    }
+
+    private func importBuildPackageCore(path: String, replace: Bool) async {
+        guard !isBusy else { return }
+        guard beginBusy() else { return }
+        defer { endBusy() }
+        appendLog(.command, "build", "builds import \"" + path + "\"" + (replace ? " --replace" : "") + " --json")
+        do {
+            let package = try await pack.importBuildPackage(path: path, replace: replace)
+            pendingImportReplacePath = nil
+            setBuildPackageStatus(strings.buildPackageImported(package.displayName, package.packageDir), warning: false)
+            for warning in package.warnings {
+                appendLog(.warn, "build", warning)
+            }
+            await refreshLibrary()
+            appendLog(.success, "build", "imported .32a for " + package.titleID + " -> " + package.packageDir
+                + " (pack sha256 " + package.packSha256 + ", rom " + (package.romIncluded ? "included" : "not included") + ")")
+            screen = .library
+        } catch {
+            let failure = error.launcherFailure()
+            let conflict = !replace && (failure.hint.contains("--replace") || failure.message.contains("--replace"))
+            if conflict {
+                pendingImportReplacePath = path
+                setBuildPackageStatus(strings.buildPackageConflict(failure.hint), warning: true)
+                appendLog(.warn, "build", "build package import needs confirmation: " + failure.message + " " + failure.hint)
+                return
+            }
+            pendingImportReplacePath = nil
+            setBuildPackageStatus(strings.buildPackageImportFailed(failure.message), warning: true)
+            appendLog(.error, "build", "build package import failed: " + failure.message + " " + failure.hint)
+        }
+    }
+
+    private func setBuildPackageStatus(_ text: String, warning: Bool) {
+        buildPackageStatus = text
+        buildPackageWarning = warning
+    }
+
 
     private func makeGame(from rom: DetectedROM, package: DetectedPackage) -> GameEntry {
         let existing = game(id: package.titleID)

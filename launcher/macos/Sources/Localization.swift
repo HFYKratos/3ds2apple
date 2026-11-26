@@ -111,6 +111,18 @@ struct LauncherStrings {
     var librarySubtitle: String
     var libraryCountFormat: String
     var libraryIPALabel: String
+    // Portable .32a build packages (Library export/import; user data, never uploaded)
+    var buildPackageImport: String
+    var buildPackageExport: String
+    var buildPackageReplace: String
+    var buildPackageNeedsPack: String
+    var buildPackageWithRom: String
+    var buildPackageWithoutRom: String
+    var buildPackageExportedFormat: String
+    var buildPackageImportedFormat: String
+    var buildPackageExportFailedFormat: String
+    var buildPackageImportFailedFormat: String
+    var buildPackageConflictFormat: String
     var emptyLibraryTitle: String
     var emptyLibraryMessage: String
     var importGame: String
@@ -302,6 +314,29 @@ struct LauncherStrings {
         librarySubtitle = t("Your own games, one shell", "你自己的游戏，一个外壳")
         libraryCountFormat = t("%d game(s) in the library", "游戏库中有 %d 个游戏")
         libraryIPALabel = t("Library IPA", "游戏库 IPA")
+        buildPackageImport = t("Import .32a", "导入 .32a")
+        buildPackageExport = t("Export .32a", "导出 .32a")
+        buildPackageReplace = t("Replace existing package", "覆盖现有包")
+        buildPackageNeedsPack = t(
+            "Build the GamePack first: only a real AOT pack can be exported.",
+            "请先构建 GamePack：只有真实 AOT 包才能导出。"
+        )
+        buildPackageWithRom = t(
+            "(includes game data; keep it local, never upload or commit it)",
+            "（包含游戏数据——仅保留在本地，切勿上传或提交）"
+        )
+        buildPackageWithoutRom = t(
+            "(no game data; deploying it needs the original ROM)",
+            "（不含游戏数据——部署时需要原始 ROM）"
+        )
+        buildPackageExportedFormat = t("Exported %@  %@", "已导出 %@  %@")
+        buildPackageImportedFormat = t("Imported %@ into %@", "已导入 %@ 到 %@")
+        buildPackageExportFailedFormat = t("Export failed: %@", "导出失败：%@")
+        buildPackageImportFailedFormat = t("Import failed: %@", "导入失败：%@")
+        buildPackageConflictFormat = t(
+            "A package for this game already exists. %@",
+            "该游戏已存在构建包。%@"
+        )
         emptyLibraryTitle = t("Your library is empty", "游戏库还是空的")
         emptyLibraryMessage = t(
             "Import a decrypted .3ds/.cci file that you own. The Deploy tab compiles one native AOT pack per game and installs a single shell on the iPhone/iPad.",
@@ -531,6 +566,28 @@ struct LauncherStrings {
     /// "Publisher: Nintendo" line on a Library card.
     func publisher(_ value: String) -> String {
         String(format: publisherFormat, value)
+    }
+
+    // MARK: - Portable .32a build packages
+
+    func buildPackageExported(_ path: String, _ rom: String) -> String {
+        String(format: buildPackageExportedFormat, path, rom)
+    }
+
+    func buildPackageImported(_ name: String, _ packageDir: String) -> String {
+        String(format: buildPackageImportedFormat, name, packageDir)
+    }
+
+    func buildPackageExportFailed(_ message: String) -> String {
+        String(format: buildPackageExportFailedFormat, message)
+    }
+
+    func buildPackageImportFailed(_ message: String) -> String {
+        String(format: buildPackageImportFailedFormat, message)
+    }
+
+    func buildPackageConflict(_ message: String) -> String {
+        String(format: buildPackageConflictFormat, message)
     }
 
     /// Compile hardware line: cores + RAM + 3dsrecomp's automatic parallelism.
