@@ -61,6 +61,7 @@ struct InGameMenuView: View {
         case saveState
         case screenLayout
         case perApplication
+        case cheats
     }
 
     /// NavigationStack path: [] = root, one element = a sub-page. Native
@@ -71,6 +72,11 @@ struct InGameMenuView: View {
     @State private var controlOptionsSheet: ControlOptionsPage?
     @State private var isResetControlsConfirmationPresented = false
     @State private var didHandleDebugOptions = false
+    /// The in-game Cheats page's state: the running game's cheat list, the last
+    /// toggle error and the one-time refresh when the page opens.
+    @ObservedObject private var cheats = CheatRuntime.shared
+    @State private var cheatError: String?
+    @State private var didRequestCheats = false
 
     // MARK: - Grouped style
 
@@ -95,6 +101,7 @@ struct InGameMenuView: View {
     private var tintPurple: Color { Color(.systemPurple) }
     private var tintTeal: Color { Color(.systemTeal) }
     private var tintGray: Color { Color(.systemGray) }
+    private var tintYellow: Color { Color(.systemYellow) }
 
     private let cardCornerRadius: CGFloat = 10
     private let iconTileSize: CGFloat = 29
@@ -245,6 +252,7 @@ struct InGameMenuView: View {
         case .saveState: return L10n.tr("Save state")
         case .screenLayout: return L10n.tr("Screen layout")
         case .perApplication: return L10n.tr("Per-Application Settings")
+        case .cheats: return L10n.tr("Cheats")
         }
     }
 
@@ -320,6 +328,7 @@ struct InGameMenuView: View {
         case .saveState: saveStateContent
         case .screenLayout: screenLayoutContent
         case .perApplication: perApplicationContent
+        case .cheats: cheatsContent
         }
     }
 
@@ -362,6 +371,13 @@ struct InGameMenuView: View {
                 }
             }
             rowGroup {
+                actionRow(L10n.tr("Cheats"),
+                          systemImage: "wand.and.stars",
+                          tint: tintYellow,
+                          identifier: "menu-cheats") {
+                    pushPage(.cheats)
+                }
+                rowDivider
                 actionRow(L10n.tr("Global Settings"),
                           systemImage: "gearshape",
                           tint: tintGray,
@@ -812,6 +828,144 @@ struct InGameMenuView: View {
             settings.screenRotation = next
             settings.persist()
         }
+    }
+
+    // MARK: - Cheats
+
+    /// The running game's cheat codes: the entries zk_cheats_json() reports for
+    /// the loaded title, each with its runtime switch. A toggle applies from the
+    /// next frame and writes the file back through zk_cheats_save(); the file is
+    /// the same one Settings -> Cheats edits (Documents/Cheats/<TITLEID>.txt).
+    private var cheatsContent: some View {
+        VStack(alignment: .leading, spacing: cardSpacing) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L10n.tr("Cheat codes"))
+                    .font(.body)
+                    .foregroundStyle(primaryText)
+                Text(cheatSummaryText)
+                    .font(.footnote)
+                    .foregroundStyle(secondaryText)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("menu-cheats-status")
+
+            if let error = cheatError ?? cheats.snapshot.error {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(accentRed)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("menu-cheats-error")
+            }
+
+            if cheats.snapshot.cheats.isEmpty {
+                if cheats.isBusy {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text(L10n.tr("Reading the cheat file…"))
+                            .font(.footnote)
+                            .foregroundStyle(secondaryText)
+                    }
+                } else {
+                    Text(cheats.snapshot.fileExists
+                         ? L10n.tr("The cheat file has no entries the runtime can run.")
+                         : L10n.tr("No cheat file for this game yet."))
+                        .font(.footnote)
+                        .foregroundStyle(secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(L10n.format("Add codes in Settings → Cheats. The file is Documents/Cheats/%@.", cheatFileName))
+                        .font(.footnote)
+                        .foregroundStyle(secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
+                rowGroup {
+                    ForEach(cheats.snapshot.cheats) { cheat in
+                        cheatToggleRow(cheat)
+                        if cheat.id < cheats.snapshot.cheats.count - 1 {
+                            rowDivider
+                        }
+                    }
+                }
+            }
+
+            rowGroup {
+                actionRow(L10n.tr("Reload from file"),
+                          systemImage: "arrow.clockwise",
+                          tint: tintGray,
+                          identifier: "menu-cheats-reload") {
+                    cheatError = nil
+                    cheats.refresh()
+                }
+            }
+
+            Text(L10n.tr("Changes apply from the next frame and are saved to the cheat file."))
+                .font(.footnote)
+                .foregroundStyle(secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onAppear {
+            guard !didRequestCheats else { return }
+            didRequestCheats = true
+            cheats.refresh()
+        }
+    }
+
+    private var cheatSummaryText: String {
+        guard !cheats.snapshot.cheats.isEmpty else {
+            return cheats.snapshot.filePathDescription
+        }
+        return L10n.format("%ld cheats · %ld on", cheats.snapshot.cheats.count,
+                           cheats.snapshot.enabledCount)
+    }
+
+    private var cheatFileName: String {
+        titleID.map { "\($0).txt" } ?? "<TITLEID>.txt"
+    }
+
+    private func cheatToggleRow(_ cheat: RuntimeCheat) -> some View {
+        HStack(spacing: iconTitleSpacing) {
+            iconTile("wand.and.stars", tint: tintYellow)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(cheat.name.isEmpty ? L10n.tr("(unnamed)") : cheat.name)
+                    .font(.body)
+                    .foregroundStyle(primaryText)
+                    .lineLimit(1)
+                Text(cheat.lines == 1
+                     ? L10n.tr("1 code")
+                     : L10n.format("%ld codes", cheat.lines))
+                    .font(.footnote)
+                    .foregroundStyle(secondaryText)
+            }
+            Spacer(minLength: 8)
+            Toggle(isOn: cheatBinding(cheat)) { EmptyView() }
+                .labelsHidden()
+        }
+        .padding(.horizontal, rowHorizontalPadding)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity)
+        .accessibilityIdentifier("menu-cheat-\(cheat.index)")
+    }
+
+    private func cheatBinding(_ cheat: RuntimeCheat) -> Binding<Bool> {
+        Binding(
+            get: {
+                cheats.snapshot.cheats.first(where: { $0.index == cheat.index })?.enabled
+                    ?? cheat.enabled
+            },
+            set: { enabled in
+                cheats.setEnabled(index: cheat.index, enabled: enabled) { error in
+                    if let error {
+                        cheatError = error
+                    }
+                }
+            }
+        )
     }
 
     // MARK: - Save state status

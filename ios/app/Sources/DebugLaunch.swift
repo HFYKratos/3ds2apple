@@ -296,6 +296,10 @@ enum DebugLaunch {
         argumentValue(for: titleIDArgument, in: arguments)
     }
 
+    /// Whether this launch passes `-openAOTTitleID` (QA/diagnostic fixtures).
+    /// The single-game auto launch leaves an explicit hook alone.
+    static var hasRequestedStart: Bool { requestedTitleID() != nil }
+
     /// Folder to scan instead of Documents/Games; nil in normal launches.
     ///
     /// A relative path resolves against Documents, and the "Documents/" prefix

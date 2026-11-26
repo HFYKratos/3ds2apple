@@ -124,6 +124,11 @@ struct ContentView: View {
             // Automated launch for the Simulator / diagnostics
             // (`-openAOTTitleID <TITLEID>`); inert in normal use.
             DebugLaunch.startIfRequested(model: model, library: library)
+            // Single-game IPA export: the catalog can ask the shell to open its
+            // one game right after the library scan and its ROM check. Inert for
+            // a normal multi-game shell and runs at most once per process
+            // (AutoLaunch.swift).
+            AutoLaunch.startIfRequested(model: model, library: library)
             // Headless screenshot of the layout pages; inert otherwise.
             switch DebugLaunch.requestedLayoutPage {
             case .screenLayout:

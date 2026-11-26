@@ -468,6 +468,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         // The catalog decides what exists; log it once like the old shell logged
         // the ROMs it had imported.
         AppLog.log("[3ds2apple] game library: %ld game(s)", GameLibrary.shared.entries.count)
+        // The in-game Cheats page reads/toggles the runtime's list through
+        // CheatRuntime; its handlers run the runtime queue (see the block below).
+        configureCheatRuntime()
         // A recovery snapshot left by a session the system jettisoned while in
         // the background: the home page offers to continue it.
         backgroundSnapshot = SaveStateSupport.pendingBackgroundSnapshot()
@@ -663,6 +666,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         GameLibrary.shared.markPlayed(titleID: entry.titleID)
         let game = GameLibrary.shared.entry(titleID: entry.titleID) ?? entry
         currentGame = game
+        // A new load starts from the file again; the launch below publishes the
+        // loaded cheats once the runtime handle exists.
+        CheatRuntime.shared.reset()
         notice = nil
         stopFrameLoop()
         stopAudio()
@@ -781,8 +787,54 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
                 self.clearScreens()
                 self.warmUp = GraphicsWarmUpStatus()
                 self.aotStatus = .notLoaded
+                CheatRuntime.shared.reset()
                 self.setPhase(.idle)
                 completion?()
+            }
+        }
+    }
+
+    // MARK: - Cheat codes (0.2.2; runtimeQueue owns the handle)
+
+    /// Installs the in-game Cheats bridge. Main queue (init): both handlers hop
+    /// to `runtimeQueue`, because every zk_cheats_* call takes the live handle
+    /// and must run on the queue that owns it. The file path is the one the
+    /// game load published (Documents/Cheats/<TITLEID>.txt, CheatManager).
+    private func configureCheatRuntime() {
+        CheatRuntime.shared.reloadHandler = { [weak self] titleID, path, completion in
+            guard let self else {
+                completion(.none)
+                return
+            }
+            self.runtimeQueue.async { [weak self] in
+                guard let self else {
+                    DispatchQueue.main.async { completion(.none) }
+                    return
+                }
+                let snapshot = CheatBridge.snapshot(system: self.system,
+                                                   titleID: titleID,
+                                                   path: path)
+                DispatchQueue.main.async { completion(snapshot) }
+            }
+        }
+        CheatRuntime.shared.toggleHandler = { [weak self] titleID, path, index, enabled, completion in
+            guard let self else {
+                DispatchQueue.main.async { completion(nil, L10n.tr("The game is not running.")) }
+                return
+            }
+            self.runtimeQueue.async { [weak self] in
+                guard let self else {
+                    DispatchQueue.main.async { completion(nil, L10n.tr("The game is not running.")) }
+                    return
+                }
+                let error = CheatBridge.setEnabled(system: self.system,
+                                                  path: path,
+                                                  index: index,
+                                                  enabled: enabled)
+                let snapshot = CheatBridge.snapshot(system: self.system,
+                                                   titleID: titleID,
+                                                   path: path)
+                DispatchQueue.main.async { completion(snapshot, error) }
             }
         }
     }
@@ -2130,6 +2182,16 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
         AppLog.log("[3ds2apple] zk_create OK after %.1f s: %@ (%@)",
               elapsed, launch.entry.title, romURL.lastPathComponent)
 
+        // Cheat codes: the player's own file for this title
+        // (Documents/Cheats/<TITLEID>.txt). The runtime applies the enabled
+        // entries from the next frame and a missing file is not an error; the
+        // result is published with the loaded game and goes to the log.
+        let cheatPath = CheatManager.fileURL(titleID: launch.entry.titleID).path
+        let cheatSnapshot = CheatBridge.load(system: handle,
+                                            titleID: launch.entry.titleID,
+                                            path: cheatPath)
+        AppLog.log("[3ds2apple] cheats: %@", cheatSnapshot.diagnosticsLine)
+
         // The optional first-load warm-up was removed in 0.1.1: a load always
         // reveals the game as soon as zk_create succeeds. The runtime still
         // persists its pipeline cache while the game runs, so later loads start
@@ -2148,6 +2210,9 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
             self.pipelineCacheStats = cacheAtLoad
             self.pipelineCacheAtLoad = cacheAtLoad
             self.warmUp = GraphicsWarmUpStatus()
+            CheatRuntime.shared.publish(cheatSnapshot,
+                                        titleID: launch.entry.titleID,
+                                        path: cheatPath)
             self.setPhase(.loaded(name: launch.entry.title))
             if self.backgroundSuspended {
                 // The app moved to the background while this load was running:

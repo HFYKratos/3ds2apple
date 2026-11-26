@@ -18,6 +18,7 @@
 //
 //  {
 //    "schemaVersion": 2,
+//    "autoLaunch": false,                       // optional; single-game IPA only
 //    "games": [
 //      { "titleID": "0004000000055E00",          // 16 upper-case hex digits
 //        "displayName": "Pokémon Y",
@@ -44,6 +45,11 @@
 //    in the library as "No AOT" and cannot be started.
 //  - "schemaVersion": 1 catalogs have no packFile, so every AOT entry is treated
 //    as statically linked; that keeps every 0.1.x build working.
+//  - "autoLaunch" (optional, default false) asks the shell to open the single
+//    game right after the library scan. The desktop launcher writes true only
+//    for an IPA exported for one game; a normal shell omits it and the home page
+//    is unchanged. The shell starts at most once per process and only when the
+//    pushed game data validated.
 //
 //  A missing or unreadable GameCatalog.json is not an error: a base shell with
 //  no games has an empty library, and the home page explains that games are
@@ -154,15 +160,22 @@ struct GameCatalog: Codable {
     static let empty = GameCatalog(schemaVersion: GameCatalog.supportedSchemaVersion, games: [])
 
     let schemaVersion: Int
+    /// Open the build's single game right after the library scan (single-game
+    /// IPA export). Optional in the file and false for every normal shell.
+    let autoLaunch: Bool
     let games: [GameCatalogGame]
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion
+        case autoLaunch
         case games
     }
 
-    init(schemaVersion: Int = GameCatalog.supportedSchemaVersion, games: [GameCatalogGame] = []) {
+    init(schemaVersion: Int = GameCatalog.supportedSchemaVersion,
+         autoLaunch: Bool = false,
+         games: [GameCatalogGame] = []) {
         self.schemaVersion = schemaVersion
+        self.autoLaunch = autoLaunch
         self.games = games
     }
 
@@ -170,6 +183,9 @@ struct GameCatalog: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
             ?? Self.supportedSchemaVersion
+        // An unreadable value means "do not auto launch": the flag only ever
+        // makes a one-game IPA skip its one-card home page.
+        autoLaunch = try container.decodeIfPresent(Bool.self, forKey: .autoLaunch) ?? false
         games = try container.decodeIfPresent([GameCatalogGame].self, forKey: .games) ?? []
     }
 
@@ -303,7 +319,11 @@ struct GameCatalog: Codable {
                 notes: game.notes
             ))
         }
-        return GameCatalog(schemaVersion: decoded.schemaVersion, games: games)
+        return GameCatalog(
+            schemaVersion: decoded.schemaVersion,
+            autoLaunch: decoded.autoLaunch,
+            games: games
+        )
     }
 
     /// The catalog shipped in the app bundle (bundle root or Resources/),
@@ -322,11 +342,12 @@ struct GameCatalog: Codable {
         do {
             let catalog = try load(from: url)
             AppLog.log(
-                "[3ds2apple] game catalog: %@ · schemaVersion %ld · %ld game(s), %ld built",
+                "[3ds2apple] game catalog: %@ · schemaVersion %ld · %ld game(s), %ld built%@",
                 url.lastPathComponent,
                 catalog.schemaVersion,
                 catalog.games.count,
-                catalog.aotGames.count
+                catalog.aotGames.count,
+                catalog.autoLaunch ? " · autoLaunch" : ""
             )
             return catalog
         } catch {

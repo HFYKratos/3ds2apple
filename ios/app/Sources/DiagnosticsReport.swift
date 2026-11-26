@@ -245,6 +245,24 @@ enum DiagnosticsExporter {
         let budgetUsedText = renderTotalAvg > 0
             ? String(format: "%.1f", renderTotalAvg / frameBudgetMs * 100)
             : "-"
+        // 0.2.2 experimental renderer optimisations: the switches App.init wrote
+        // into this process's environment (a Settings change applies on the
+        // next launch) and whether the running path can use them at all.
+        let advancedPairs = AdvancedGraphics.appliedEnvironment
+        let advancedText = advancedPairs.isEmpty ? "none" : advancedPairs.joined(separator: ",")
+        let advancedHardware = MetalBackend.isMoltenVKEmbedded
+            && (!model.isRuntimeLoaded || model.displayPath.usesMetalLayer)
+        let advancedEffective = (!advancedPairs.isEmpty && advancedHardware) ? "1" : "0"
+        let advancedNote: String
+        if advancedPairs.isEmpty {
+            advancedNote = "all six are off"
+        } else if advancedHardware {
+            advancedNote = "effective: the hardware Vulkan/MoltenVK path runs"
+        } else if !MetalBackend.isMoltenVKEmbedded {
+            advancedNote = "inert: MoltenVK is not embedded in this app, the software PICA200 renderer never reads the switches"
+        } else {
+            advancedNote = "inert: this game load fell back to the software renderer"
+        }
         var header = """
         3ds2apple diagnostics
         date=\(Date())
@@ -254,6 +272,11 @@ enum DiagnosticsExporter {
         screen=\(Int(screen.bounds.width * screen.scale))x\(Int(screen.bounds.height * screen.scale)) @\(screen.scale)x
         phase=\(phaseDescription(model.phase))
         game=\(model.currentGame.map { "\($0.title) (\($0.titleID))" } ?? "none")
+        auto_launch=\(AutoLaunch.diagnosticsLine)
+        auto_launch_definition=the optional "autoLaunch" flag in the bundle GameCatalog.json is honoured once per process: a single-game IPA starts its one game after the Documents scan and the ROM SHA-256 check; a game whose data is missing or fails the check stays on the home page and this line says why. not requested for a normal multi-game shell
+        cheats_file=\(CheatManager.diagnosticsLine(titleID: model.currentGame?.titleID))
+        cheats_runtime=\(CheatRuntime.shared.snapshot.diagnosticsLine)
+        cheats_definition=cheat codes are the player's own Citra/Azahar text file at Documents/Cheats/<TITLEID>.txt, loaded through zk_cheats_load() at game start; the file is the authority (no code database ships in the app). cheats_file is the file on disk (entries, enabled, lines the runtime keeps but does not run), cheats_runtime is the loaded runtime list (loaded/enabled counts), both absent when no game is loaded. cheats_runtime is published by the game load and by an in-game toggle, which also calls zk_cheats_save()
         paused=\(model.isPaused ? 1 : 0)
         background_suspended=\(model.isBackgroundSuspended ? 1 : 0)
         background_snapshot=\(model.backgroundSnapshotDiagnostics)
@@ -270,6 +293,9 @@ enum DiagnosticsExporter {
         metal_moltenvk_embedded=\(MetalBackend.isMoltenVKEmbedded ? 1 : 0)
         metal_hud_enabled=\(model.isSystemMetalHUDEnabled ? 1 : 0)
         renderer_software=\(model.displayPath == .metalDirect ? 0 : 1)
+        graphics_advanced=\(advancedText)
+        graphics_advanced_effective=\(advancedEffective)
+        graphics_advanced_definition=the six experimental Settings -> Graphics renderer optimisations (ZAKURO_SAFE_SKIPS, ZAKURO_DEDUPE_CAPTURE, ZAKURO_MERGE_PASSES, ZAKURO_FAST_CLEARS, ZAKURO_SORT_OPAQUE, ZAKURO_FAST_BARRIERS) are read once by the Vulkan/MoltenVK renderer while it builds the device: App.init writes the enabled ones before the first game load and a Settings change applies on the next app launch. \(advancedNote)
         display=\(model.displayPath.label)
         hardware=\(model.hardwareStatus)
         loop=\(model.frameLoopLabel)

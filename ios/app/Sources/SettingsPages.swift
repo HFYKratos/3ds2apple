@@ -42,6 +42,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
     case general
     case system
     case gamepad
+    case cheats
     case graphics
     case layout
     case sound
@@ -56,6 +57,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .general: return L10n.tr("General")
         case .system: return L10n.tr("System")
         case .gamepad: return L10n.tr("Gamepad")
+        case .cheats: return L10n.tr("Cheats")
         case .graphics: return L10n.tr("Graphics")
         case .layout: return L10n.tr("Layout")
         case .sound: return L10n.tr("Sound")
@@ -70,6 +72,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .general: return "gearshape.fill"
         case .system: return "iphone"
         case .gamepad: return "gamecontroller.fill"
+        case .cheats: return "wand.and.stars"
         case .graphics: return "square.grid.2x2.fill"
         case .layout: return "rectangle.split.2x1"
         case .sound: return "speaker.wave.2.fill"
@@ -84,6 +87,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .general: return .gray
         case .system: return .blue
         case .gamepad: return .green
+        case .cheats: return .yellow
         case .graphics: return .purple
         case .layout: return .orange
         case .sound: return .pink
@@ -109,6 +113,8 @@ struct SettingsCategoryPage: View {
                 SystemSettingsPage(settings: settings, model: model)
             case .gamepad:
                 GamepadSettingsPage(settings: settings, model: model)
+            case .cheats:
+                CheatsSettingsPage()
             case .graphics:
                 GraphicsSettingsPage(settings: settings, model: model)
             case .layout:
@@ -1381,6 +1387,32 @@ struct GraphicsSettingsPage: View {
                 Text("Experimental")
             }
 
+            // 0.2.2: the six renderer optimisations are their own section (not
+            // an Advanced sub-page): all off, Experimental and next-launch. The
+            // order is the risk order from the R&D contract, lowest first, and
+            // comes from AdvancedGraphics.Toggle.allCases.
+            Section {
+                ForEach(AdvancedGraphics.Toggle.allCases) { toggle in
+                    SettingsToggleRow(
+                        title: LocalizedStringKey(toggle.titleKey),
+                        description: LocalizedStringKey(toggle.descriptionKey),
+                        restartRequired: true,
+                        isOn: advancedGraphicsBinding(toggle)
+                    )
+                    .accessibilityIdentifier(toggle.accessibilityIdentifier)
+                }
+                Button {
+                    resetAdvancedGraphics()
+                } label: {
+                    Text("Reset")
+                }
+                .accessibilityIdentifier("settings-graphics-advanced-reset")
+            } header: {
+                Text("Renderer optimisations")
+            } footer: {
+                Text("Experimental: all six ship off and need an app relaunch. They change how the hardware renderer draws; if a game shows graphical differences, turn them off one by one.")
+            }
+
             if model.isRuntimeLoaded {
                 Section {
                     SettingsInfoRow(
@@ -1391,6 +1423,30 @@ struct GraphicsSettingsPage: View {
                 }
             }
         }
+    }
+
+    /// One of the six experimental renderer switches. The group is one Codable
+    /// value: each toggle writes the whole group back through AppSettings and
+    /// persists it, so the six stay consistent.
+    private func advancedGraphicsBinding(_ toggle: AdvancedGraphics.Toggle) -> Binding<Bool> {
+        Binding(
+            get: { toggle.isEnabled(in: settings.advancedGraphics) },
+            set: { enabled in
+                var options = settings.advancedGraphics
+                toggle.setEnabled(enabled, in: &options)
+                settings.advancedGraphics = options
+                settings.persist()
+            }
+        )
+    }
+
+    /// Reset writes the shipped default (all six off). The renderer already read
+    /// the previous state, so the app has to be relaunched for the reset to take
+    /// effect; every row shows the restart badge.
+    private func resetAdvancedGraphics() {
+        settings.advancedGraphics = .none
+        settings.persist()
+        AppLog.log("[3ds2apple] settings: reset the six experimental renderer optimisations to off")
     }
 }
 

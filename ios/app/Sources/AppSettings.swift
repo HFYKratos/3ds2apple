@@ -844,6 +844,11 @@ final class AppSettings: ObservableObject {
     /// applies on the NEXT APP LAUNCH for the same reason as
     /// gpuVertexShaders.
     @Published var preciseShading: Bool
+    /// The six experimental renderer optimisations Settings -> Graphics exposes
+    /// (0.2.2). One Codable value persisted in a single key
+    /// ("UI.graphics.advanced"), all off by default; App.init puts the enabled
+    /// ones into the environment, so a change applies on the NEXT APP LAUNCH.
+    @Published var advancedGraphics: AdvancedGraphicsOptions
 
     private let defaults: UserDefaults
 
@@ -1191,6 +1196,15 @@ final class AppSettings: ObservableObject {
         // values are read by App.init and only take effect on the next app launch.
         gpuVertexShaders = Self.bool(defaults, Keys.gpuVertexShaders, fallback: false)
         preciseShading = Self.bool(defaults, Keys.preciseShading, fallback: false)
+        // Six experimental renderer optimisations (Settings -> Graphics): one
+        // Codable value under one key, all off when the key is missing or not
+        // readable (every build before 0.2.2 has no such key).
+        if let data = defaults.data(forKey: Keys.advancedGraphics),
+           let decoded = try? JSONDecoder().decode(AdvancedGraphicsOptions.self, from: data) {
+            advancedGraphics = decoded
+        } else {
+            advancedGraphics = .none
+        }
     }
 
     /// Stores the current values. Called by the settings UI after a change.
@@ -1245,6 +1259,13 @@ final class AppSettings: ObservableObject {
         // Experimental renderer options: App.init reads them on the next launch.
         defaults.set(gpuVertexShaders, forKey: Keys.gpuVertexShaders)
         defaults.set(preciseShading, forKey: Keys.preciseShading)
+        // The six experimental renderer optimisations: one Codable value under
+        // one key, so the group is written atomically (not eight loose defaults).
+        if let data = try? JSONEncoder().encode(advancedGraphics) {
+            defaults.set(data, forKey: Keys.advancedGraphics)
+        } else {
+            defaults.removeObject(forKey: Keys.advancedGraphics)
+        }
         // Editable layouts (versioned Codable data; see the init).
         defaults.set(landscapeScreenLayout.rawValue, forKey: Keys.landscapeScreenLayout)
         defaults.set(portraitScreenLayout.rawValue, forKey: Keys.portraitScreenLayout)
@@ -1655,6 +1676,10 @@ final class AppSettings: ObservableObject {
         /// applied on the next app launch.
         static let gpuVertexShaders = "UI.experimental.gpuVertexShaders"
         static let preciseShading = "UI.experimental.preciseShading"
+        /// Settings -> Graphics: the six experimental renderer optimisations,
+        /// one JSON value under one key; read once by App.init and applied on
+        /// the next app launch.
+        static let advancedGraphics = "UI.graphics.advanced"
         /// Round-2 landscape / portrait screen layout choices (independent).
         static let landscapeScreenLayout = "UI.landscapeScreenLayout"
         static let portraitScreenLayout = "UI.portraitScreenLayout"
