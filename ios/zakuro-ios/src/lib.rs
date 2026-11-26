@@ -98,6 +98,20 @@
 //! touch the running console. Measured states are kept until copied/discarded
 //! and released with the handle.
 //!
+//! ## Cheat codes
+//!
+//! [`cheats`] is the app-facing side of Zakuro's cheat engine: a title's
+//! Action Replay / Gateway codes live in a text file the app owns (the
+//! Citra/Azahar `[name]` + `*citra_enabled` + `XXXXXXXX YYYYYYYY` format), and
+//! [`cheats::zk_cheats_load`] / [`cheats::zk_cheats_save`] /
+//! [`cheats::zk_cheats_json`] / [`cheats::zk_cheats_set_enabled`] load, write,
+//! list and switch them on and off. The runtime's frame loop runs the enabled
+//! ones once per frame by itself (upstream `System::run_frame` calls the core's
+//! `cheats::run` before the CPU steps), so nothing here needs a tick call and a
+//! switch applies from the next frame. The path is an argument, never the data
+//! directory, and the build carries no bundled code database (see
+//! `patches/0011-remove-enhancements-data.patch`).
+//!
 //! Zakuro's own `log` records (the loader's linked-code warnings, GPU warnings)
 //! are forwarded to stderr by [`zk_create`], because an iOS app installs no
 //! logger and they would otherwise be dropped.
@@ -116,6 +130,7 @@ use zakuro_core::services::hid::{InputState, PadState};
 use zakuro_core::{Config, FrameOutcome, System};
 use zakuro_gpu::SharedDevice;
 
+mod cheats;
 mod gamepack;
 mod perf;
 mod presenter;
@@ -816,9 +831,10 @@ fn log_linked_outcome(system: &System) {
 /// pending error.
 ///
 /// `zk_create`, the saved-state calls (`zk_save_state_size`,
-/// `zk_save_state_copy`, `zk_load_state`), the hardware switches and the
+/// `zk_save_state_copy`, `zk_load_state`), the cheat calls (`zk_cheats_load`,
+/// `zk_cheats_save`, `zk_cheats_set_enabled`), the hardware switches and the
 /// presenter calls record their failures here; a successful `zk_create`,
-/// state measurement/copy/load clears the message.
+/// state measurement/copy/load or cheat load/save/enable clears the message.
 ///
 /// The returned pointer is owned by this library and remains valid until the
 /// next call that records or clears an error on **the same thread**. Copy the
