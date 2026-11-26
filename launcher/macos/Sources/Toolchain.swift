@@ -29,6 +29,18 @@ struct ToolchainPaths: Equatable {
             packCandidates.append(resourceTools + "/3ds2apple-pack")
             devpushCandidates.append(resourceTools + "/devpush")
         }
+        // The pack CLI must be built from the current builder sources: the Library
+        // exports need the "builds" subcommand and "catalog --auto-launch". A stale
+        // 0.2.0 CLI (bundled in 0.2.2-beta2) makes both exports fail; PackCLI turns
+        // that clap rejection into an actionable rebuild hint. Repo/dev-preview
+        // checkouts are preferred over PATH so a VM build exercises this checkout.
+        let home = ProcessInfo.processInfo.environment["HOME"] ?? ""
+        if !home.isEmpty {
+            packCandidates.append(contentsOf: [
+                home + "/zk017/zakuro/builder/target/release/3ds2apple-pack",
+                home + "/zk017/zakuro/builder/target/debug/3ds2apple-pack",
+            ])
+        }
         packCandidates.append(contentsOf: [
             repo + "/builder/target/release/3ds2apple-pack",
             repo + "/builder/target/debug/3ds2apple-pack",

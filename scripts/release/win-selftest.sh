@@ -7,7 +7,7 @@
 # Impactor/plumesign, the Bin tool CLIs and the licence texts embedded. Only a
 # Windows host can execute it and prove that embedded payload, so AGENTS.md §7
 # requires a clean-folder "3ds2apple-launcher.exe --self-test" on Windows
-# (32 PASS / 0 FAIL / 0 WARN) before a release. This script makes that run
+# (33 PASS / 0 FAIL / 0 WARN) before a release. This script makes that run
 # reproducible from WSL:
 #
 #   - refuses to run without the WSL Windows interop binfmt handler
@@ -50,7 +50,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 EXE_NAME="3ds2apple-launcher.exe"
-EXPECTED_PASS_LINES=32
+EXPECTED_PASS_LINES=33
 INTEROP_FILE="/proc/sys/fs/binfmt_misc/WSLInterop"
 
 ZIP=""
@@ -85,7 +85,7 @@ Options:
                          directory; DIR must be empty and is never deleted.
   -h, --help             Show this help and exit.
 
-Checks: exit code 0, final line "SELF-TEST OK", exactly 32 PASS lines, 0 FAIL
+Checks: exit code 0, final line "SELF-TEST OK", exactly 33 PASS lines, 0 FAIL
 lines, 0 WARN lines and the version line
 "3ds2apple launcher self-test · 3ds2apple-launcher-windows/<ver>".
 

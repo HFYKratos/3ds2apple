@@ -83,6 +83,19 @@ public sealed class BuildPackageService
                 targetDirectory,
                 "The export folder could not be created: " + targetDirectory + ": " + exception.Message);
         }
+        // Only a real file can be statically inspected; a fake-runner test path is left
+        // to the runner (a genuinely missing CLI fails the probe/process with its own message).
+        var capabilityError = File.Exists(_packCli.ExecutablePath)
+            ? PackCli.CapabilityError(_packCli.ExecutablePath)
+            : null;
+        if (capabilityError is not null)
+        {
+            return new BuildPackageExportOutcome(
+                Array.Empty<ExportedBuildPackageInfo>(),
+                Array.Empty<string>(),
+                targetDirectory,
+                capabilityError);
+        }
         var clang = VersionOrEmpty(compatibility?.ClangVersion);
         var llvm = VersionOrEmpty(compatibility?.Ld64Version);
         var result = await _packCli.ExportBuildsAsync(
@@ -101,7 +114,7 @@ public sealed class BuildPackageService
             ? null
             : result.Errors.Count > 0
                 ? null
-                : PackCli.FirstMeaningfulLine(result.Process);
+                : PackCli.ActionableFailure(result.Process);
         return new BuildPackageExportOutcome(result.Packages, result.Errors, result.OutputDirectory ?? targetDirectory, error);
     }
 

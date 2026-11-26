@@ -528,6 +528,95 @@ public sealed class PackCli
         return names.Count == 0 ? null : names;
     }
 
+    /// <summary>
+    /// Capability descriptor for one pack CLI binary. A stale 0.2.0 CLI (the
+    /// 0.2.2-beta2 packaging bug) lacks the `builds` subcommand and
+    /// `catalog --auto-launch`, so both Library exports are rejected by clap.
+    /// </summary>
+    public sealed record PackCliBinaryCapabilities(
+        string Path,
+        bool HasBuildsCommand,
+        bool HasCatalogAutoLaunch,
+        string? Error)
+    {
+        public bool Ok => Error is null && HasBuildsCommand && HasCatalogAutoLaunch;
+
+        public string Describe() =>
+            Error ?? (HasBuildsCommand ? "builds ok" : "missing builds")
+            + "; " + (HasCatalogAutoLaunch ? "catalog --auto-launch ok" : "missing catalog --auto-launch");
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, PackCliBinaryCapabilities> BinaryCapabilities =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Static capability scan of the CLI executable. It works for the Windows PE
+    /// payload on non-Windows hosts (the Linux clean-folder self-test cannot run
+    /// the PE) as well as for ELF/Mach-O dev builds; the Rust literals survive
+    /// stripping, so the clap subcommand/flag names are present in the binary.
+    /// </summary>
+    public static PackCliBinaryCapabilities InspectBinaryCapabilities(string executablePath)
+    {
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            return new PackCliBinaryCapabilities(string.Empty, false, false, "the pack CLI path is empty");
+        }
+        return BinaryCapabilities.GetOrAdd(executablePath, path =>
+        {
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    return new PackCliBinaryCapabilities(path, false, false, "the pack CLI does not exist: " + path);
+                }
+                var bytes = File.ReadAllBytes(path);
+                var text = System.Text.Encoding.Latin1.GetString(bytes);
+                var hasBuilds = text.Contains("builds", StringComparison.Ordinal);
+                // clap stores a long flag without the leading dashes, so the binary
+                // literal is "auto-launch" (help output renders "--auto-launch").
+                var hasAutoLaunch = text.Contains("auto-launch", StringComparison.Ordinal);
+                return new PackCliBinaryCapabilities(
+                    path,
+                    hasBuilds,
+                    hasAutoLaunch,
+                    hasBuilds && hasAutoLaunch
+                        ? null
+                        : "the bundled 3ds2apple-pack CLI is out of date (no " + (hasBuilds ? "catalog --auto-launch" : "builds")
+                          + "); rebuild the launcher package from the current builder sources (cargo build --release -p builder-pack --target x86_64-pc-windows-gnu)");
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            {
+                return new PackCliBinaryCapabilities(path, false, false, "could not read the pack CLI: " + exception.Message);
+            }
+        });
+    }
+
+    /// <summary>null when the binary has the required capabilities; otherwise an actionable error.</summary>
+    public static string? CapabilityError(string executablePath)
+    {
+        var report = InspectBinaryCapabilities(executablePath);
+        return report.Ok ? null : report.Error;
+    }
+
+    /// <summary>
+    /// Error text for a failed CLI invocation: when clap rejected an unknown
+    /// subcommand/flag (an old bundled CLI) return an actionable rebuild hint
+    /// instead of the bare "For more information, try '--help'." line.
+    /// </summary>
+    public static string ActionableFailure(ProcessResult process)
+    {
+        var combined = process.Combined;
+        if (combined.Contains("For more information, try", StringComparison.OrdinalIgnoreCase)
+            || combined.Contains("unexpected argument", StringComparison.OrdinalIgnoreCase)
+            || combined.Contains("unrecognized subcommand", StringComparison.OrdinalIgnoreCase))
+        {
+            return "The bundled 3ds2apple-pack CLI is out of date (it does not support the builds / catalog --auto-launch commands). "
+                + "Rebuild the launcher package from the current builder sources, or set THREEDS2APPLE_PACK to a current CLI. Detail: "
+                + FirstMeaningfulLine(process);
+        }
+        return FirstMeaningfulLine(process);
+    }
+
     /// <summary>First non-empty diagnostic line: used when a CLI fails without emitting JSON.</summary>
     public static string FirstMeaningfulLine(ProcessResult process)
     {

@@ -69,13 +69,67 @@ if (-not (Test-Path -LiteralPath (Join-Path $windowsRoot 'vendor/impactor/Impact
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
-# 3. Tool CLIs.
-foreach ($tool in @('3ds2apple-pack.exe', 'devpush.exe')) {
-    if (-not (Test-Path -LiteralPath (Join-Path $windowsRoot "Bin/$tool"))) {
-        Write-Error "Bin/$tool is missing. Build it for x86_64-pc-windows-gnu first."
-        exit 2
-    }
+# 3. Tool CLIs: rebuilt from this checkout's sources and capability-gated.
+#    0.2.2-beta2 shipped a stale Bin/3ds2apple-pack.exe (0.2.0) whose clap parser
+#    rejected the new "builds" / "catalog --auto-launch" commands, so both Library
+#    exports failed. This script now refuses a stale CLI forever.
+$cargo = if ($env:CARGO) { $env:CARGO } else { 'cargo' }
+if (-not (Get-Command $cargo -ErrorAction SilentlyContinue)) {
+    Write-Error 'cargo is required to rebuild the tool CLIs for the Windows package.'
+    exit 2
 }
+$builderManifest = Join-Path $repoRoot 'builder/Cargo.toml'
+$devpushManifest = Join-Path $repoRoot 'tools/devpush/Cargo.toml'
+$packVersion = ((Select-String -Path $builderManifest -Pattern '^version = "([^"]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value)
+$devPushVersion = ((Select-String -Path $devpushManifest -Pattern '^version = "([^"]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value)
+if ([string]::IsNullOrWhiteSpace($packVersion) -or [string]::IsNullOrWhiteSpace($devPushVersion)) {
+    Write-Error 'could not read the builder/devpush versions from their Cargo.toml files.'
+    exit 2
+}
+if (-not (Select-String -Path (Join-Path $repoRoot 'builder/pack/src/main.rs') -Pattern 'Builds \{' -Quiet)) {
+    Write-Error "builder/pack/src/main.rs has no 'builds' subcommand (launcher exports need it)."
+    exit 2
+}
+Write-Host "[single] rebuilding tool CLIs from source: 3ds2apple-pack $packVersion, devpush $devPushVersion (target x86_64-pc-windows-gnu)"
+Push-Location (Join-Path $repoRoot 'builder')
+& $cargo build --release -p builder-pack --target x86_64-pc-windows-gnu
+$packBuild = $LASTEXITCODE
+Pop-Location
+if ($packBuild -ne 0) {
+    Write-Error 'could not build 3ds2apple-pack for x86_64-pc-windows-gnu.'
+    exit 2
+}
+Push-Location (Join-Path $repoRoot 'tools/devpush')
+& $cargo build --release --target x86_64-pc-windows-gnu
+$devPushBuild = $LASTEXITCODE
+Pop-Location
+if ($devPushBuild -ne 0) {
+    Write-Error 'could not build devpush for x86_64-pc-windows-gnu.'
+    exit 2
+}
+$binDir = Join-Path $windowsRoot 'Bin'
+New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+Copy-Item -Force -LiteralPath (Join-Path $repoRoot 'builder/target/x86_64-pc-windows-gnu/release/3ds2apple-pack.exe') -Destination (Join-Path $binDir '3ds2apple-pack.exe')
+Copy-Item -Force -LiteralPath (Join-Path $repoRoot 'tools/devpush/target/x86_64-pc-windows-gnu/release/devpush.exe') -Destination (Join-Path $binDir 'devpush.exe')
+
+# Capability gate: run the freshly built CLI (this script runs on Windows).
+$packExe = Join-Path $binDir '3ds2apple-pack.exe'
+$versionOut = (& $packExe --version 2>&1 | Out-String)
+if ($versionOut -notmatch [regex]::Escape("3ds2apple-pack $packVersion")) {
+    Write-Error ("Bin/3ds2apple-pack.exe version is not the current builder version " + $packVersion)
+    exit 2
+}
+$helpOut = (& $packExe --help 2>&1 | Out-String)
+if ($helpOut -notmatch 'builds') {
+    Write-Error "Bin/3ds2apple-pack.exe has no 'builds' subcommand (stale CLI; exports would fail)."
+    exit 2
+}
+$catalogHelp = (& $packExe catalog --help 2>&1 | Out-String)
+if ($catalogHelp -notmatch '--auto-launch') {
+    Write-Error "Bin/3ds2apple-pack.exe has no 'catalog --auto-launch' option (stale CLI; IPA export would fail)."
+    exit 2
+}
+Write-Host "[single] pack CLI verified: version $packVersion, builds + catalog --auto-launch present"
 
 # 3b. Windows local-build payload: 3dsrecomp.exe.
 $recomp = Join-Path $windowsRoot 'Bin/3dsrecomp.exe'
