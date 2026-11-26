@@ -59,8 +59,8 @@ struct LibraryScreen: View {
         }
     }
 
-    /// The whole import area is exactly one button: it opens the file picker and
-    /// imports the chosen ROM (header read + staging + library entry in one go).
+    /// The whole import area is exactly one button: one picker accepts decrypted
+    /// ROMs (multi-select) and .32a build packages; the extension decides the path.
     /// No path field, name override, explanatory card or readiness panel here.
     private var header: some View {
         HStack(spacing: 10) {
@@ -69,18 +69,11 @@ struct LibraryScreen: View {
                 .foregroundStyle(LauncherTheme.mutedText)
             Spacer()
             Button {
-                chooseROM()
+                chooseImport()
             } label: {
-                Label(strings.importROMButton, systemImage: "plus")
+                Label(strings.importButton, systemImage: "plus")
             }
             .buttonStyle(PrimaryButtonStyle())
-            .disabled(model.isBusy)
-            Button {
-                chooseBuildPackage()
-            } label: {
-                Label(strings.buildPackageImport, systemImage: "shippingbox")
-            }
-            .buttonStyle(SecondaryButtonStyle())
             .disabled(model.isBusy)
         }
     }
@@ -116,38 +109,30 @@ struct LibraryScreen: View {
         .launcherCard()
     }
 
-    private func chooseBuildPackage() {
+    /// One Library Import picker: decrypted ROMs (.3ds/.cci/.ncch/.cxi, multi-select)
+    /// and portable .32a build packages. The view-model dispatches by extension.
+    private func chooseImport() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        if let type = UTType(filenameExtension: "32a") {
-            panel.allowedContentTypes = [type]
+        panel.allowsMultipleSelection = true
+        var types: [UTType] = ["3ds", "cci", "ncch", "cxi"].compactMap { UTType(filenameExtension: $0) }
+        if let packageType = UTType(filenameExtension: "32a") {
+            types.append(packageType)
+        } else {
+            // Unknown extension on this macOS: keep the picker usable for .32a files.
+            types.append(.data)
         }
-        panel.message = strings.buildPackageImportTitle
+        panel.allowedContentTypes = types
+        panel.message = strings.importPickerTitle
         panel.prompt = strings.choose
-        if panel.runModal() == .OK, let url = panel.url {
-            Task { await model.importBuildPackage(at: url.path) }
+        if panel.runModal() == .OK {
+            let paths = panel.urls.map { $0.path }
+            Task { await model.importSelection(at: paths) }
         }
     }
 
 
-    private func chooseROM() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        let extensions = ["3ds", "cci", "ncch", "cxi"]
-        let types = extensions.compactMap { UTType(filenameExtension: $0) }
-        if !types.isEmpty {
-            panel.allowedContentTypes = types
-        }
-        panel.message = strings.dropHint
-        panel.prompt = strings.choose
-        if panel.runModal() == .OK, let url = panel.url {
-            Task { await model.importROM(at: url.path) }
-        }
-    }
 }
 
 /// Library "Export" dialog: one action, choose the format and the destination.

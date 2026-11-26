@@ -134,6 +134,13 @@ public sealed class SingleGameIpaExporter
             return SingleGameIpaExportResult.Failure(
                 templateInspection.Error ?? "The shell template is not a launcher-compatible ROM-free IPA.");
         }
+        var capabilityError = File.Exists(_packCli.ExecutablePath)
+            ? PackCli.CapabilityError(_packCli.ExecutablePath)
+            : null;
+        if (capabilityError is not null)
+        {
+            return SingleGameIpaExportResult.Failure(capabilityError);
+        }
         var rom = ResolveRom(romPath, pack.TitleID, out var romError);
         if (rom is null)
         {
@@ -155,7 +162,7 @@ public sealed class SingleGameIpaExporter
             if (!catalogProcess.Ok || !File.Exists(catalogPath))
             {
                 return SingleGameIpaExportResult.Failure(
-                    "The pack CLI could not generate GameCatalog.json: " + PackCli.FirstMeaningfulLine(catalogProcess));
+                    "The pack CLI could not generate GameCatalog.json: " + PackCli.ActionableFailure(catalogProcess));
             }
             var catalogJson = await File.ReadAllTextAsync(catalogPath, cancellationToken).ConfigureAwait(false);
             catalogJson = IpaComposer.NormalizeCatalog(catalogJson, new[] { title });

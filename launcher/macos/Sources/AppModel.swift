@@ -504,6 +504,35 @@ final class AppModel: ObservableObject {
         return exportsDirectory + "/" + name
     }
 
+    /// Library "Import": one picker for decrypted ROMs and .32a build packages.
+    /// Dispatch by extension: ROMs go through the ROM import (one by one), .32a
+    /// files through the build-package import (replace-conflict flow preserved).
+    func importSelection(at paths: [String]) async {
+        guard !isBusy, !paths.isEmpty else { return }
+        let plan = LibraryImportPlanner.classify(paths)
+        for error in plan.errors {
+            appendLog(.warn, "import", error)
+        }
+        if plan.roms.isEmpty && plan.packages.isEmpty {
+            banner = Banner(
+                kind: .warning,
+                title: strings.unrecognisedTitle,
+                message: plan.errors.first ?? strings.importUnsupportedFormat
+            )
+            return
+        }
+        appendLog(.info, "import", String(plan.roms.count) + " ROM(s), " + String(plan.packages.count) + " build package(s)")
+        for rom in plan.roms {
+            await importROM(at: rom)
+            if isBusy {
+                // importROM drives its own busy state; wait for it to finish before the next file.
+            }
+        }
+        for package in plan.packages {
+            await importBuildPackage(at: package)
+        }
+    }
+
     /// Library card "Export": open the format/location dialog for a built game.
     func openExport(for game: GameEntry) {
         guard !isBusy, game.packIsReal else { return }

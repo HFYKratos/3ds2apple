@@ -66,13 +66,61 @@ if [ ! -f "$WINDOWS_ROOT/vendor/impactor/Impactor-windows-x86_64-portable.exe" ]
   "$WINDOWS_ROOT/tools/fetch-impactor.sh" "$WINDOWS_ROOT/vendor/impactor"
 fi
 
-# 3. Tool CLIs (cross-built Rust binaries).
-for tool in 3ds2apple-pack.exe devpush.exe; do
-  if [ ! -f "$WINDOWS_ROOT/Bin/$tool" ]; then
-    echo "error: Bin/$tool is missing. Build it for x86_64-pc-windows-gnu first." >&2
-    exit 2
-  fi
-done
+# 3. Tool CLIs: ALWAYS rebuilt from this checkout's sources, then statically
+#    capability-gated. 0.2.2-beta2 shipped a stale Bin/3ds2apple-pack.exe (0.2.0)
+#    whose clap parser rejected the new "builds" / "catalog --auto-launch"
+#    commands, so both Library exports failed with "For more information, try
+#    '--help'.". The gate below makes that class of packaging bug fatal.
+CARGO="${CARGO:-cargo}"
+command -v "$CARGO" >/dev/null 2>&1 || { echo "error: cargo is required to rebuild the tool CLIs" >&2; exit 2; }
+if ! rustup target list --installed 2>/dev/null | grep -q '^x86_64-pc-windows-gnu$'; then
+  echo "error: the x86_64-pc-windows-gnu Rust target is missing (rustup target add x86_64-pc-windows-gnu)." >&2
+  exit 2
+fi
+command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1 || {
+  echo "error: the mingw-w64 linker (x86_64-w64-mingw32-gcc) is required for the Windows CLIs." >&2
+  exit 2
+}
+PACK_VERSION="$(awk -F'"' '/^\[workspace\.package\]/{section=1; next} section && /^version *=/{print $2; exit}' "$REPO_ROOT/builder/Cargo.toml")"
+DEV_PUSH_VERSION="$(awk -F'"' '/^version *=/{print $2; exit}' "$REPO_ROOT/tools/devpush/Cargo.toml")"
+if [ -z "$PACK_VERSION" ] || [ -z "$DEV_PUSH_VERSION" ]; then
+  echo "error: could not read the builder/devpush versions from their Cargo.toml files." >&2
+  exit 2
+fi
+# Source capability gate: the builder must still expose the commands the launcher
+# calls; a source regression is refused before compiling.
+grep -q 'Builds {' "$REPO_ROOT/builder/pack/src/main.rs" \
+  || { echo "error: builder/pack/src/main.rs has no 'builds' subcommand (launcher exports need it)." >&2; exit 2; }
+grep -rq 'auto_launch' "$REPO_ROOT/builder/pack/src" \
+  || { echo "error: builder/pack has no catalog --auto-launch option (single-game IPA export needs it)." >&2; exit 2; }
+
+echo "[single] rebuilding tool CLIs from source: 3ds2apple-pack $PACK_VERSION, devpush $DEV_PUSH_VERSION (target x86_64-pc-windows-gnu)"
+( cd "$REPO_ROOT/builder" && "$CARGO" build --release -p builder-pack --target x86_64-pc-windows-gnu ) \
+  || { echo "error: could not build 3ds2apple-pack for x86_64-pc-windows-gnu." >&2; exit 2; }
+( cd "$REPO_ROOT/tools/devpush" && "$CARGO" build --release --target x86_64-pc-windows-gnu ) \
+  || { echo "error: could not build devpush for x86_64-pc-windows-gnu." >&2; exit 2; }
+PACK_EXE="$REPO_ROOT/builder/target/x86_64-pc-windows-gnu/release/3ds2apple-pack.exe"
+DEV_PUSH_EXE="$REPO_ROOT/tools/devpush/target/x86_64-pc-windows-gnu/release/devpush.exe"
+[ -f "$PACK_EXE" ] || { echo "error: $PACK_EXE was not produced." >&2; exit 2; }
+[ -f "$DEV_PUSH_EXE" ] || { echo "error: $DEV_PUSH_EXE was not produced." >&2; exit 2; }
+mkdir -p "$WINDOWS_ROOT/Bin"
+cp "$PACK_EXE" "$WINDOWS_ROOT/Bin/3ds2apple-pack.exe"
+cp "$DEV_PUSH_EXE" "$WINDOWS_ROOT/Bin/devpush.exe"
+
+# Static capability/version gate: the Windows PE cannot run on this Linux host, so
+# verify its embedded clap command/flag literals and version string instead.
+PACK_STRINGS="$(strings -a "$WINDOWS_ROOT/Bin/3ds2apple-pack.exe" || true)"
+# Substring checks without a pipe: set -o pipefail + grep -q on a huge string
+# triggers SIGPIPE on echo and would fail the gate spuriously.
+[[ "$PACK_STRINGS" == *"3ds2apple-pack"* ]] \
+  || { echo "error: Bin/3ds2apple-pack.exe is not the 3ds2apple-pack CLI." >&2; exit 2; }
+[[ "$PACK_STRINGS" == *"$PACK_VERSION"* ]] \
+  || { echo "error: Bin/3ds2apple-pack.exe does not embed the current builder version $PACK_VERSION." >&2; exit 2; }
+[[ "$PACK_STRINGS" == *"builds"* ]] \
+  || { echo "error: Bin/3ds2apple-pack.exe has no 'builds' subcommand (stale CLI; exports would fail)." >&2; exit 2; }
+[[ "$PACK_STRINGS" == *"auto-launch"* ]] \
+  || { echo "error: Bin/3ds2apple-pack.exe has no 'catalog --auto-launch' option (stale CLI; IPA export would fail)." >&2; exit 2; }
+echo "[single] pack CLI verified: version $PACK_VERSION, builds + catalog --auto-launch present ($(sha256sum "$WINDOWS_ROOT/Bin/3ds2apple-pack.exe" | cut -d' ' -f1 | cut -c1-16)…)"
 
 # 3b. Windows local-build payload: 3dsrecomp.exe (built from the pinned upstream).
 if [ ! -f "$WINDOWS_ROOT/Bin/3dsrecomp.exe" ]; then

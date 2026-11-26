@@ -412,6 +412,17 @@ final class PackCLI: PackBackend {
         return LibraryIPAResult(ipaPath: ipaPath, titles: titleIDs, executed: true, command: command, summary: summary)
     }
 
+    /// Actionable hint when the pack CLI rejects a command: a stale 0.2.0 CLI
+    /// (the 0.2.2-beta2 packaging bug) lacks builds / catalog --auto-launch.
+    func legacyCliHint(_ result: CommandResult) -> String {
+        let text = result.combined
+        if text.contains("For more information, try") || text.contains("unexpected argument") {
+            return "The 3ds2apple-pack CLI is out of date: it must support 'builds' and 'catalog --auto-launch'. "
+                + "Rebuild it from the current sources on this Mac (cd builder && cargo build --release) and retry."
+        }
+        return tailHint(result)
+    }
+
     func exportBuildPackage(titleID: String, outputDirectory: String) async throws -> ExportedBuildPackage {
         let arguments = [
             "builds", "export",
@@ -428,7 +439,7 @@ final class PackCLI: PackBackend {
             throw LauncherFailure(
                 code: "build_package_export_failed",
                 message: "Could not export the .32a build package.",
-                hint: parsed.errors.first ?? tailHint(result),
+                hint: parsed.errors.first ?? legacyCliHint(result),
                 detail: result.combined,
                 exitCode: result.exitCode
             )
@@ -443,7 +454,7 @@ final class PackCLI: PackBackend {
             throw LauncherFailure(
                 code: "catalog_failed",
                 message: "Could not write the single-game GameCatalog.json.",
-                hint: tailHint(result),
+                hint: legacyCliHint(result),
                 detail: result.combined,
                 exitCode: result.exitCode
             )
