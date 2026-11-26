@@ -160,8 +160,9 @@ audio advances behind it.
   starts. The app bundles no code database and downloads none; only data patches
   are promised (codes that rewrite the game's code can slow an AOT build down),
   and save data should be backed up first.
-- **Single-game auto-launch**: a self-contained single-game IPA exported by the
-  launcher carries one GamePack, the additive root flag `autoLaunch: true` and the
+- **Single-game auto-launch**: a self-contained single-game IPA exported from the
+  launcher's Library **Export** action carries one GamePack, the additive root flag
+  `autoLaunch: true` and the
   game's `romFile` in its bundle `GameCatalog.json`, and the user's own game data
   (the ROM) at `Roms/<TITLEID>.<ext>` inside the app bundle. After the launch scan
   finds that bundled file and the AOT pack resolves, the one game starts by itself —
@@ -185,8 +186,8 @@ Documents, so the AOT pack must be part of the signed IPA, while the large
 per-user game data stays in Documents and can be pushed or replaced without
 rebuilding the app.
 
-A self-contained single-game IPA exported by the launcher is the exception to the
-two-halves flow: the signed app carries exactly one GamePack, the additive root
+A self-contained single-game IPA exported from the launcher's Library **Export**
+action is the exception to the two-halves flow: the signed app carries exactly one GamePack, the additive root
 flag `autoLaunch: true` and the game's `romFile` in `GameCatalog.json`, and the
 user's own game data (the ROM) at `Roms/<TITLEID>.<ext>` in the bundle. The shell
 validates that bundle-relative path, opens the bundled file in place and starts
