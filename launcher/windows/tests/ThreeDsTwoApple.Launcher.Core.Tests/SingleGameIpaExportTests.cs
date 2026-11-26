@@ -10,14 +10,16 @@ namespace ThreeDsTwoApple.Launcher.Core.Tests;
 
 /// <summary>
 /// Single-game IPA export (Library "Export IPA"): template + one GamePack +
-/// autoLaunch catalogue + the SMDH cover replacing the template AppIcon*.png set.
-/// The composition reuses IpaComposer, so these tests cover the exporter layer,
-/// the icon generator and the structure gate only (no signing, no device).
+/// autoLaunch catalogue + the game's ROM embedded as Roms/&lt;TITLEID&gt;.&lt;ext&gt; +
+/// the SMDH cover replacing the template AppIcon*.png set. The composition reuses
+/// IpaComposer, so these tests cover the exporter layer (embedded game data), the
+/// icon generator and the structure gate only (no signing, no device).
 /// </summary>
 public sealed class SingleGameIpaExportTests
 {
     private const string TitleId = "0004000000055E00";
     private static readonly byte[] MachOMagic = { 0xCF, 0xFA, 0xED, 0xFE, 0, 0, 0, 0 };
+    private static readonly byte[] FakeRom = { 0x4E, 0x43, 0x53, 0x44, 0x01, 0x02, 0x03, 0x04, 0x05 };
 
     /// <summary>Template AppIcon sizes the real shell ships (iOS 20/29/40/60/76/83.5 pt + @2x/@3x + 1024).</summary>
     private static readonly (string Name, int Pixel)[] TemplateIcons =
@@ -112,6 +114,34 @@ public sealed class SingleGameIpaExportTests
         return JsonSerializer.Serialize(new { schemaVersion = 2, games = new[] { game } });
     }
 
+    private static string FakeRomFile(TempDir temp, string name = "Example Game.cci") =>
+        temp.Bytes(name, FakeRom);
+
+    /// <summary>Rewrite an IPA with entry-level mutation (structure-gate tests).</summary>
+    private static string RewriteIpa(string source, string destination, Action<List<(string Name, byte[] Bytes)>> mutate)
+    {
+        var entries = new List<(string Name, byte[] Bytes)>();
+        using (var archive = ZipFile.OpenRead(source))
+        {
+            foreach (var entry in archive.Entries)
+            {
+                using var stream = entry.Open();
+                using var memory = new MemoryStream();
+                stream.CopyTo(memory);
+                entries.Add((entry.FullName, memory.ToArray()));
+            }
+        }
+        mutate(entries);
+        using var output = ZipFile.Open(destination, ZipArchiveMode.Create);
+        foreach (var (name, bytes) in entries)
+        {
+            var entry = output.CreateEntry(name, CompressionLevel.Optimal);
+            using var stream = entry.Open();
+            stream.Write(bytes);
+        }
+        return destination;
+    }
+
     [Fact]
     public void AppIconGeneratorRendersEveryTemplateSizeFromTheCover()
     {
@@ -136,12 +166,13 @@ public sealed class SingleGameIpaExportTests
     }
 
     [Fact]
-    public async Task ExportsUnsignedSingleGameIpaWithAutoLaunchAndGameIcons()
+    public async Task ExportsUnsignedSingleGameIpaWithEmbeddedRomAutoLaunchAndGameIcons()
     {
         using var temp = new TempDir();
         var template = BuildTemplate(temp);
         var packPath = temp.Bytes("GamePack.dylib", MachOMagic);
         var cover = temp.Bytes("cover.png", RenderPng(48, 48, new SKColor(10, 200, 10)));
+        var rom = FakeRomFile(temp);
         var runner = CatalogRunner(CatalogJson());
         var exporter = new SingleGameIpaExporter(new PackCli(runner, "pack", Path.Combine(temp.Path, "out")));
         var outputDir = Path.Combine(temp.Path, "exports");
@@ -150,6 +181,7 @@ public sealed class SingleGameIpaExportTests
             template,
             new ComposedPack(TitleId, "Demo", "CTR-P-DEMO", 1, packPath),
             cover,
+            rom,
             "0.2.2",
             outputDir);
 
@@ -159,9 +191,11 @@ public sealed class SingleGameIpaExportTests
         Assert.EndsWith("-unsigned.ipa", result.IpaPath);
         Assert.Contains("0.2.2", Path.GetFileName(result.IpaPath));
         Assert.Equal(15, result.ReplacedIconCount);
-        Assert.Empty(result.Warnings);
         Assert.Equal(1, result.GameCount);
         Assert.True(result.Bytes > 0);
+        Assert.Equal(FakeRom.Length, result.RomBytes);
+        Assert.Equal("Roms/" + TitleId + ".cci", result.RomRelativePath);
+        Assert.Contains(result.Warnings, warning => warning.Contains("game data", StringComparison.OrdinalIgnoreCase));
         var sha = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(result.IpaPath!)));
         Assert.Equal(sha, result.Sha256);
         Assert.Contains(runner.Requests, request => request.Arguments.Contains("--auto-launch"));
@@ -178,10 +212,23 @@ public sealed class SingleGameIpaExportTests
         {
             Assert.True(catalog.RootElement.GetProperty("autoLaunch").GetBoolean());
             Assert.Equal(1, catalog.RootElement.GetProperty("games").GetArrayLength());
-            Assert.Equal(TitleId, catalog.RootElement.GetProperty("games")[0].GetProperty("titleID").GetString());
+            var game = catalog.RootElement.GetProperty("games")[0];
+            Assert.Equal(TitleId, game.GetProperty("titleID").GetString());
+            Assert.Equal("Roms/" + TitleId + ".cci", game.GetProperty("romFile").GetString());
         }
         Assert.NotNull(archive.GetEntry("Payload/demo.app/Frameworks/GamePack-" + TitleId + ".dylib"));
-        Assert.DoesNotContain(archive.Entries, entry => entry.FullName.Contains("/Roms/", StringComparison.OrdinalIgnoreCase));
+        var romEntry = archive.GetEntry("Payload/demo.app/Roms/" + TitleId + ".cci");
+        Assert.NotNull(romEntry);
+        using (var stream = romEntry!.Open())
+        using (var memory = new MemoryStream())
+        {
+            stream.CopyTo(memory);
+            Assert.Equal(FakeRom, memory.ToArray());
+        }
+        var romEntries = archive.Entries
+            .Where(entry => entry.FullName.Contains("/Roms/", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.Single(romEntries);
 
         // Every template icon was replaced by the cover at the template's pixel size.
         foreach (var (name, pixel) in TemplateIcons)
@@ -196,17 +243,155 @@ public sealed class SingleGameIpaExportTests
     }
 
     [Fact]
-    public async Task MissingCoverKeepsTemplateIconsAndWarns()
+    public async Task MissingRomFailsWithAnActionableError()
     {
         using var temp = new TempDir();
         var template = BuildTemplate(temp);
         var packPath = temp.Bytes("GamePack.dylib", MachOMagic);
         var exporter = new SingleGameIpaExporter(new PackCli(CatalogRunner(CatalogJson()), "pack", Path.Combine(temp.Path, "out")));
 
+        var noRom = await exporter.ExportAsync(
+            template,
+            new ComposedPack(TitleId, "Demo", null, 1, packPath),
+            null,
+            romPath: null,
+            "0.2.2",
+            Path.Combine(temp.Path, "exports"));
+        Assert.False(noRom.Ok);
+        Assert.Contains("ROM", noRom.Error);
+        Assert.Contains("embeds", noRom.Error, StringComparison.OrdinalIgnoreCase);
+
+        var missingFile = await exporter.ExportAsync(
+            template,
+            new ComposedPack(TitleId, "Demo", null, 1, packPath),
+            null,
+            Path.Combine(temp.Path, "gone.cci"),
+            "0.2.2",
+            Path.Combine(temp.Path, "exports"));
+        Assert.False(missingFile.Ok);
+        Assert.Contains("ROM", missingFile.Error);
+    }
+
+    [Fact]
+    public async Task UnsupportedRomExtensionIsRefused()
+    {
+        using var temp = new TempDir();
+        var template = BuildTemplate(temp);
+        var packPath = temp.Bytes("GamePack.dylib", MachOMagic);
+        var rom = temp.Bytes("game.cia", FakeRom);
+        var exporter = new SingleGameIpaExporter(new PackCli(CatalogRunner(CatalogJson()), "pack", Path.Combine(temp.Path, "out")));
+
+        var result = await exporter.ExportAsync(
+            template,
+            new ComposedPack(TitleId, "Demo", null, 1, packPath),
+            null,
+            rom,
+            "0.2.2",
+            Path.Combine(temp.Path, "exports"));
+
+        Assert.False(result.Ok);
+        Assert.Contains(".cci", result.Error);
+        Assert.Contains("ROM", result.Error);
+    }
+
+    [Fact]
+    public async Task RomExtensionIsNormalisedToLowerCaseInTheBundle()
+    {
+        using var temp = new TempDir();
+        var template = BuildTemplate(temp);
+        var packPath = temp.Bytes("GamePack.dylib", MachOMagic);
+        var rom = temp.Bytes("Example Game.3DS", FakeRom);
+        var exporter = new SingleGameIpaExporter(new PackCli(CatalogRunner(CatalogJson()), "pack", Path.Combine(temp.Path, "out")));
+
+        var result = await exporter.ExportAsync(
+            template,
+            new ComposedPack(TitleId, "Demo", null, 1, packPath),
+            null,
+            rom,
+            "0.2.2",
+            Path.Combine(temp.Path, "exports"));
+
+        Assert.True(result.Ok, result.Error);
+        Assert.Equal("Roms/" + TitleId + ".3ds", result.RomRelativePath);
+        using var archive = ZipFile.OpenRead(result.IpaPath!);
+        Assert.NotNull(archive.GetEntry("Payload/demo.app/Roms/" + TitleId + ".3ds"));
+        Assert.True(SingleGameIpaExporter.VerifyStructure(result.IpaPath!, TitleId).Ok);
+    }
+
+    [Fact]
+    public async Task StructureGateRequiresExactlyOneMatchingRomsEntry()
+    {
+        using var temp = new TempDir();
+        var template = BuildTemplate(temp);
+        var packPath = temp.Bytes("GamePack.dylib", MachOMagic);
+        var rom = FakeRomFile(temp);
+        var exporter = new SingleGameIpaExporter(new PackCli(CatalogRunner(CatalogJson()), "pack", Path.Combine(temp.Path, "out")));
+
+        var result = await exporter.ExportAsync(
+            template,
+            new ComposedPack(TitleId, "Demo", null, 1, packPath),
+            null,
+            rom,
+            "0.2.2",
+            Path.Combine(temp.Path, "exports"));
+        Assert.True(result.Ok, result.Error);
+
+        // An extra (unlisted) Roms/ entry is refused.
+        var extra = RewriteIpa(result.IpaPath!, Path.Combine(temp.Path, "extra.ipa"), entries =>
+        {
+            entries.Add(("Payload/demo.app/Roms/extra.cci", new byte[] { 1, 2, 3 }));
+        });
+        var extraVerification = SingleGameIpaExporter.VerifyStructure(extra, TitleId);
+        Assert.False(extraVerification.Ok);
+        Assert.Contains("exactly one", extraVerification.Error);
+
+        // A catalogue without romFile is refused.
+        var missingCatalogRom = RewriteIpa(result.IpaPath!, Path.Combine(temp.Path, "missing-romfile.ipa"), entries =>
+        {
+            for (var index = 0; index < entries.Count; index++)
+            {
+                if (!entries[index].Name.EndsWith("GameCatalog.json", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                using var document = JsonDocument.Parse(entries[index].Bytes);
+                var game = new Dictionary<string, object?>();
+                foreach (var property in document.RootElement.GetProperty("games")[0].EnumerateObject())
+                {
+                    if (property.Name == "romFile")
+                    {
+                        continue;
+                    }
+                    game[property.Name] = property.Value.Clone();
+                }
+                var catalog = new Dictionary<string, object?>
+                {
+                    ["schemaVersion"] = 2,
+                    ["autoLaunch"] = true,
+                    ["games"] = new[] { game },
+                };
+                entries[index] = (entries[index].Name, JsonSerializer.SerializeToUtf8Bytes(catalog));
+            }
+        });
+        var catalogVerification = SingleGameIpaExporter.VerifyStructure(missingCatalogRom, TitleId);
+        Assert.False(catalogVerification.Ok);
+        Assert.Contains("romFile", catalogVerification.Error);
+    }
+
+    [Fact]
+    public async Task MissingCoverKeepsTemplateIconsAndWarns()
+    {
+        using var temp = new TempDir();
+        var template = BuildTemplate(temp);
+        var packPath = temp.Bytes("GamePack.dylib", MachOMagic);
+        var rom = FakeRomFile(temp);
+        var exporter = new SingleGameIpaExporter(new PackCli(CatalogRunner(CatalogJson()), "pack", Path.Combine(temp.Path, "out")));
+
         var result = await exporter.ExportAsync(
             template,
             new ComposedPack(TitleId, "Demo", null, 1, packPath),
             coverPath: null,
+            rom,
             "0.2.2",
             Path.Combine(temp.Path, "exports"));
 
@@ -219,6 +404,7 @@ public sealed class SingleGameIpaExportTests
     public async Task RejectsInvalidTemplatePackAndCatalogFailures()
     {
         using var temp = new TempDir();
+        var rom = FakeRomFile(temp);
         var packPath = temp.Bytes("GamePack.dylib", MachOMagic);
         var exporter = new SingleGameIpaExporter(new PackCli(CatalogRunner(CatalogJson()), "pack", Path.Combine(temp.Path, "out")));
 
@@ -226,6 +412,7 @@ public sealed class SingleGameIpaExportTests
             Path.Combine(temp.Path, "missing-template.ipa"),
             new ComposedPack(TitleId, "Demo", null, 1, packPath),
             null,
+            rom,
             "0.2.2",
             Path.Combine(temp.Path, "exports"));
         Assert.False(noTemplate.Ok);
@@ -236,6 +423,7 @@ public sealed class SingleGameIpaExportTests
             template,
             new ComposedPack(TitleId, "Demo", null, 1, Path.Combine(temp.Path, "missing.dylib")),
             null,
+            rom,
             "0.2.2",
             Path.Combine(temp.Path, "exports"));
         Assert.False(noPack.Ok);
@@ -246,6 +434,7 @@ public sealed class SingleGameIpaExportTests
             template,
             new ComposedPack(TitleId, "Demo", null, 1, packPath),
             null,
+            rom,
             "0.2.2",
             Path.Combine(temp.Path, "exports"));
         Assert.False(catalogFailed.Ok);

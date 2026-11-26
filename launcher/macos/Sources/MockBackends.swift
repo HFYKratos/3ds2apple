@@ -542,8 +542,8 @@ final class MockPackBackend: PackBackend {
         )
     }
 
-    func writeAutoLaunchCatalog(titleID: String, catalogOut: String) async throws {
-        let game = "{\"titleID\":\"" + titleID + "\",\"displayName\":\"Mock Game\",\"productCode\":\"CTR-P-MOCK\",\"aot\":true,\"aotVersion\":1,\"packFile\":\"Frameworks/GamePack-" + titleID + ".dylib\",\"packABIVersion\":1}"
+    func writeAutoLaunchCatalog(titleID: String, romFile: String, catalogOut: String) async throws {
+        let game = "{\"titleID\":\"" + titleID + "\",\"displayName\":\"Mock Game\",\"productCode\":\"CTR-P-MOCK\",\"aot\":true,\"aotVersion\":1,\"packFile\":\"Frameworks/GamePack-" + titleID + ".dylib\",\"packABIVersion\":1,\"romFile\":\"" + romFile + "\"}"
         let json = "{\"schemaVersion\":2,\"autoLaunch\":true,\"games\":[" + game + "]}"
         try? Data(json.utf8).write(to: URL(fileURLWithPath: catalogOut))
     }
@@ -617,7 +617,7 @@ final class MissingPackBackend: PackBackend {
     func readManifest(titleID: String) async throws -> PackageManifest { throw missing() }
     func exportBuildPackage(titleID: String, outputDirectory: String) async throws -> ExportedBuildPackage { throw missing() }
     func importBuildPackage(path: String, replace: Bool) async throws -> ImportedBuildPackage { throw missing() }
-    func writeAutoLaunchCatalog(titleID: String, catalogOut: String) async throws { throw missing() }
+    func writeAutoLaunchCatalog(titleID: String, romFile: String, catalogOut: String) async throws { throw missing() }
 
     func buildLibraryIPA(
         titleIDs: [String],

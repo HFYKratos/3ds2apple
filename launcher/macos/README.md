@@ -67,13 +67,19 @@ tooltip and the log — there is no manual "check" button).
   installed into `workspace/packages/<TITLEID>/`; an existing package asks for
   confirmation before it is replaced. Nothing is signed, installed or uploaded:
   a .32a can contain game data, so it stays local.
-  **Export IPA** (also on each real-pack card) composes one unsigned single-game
-  IPA from the pinned shell template: the GamePack + a `GameCatalog.json` with
-  `autoLaunch: true` (written by `3ds2apple-pack catalog --auto-launch`) + the
-  SMDH cover replacing every template `AppIcon*.png` (NSImage), zipped with
-  `ditto` into `workspace/exports/<build-slug>-<version>-unsigned.ipa`. The UI
-  shows the path and asks the user to sign it with Sideloadly/AltStore; nothing is
-  signed, installed or uploaded.
+  **Export IPA** (also on each real-pack card) composes one unsigned, self-contained
+  single-game IPA from the pinned shell template: the GamePack + the user's own ROM
+  embedded as `Roms/<TITLEID>.<cci|3ds|ncch|cxi>` + a `GameCatalog.json` with
+  `autoLaunch: true` and the matching `romFile` (the pack CLI writes the catalogue
+  with `--auto-launch`; the launcher injects the embedded-data path) + the SMDH
+  cover replacing every template `AppIcon*.png` (NSImage), zipped with `ditto`
+  into `workspace/exports/<build-slug>-<version>-unsigned.ipa`. A missing ROM or an
+  unsupported extension fails with a clear error; the staged bundle is checked to
+  contain exactly one non-empty `Roms/` file named by the catalogue before zipping.
+  The output is roughly GamePack + ROM in size. The UI shows the path and asks the
+  user to sign it with Sideloadly/AltStore: **the IPA contains the user's own game
+  data, so it stays in the local portable workspace and must never be uploaded or
+  shared**. Nothing is signed, installed or uploaded.
   The Deploy page also has a collapsed **高级构建设置 / Advanced build settings**
   disclosure: optimization level (O1/O2/O3/Oz), LTO and fast-math, persisted in
   the launcher settings with **恢复默认值 / Reset to defaults**. Defaults keep the

@@ -128,6 +128,7 @@ struct LauncherStrings {
     var ipaExportedFormat: String
     var ipaExportFailedFormat: String
     var ipaUnsignedHint: String
+    var ipaNeedsRom: String
     var emptyLibraryTitle: String
     var emptyLibraryMessage: String
     var importGame: String
@@ -351,11 +352,15 @@ struct LauncherStrings {
             "该游戏已存在构建包。%@"
         )
         exportIpa = t("Export IPA", "导出 IPA")
-        ipaExportedFormat = t("Exported %@  %@", "已导出 %@  %@")
+        ipaExportedFormat = t("Exported %@ (%@)  %@", "已导出 %@（%@）  %@")
         ipaExportFailedFormat = t("IPA export failed: %@", "IPA 导出失败：%@")
         ipaUnsignedHint = t(
-            "Unsigned IPA: sign it with Sideloadly or AltStore before installing.",
-            "未签名 IPA：安装前请用 Sideloadly 或 AltStore 自签名。"
+            "Unsigned IPA with your own game data embedded: sign it with Sideloadly or AltStore, keep this file local and never upload or share it.",
+            "未签名 IPA（已内嵌你自己的游戏数据）：安装前请用 Sideloadly 或 AltStore 自签名；文件仅保存在本地，切勿上传或外传。"
+        )
+        ipaNeedsRom = t(
+            "The game's ROM is required: the single-game IPA embeds the game data. Re-import the ROM (or restore its file) and export again.",
+            "需要该游戏的 ROM：单游戏 IPA 会内嵌游戏数据。请重新导入 ROM（或恢复原文件）后再导出。"
         )
         emptyLibraryTitle = t("Your library is empty", "游戏库还是空的")
         emptyLibraryMessage = t(
@@ -620,8 +625,8 @@ struct LauncherStrings {
         String(format: buildPackageConflictFormat, message)
     }
 
-    func ipaExported(_ path: String, _ hint: String) -> String {
-        String(format: ipaExportedFormat, path, hint)
+    func ipaExported(_ path: String, _ size: String, _ hint: String) -> String {
+        String(format: ipaExportedFormat, path, size, hint)
     }
 
     func ipaExportFailed(_ message: String) -> String {

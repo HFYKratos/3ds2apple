@@ -562,12 +562,23 @@ final class AppModel: ObservableObject {
     // MARK: - Unsigned single-game IPA export
 
     /// Library card "Export IPA": compose one unsigned single-game IPA from the
-    /// pinned shell template (GamePack + autoLaunch catalogue + SMDH app icons).
-    /// Nothing is signed or installed; the UI tells the user to sign it itself.
+    /// pinned shell template (GamePack + the user's own ROM embedded as
+    /// Roms/<TITLEID>.<ext> + autoLaunch/romFile catalogue + SMDH app icons).
+    /// Nothing is signed, installed or uploaded; the IPA contains the user's own
+    /// game data, stays in the local portable workspace and must never be shared.
     func exportIpa(for game: GameEntry) async {
         guard !isBusy else { return }
         guard game.packIsReal, let packPath = game.packPath, !packPath.isEmpty else {
             setBuildPackageStatus(strings.buildPackageNeedsPack, warning: true)
+            return
+        }
+        let romSource: String
+        if !game.romPath.isEmpty, FileProbe.exists(game.romPath) {
+            romSource = game.romPath
+        } else if let staged = game.romDataPath, FileProbe.exists(staged) {
+            romSource = staged
+        } else {
+            setBuildPackageStatus(strings.ipaNeedsRom, warning: true)
             return
         }
         guard beginBusy() else { return }
@@ -576,7 +587,8 @@ final class AppModel: ObservableObject {
         let outputDirectory = pack.outRoot.appendingPathComponent("exports", isDirectory: true).path
         let packBackend = pack
         let titleID = game.titleID
-        appendLog(.command, "ipa", "single-game IPA: template " + template + ", pack " + packPath)
+        appendLog(.command, "ipa", "single-game IPA: template " + template + ", pack " + packPath
+            + ", embedded game data " + romSource)
         do {
             let exporter = SingleGameIpaExporter(runner: runner)
             let result = try await exporter.export(
@@ -585,19 +597,25 @@ final class AppModel: ObservableObject {
                 titleID: titleID,
                 displayName: game.displayName,
                 coverPath: game.coverPath,
+                romPath: romSource,
                 version: LauncherInfo.version,
                 outputDirectory: outputDirectory,
-                writeCatalog: { catalogOut in
-                    try await packBackend.writeAutoLaunchCatalog(titleID: titleID, catalogOut: catalogOut)
+                writeCatalog: { catalogOut, romFile in
+                    try await packBackend.writeAutoLaunchCatalog(titleID: titleID, romFile: romFile, catalogOut: catalogOut)
                 },
                 onLine: { [weak self] level, line in
                     Task { @MainActor in self?.appendLog(level, "ipa", line) }
                 }
             )
-            setBuildPackageStatus(strings.ipaExported(result.ipaPath, strings.ipaUnsignedHint), warning: false)
+            setBuildPackageStatus(
+                strings.ipaExported(result.ipaPath, FileProbe.formatBytes(result.bytes), strings.ipaUnsignedHint),
+                warning: false
+            )
             appendLog(.success, "ipa", "exported unsigned single-game IPA " + result.ipaPath
                 + " (" + FileProbe.formatBytes(result.bytes) + ", sha256 " + result.sha256
-                + ", icons replaced " + String(result.replacedIcons) + ") - sign it with Sideloadly or AltStore")
+                + ", icons replaced " + String(result.replacedIcons)
+                + ", embedded game data " + result.romRelativePath + " " + FileProbe.formatBytes(result.romBytes)
+                + ") - contains the user's own game data; sign it yourself (Sideloadly/AltStore), keep it local, never upload it")
             for warning in result.warnings {
                 appendLog(.warn, "ipa", warning)
             }

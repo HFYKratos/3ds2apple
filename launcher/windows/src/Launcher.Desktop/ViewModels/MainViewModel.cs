@@ -1194,6 +1194,12 @@ public sealed class MainViewModel : ObservableObject
             SetBuildPackageStatus(Loc.T("library.ipaExportFailed", Loc.T("library.ipaLibraryUnavailable")), warning: true);
             return;
         }
+        var romPath = ResolveIpaRomPath(row);
+        if (string.IsNullOrWhiteSpace(romPath) || !File.Exists(romPath))
+        {
+            SetBuildPackageStatus(Loc.T("library.ipaNeedsRom"), warning: true);
+            return;
+        }
         SetBusy(true, Loc.T("status.exportIpa"));
         try
         {
@@ -1205,6 +1211,7 @@ public sealed class MainViewModel : ObservableObject
                 template,
                 pack,
                 row.Entry.CoverPath,
+                romPath,
                 LauncherInfo.Version,
                 outputDirectory,
                 line => Log("[ipa] " + line)).ConfigureAwait(true);
@@ -1216,10 +1223,11 @@ public sealed class MainViewModel : ObservableObject
                 return;
             }
             SetBuildPackageStatus(
-                Loc.T("library.ipaExported", result.IpaPath!, Loc.T("library.ipaUnsignedHint")),
+                Loc.T("library.ipaExported", result.IpaPath!, result.Bytes + " bytes", Loc.T("library.ipaUnsignedHint")),
                 warning: false);
             Log("exported unsigned single-game IPA " + result.IpaPath + " (" + result.Bytes + " bytes, sha256 " + result.Sha256
-                + ", icons replaced " + result.ReplacedIconCount + ") - sign it with Sideloadly or AltStore before installing");
+                + ", icons replaced " + result.ReplacedIconCount + ", embedded game data " + result.RomRelativePath
+                + " " + result.RomBytes + " bytes) - contains the user's own game data; sign it yourself (Sideloadly/AltStore), keep it local, never upload it");
             foreach (var warning in result.Warnings)
             {
                 Log("IPA export: " + warning);
@@ -1236,6 +1244,29 @@ public sealed class MainViewModel : ObservableObject
         {
             SetBusy(false, Loc.T("status.ready"));
         }
+    }
+
+    /// <summary>ROM used for the single-game IPA: the library path, else the package's GameRom copy.</summary>
+    private static string? ResolveIpaRomPath(GameRow row)
+    {
+        if (!string.IsNullOrWhiteSpace(row.Entry.RomPath) && File.Exists(row.Entry.RomPath))
+        {
+            return row.Entry.RomPath;
+        }
+        var packageDirectory = row.Entry.PackageDir;
+        if (string.IsNullOrWhiteSpace(packageDirectory))
+        {
+            return null;
+        }
+        foreach (var extension in SingleGameIpaExporter.RomExtensions)
+        {
+            var candidate = Path.Combine(packageDirectory, "GameRom." + extension);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     private void SetBuildPackageStatus(string text, bool warning)
