@@ -13,4 +13,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\ThreeDsTwoApple.Launcher.Core\ThreeDsTwoApple.Launcher.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- SkiaSharp native assets so the icon-resize tests run on the Linux CI host too. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.4" />
+  </ItemGroup>
 </Project>

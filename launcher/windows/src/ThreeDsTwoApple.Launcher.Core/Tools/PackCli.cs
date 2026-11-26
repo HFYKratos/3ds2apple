@@ -285,7 +285,7 @@ public sealed class PackCli
     /// remains the single catalogue schema writer; the launcher only copies the
     /// file it produced (and fills the optional registrationSymbol contract field).
     /// </summary>
-    public async Task<ProcessResult> CatalogAsync(IReadOnlyList<string> titleIds, string catalogOutPath, CancellationToken cancellationToken = default)
+    public async Task<ProcessResult> CatalogAsync(IReadOnlyList<string> titleIds, string catalogOutPath, bool autoLaunch = false, CancellationToken cancellationToken = default)
     {
         var arguments = new List<string> { "catalog" };
         foreach (var titleId in titleIds)
@@ -295,6 +295,10 @@ public sealed class PackCli
         }
         arguments.Add("--catalog-out");
         arguments.Add(catalogOutPath);
+        if (autoLaunch)
+        {
+            arguments.Add("--auto-launch");
+        }
         return await RunPackAsync(arguments, cancellationToken).ConfigureAwait(false);
     }
 

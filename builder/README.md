@@ -88,6 +88,11 @@ it after `packages add` and copy the fields they need. `GameCatalog.json`
    "packABIVersion":1}]}
 ```
 
+The optional root field `autoLaunch: true` marks a single-game catalogue: the shell
+opens the only listed game as soon as its library is ready instead of showing the
+game list (`3ds2apple-pack catalog --auto-launch`, used by the launchers' single-game
+IPA export). It is rejected for multi-game catalogues.
+
 `packFile` is app-bundle-relative, games are sorted by title ID and unique (the
 allocation is deterministic), and schema-1 (legacy static-link) catalogues are
 still accepted. The GamePack C ABI is versioned by `GAMEPACK_ABI_VERSION`

@@ -199,6 +199,31 @@ the format.
   conflict/replace, missing CLI, workspace state) and the Rust `builder/pack`
   tests (`builds::tests` + the CLI round trip in `tests/cli_local.rs`).
 
+### Unsigned single-game IPA export (Library row "Export IPA")
+
+Each Library card with a real AOT GamePack has **Export IPA** next to
+**Export .32a**/**Build now**. It composes one unsigned single-game IPA from the
+pinned ROM-free shell template:
+
+1. the pack CLI writes a schema-2 `GameCatalog.json` for the one title with
+   `--auto-launch` (the additive root field `autoLaunch: true`; the iOS shell
+   opens the game as soon as its library is ready);
+2. `IpaComposer` composes the template + the single `Frameworks/GamePack-<TITLEID>.dylib`
+   into a ROM-free app IPA;
+3. the IPA is rewritten to carry the autoLaunch catalogue and to replace every
+   template `AppIcon*.png` with the game's SMDH cover resized to the template
+   pixel size (SkiaSharp; the 48x48 SMDH icon is upscaled, which is soft but
+   recognisable). A missing/unreadable cover keeps the template icons and adds a
+   warning;
+4. the result is verified (Payload/*.app, no `Roms/`, schema-2 catalogue with the
+   title + autoLaunch, GamePack present, SHA-256) and written to
+   `<portable data root>/workspace/exports/<build-slug>-<version>-unsigned.ipa`.
+
+The UI shows the output path plus **unsigned IPA: sign it with Sideloadly or
+AltStore before installing**. Nothing is signed, installed or uploaded. Tests:
+`SingleGameIpaExportTests` (icon generator, IPA structure/catalogue, missing
+cover fallback, template/pack/catalog failures).
+
 ## Stack
 
 - .NET 10 + **Avalonia 12.1.6** desktop UI (same stack family S2Arm's Windows

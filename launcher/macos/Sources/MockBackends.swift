@@ -542,6 +542,12 @@ final class MockPackBackend: PackBackend {
         )
     }
 
+    func writeAutoLaunchCatalog(titleID: String, catalogOut: String) async throws {
+        let game = "{\"titleID\":\"" + titleID + "\",\"displayName\":\"Mock Game\",\"productCode\":\"CTR-P-MOCK\",\"aot\":true,\"aotVersion\":1,\"packFile\":\"Frameworks/GamePack-" + titleID + ".dylib\",\"packABIVersion\":1}"
+        let json = "{\"schemaVersion\":2,\"autoLaunch\":true,\"games\":[" + game + "]}"
+        try? Data(json.utf8).write(to: URL(fileURLWithPath: catalogOut))
+    }
+
     func importBuildPackage(path: String, replace: Bool) async throws -> ImportedBuildPackage {
         try? await Task.sleep(nanoseconds: 60_000_000)
         importBuildCalls.append((path: path, replace: replace))
@@ -611,6 +617,7 @@ final class MissingPackBackend: PackBackend {
     func readManifest(titleID: String) async throws -> PackageManifest { throw missing() }
     func exportBuildPackage(titleID: String, outputDirectory: String) async throws -> ExportedBuildPackage { throw missing() }
     func importBuildPackage(path: String, replace: Bool) async throws -> ImportedBuildPackage { throw missing() }
+    func writeAutoLaunchCatalog(titleID: String, catalogOut: String) async throws { throw missing() }
 
     func buildLibraryIPA(
         titleIDs: [String],

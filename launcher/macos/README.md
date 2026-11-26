@@ -67,6 +67,13 @@ tooltip and the log — there is no manual "check" button).
   installed into `workspace/packages/<TITLEID>/`; an existing package asks for
   confirmation before it is replaced. Nothing is signed, installed or uploaded:
   a .32a can contain game data, so it stays local.
+  **Export IPA** (also on each real-pack card) composes one unsigned single-game
+  IPA from the pinned shell template: the GamePack + a `GameCatalog.json` with
+  `autoLaunch: true` (written by `3ds2apple-pack catalog --auto-launch`) + the
+  SMDH cover replacing every template `AppIcon*.png` (NSImage), zipped with
+  `ditto` into `workspace/exports/<build-slug>-<version>-unsigned.ipa`. The UI
+  shows the path and asks the user to sign it with Sideloadly/AltStore; nothing is
+  signed, installed or uploaded.
 - **Deploy** - device status, the checkbox selection list (one or several games),
   the single **一键部署 / Deploy selected** button, the detected compile-hardware
   line (logical cores · RAM · 3dsrecomp's automatic full-core parallelism), then

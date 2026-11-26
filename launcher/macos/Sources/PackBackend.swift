@@ -74,6 +74,9 @@ protocol PackBackend: AnyObject {
     /// Validate and install one .32a build package into workspace/packages.
     /// An existing package is only replaced when replace is true.
     func importBuildPackage(path: String, replace: Bool) async throws -> ImportedBuildPackage
+    /// Write a single-game schema-2 GameCatalog.json with autoLaunch=true through
+    /// the pack CLI (the single catalogue schema writer) for a single-game IPA.
+    func writeAutoLaunchCatalog(titleID: String, catalogOut: String) async throws
     /// Allocate the selected built GamePacks into one shell app/IPA. The app is
     /// ROM-free by construction (packages hold no bundled GameRom); the IPA only
     /// carries Frameworks/GamePack-<TITLEID>.dylib + GameCatalog.json.
@@ -422,6 +425,20 @@ final class PackCLI: PackBackend {
             )
         }
         return package
+    }
+
+    func writeAutoLaunchCatalog(titleID: String, catalogOut: String) async throws {
+        let arguments = ["catalog", "--title-id", titleID, "--catalog-out", catalogOut, "--auto-launch", "--json"]
+        let result = try await run(arguments)
+        if !result.succeeded {
+            throw LauncherFailure(
+                code: "catalog_failed",
+                message: "Could not write the single-game GameCatalog.json.",
+                hint: tailHint(result),
+                detail: result.combined,
+                exitCode: result.exitCode
+            )
+        }
     }
 
     func importBuildPackage(path: String, replace: Bool) async throws -> ImportedBuildPackage {

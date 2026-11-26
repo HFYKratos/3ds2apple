@@ -235,6 +235,13 @@ private struct GameCard: View {
                     }
                     .buttonStyle(SecondaryButtonStyle())
                     .disabled(model.isBusy)
+                    Button {
+                        Task { await model.exportIpa(for: game) }
+                    } label: {
+                        Label(strings.exportIpa, systemImage: "arrow.down.app")
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .disabled(model.isBusy)
                 }
                 Spacer(minLength: 0)
                 Button {

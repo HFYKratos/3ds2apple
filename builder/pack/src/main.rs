@@ -200,6 +200,10 @@ struct CatalogArgs {
     /// Write the catalogue here (default: <out>/packages/GameCatalog.json).
     #[arg(long, value_name = "FILE")]
     catalog_out: Option<PathBuf>,
+    /// Mark the catalogue for a single-game IPA: the shell opens the only game
+    /// as soon as its library is ready (additive root field autoLaunch).
+    #[arg(long)]
+    auto_launch: bool,
 }
 
 #[derive(Debug, Args)]
@@ -875,7 +879,7 @@ fn cmd_catalog(out: &Path, args: CatalogArgs, json: bool) -> Result<i32> {
             "catalog takes either --package-dir or --title-id, not both",
         ));
     }
-    let (catalog, packages) = if !args.package_dirs.is_empty() {
+    let (mut catalog, packages) = if !args.package_dirs.is_empty() {
         ops::allocate_dirs(&args.package_dirs)?
     } else {
         let filter = if args.title_ids.is_empty() {
@@ -885,6 +889,10 @@ fn cmd_catalog(out: &Path, args: CatalogArgs, json: bool) -> Result<i32> {
         };
         ops::allocate(out, filter)?
     };
+    if args.auto_launch {
+        catalog.auto_launch = Some(true);
+        catalog.validate()?;
+    }
     let path = args
         .catalog_out
         .unwrap_or_else(|| gameinfo::catalog_path(out));
@@ -895,6 +903,7 @@ fn cmd_catalog(out: &Path, args: CatalogArgs, json: bool) -> Result<i32> {
             serde_json::to_string_pretty(&json!({
                 "catalog": path.display().to_string(),
                 "summary": catalog.summary(),
+                "autoLaunch": catalog.auto_launch,
                 "games": catalog.games,
                 "packages": packages.iter().map(|package| package.title_id.clone()).collect::<Vec<_>>(),
             }))?

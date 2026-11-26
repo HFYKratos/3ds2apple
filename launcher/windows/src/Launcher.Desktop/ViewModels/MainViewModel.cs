@@ -33,6 +33,7 @@ public sealed class GameRow : ObservableObject
         RemoveCommand = new AsyncRelayCommand(() => _owner.RemoveGameAsync(this), () => !_owner.IsBusy);
         BuildCommand = new AsyncRelayCommand(() => _owner.BuildGameAsync(this), () => !_owner.IsBusy);
         ExportBuildPackageCommand = new AsyncRelayCommand(() => _owner.ExportBuildPackageAsync(this), () => !_owner.IsBusy && HasRealPack);
+        ExportIpaCommand = new AsyncRelayCommand(() => _owner.ExportIpaAsync(this), () => !_owner.IsBusy && HasRealPack);
         Refresh();
     }
 
@@ -103,9 +104,14 @@ public sealed class GameRow : ObservableObject
     /// <summary>"Export .32a": write this game's portable build package into workspace/builds.</summary>
     public AsyncRelayCommand ExportBuildPackageCommand { get; }
 
+    /// <summary>"Export IPA": compose an unsigned single-game IPA into workspace/exports.</summary>
+    public AsyncRelayCommand ExportIpaCommand { get; }
+
     public string BuildNowLabel => Loc.T("library.buildNow");
 
     public string ExportBuildPackageLabel => Loc.T("library.buildPackage.export");
+
+    public string ExportIpaLabel => Loc.T("library.exportIpa");
 
     /// <summary>Built/cache label or the exact rebuild reason (recorded buildCompatVersion + ROM fingerprint).</summary>
     public string BuildStatusText
@@ -144,6 +150,7 @@ public sealed class GameRow : ObservableObject
         OnPropertyChanged(nameof(RemoveLabel));
         OnPropertyChanged(nameof(BuildNowLabel));
         OnPropertyChanged(nameof(ExportBuildPackageLabel));
+        OnPropertyChanged(nameof(ExportIpaLabel));
     }
 
     public void RaiseCommandStates()
@@ -151,6 +158,7 @@ public sealed class GameRow : ObservableObject
         RemoveCommand.RaiseCanExecuteChanged();
         BuildCommand.RaiseCanExecuteChanged();
         ExportBuildPackageCommand.RaiseCanExecuteChanged();
+        ExportIpaCommand.RaiseCanExecuteChanged();
     }
 
     /// <summary>Recompute the cache label; cheap (size/mtime only, never reads the ROM).</summary>
@@ -1082,6 +1090,74 @@ public sealed class MainViewModel : ObservableObject
             SetBuildPackageStatus(Loc.T("library.buildPackage.importFailed", exception.Message), warning: true);
             Log("build package import failed: " + exception.Message);
             StatusText = Loc.T("status.buildPackageImportFailed");
+        }
+        finally
+        {
+            SetBusy(false, Loc.T("status.ready"));
+        }
+    }
+
+    /// <summary>Library card "Export IPA": compose one unsigned single-game IPA from the shell template.</summary>
+    public async Task ExportIpaAsync(GameRow row)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+        if (_services.Pack is not { } packCli)
+        {
+            SetBuildPackageStatus(Loc.T("library.ipaExportFailed", "3ds2apple-pack was not found; reinstall the launcher package."), warning: true);
+            return;
+        }
+        var packPath = row.Entry.PackPath;
+        if (string.IsNullOrWhiteSpace(packPath) || !File.Exists(packPath))
+        {
+            SetBuildPackageStatus(Loc.T("library.ipaNeedsPack"), warning: true);
+            return;
+        }
+        var shell = _shell ??= await _services.LoadShellAsync().ConfigureAwait(true);
+        if (shell is null)
+        {
+            SetBuildPackageStatus(Loc.T("library.ipaExportFailed", Loc.T("library.ipaLibraryUnavailable")), warning: true);
+            return;
+        }
+        SetBusy(true, Loc.T("status.exportIpa"));
+        try
+        {
+            var template = Path.Combine(_services.ShellDirectory, shell.FileName);
+            var outputDirectory = Path.Combine(_services.Workspace.Root, SingleGameIpaExporter.ExportsDirectoryName);
+            var exporter = new SingleGameIpaExporter(packCli);
+            var pack = new ComposedPack(row.TitleID, row.Entry.DisplayName, row.Entry.ProductCode, 1, packPath);
+            var result = await exporter.ExportAsync(
+                template,
+                pack,
+                row.Entry.CoverPath,
+                LauncherInfo.Version,
+                outputDirectory,
+                line => Log("[ipa] " + line)).ConfigureAwait(true);
+            if (!result.Ok)
+            {
+                SetBuildPackageStatus(Loc.T("library.ipaExportFailed", result.Error ?? "unknown error"), warning: true);
+                Log("single-game IPA export failed (" + row.TitleID + "): " + (result.Error ?? "unknown error"));
+                StatusText = Loc.T("status.ipaExportFailed");
+                return;
+            }
+            SetBuildPackageStatus(
+                Loc.T("library.ipaExported", result.IpaPath!, Loc.T("library.ipaUnsignedHint")),
+                warning: false);
+            Log("exported unsigned single-game IPA " + result.IpaPath + " (" + result.Bytes + " bytes, sha256 " + result.Sha256
+                + ", icons replaced " + result.ReplacedIconCount + ") - sign it with Sideloadly or AltStore before installing");
+            foreach (var warning in result.Warnings)
+            {
+                Log("IPA export: " + warning);
+            }
+            StatusText = Loc.T("status.ipaExported");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            SetBuildPackageStatus(Loc.T("library.ipaExportFailed", exception.Message), warning: true);
+            Log("single-game IPA export failed: " + exception.Message);
+            StatusText = Loc.T("status.ipaExportFailed");
         }
         finally
         {

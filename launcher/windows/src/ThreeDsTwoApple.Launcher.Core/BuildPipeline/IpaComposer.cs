@@ -96,7 +96,7 @@ public sealed class IpaComposer : IComposedIpaComposer
 
         Directory.CreateDirectory(outputDirectory);
         var catalogPath = Path.Combine(outputDirectory, "GameCatalog.generated.json");
-        var catalogProcess = await _packCli.CatalogAsync(titleIds, catalogPath, cancellationToken).ConfigureAwait(false);
+        var catalogProcess = await _packCli.CatalogAsync(titleIds, catalogPath, autoLaunch: false, cancellationToken).ConfigureAwait(false);
         if (!catalogProcess.Ok || !File.Exists(catalogPath))
         {
             throw new LauncherToolException("catalog_failed",

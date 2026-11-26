@@ -559,6 +559,55 @@ final class AppModel: ObservableObject {
         buildPackageWarning = warning
     }
 
+    // MARK: - Unsigned single-game IPA export
+
+    /// Library card "Export IPA": compose one unsigned single-game IPA from the
+    /// pinned shell template (GamePack + autoLaunch catalogue + SMDH app icons).
+    /// Nothing is signed or installed; the UI tells the user to sign it itself.
+    func exportIpa(for game: GameEntry) async {
+        guard !isBusy else { return }
+        guard game.packIsReal, let packPath = game.packPath, !packPath.isEmpty else {
+            setBuildPackageStatus(strings.buildPackageNeedsPack, warning: true)
+            return
+        }
+        guard beginBusy() else { return }
+        defer { endBusy() }
+        let template = settings.repoRoot + "/" + ShellRuntime.pinnedTemplateRelativePath
+        let outputDirectory = pack.outRoot.appendingPathComponent("exports", isDirectory: true).path
+        let packBackend = pack
+        let titleID = game.titleID
+        appendLog(.command, "ipa", "single-game IPA: template " + template + ", pack " + packPath)
+        do {
+            let exporter = SingleGameIpaExporter(runner: runner)
+            let result = try await exporter.export(
+                shellTemplateIpaPath: template,
+                packPath: packPath,
+                titleID: titleID,
+                displayName: game.displayName,
+                coverPath: game.coverPath,
+                version: LauncherInfo.version,
+                outputDirectory: outputDirectory,
+                writeCatalog: { catalogOut in
+                    try await packBackend.writeAutoLaunchCatalog(titleID: titleID, catalogOut: catalogOut)
+                },
+                onLine: { [weak self] level, line in
+                    Task { @MainActor in self?.appendLog(level, "ipa", line) }
+                }
+            )
+            setBuildPackageStatus(strings.ipaExported(result.ipaPath, strings.ipaUnsignedHint), warning: false)
+            appendLog(.success, "ipa", "exported unsigned single-game IPA " + result.ipaPath
+                + " (" + FileProbe.formatBytes(result.bytes) + ", sha256 " + result.sha256
+                + ", icons replaced " + String(result.replacedIcons) + ") - sign it with Sideloadly or AltStore")
+            for warning in result.warnings {
+                appendLog(.warn, "ipa", warning)
+            }
+        } catch {
+            let failure = error.launcherFailure()
+            setBuildPackageStatus(strings.ipaExportFailed(failure.message), warning: true)
+            appendLog(.error, "ipa", "single-game IPA export failed: " + failure.message + " " + failure.hint)
+        }
+    }
+
 
     private func makeGame(from rom: DetectedROM, package: DetectedPackage) -> GameEntry {
         let existing = game(id: package.titleID)

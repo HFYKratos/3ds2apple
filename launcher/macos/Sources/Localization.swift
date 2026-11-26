@@ -123,6 +123,11 @@ struct LauncherStrings {
     var buildPackageExportFailedFormat: String
     var buildPackageImportFailedFormat: String
     var buildPackageConflictFormat: String
+    // Unsigned single-game IPA export (Library card "Export IPA")
+    var exportIpa: String
+    var ipaExportedFormat: String
+    var ipaExportFailedFormat: String
+    var ipaUnsignedHint: String
     var emptyLibraryTitle: String
     var emptyLibraryMessage: String
     var importGame: String
@@ -336,6 +341,13 @@ struct LauncherStrings {
         buildPackageConflictFormat = t(
             "A package for this game already exists. %@",
             "该游戏已存在构建包。%@"
+        )
+        exportIpa = t("Export IPA", "导出 IPA")
+        ipaExportedFormat = t("Exported %@  %@", "已导出 %@  %@")
+        ipaExportFailedFormat = t("IPA export failed: %@", "IPA 导出失败：%@")
+        ipaUnsignedHint = t(
+            "Unsigned IPA: sign it with Sideloadly or AltStore before installing.",
+            "未签名 IPA：安装前请用 Sideloadly 或 AltStore 自签名。"
         )
         emptyLibraryTitle = t("Your library is empty", "游戏库还是空的")
         emptyLibraryMessage = t(
@@ -588,6 +600,14 @@ struct LauncherStrings {
 
     func buildPackageConflict(_ message: String) -> String {
         String(format: buildPackageConflictFormat, message)
+    }
+
+    func ipaExported(_ path: String, _ hint: String) -> String {
+        String(format: ipaExportedFormat, path, hint)
+    }
+
+    func ipaExportFailed(_ message: String) -> String {
+        String(format: ipaExportFailedFormat, message)
     }
 
     /// Compile hardware line: cores + RAM + 3dsrecomp's automatic parallelism.
