@@ -775,14 +775,16 @@ final class AppSettings: ObservableObject {
     /// it off, and a pre-0.1.0 install is migrated to on once (see init).
     @Published var systemMetalHUD: Bool
 
-    // MARK: Performance overlay (0.2.1-beta4)
+    // MARK: Performance overlay (0.2.1-beta4; opt-in since 0.2.2-beta3)
 
     /// The performance overlay drawn over the running game. It replaces the old
     /// FPS pill: one overlay that shows the frame rate, the frame generation
     /// time, the emulation speed, the memory the app is using and the memory
     /// still free, each line on its own. `GameView`
     /// draws it; these values only decide what it shows and where.
-    /// ON by default; OFF hides the whole overlay.
+    /// OFF by default since 0.2.2-beta3 (it used to ship on): the overlay is
+    /// opt-in, and turning it on shows the frame rate only. OFF hides the whole
+    /// overlay.
     @Published var performanceOverlayEnabled: Bool
     /// Draw a translucent background behind the overlay text so it stays
     /// readable over bright game scenes. OFF by default.
@@ -790,9 +792,11 @@ final class AppSettings: ObservableObject {
     /// Which place over the game picture the overlay uses (see
     /// `PerformanceOverlayPosition`; top left by default).
     @Published var performanceOverlayPosition: PerformanceOverlayPosition
-    /// The overlay's information lines. The shipped defaults are the reference
-    /// screenshots' choices: frame rate, frame generation time and the app's
-    /// memory use on; speed and available memory off.
+    /// The overlay's information lines. The shipped defaults since 0.2.2-beta3:
+    /// only the frame rate on; frame generation time, speed, the app's memory
+    /// use and the available memory off. An install still on the old default
+    /// combination (0.2.1-beta4..0.2.2-beta2: enabled, frame rate + frame time
+    /// + app memory on) is migrated once (see init).
     @Published var performanceOverlayShowFPS: Bool
     @Published var performanceOverlayShowFrameTime: Bool
     @Published var performanceOverlayShowSpeed: Bool
@@ -801,10 +805,10 @@ final class AppSettings: ObservableObject {
 
     /// The old FPS pill switch, kept for compatibility (0.2.1-beta4). It is a
     /// mirror of `performanceOverlayEnabled`: the Settings page no longer shows
-    /// it, the stored "UI.showFPS" key is still written so older builds and the
-    /// diagnostics report keep reading a meaningful value, and the in-game
-    /// pause menu's performance-stats row keeps working as the overlay's master
-    /// switch.
+    /// it, the stored "UI.showFPS" key is still written on every save and by
+    /// the 0.2.2-beta3 default migrations, so older builds and the diagnostics
+    /// report keep reading a meaningful value, and the in-game pause menu's
+    /// performance-stats row keeps working as the overlay's master switch.
     var showFPS: Bool {
         get { performanceOverlayEnabled }
         set { performanceOverlayEnabled = newValue }
@@ -1123,53 +1127,94 @@ final class AppSettings: ObservableObject {
         } else {
             systemMetalHUD = false
         }
-        // Performance overlay (0.2.1-beta4). The overlay replaces the FPS pill,
-        // so the old switch is its master switch on the first launch of this
-        // build: an install where the FPS pill was turned off keeps the overlay
-        // off after the upgrade instead of turning it back on. Every other
-        // overlay value starts at the shipped default; the marker makes this
-        // run exactly once, and the user's later choices win from then on.
-        if defaults.object(forKey: Keys.performanceOverlayMigrated) == nil {
-            let legacyShowFPS = Self.bool(defaults, Keys.showFPS, fallback: true)
-            performanceOverlayEnabled = legacyShowFPS
-            performanceOverlayBackground = false
-            performanceOverlayPosition = .topLeft
-            performanceOverlayShowFPS = true
-            performanceOverlayShowFrameTime = true
-            performanceOverlayShowSpeed = false
-            performanceOverlayShowProcessMemory = true
-            performanceOverlayShowAvailableMemory = false
-            defaults.set(legacyShowFPS, forKey: Keys.performanceOverlayEnabled)
+        // Performance overlay (0.2.1-beta4; OFF by default since 0.2.2-beta3).
+        // The overlay replaces the FPS pill, but the shipped default is now off
+        // with only the frame-rate line on. Both migrations below work on local
+        // copies: reading the @Published properties this early would touch
+        // `self` before every stored property is initialised.
+        let overlayMigrated = defaults.object(forKey: Keys.performanceOverlayMigrated) != nil
+        var overlayEnabled = false
+        var overlayBackground = false
+        var overlayPosition = PerformanceOverlayPosition.topLeft
+        var overlayShowFPS = true
+        var overlayShowFrameTime = false
+        var overlayShowSpeed = false
+        var overlayShowProcessMemory = false
+        var overlayShowAvailableMemory = false
+        if !overlayMigrated {
+            // An install that predates the overlay has only the FPS pill's
+            // "UI.showFPS" key. The pill was on by default, but the overlay is
+            // off by default now, so an untouched upgrade lands on the new
+            // default: master switch off, only the frame-rate line on. The
+            // marker makes this run exactly once, and the user's later choices
+            // (including turning the overlay on) win from then on.
+            defaults.set(false, forKey: Keys.performanceOverlayEnabled)
+            defaults.set(false, forKey: Keys.showFPS)
             defaults.set(false, forKey: Keys.performanceOverlayBackground)
             defaults.set(PerformanceOverlayPosition.topLeft.rawValue,
                          forKey: Keys.performanceOverlayPosition)
             defaults.set(true, forKey: Keys.performanceOverlayShowFPS)
-            defaults.set(true, forKey: Keys.performanceOverlayShowFrameTime)
+            defaults.set(false, forKey: Keys.performanceOverlayShowFrameTime)
             defaults.set(false, forKey: Keys.performanceOverlayShowSpeed)
-            defaults.set(true, forKey: Keys.performanceOverlayShowProcessMemory)
+            defaults.set(false, forKey: Keys.performanceOverlayShowProcessMemory)
             defaults.set(false, forKey: Keys.performanceOverlayShowAvailableMemory)
             defaults.set(true, forKey: Keys.performanceOverlayMigrated)
-            AppLog.log("[3ds2apple] performance overlay: the FPS pill switch (%@) became the overlay master switch",
-                       legacyShowFPS ? "on" : "off")
+            AppLog.log("[3ds2apple] performance overlay: moved from the FPS pill to the 0.2.2-beta3 default (off, frame rate only)")
         } else {
-            performanceOverlayEnabled = Self.bool(
-                defaults, Keys.performanceOverlayEnabled, fallback: true)
-            performanceOverlayBackground = Self.bool(
+            overlayEnabled = Self.bool(
+                defaults, Keys.performanceOverlayEnabled, fallback: false)
+            overlayBackground = Self.bool(
                 defaults, Keys.performanceOverlayBackground, fallback: false)
-            performanceOverlayPosition = PerformanceOverlayPosition(
+            overlayPosition = PerformanceOverlayPosition(
                 rawValue: defaults.string(forKey: Keys.performanceOverlayPosition) ?? ""
             ) ?? .topLeft
-            performanceOverlayShowFPS = Self.bool(
+            overlayShowFPS = Self.bool(
                 defaults, Keys.performanceOverlayShowFPS, fallback: true)
-            performanceOverlayShowFrameTime = Self.bool(
-                defaults, Keys.performanceOverlayShowFrameTime, fallback: true)
-            performanceOverlayShowSpeed = Self.bool(
+            overlayShowFrameTime = Self.bool(
+                defaults, Keys.performanceOverlayShowFrameTime, fallback: false)
+            overlayShowSpeed = Self.bool(
                 defaults, Keys.performanceOverlayShowSpeed, fallback: false)
-            performanceOverlayShowProcessMemory = Self.bool(
-                defaults, Keys.performanceOverlayShowProcessMemory, fallback: true)
-            performanceOverlayShowAvailableMemory = Self.bool(
+            overlayShowProcessMemory = Self.bool(
+                defaults, Keys.performanceOverlayShowProcessMemory, fallback: false)
+            overlayShowAvailableMemory = Self.bool(
                 defaults, Keys.performanceOverlayShowAvailableMemory, fallback: false)
         }
+        // 0.2.2-beta3 default migration: the overlay used to ship enabled with
+        // the frame rate, the frame time and the app-memory lines on (background
+        // off, speed/available memory off, top left). An install still on
+        // exactly that combination moves to the new default (off; only the frame
+        // rate line on); any other combination was chosen by the user and is
+        // kept unchanged. The marker makes this run exactly once, and the old
+        // FPS-pill mirror "UI.showFPS" is written along with the master switch.
+        if defaults.object(forKey: Keys.performanceOverlayBeta3DefaultsMigrated) == nil {
+            let onOldDefaultCombination = overlayEnabled
+                && overlayShowFPS
+                && overlayShowFrameTime
+                && overlayShowProcessMemory
+                && !overlayShowSpeed
+                && !overlayShowAvailableMemory
+                && !overlayBackground
+                && overlayPosition == .topLeft
+            if onOldDefaultCombination {
+                overlayEnabled = false
+                overlayShowFrameTime = false
+                overlayShowProcessMemory = false
+                defaults.set(false, forKey: Keys.performanceOverlayEnabled)
+                defaults.set(false, forKey: Keys.showFPS)
+                defaults.set(false, forKey: Keys.performanceOverlayShowFrameTime)
+                defaults.set(false, forKey: Keys.performanceOverlayShowProcessMemory)
+                AppLog.log("[3ds2apple] performance overlay: moved the old default combination to the 0.2.2-beta3 default (off, frame rate only)")
+            }
+            defaults.set(true, forKey: Keys.performanceOverlayBeta3DefaultsMigrated)
+        }
+        performanceOverlayEnabled = overlayEnabled
+        performanceOverlayBackground = overlayBackground
+        performanceOverlayPosition = overlayPosition
+        performanceOverlayShowFPS = overlayShowFPS
+        performanceOverlayShowFrameTime = overlayShowFrameTime
+        performanceOverlayShowSpeed = overlayShowSpeed
+        performanceOverlayShowProcessMemory = overlayShowProcessMemory
+        performanceOverlayShowAvailableMemory = overlayShowAvailableMemory
         playbackSpeed = PlaybackSpeed(
             rawValue: defaults.integer(forKey: Keys.playbackSpeed)
         ) ?? .normal
@@ -1235,8 +1280,9 @@ final class AppSettings: ObservableObject {
         // to the next device (the layer property switches the live layer).
         MetalHUD.apply(enabled: systemMetalHUD)
         // The old "UI.showFPS" key stays in sync with the overlay's master switch
-        // so pre-0.2.1-beta4 builds and the diagnostics report keep reading a
-        // meaningful value; the overlay's own keys follow.
+        // (off by default since 0.2.2-beta3) so pre-0.2.1-beta4 builds and the
+        // diagnostics report keep reading a meaningful value; the overlay's own
+        // keys follow.
         defaults.set(showFPS, forKey: Keys.showFPS)
         defaults.set(performanceOverlayEnabled, forKey: Keys.performanceOverlayEnabled)
         defaults.set(performanceOverlayBackground, forKey: Keys.performanceOverlayBackground)
@@ -1651,10 +1697,12 @@ final class AppSettings: ObservableObject {
         /// The removed first-load graphics warm-up wrote
         /// "UI.graphicsWarmUpEnabled"; old values are ignored on purpose.
         static let showFPS = "UI.showFPS"
-        // Performance overlay (0.2.1-beta4). "UI.showFPS" above stays as a
-        // mirror of the master switch; these keys hold the overlay's own
-        // choices, and the migration marker makes the one-time move from the
-        // old FPS pill run exactly once.
+        // Performance overlay (0.2.1-beta4; off by default since 0.2.2-beta3).
+        // "UI.showFPS" above stays as a mirror of the master switch; these keys
+        // hold the overlay's own choices. performanceOverlayMigrated is the
+        // one-time move from the old FPS pill, and
+        // performanceOverlayBeta3DefaultsMigrated the one-time move from the old
+        // "enabled, frame rate + frame time + app memory" default combination.
         static let performanceOverlayEnabled = "UI.performanceOverlayEnabled"
         static let performanceOverlayBackground = "UI.performanceOverlayBackground"
         static let performanceOverlayPosition = "UI.performanceOverlayPosition"
@@ -1664,6 +1712,10 @@ final class AppSettings: ObservableObject {
         static let performanceOverlayShowProcessMemory = "UI.performanceOverlayShowProcessMemory"
         static let performanceOverlayShowAvailableMemory = "UI.performanceOverlayShowAvailableMemory"
         static let performanceOverlayMigrated = "UI.performanceOverlayMigrated"
+        /// One-time 0.2.2-beta3 migration: the old default combination (enabled,
+        /// frame rate + frame time + app memory on) becomes the new default
+        /// (off, frame rate only).
+        static let performanceOverlayBeta3DefaultsMigrated = "UI.performanceOverlayBeta3DefaultsMigrated"
         static let playbackSpeed = "UI.playbackSpeed"
         static let turboSpeed = "UI.turboSpeed"
         static let turboLimit = "UI.turboLimit"

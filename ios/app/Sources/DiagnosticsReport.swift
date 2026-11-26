@@ -335,6 +335,7 @@ enum DiagnosticsExporter {
         playback_speed_effective=\(model.effectivePlaybackSpeed)
         playback_speed_auto_reduced=\(model.playbackSpeedAutoReduced ? 1 : 0)
         fps_counter=\(settings.performanceOverlayEnabled ? 1 : 0)
+        fps_counter_definition=1 when the performance overlay master switch is on. The overlay replaced the old FPS pill and is OFF by default since 0.2.2-beta3, with only the frame-rate line enabled; the legacy "UI.showFPS" key mirrors the master switch. The per-line switches are the ShowFPS/ShowFrameTime/ShowSpeed/ShowProcessMemory/ShowAvailableMemory defaults and the overlay itself is drawn by GameView
         warmup_enabled=0
         warmup_note=removed-in-0.1.1 (the optional first-load graphics warm-up was removed; pipeline-cache persistence is unchanged)
         system_metal_hud=\(settings.systemMetalHUD ? 1 : 0)
