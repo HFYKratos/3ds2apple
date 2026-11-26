@@ -62,13 +62,13 @@
     <td align="center" width="25%">⚡<br><b>Native AOT, not emulation</b><br><sub>Every game is recompiled to ARM64 before it runs. No CPU JIT, no interpreter fallback on the shipping path.</sub></td>
     <td align="center" width="25%">📚<br><b>One app, your whole library</b><br><sub>Each selected title is a GamePack inside one signed app; pushed game data survives updates.</sub></td>
     <td align="center" width="25%">🎮<br><b>Full New 3DS controls</b><br><sub>D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a real analog Circle Pad and the C-stick; editable Fast-forward, Quick save, Quick load and Swap screens buttons; the default layout follows two Delta reference skins (ModernFS portrait, ModernHybrid landscape) with the Settings button always visible in the skins' HOME slot; MFi, Xbox and DualSense controllers.</sub></td>
-    <td align="center" width="25%">🧭<br><b>6 + 3 layouts, all on the GPU</b><br><sub>Six landscape and three portrait presets plus custom rectangles — all drawn by the GPU presenter with zero per-frame readback; four-way rotation and screen swap included.</sub></td>
+    <td align="center" width="25%">🧭<br><b>6 + 3 layouts, all on the GPU</b><br><sub>Six landscape and three portrait presets plus custom rectangles — all drawn by the GPU presenter with zero per-frame readback; four-way rotation and screen swap included, plus six experimental renderer optimisation switches.</sub></td>
   </tr>
   <tr>
     <td align="center" width="25%">✏️<br><b>Edit controls in-game</b><br><sub>Pause, drag controls over the picture and tap Done; per-button visibility, 10%–200% size and opacity.</sub></td>
-    <td align="center" width="25%">💾<br><b>Saves and save states</b><br><sub>Battery saves in the app container, three instant save-state slots per game, save export and import in the Save Manager.</sub></td>
+    <td align="center" width="25%">💾<br><b>Saves and save states</b><br><sub>Battery saves in the app container, three instant save-state slots per game, save export and import in the Save Manager, and your own Citra/Azahar cheat code files with a per-code switch.</sub></td>
     <td align="center" width="25%">⏩<br><b>Fast-forward, performance overlay and HUD</b><br><sub>A 2x Fast-forward toggle, editable Quick save and Quick load, an optional performance overlay at the top edge of the picture (frame rate, frame time, speed, app and available memory, one of six places, switchable lines and an optional background), the system Metal HUD (off by default) and one-tap diagnostics export.</sub></td>
-    <td align="center" width="25%">🖥️<br><b>Windows and macOS launchers</b><br><sub>Import → compile → sign → install → push from one window; the Windows path needs no Mac and deploys incrementally without touching game data.</sub></td>
+    <td align="center" width="25%">🖥️<br><b>Windows and macOS launchers</b><br><sub>Import → compile → sign → install → push from one window; the Windows path needs no Mac and deploys incrementally without touching game data. Export/import portable .32a builds, export an unsigned single-game IPA, and tune the next AOT build in a collapsed advanced section.</sub></td>
   </tr>
 </table>
 
@@ -86,6 +86,19 @@ In landscape the picture box is top-aligned: **Large screen**, **Side by side** 
 All preset arrangements are drawn by the GPU presenter — the Metal path with zero per-frame screen readback. **Custom layout** places each screen at its own rectangle: edit X/Y/width/height percentages with a live preview under the fields, or drag the screens; custom layouts are drawn by the GPU presenter too (arbitrary rectangles, four-way rotation and top/bottom screen swap), so nothing falls back to a slower readback path. A custom layout still applies from the next game load.
 
 Screen rotation and interface orientation are kept, and render resolution (1x–4x) still applies on the next game load. 0.1.5 removed the old aspect-ratio and integer-scaling switches.
+
+## Renderer optimisations (experimental)
+
+**Settings → Graphics → Renderer optimisations** has six experimental switches that change how the hardware (Vulkan/MoltenVK) renderer draws. All six ship **off**, and each one is read once when the renderer builds its device for a game load, so a change applies only after force-quitting and relaunching the app.
+
+- **Equivalent draw skipping** — skip equivalent draws that cannot change either buffer.
+- **Duplicate capture skipping** — skip repeated screen captures that nothing drew into.
+- **Render pass merging** — merge depth-less draws into a pass that already has a depth buffer.
+- **Fast image clears** — clear full-screen images with the image clear commands.
+- **Opaque draw sorting** — draw the opaque draws front to back within a batch.
+- **Narrow render barriers** — narrow the barrier after a target switch to the attachment stage.
+
+The switches only affect the GPU path: with the software PICA200 renderer they are never read and change nothing. If a game shows graphical differences, switch them off one by one to find the one that causes it; **Reset** returns all six to off. The diagnostics export records which ones were on for the session.
 
 ## Controls and the pause menu
 
@@ -109,6 +122,23 @@ Visibility is per orientation (the Toggle controls sheet edits the current one);
 Pause any game and open **Virtual controls → Edit layout**: every control has its own hit area, so you drag just the one you grabbed over the paused picture, and the centred **Done** saves the current orientation and resumes. The same card gives per-button visibility, 10%–200% size and opacity, and **Reset** restores the defaults. Portrait and landscape positions are stored separately.
 
 <p align="center"><sub>0.2.1 synthetic preview, no game data: portrait controls → landscape controls → in-game menu → performance overlay settings.</sub></p>
+
+## Cheat codes
+
+Cheat codes are your own Citra/Azahar text files, not something the app or the launcher ships. The app reads them from `Documents/Cheats/<TITLEID>.txt` (the same 16-hex title ID as the game folder), in the format the desktop tools already use: a `[name]` line, an optional `*citra_enabled` line, then `XXXXXXXX YYYYYYYY` code lines.
+
+- **Settings → Cheats** lists every game in the library with its cheat file. Import a UTF-8 `.txt` from the Files app, paste or edit the text in the built-in editor, switch each cheat on or off, and export the current file through the share sheet.
+- **In-game menu → Cheats** shows the running game's codes and switches them while you play; a change applies from the next frame and is written back to the same file.
+- **No database is built in.** The app ships no codes and downloads nothing — only the codes you supply are used. The runtime accepts at most 128 cheats, 256 KiB per file and 1024 lines per cheat.
+- **Data patches only.** Codes that rewrite the game's own code can slow an AOT build down or need to be switched off; codes that change game data are the supported case. Back up your saves before using codes.
+
+## Portable builds, single-game IPA and build options
+
+The desktop launchers can package a built game and tune how the AOT code is compiled.
+
+- **Export .32a / Import .32a** — a Library card exports the built game to `<portable data folder>/workspace/builds/<build-slug>.32a`, a ZIP carrying the export manifest, the GamePack, `GameInfo.json`, the SMDH cover and, by default, the user's own game data (the ROM). Import validates the whole package (manifest schema, title ID, pack SHA-256 and Mach-O, every optional payload hash) before installing it into the launcher workspace, so a build can move to another computer and be deployed or exported again there. An existing title is only replaced after the explicit **Replace** confirmation. **A .32a can contain your own game data: keep it local, and never upload it or commit it to a repository.**
+- **Export IPA** — a Library card with a real AOT GamePack exports an unsigned single-game IPA to `<portable data folder>/workspace/exports/<build-slug>-<version>-unsigned.ipa`. It composes the shell template with that one GamePack and a single-game `GameCatalog.json`, replaces the app icons with the game's SMDH cover and marks the catalogue to open the game as soon as its library is ready. The result is **unsigned**: sign it yourself with Sideloadly or AltStore before installing — the launcher neither signs nor uploads it. The game data still has to be pushed by the launcher; the exported IPA itself carries no ROM.
+- **Advanced build settings** — the Deploy page has a collapsed section for the AOT optimisation level (**O1 / O2 / O3 / Oz**, default **O2**), link-time optimisation (default **off**) and fast-math (default **off**; it changes guest floating-point results). The defaults reproduce the shipped build; a change applies to the next build and invalidates the affected GamePacks' cache, so those games rebuild instead of reusing a stale pack.
 
 ## Screenshots
 
@@ -174,6 +204,22 @@ On a physical iPhone, **one retail title** run through the Windows launcher path
 
 No longer. Since 0.1.6 the GPU presenter draws custom layouts too — arbitrary rectangles, four-way rotation and top/bottom screen swap — so they stay on the same zero-readback Metal path as the presets. A custom layout still applies from the next game load.
 
+### Can I move a built game to another computer?
+
+Yes. Export the game from the Library as a `.32a` build package and import it in the launcher on the other machine, where it can be deployed or exported again. The package carries the GamePack, `GameInfo.json`, the icon and — by default — your own game data, so keep it local: **never upload it or commit it to a repository**. Importing over an existing title requires the explicit **Replace** confirmation and never deletes unrelated files.
+
+### Is the exported single-game IPA signed?
+
+No. **Export IPA** writes an unsigned single-game IPA whose app icons come from the game's SMDH cover and which opens directly into that game once its data has been pushed. Sign it with Sideloadly or AltStore and install it yourself; the launcher neither signs nor uploads it, and the exported IPA carries no ROM.
+
+### How do I add cheat codes?
+
+Put your own Citra/Azahar `.txt` in `Documents/Cheats/<TITLEID>.txt` — through **Settings → Cheats** (import from the Files app or paste the text) or directly in the Files app — and switch codes in **Settings → Cheats** or the in-game menu's **Cheats** page. Nothing is bundled or downloaded, only data patches are promised, and codes that rewrite the game's code can slow an AOT build down. Back up your saves first.
+
+### Do the experimental renderer optimisations help?
+
+They may. The six switches under **Settings → Graphics → Renderer optimisations** ship off, need an app relaunch to take effect and only change the GPU (Vulkan/MoltenVK) path. Some games may render differently with one of them on; if a game misbehaves after enabling them, turn them off one by one (or use **Reset**) to find the culprit.
+
 ## Legal and limits
 
 - **Bring your own games.** No ROMs, keys, BIOS, system files or game assets are provided or linked; there is no piracy support. Only use decrypted ROMs that you legally own and dump yourself.
@@ -199,8 +245,8 @@ No longer. Since 0.1.6 the GPU presenter draws custom layouts too — arbitrary 
 
 | Platform | Support |
 |---|---|
-| **iPhone / iPad** | iOS 16 and later. One app holds the library, the redesigned in-game menu, the full New 3DS control set with in-game layout editing, six landscape and three portrait screen layouts, save states, the performance overlay and per-app settings. |
-| **Windows** | Windows 10/11 x64. One self-contained launcher executable; builds, signs, installs and pushes without a Mac. **Verified path.** |
+| **iPhone / iPad** | iOS 16 and later. One app holds the library, the redesigned in-game menu, the full New 3DS control set with in-game layout editing, six landscape and three portrait screen layouts, save states, the performance overlay, per-app settings, your own cheat code files and six experimental renderer optimisations. |
+| **Windows** | Windows 10/11 x64. One self-contained launcher executable; builds, signs, installs and pushes without a Mac, exports portable `.32a` builds and unsigned single-game IPAs, and has a collapsed advanced build-settings section. **Verified path.** |
 | **macOS** | macOS 13+ (Intel + Apple silicon). SwiftUI launcher using Xcode signing; the package is not self-contained yet and device install is not verified by the maintainers. **Developer preview.** |
 | **Build host** | Windows (bundled LLVM/LLD) or macOS (Apple clang + Xcode). |
 
@@ -275,7 +321,7 @@ Each library card is built from what the launcher already read out of the ROM at
 
 There is a launcher for Windows and one for macOS. Import your own decrypted `.3ds`/`.cci`, pick the games and press the one deploy button: the launcher compiles the GamePacks, composes a ROM-free base IPA, signs and installs it with your own Apple ID (bundled official Impactor/plumesign on Windows, Xcode automatic signing on macOS), then pushes only `GameRom.cci` + `GameInfo.json` into the app Documents folder.
 
-The launchers keep a portable data folder beside the executable/.app, read the ROM SMDH metadata (icon, localized name, publisher), detect the compile hardware and parallelise 3dsrecomp automatically, and show a startup readiness light plus a self-test so a missing tool never fails a deploy silently. On Windows, Deploy is device-aware: it reads the installed app and pushed games first, skips the work when the phone is already up to date, keeps game data and saves when it overwrites an app, and lists/asks about phone games missing from the local library before updating — their data is never deleted.
+The launchers keep a portable data folder beside the executable/.app, read the ROM SMDH metadata (icon, localized name, publisher), detect the compile hardware and parallelise 3dsrecomp automatically, and show a startup readiness light plus a self-test so a missing tool never fails a deploy silently. On Windows, Deploy is device-aware: it reads the installed app and pushed games first, skips the work when the phone is already up to date, keeps game data and saves when it overwrites an app, and lists/asks about phone games missing from the local library before updating — their data is never deleted. Each built game can also be exported as a portable `.32a` package (which can include the user's own game data) or as an unsigned single-game IPA for sideloading, and the Deploy page's collapsed **Advanced build settings** tune the AOT optimisation level, link-time optimisation and fast-math for the next build.
 
 ### What the phone shows while you play
 
@@ -311,6 +357,8 @@ licenses/          third-party license texts (Impactor MIT, apple-codesign MPL-2
 - **A mainland-China iPhone can ask for "wireless data" on the first text input.** This is a known iOS quirk: when the system text input first appears (for example the in-game keyboard overlay), UIKit's own dictation/network path check is attributed to the app, so iOS shows its "allow wireless data" alert. 3ds2apple makes no network requests and its cellular data usage stays at 0 — choose *Don't Allow* or *Wi-Fi only* and everything keeps working (a reinstall can show the alert again). Details in [ios/app/README.md](ios/app/README.md).
 - **Older installs and older pushes keep working.** `GameInfo.json` only gained optional fields (schema version stays 1), so game data pushed by a 0.1.0 launcher still validates and plays — until you redeploy, the card has no publisher, no real SMDH icon and no size. An app updated from 0.1.0 keeps its library and saves.
 - **The macOS package is a developer preview.** It is not self-contained and its device install has not been verified by the maintainers yet — the real-device acceptance call is tracked in [#1](https://github.com/HFYKratos/3ds2apple/issues/1); the Windows package is the verified path.
+- **Renderer optimisations are experimental.** The six switches under Settings → Graphics ship off, need an app relaunch and only change the GPU path; if a title shows graphical differences, turn them off one by one.
+- **Cheat codes are yours to supply.** The app ships no cheat database and downloads none; codes are user text files that should only patch game data — codes that rewrite the game's code can slow an AOT build down — so back up your saves first.
 - **No ROMs, keys or BIOS are provided.** Only decrypted ROMs that you own are supported.
 - **No CPU JIT by design.** The shipping path is AOT code plus the Zakuro HLE runtime; there is no interpreter fallback.
 
