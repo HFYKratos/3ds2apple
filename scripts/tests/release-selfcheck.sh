@@ -159,7 +159,7 @@ make_macos_zip() {
 # and the appended "win-selftest: exit code N" evidence line.
 make_win_selftest_log() {
   local log="$1" version="$2"
-  local pass_count="${3:-32}" fail_count="${4:-0}" warn_count="${5:-0}" exit_code="${6:-0}" i
+  local pass_count="${3:-33}" fail_count="${4:-0}" warn_count="${5:-0}" exit_code="${6:-0}" i
   {
     printf '3ds2apple launcher self-test \xc2\xb7 3ds2apple-launcher-windows/%s\n' "$version"
     for ((i = 0; i < pass_count; i++)); do printf '[PASS] synthetic check %d\n' "$i"; done
