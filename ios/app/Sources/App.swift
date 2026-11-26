@@ -41,6 +41,15 @@ struct ThreeDS2AppleApp: App {
                 experimentalEnvironment.append("ZAKURO_FRAG_FAST_MATH=0")
             }
         }
+        // The six experimental renderer optimisations from Settings -> Graphics.
+        // The Vulkan/MoltenVK renderer reads each switch once, while it builds
+        // the device for a game load, so the enabled ones have to be in the
+        // process environment before the first load; a change in Settings
+        // applies on the next app launch (the rows say so). The six names come
+        // from AdvancedGraphics.Toggle and are part of the renderer A/B
+        // allow-list (MoltenVKTuning.supportedRendererKeys).
+        let advancedGraphicsEnvironment = AdvancedGraphics.apply(launchSettings.advancedGraphics)
+        experimentalEnvironment.append(contentsOf: advancedGraphicsEnvironment)
         MoltenVKTuning.noteSettingsEnvironment(experimentalEnvironment)
         // MoltenVK's MVK_CONFIG_* performance parameters are environment
         // variables read when its first Vulkan instance/device is created.
@@ -85,6 +94,15 @@ struct ThreeDS2AppleApp: App {
             AppLog.log(
                 "[3ds2apple] experimental GPU settings (change requires an app relaunch): %@",
                 MoltenVKTuning.settingsEnvironment.joined(separator: ",")
+            )
+        }
+        if !advancedGraphicsEnvironment.isEmpty {
+            // The six Settings -> Graphics renderer optimisations: in the
+            // environment already, read by the renderer on the next game load;
+            // changing a switch needs an app relaunch to reach this init again.
+            AppLog.log(
+                "[3ds2apple] advanced graphics (change requires an app relaunch): %@",
+                advancedGraphicsEnvironment.joined(separator: ",")
             )
         }
         if !MetalBackend.isMoltenVKEmbedded {

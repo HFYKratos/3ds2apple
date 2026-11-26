@@ -245,6 +245,24 @@ enum DiagnosticsExporter {
         let budgetUsedText = renderTotalAvg > 0
             ? String(format: "%.1f", renderTotalAvg / frameBudgetMs * 100)
             : "-"
+        // 0.2.2 experimental renderer optimisations: the switches App.init wrote
+        // into this process's environment (a Settings change applies on the
+        // next launch) and whether the running path can use them at all.
+        let advancedPairs = AdvancedGraphics.appliedEnvironment
+        let advancedText = advancedPairs.isEmpty ? "none" : advancedPairs.joined(separator: ",")
+        let advancedHardware = MetalBackend.isMoltenVKEmbedded
+            && (!model.isRuntimeLoaded || model.displayPath.usesMetalLayer)
+        let advancedEffective = (!advancedPairs.isEmpty && advancedHardware) ? "1" : "0"
+        let advancedNote: String
+        if advancedPairs.isEmpty {
+            advancedNote = "all six are off"
+        } else if advancedHardware {
+            advancedNote = "effective: the hardware Vulkan/MoltenVK path runs"
+        } else if !MetalBackend.isMoltenVKEmbedded {
+            advancedNote = "inert: MoltenVK is not embedded in this app, the software PICA200 renderer never reads the switches"
+        } else {
+            advancedNote = "inert: this game load fell back to the software renderer"
+        }
         var header = """
         3ds2apple diagnostics
         date=\(Date())
@@ -272,6 +290,9 @@ enum DiagnosticsExporter {
         metal_moltenvk_embedded=\(MetalBackend.isMoltenVKEmbedded ? 1 : 0)
         metal_hud_enabled=\(model.isSystemMetalHUDEnabled ? 1 : 0)
         renderer_software=\(model.displayPath == .metalDirect ? 0 : 1)
+        graphics_advanced=\(advancedText)
+        graphics_advanced_effective=\(advancedEffective)
+        graphics_advanced_definition=the six experimental Settings -> Graphics renderer optimisations (ZAKURO_SAFE_SKIPS, ZAKURO_DEDUPE_CAPTURE, ZAKURO_MERGE_PASSES, ZAKURO_FAST_CLEARS, ZAKURO_SORT_OPAQUE, ZAKURO_FAST_BARRIERS) are read once by the Vulkan/MoltenVK renderer while it builds the device: App.init writes the enabled ones before the first game load and a Settings change applies on the next app launch. \(advancedNote)
         display=\(model.displayPath.label)
         hardware=\(model.hardwareStatus)
         loop=\(model.frameLoopLabel)

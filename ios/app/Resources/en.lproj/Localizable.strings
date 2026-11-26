@@ -894,3 +894,19 @@
 "Show the emulation speed as a percentage of real time." = "Show the emulation speed as a percentage of real time.";
 "Show how much memory the emulator is using." = "Show how much memory the emulator is using.";
 "Show how much memory the device still has free." = "Show how much memory the device still has free.";
+
+/* --- 0.2.2 experimental renderer optimisations (Settings -> Graphics) ---- */
+"Renderer optimisations" = "Renderer optimisations";
+"Equivalent draw skipping" = "Equivalent draw skipping";
+"Experimental: skip equivalent draws that cannot change either buffer." = "Experimental: skip equivalent draws that cannot change either buffer.";
+"Duplicate capture skipping" = "Duplicate capture skipping";
+"Experimental: skip repeated screen captures that nothing drew into." = "Experimental: skip repeated screen captures that nothing drew into.";
+"Render pass merging" = "Render pass merging";
+"Experimental: merge depth-less draws into a pass that already has a depth buffer." = "Experimental: merge depth-less draws into a pass that already has a depth buffer.";
+"Fast image clears" = "Fast image clears";
+"Experimental: clear full-screen images with the image clear commands." = "Experimental: clear full-screen images with the image clear commands.";
+"Opaque draw sorting" = "Opaque draw sorting";
+"Experimental: draw the opaque draws front to back within a batch." = "Experimental: draw the opaque draws front to back within a batch.";
+"Narrow render barriers" = "Narrow render barriers";
+"Experimental: narrow the barrier after a target switch to the attachment stage." = "Experimental: narrow the barrier after a target switch to the attachment stage.";
+"Experimental: all six ship off and need an app relaunch. They change how the hardware renderer draws; if a game shows graphical differences, turn them off one by one." = "Experimental: all six ship off and need an app relaunch. They change how the hardware renderer draws; if a game shows graphical differences, turn them off one by one.";

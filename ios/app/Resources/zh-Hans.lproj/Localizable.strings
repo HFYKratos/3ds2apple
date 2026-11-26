@@ -896,3 +896,19 @@
 "Show the emulation speed as a percentage of real time." = "以百分比显示当前模拟速度。";
 "Show how much memory the emulator is using." = "显示模拟器占用的内存大小。";
 "Show how much memory the device still has free." = "显示设备可用的内存大小。";
+
+/* --- 0.2.2 设置：图形渲染器实验选项 -------------------------------------- */
+"Renderer optimisations" = "渲染器优化";
+"Equivalent draw skipping" = "等价绘制跳过";
+"Experimental: skip equivalent draws that cannot change either buffer." = "实验性：跳过不可能改变任一屏幕缓冲区的等价绘制。";
+"Duplicate capture skipping" = "重复截取跳过";
+"Experimental: skip repeated screen captures that nothing drew into." = "实验性：跳过没有新绘制内容的重复屏幕截取。";
+"Render pass merging" = "渲染通道合并";
+"Experimental: merge depth-less draws into a pass that already has a depth buffer." = "实验性：把没有深度缓冲的绘制并入已有深度缓冲的渲染通道。";
+"Fast image clears" = "快速图像清除";
+"Experimental: clear full-screen images with the image clear commands." = "实验性：用图像清除命令清除整屏图像。";
+"Opaque draw sorting" = "不透明绘制排序";
+"Experimental: draw the opaque draws front to back within a batch." = "实验性：在同一批次内按从前到后的顺序绘制不透明内容。";
+"Narrow render barriers" = "收窄渲染屏障";
+"Experimental: narrow the barrier after a target switch to the attachment stage." = "实验性：切换渲染目标后把屏障收窄到附件阶段。";
+"Experimental: all six ship off and need an app relaunch. They change how the hardware renderer draws; if a game shows graphical differences, turn them off one by one." = "实验性：六项默认全部关闭，且需要重启 App。它们只会改变硬件渲染器的绘制方式；如果某个游戏出现画面差异，请逐项关闭。";
