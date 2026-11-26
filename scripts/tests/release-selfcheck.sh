@@ -14,7 +14,7 @@
 #         synthetic exe carries the single-file deps.json key
 #         "3ds2apple-launcher/<ver>")
 #   FAIL  a Windows zip whose exe embeds a different version
-#   PASS  a clean win-selftest.sh log: exit code 0, SELF-TEST OK, 32 PASS,
+#   PASS  a clean win-selftest.sh log: exit code 0, SELF-TEST OK, 33 PASS,
 #         0 FAIL, 0 WARN and the expected version line (--win-selftest-log)
 #   FAIL  a win-selftest.sh log with a failure, or a missing log file
 #   PASS  a release directory named v<ver> with assets matching that version
@@ -205,7 +205,7 @@ run_verify_case "windows exe version mismatch -> FAIL" fail "does not embed laun
 
 GOOD_LOG="$CASE_DIR/win-selftest-ok.log"
 make_win_selftest_log "$GOOD_LOG" 0.1.0
-run_verify_case "clean win-selftest log -> PASS" pass "32 PASS / 0 FAIL / 0 WARN" \
+run_verify_case "clean win-selftest log -> PASS" pass "33 PASS / 0 FAIL / 0 WARN" \
   --windows-zip "$W_COMPLETE" --expect-package-version 0.1.0 --win-selftest-log "$GOOD_LOG"
 
 BAD_LOG="$CASE_DIR/win-selftest-fail.log"
