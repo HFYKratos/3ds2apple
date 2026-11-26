@@ -67,7 +67,6 @@
     </a>
     <nav class="site-nav" aria-label="主导航">
       <a href="#why">为何原生</a>
-      <a href="#whats-new">0.2.1 新功能</a>
       <a href="#features">功能</a>
       <a href="#layouts">屏幕布局</a>
       <a href="#controls">虚拟按键</a>
@@ -107,8 +106,8 @@
         </ul>
       </div>
       <figure class="hero-media" data-gif data-pause-label="暂停预览" data-play-label="播放预览">
-        <img class="gif-anim" src="../assets/demo.gif" width="960" height="640" alt="0.2.1 合成动画预览：纵向按键与 HOME 槽设置按钮、贴顶的横向按键、游戏内菜单，以及性能覆盖层设置。">
-        <img class="gif-still" src="../assets/demo-poster.png" width="960" height="640" alt="0.2.1 合成预览封面：纵向手机画面顶部是性能覆盖层，下方是一整组虚拟按键。" hidden>
+        <img class="gif-anim" src="../assets/demo.gif" width="960" height="640" alt="合成动画预览：纵向按键与 HOME 槽设置按钮、贴顶的横向按键、游戏内菜单，以及性能覆盖层设置。">
+        <img class="gif-still" src="../assets/demo-poster.png" width="960" height="640" alt="合成预览封面：纵向手机画面顶部是性能覆盖层，下方是一整组虚拟按键。" hidden>
         <button class="gif-toggle" type="button" hidden>暂停预览</button>
         <figcaption>0.2.1 合成预览——仅含网格与控件标签，不含任何游戏数据。<span class="dim">动画幻灯片（5 秒循环）。</span></figcaption>
       </figure>
@@ -166,48 +165,6 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
     </div>
   </section>
 
-  <section class="section" id="whats-new">
-    <div class="wrap">
-      <div class="section-head">
-        <p class="eyebrow">0.2.1 新功能</p>
-        <h2>面向设置、按键与画面的打磨版本。</h2>
-        <p>0.2.1 完善 iOS 风格设置与游戏内菜单，重做默认虚拟按键，让设置按钮不可隐藏，把 FPS 胶囊升级为完整性能覆盖层，并让横屏画面贴到顶边。</p>
-      </div>
-      <div class="features">
-        <article class="feature">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M3 13h18M8 20h8M12 17v3"/></svg>
-          <h3>iOS 风格设置</h3>
-          <p>设置页延续 iOS 26/27 的 inset-grouped 风格：大标题、彩色圆角图标、inline 标题、两行内说明、push 单选页，并跟随系统浅/深色。</p>
-        </article>
-        <article class="feature">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 4v16"/><path d="m13 13 3 3-3 3"/></svg>
-          <h3>默认按键布局</h3>
-          <p>默认虚拟按键改用竖屏 ModernFS / 横屏 ModernHybrid 两套 Delta 参考皮肤几何：皮肤 HOME 槽是设置按钮，快速存档/快速读取位于刘海旁；未改动过的旧布局一次性迁移，自定义布局保留。</p>
-        </article>
-        <article class="feature">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 17v3h16v-3"/></svg>
-          <h3>设置按钮常显</h3>
-          <p>游戏内设置按钮不再可隐藏：它固定在 HOME 槽原位，切换控制里不再列出，调整大小仍可改尺寸；旧存档里隐藏它的设置会在加载时自动清除。</p>
-        </article>
-        <article class="feature">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="5" width="19" height="12" rx="2"/><path d="M8 21h8M4 9h16"/></svg>
-          <h3>Azahar 风格性能覆盖层</h3>
-          <p>原来的 FPS 胶囊升级为可配置覆盖层，贴在画面最顶端：帧率、帧生成时间、速度、应用内存与可用内存逐行开关，六种位置与可选背景；无法获取的电池温度行已移除。</p>
-        </article>
-        <article class="feature">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5h9v14H4z"/><path d="M16 12h5M21 12l-4-4M21 12l-4 4"/></svg>
-          <h3>游戏内菜单重做</h3>
-          <p>菜单沿用分组式 iOS 语言：竖屏底部上滑、横屏居中卡片，子页使用原生 push/pop；标题显示游戏名，顶部只保留退出/重置/恢复。</p>
-        </article>
-        <article class="feature">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 4v4M16 10v4M10 16v4"/></svg>
-          <h3>横屏布局贴顶</h3>
-          <p>横屏 Large screen / Side by side / Hybrid 现在贴住画面顶边（上方黑边消失），保持水平居中与宽高比/整数缩放不变；SAVE/LOAD 移到刘海顶角旁。</p>
-        </article>
-      </div>
-    </div>
-  </section>
-
   <section class="section" id="why">
     <div class="wrap">
       <div class="section-head">
@@ -240,7 +197,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 20h8M12 17v3"/></svg>
           <h3>全屏画面</h3>
-          <p>没有标题栏、卡片边框或游戏名；画面上只有性能覆盖层和你的虚拟按键，HOME 槽的常显设置按钮是游戏内唯一菜单入口。</p>
+          <p>没有标题栏、卡片边框或游戏名；画面上只有性能覆盖层和你的虚拟按键，HOME 槽的常显设置按钮是游戏内唯一菜单入口；菜单本身沿用相同的 iOS 分组语言，子页为原生 push/pop。</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z"/><path d="m4 12 8 4.5 8-4.5M4 16.5 12 21l8-4.5"/></svg>
@@ -250,12 +207,12 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="7" width="19" height="11" rx="4"/><path d="M8 10.5v4M6 12.5h4M16 11.5h.01M18.5 13.5h.01"/></svg>
           <h3>完整 New 3DS 键位</h3>
-          <p>十字键、A/B/X/Y、L/R、ZL/ZR、Start/Select、真模拟量 Circle Pad 与 New 3DS C 杆，并支持手柄映射。0.2.0 新增模拟死区、物理按键重映射、2–4 键 hotkey、Standard / High contrast 控件外观与按游戏 Gamepad profile。</p>
+          <p>十字键、A/B/X/Y、L/R、ZL/ZR、Start/Select、真模拟量 Circle Pad 与 New 3DS C 杆，并支持手柄映射；默认布局取竖屏 ModernFS / 横屏 ModernHybrid 两套 Delta 参考皮肤，其 HOME 槽是始终显示的设置按钮。手柄层还支持模拟死区、物理按键重映射、2–4 键 hotkey、Standard / High contrast 控件外观与按游戏 profile。</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
           <h3>6 + 3 种屏幕布局</h3>
-          <p>横向六种、纵向三种预设，外加任意自定义矩形，横竖各自独立，全部由 GPU presenter 绘制，每帧零屏幕回读。</p>
+          <p>横向六种、纵向三种预设，外加任意自定义矩形，横竖各自独立，全部由 GPU presenter 绘制，每帧零屏幕回读；横屏时「大屏幕」「并排屏幕」「混合式屏幕」贴住画面顶边。</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v18M3 12h18M12 3l3 3M12 3 9 6M12 21l3-3M12 21l-3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>
@@ -270,7 +227,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 13h4l3-7 4 12 3-6h6"/></svg>
           <h3>贴顶的性能覆盖层</h3>
-          <p>Azahar 风格覆盖层贴在画面最顶端：帧率、帧生成时间、速度、应用内存与可用内存逐行开关，六种位置与可选背景；无法获取的电池温度行已移除。</p>
+          <p>Azahar 风格覆盖层贴在画面最顶端：帧率、帧生成时间、速度、应用内存与可用内存逐行开关，六种位置与可选背景。</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9V3Z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15V3.5Z"/></svg>
@@ -291,18 +248,18 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
 
       <div class="layout-block">
         <h3>横向 <span class="count">6 种预设</span></h3>
-        <p>与纵向分别设置。0.2.1 里「大屏幕」「并排屏幕」「混合式屏幕」贴住画面顶边（上方黑边消失）；自定义布局可按百分比编辑或直接拖动，并带实时预览。其余「单个屏幕」「原始」「自定义布局」三种预设同样走 GPU 路径。</p>
+        <p>与纵向分别设置。横屏时「大屏幕」「并排屏幕」「混合式屏幕」贴住画面顶边（上方黑边消失）；自定义布局可按百分比编辑或直接拖动，并带实时预览。其余「单个屏幕」「原始」「自定义布局」三种预设同样走 GPU 路径。</p>
         <div class="layout-grid">
           <figure class="layout-card">
-            <img class="shot" src="../assets/screenshots/layout-large.png" width="780" height="360" loading="lazy" decoding="async" alt="0.2.1 大屏幕布局的合成横向预览（贴顶）：一个大的蓝色上屏，紫色下屏位于右上角。">
+            <img class="shot" src="../assets/screenshots/layout-large.png" width="780" height="360" loading="lazy" decoding="async" alt="大屏幕布局的合成横向预览（贴顶）：一个大的蓝色上屏，紫色下屏位于右上角。">
             <div class="body"><h4>大屏幕 <span class="tag tag-gpu">预设 · GPU</span></h4><p>一个大的上屏，下屏放在旁边，整体贴住画面顶边。</p></div>
           </figure>
           <figure class="layout-card">
-            <img class="shot" src="../assets/screenshots/layout-side.png" width="780" height="360" loading="lazy" decoding="async" alt="0.2.1 并排屏幕布局的合成横向预览（贴顶）：蓝色上屏与紫色下屏并排。">
+            <img class="shot" src="../assets/screenshots/layout-side.png" width="780" height="360" loading="lazy" decoding="async" alt="并排屏幕布局的合成横向预览（贴顶）：蓝色上屏与紫色下屏并排。">
             <div class="body"><h4>并排屏幕 <span class="tag tag-gpu">预设 · GPU</span></h4><p>上屏与下屏并排，两块都完整可见，整体贴住画面顶边。</p></div>
           </figure>
           <figure class="layout-card">
-            <img class="shot" src="../assets/screenshots/layout-hybrid.png" width="780" height="360" loading="lazy" decoding="async" alt="0.2.1 混合式布局的合成横向预览（贴顶）：一个大的蓝色上屏，右侧上下两个小号紫色屏幕。">
+            <img class="shot" src="../assets/screenshots/layout-hybrid.png" width="780" height="360" loading="lazy" decoding="async" alt="混合式布局的合成横向预览（贴顶）：一个大的蓝色上屏，右侧上下两个小号紫色屏幕。">
             <div class="body"><h4>混合式屏幕 <span class="tag tag-gpu">预设 · GPU</span></h4><p>一个大的上屏 + 右侧上下两个小屏，整体贴住画面顶边。</p></div>
           </figure>
         </div>
@@ -310,7 +267,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
 
       <div class="layout-block">
         <h3>纵向 <span class="count">3 种预设</span></h3>
-        <p>纵向时整组虚拟按键位于画面下方的空白带，不会遮挡屏幕；0.2.1 默认纵向画面与 HOME 槽设置按钮见上方虚拟按键一节。</p>
+        <p>纵向时整组虚拟按键位于画面下方的空白带，不会遮挡屏幕；默认纵向画面与 HOME 槽设置按钮见上方虚拟按键一节。</p>
       </div>
       <p class="fine">屏幕旋转与方向保留，自定义布局现在也随 GPU presenter 旋转与交换；若无法创建 GPU presenter，会回退到屏幕回读路径。渲染分辨率（1x–4x）仍在下次加载游戏时生效；0.2.0 在 设置 → 图形 重新加入 Integer scaling 与 Screen aspect（适应 / 4:3 / 拉伸），并移除只读的 Renderer 行。</p>
     </div>
@@ -326,11 +283,11 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
       <div class="controls-grid">
         <div class="two-shots">
           <figure class="shot-figure">
-            <img src="../assets/portrait.png" width="900" height="1951" loading="lazy" decoding="async" alt="0.2.1 合成纵向预览：顶部是贴顶的性能覆盖层，标有 TOP 400×240 的蓝色网格与标有 BOTTOM 320×240 的紫色网格，下方是完整虚拟按键。">
+            <img src="../assets/portrait.png" width="900" height="1951" loading="lazy" decoding="async" alt="合成纵向预览：顶部是贴顶的性能覆盖层，标有 TOP 400×240 的蓝色网格与标有 BOTTOM 320×240 的紫色网格，下方是完整虚拟按键。">
             <figcaption>纵向——整组按键位于画面下方。</figcaption>
           </figure>
           <figure class="shot-figure">
-            <img src="../assets/screenshots/pause-virtual-controls.png" width="800" height="1734" loading="lazy" decoding="async" alt="0.2.1 合成游戏内菜单预览：iOS 风格分组菜单，标题为当前游戏名，包含虚拟按键等行。">
+            <img src="../assets/screenshots/pause-virtual-controls.png" width="800" height="1734" loading="lazy" decoding="async" alt="合成游戏内菜单预览：iOS 风格分组菜单，标题为当前游戏名，包含虚拟按键等行。">
             <figcaption>暂停菜单——0.2.1 游戏内菜单与虚拟按键选项。</figcaption>
           </figure>
         </div>
@@ -348,9 +305,9 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
             <h3>暂停菜单 → 虚拟按键选项</h3>
             <p>显示/隐藏虚拟按键、开关性能覆盖层、游戏内编辑布局、逐键切换、把每个按钮或组调整为 10%–200%、调整透明度、重置为默认。关闭虚拟按键后，除始终显示的设置按钮外所有虚拟控件都会隐藏；设置按钮仍打开游戏内菜单。「切换控制」不再列出设置按钮，「调整大小」仍可改其尺寸；默认隐藏集为 ZL、ZR、C 杆、快进与交换屏幕。</p>
             <div class="vc-shots">
-              <figure><img src="../assets/screenshots/controls-visibility.png" width="800" height="1734" loading="lazy" decoding="async" alt="0.2.1 合成切换控制页面：列表中不再出现设置按钮。"><figcaption>切换控制 · 不含设置</figcaption></figure>
-              <figure><img src="../assets/screenshots/controls-size.png" width="800" height="1734" loading="lazy" decoding="async" alt="0.2.1 合成调整大小页面：列表末尾仍保留设置按钮。"><figcaption>调整大小 · 含设置</figcaption></figure>
-              <figure><img src="../assets/screenshots/controls-hidden.png" width="800" height="1734" loading="lazy" decoding="async" alt="0.2.1 合成纵向画面关闭显示虚拟按键：只剩设置按钮浮在画面上。"><figcaption>关闭按键 · 只留设置</figcaption></figure>
+              <figure><img src="../assets/screenshots/controls-visibility.png" width="800" height="1734" loading="lazy" decoding="async" alt="合成切换控制页面：列表中不再出现设置按钮。"><figcaption>切换控制 · 不含设置</figcaption></figure>
+              <figure><img src="../assets/screenshots/controls-size.png" width="800" height="1734" loading="lazy" decoding="async" alt="合成调整大小页面：列表末尾仍保留设置按钮。"><figcaption>调整大小 · 含设置</figcaption></figure>
+              <figure><img src="../assets/screenshots/controls-hidden.png" width="800" height="1734" loading="lazy" decoding="async" alt="合成纵向画面关闭显示虚拟按键：只剩设置按钮浮在画面上。"><figcaption>关闭按键 · 只留设置</figcaption></figure>
             </div>
           </div>
         </div>
@@ -371,10 +328,10 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         <figure><img src="../assets/screenshots/launcher-windows-deploy-en.png" width="1120" height="820" loading="lazy" decoding="async" alt="Windows 启动器 0.2.1 部署界面（合成演示库）。"><figcaption>Windows 启动器 · 部署</figcaption></figure>
         <figure><img src="../assets/screenshots/launcher-macos-empty.png" width="1240" height="693" loading="lazy" decoding="async" alt="macOS 启动器 0.2.1 的空游戏库（深色模式）。"><figcaption>macOS 启动器 · 空游戏库（深色）</figcaption></figure>
         <figure><img src="../assets/screenshots/launcher-macos-settings.png" width="1240" height="1114" loading="lazy" decoding="async" alt="macOS 启动器 0.2.1 设置页（深色模式）。"><figcaption>macOS 启动器 · 设置（深色）</figcaption></figure>
-        <figure><img src="../assets/screenshots/settings.png" width="800" height="1734" loading="lazy" decoding="async" alt="0.2.1 iOS 设置主页：iOS 风格分组卡片与彩色图标。"><figcaption>iOS 设置 · 0.2.1</figcaption></figure>
-        <figure><img src="../assets/screenshots/display-settings.png" width="800" height="1734" loading="lazy" decoding="async" alt="0.2.1 布局设置页：屏幕布局入口与性能监控分组。"><figcaption>布局设置 · 屏幕布局 + 性能监控</figcaption></figure>
-        <figure><img src="../assets/screenshots/performance-overlay.png" width="800" height="1734" loading="lazy" decoding="async" alt="0.2.1 性能参数覆盖设置页：总开关、背景、六种位置与五个行开关。"><figcaption>性能参数覆盖设置</figcaption></figure>
-        <figure><img src="../assets/screenshots/overlay-position.png" width="800" height="1734" loading="lazy" decoding="async" alt="0.2.1 覆盖层位置选择：六个角位置。"><figcaption>覆盖层位置 · 六处</figcaption></figure>
+        <figure><img src="../assets/screenshots/settings.png" width="800" height="1734" loading="lazy" decoding="async" alt="iOS 设置主页：iOS 风格分组卡片与彩色图标。"><figcaption>iOS 设置 · 0.2.1</figcaption></figure>
+        <figure><img src="../assets/screenshots/display-settings.png" width="800" height="1734" loading="lazy" decoding="async" alt="布局设置页：屏幕布局入口与性能监控分组。"><figcaption>布局设置 · 屏幕布局 + 性能监控</figcaption></figure>
+        <figure><img src="../assets/screenshots/performance-overlay.png" width="800" height="1734" loading="lazy" decoding="async" alt="性能参数覆盖设置页：总开关、背景、六种位置与五个行开关。"><figcaption>性能参数覆盖设置</figcaption></figure>
+        <figure><img src="../assets/screenshots/overlay-position.png" width="800" height="1734" loading="lazy" decoding="async" alt="覆盖层位置选择：六个角位置。"><figcaption>覆盖层位置 · 六处</figcaption></figure>
       </div>
     </div>
   </section>

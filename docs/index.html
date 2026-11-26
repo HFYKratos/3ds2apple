@@ -68,7 +68,6 @@
     </a>
     <nav class="site-nav" aria-label="Primary">
       <a href="#why">Why native</a>
-      <a href="#whats-new">What&rsquo;s new</a>
       <a href="#features">Features</a>
       <a href="#layouts">Layouts</a>
       <a href="#controls">Controls</a>
@@ -108,8 +107,8 @@
         </ul>
       </div>
       <figure class="hero-media" data-gif>
-        <img class="gif-anim" src="assets/demo.gif" width="960" height="640" alt="0.2.1 synthetic preview loop: portrait controls with the HOME-slot Settings button, landscape controls flush to the top edge, the in-game menu, and the performance overlay settings.">
-        <img class="gif-still" src="assets/demo-poster.png" width="960" height="640" alt="0.2.1 synthetic preview poster: a portrait phone with the top-edge performance overlay and the full control set below the picture." hidden>
+        <img class="gif-anim" src="assets/demo.gif" width="960" height="640" alt="synthetic preview loop: portrait controls with the HOME-slot Settings button, landscape controls flush to the top edge, the in-game menu, and the performance overlay settings.">
+        <img class="gif-still" src="assets/demo-poster.png" width="960" height="640" alt="synthetic preview poster: a portrait phone with the top-edge performance overlay and the full control set below the picture." hidden>
         <button class="gif-toggle" type="button" hidden>Pause preview</button>
         <figcaption>0.2.1 synthetic preview — topology grids and control labels only; no game data. <span class="dim">Animated slideshow (5&nbsp;s loop).</span></figcaption>
       </figure>
@@ -167,48 +166,6 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
     </div>
   </section>
 
-  <section class="section" id="whats-new">
-    <div class="wrap">
-      <div class="section-head">
-        <p class="eyebrow">What&rsquo;s new · 0.2.1</p>
-        <h2>A polish release for settings, controls and the game view.</h2>
-        <p>0.2.1 refines the iOS-style Settings and in-game menu, rebuilds the default virtual controls, makes the Settings button impossible to hide, turns the FPS pill into a full performance overlay and pushes the landscape picture flush to the top edge.</p>
-      </div>
-      <div class="features">
-        <article class="feature">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M3 13h18M8 20h8M12 17v3"/></svg>
-          <h3>iOS-style Settings</h3>
-          <p>Settings keeps the iOS 26/27 inset-grouped language throughout: large titles, coloured rounded-square tiles, inline titles, concise two-line explanations, push-to-select choice pages and semantic light/dark colours.</p>
-        </article>
-        <article class="feature">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 4v16"/><path d="m13 13 3 3-3 3"/></svg>
-          <h3>Default control layout</h3>
-          <p>Shipped virtual controls now follow two Delta reference skins — ModernFS in portrait and ModernHybrid in landscape — with the skins' HOME slot as the Settings button and Quick save / Quick load tucked beside the notch. Untouched old layouts migrate once; custom layouts are kept.</p>
-        </article>
-        <article class="feature">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 17v3h16v-3"/></svg>
-          <h3>Settings is always on screen</h3>
-          <p>The in-game Settings button can never be hidden: it stays in its HOME-slot position, Toggle controls no longer lists it, Adjust size still resizes it, and an older saved hidden set is cleaned up automatically on load.</p>
-        </article>
-        <article class="feature">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="5" width="19" height="12" rx="2"/><path d="M8 21h8M4 9h16"/></svg>
-          <h3>Azahar-style performance overlay</h3>
-          <p>The old FPS pill becomes a configurable overlay at the very top edge of the picture: frame rate, frame time, speed, app memory and available memory, each line switchable, six positions and an optional background; the unavailable battery-temperature row is gone.</p>
-        </article>
-        <article class="feature">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5h9v14H4z"/><path d="M16 12h5M21 12l-4-4M21 12l-4 4"/></svg>
-          <h3>Rebuilt in-game menu</h3>
-          <p>The menu now uses the same iOS grouped language and a single slide-up animation in portrait, with a centred card in landscape, native push/pop sub-pages, the running game's name in the header and only power / restart / resume buttons.</p>
-        </article>
-        <article class="feature">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 4v4M16 10v4M10 16v4"/></svg>
-          <h3>Landscape layouts flush to the top</h3>
-          <p>Large screen, Side by side and Hybrid now sit flush against the top edge — the black band above the picture is gone — while staying horizontally centred with their aspect ratio and integer scaling unchanged. SAVE/LOAD move to the notch corners.</p>
-        </article>
-      </div>
-    </div>
-  </section>
-
   <section class="section" id="why">
     <div class="wrap">
       <div class="section-head">
@@ -241,7 +198,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 20h8M12 17v3"/></svg>
           <h3>Full-bleed picture</h3>
-          <p>No title bar, card border or game name. Only the performance overlay and your floating controls sit over the picture, with the always-visible Settings button in the HOME slot as the only in-game menu entry.</p>
+          <p>No title bar, card border or game name. Only the performance overlay and your floating controls sit over the picture, with the always-visible Settings button in the HOME slot as the only in-game menu entry; the menu itself uses the same iOS grouped language with native push/pop sub-pages.</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z"/><path d="m4 12 8 4.5 8-4.5M4 16.5 12 21l8-4.5"/></svg>
@@ -251,12 +208,12 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="7" width="19" height="11" rx="4"/><path d="M8 10.5v4M6 12.5h4M16 11.5h.01M18.5 13.5h.01"/></svg>
           <h3>Full New 3DS controls</h3>
-          <p>D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a true analog Circle Pad and the New 3DS C-stick — with hardware-controller mapping. 0.2.0 added an analog deadzone, physical button remapping, 2–4 button hotkeys, Standard / High contrast controls and per-app Gamepad profiles.</p>
+          <p>D-pad, A/B/X/Y, L/R, ZL/ZR, Start/Select, a true analog Circle Pad and the New 3DS C-stick — with hardware-controller mapping and a default layout from two Delta reference skins (ModernFS portrait, ModernHybrid landscape) whose HOME slot is the always-visible Settings button. Gamepad support adds an analog deadzone, physical button remapping, 2–4 button hotkeys, Standard / High contrast controls and per-app profiles.</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
           <h3>6 + 3 screen layouts</h3>
-          <p>Six landscape and three portrait presets plus arbitrary custom rectangles, set independently and drawn by the GPU presenter with zero per-frame readback.</p>
+          <p>Six landscape and three portrait presets plus arbitrary custom rectangles, set independently and drawn by the GPU presenter with zero per-frame readback; in landscape, Large screen, Side by side and Hybrid sit flush to the top edge.</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v18M3 12h18M12 3l3 3M12 3 9 6M12 21l3-3M12 21l-3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>
@@ -271,7 +228,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 13h4l3-7 4 12 3-6h6"/></svg>
           <h3>Performance overlay at the top edge</h3>
-          <p>An Azahar-style overlay sits at the very top edge of the picture: frame rate, frame time, speed, app memory and available memory, each line switchable, six positions and an optional background. The battery-temperature row is gone.</p>
+          <p>An Azahar-style overlay sits at the very top edge of the picture: frame rate, frame time, speed, app memory and available memory, each line switchable, six positions and an optional background.</p>
         </article>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9V3Z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15V3.5Z"/></svg>
@@ -292,18 +249,18 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
 
       <div class="layout-block">
         <h3>Landscape <span class="count">6 presets</span></h3>
-        <p>Chosen separately from portrait. In 0.2.1 Large screen, Side by side and Hybrid sit flush to the top edge — the black band above the picture is gone — and Custom layouts are edited by percentage fields or by dragging, with a live preview. Single screen, Original and Custom layout complete the six presets on the same GPU path.</p>
+        <p>Chosen separately from portrait. In landscape, Large screen, Side by side and Hybrid sit flush to the top edge — the black band above the picture is gone — and Custom layouts are edited by percentage fields or by dragging, with a live preview. Single screen, Original and Custom layout complete the six presets on the same GPU path.</p>
         <div class="layout-grid">
           <figure class="layout-card">
-            <img class="shot" src="assets/screenshots/layout-large.png" width="780" height="360" loading="lazy" decoding="async" alt="0.2.1 synthetic landscape preview of the Large screen layout, flush to the top edge: a large blue top screen with a small purple bottom screen at the top right.">
+            <img class="shot" src="assets/screenshots/layout-large.png" width="780" height="360" loading="lazy" decoding="async" alt="synthetic landscape preview of the Large screen layout, flush to the top edge: a large blue top screen with a small purple bottom screen at the top right.">
             <div class="body"><h4>Large screen <span class="tag tag-gpu">Preset · GPU</span></h4><p>One large top screen with the bottom screen beside it, flush to the top edge.</p></div>
           </figure>
           <figure class="layout-card">
-            <img class="shot" src="assets/screenshots/layout-side.png" width="780" height="360" loading="lazy" decoding="async" alt="0.2.1 synthetic landscape preview of the Side by side layout, flush to the top edge: blue top and purple bottom screens next to each other.">
+            <img class="shot" src="assets/screenshots/layout-side.png" width="780" height="360" loading="lazy" decoding="async" alt="synthetic landscape preview of the Side by side layout, flush to the top edge: blue top and purple bottom screens next to each other.">
             <div class="body"><h4>Side by side <span class="tag tag-gpu">Preset · GPU</span></h4><p>Top and bottom screens side by side, both fully visible and flush to the top edge.</p></div>
           </figure>
           <figure class="layout-card">
-            <img class="shot" src="assets/screenshots/layout-hybrid.png" width="780" height="360" loading="lazy" decoding="async" alt="0.2.1 synthetic landscape preview of the Hybrid layout, flush to the top edge: one large blue top screen with two small purple screens stacked beside it.">
+            <img class="shot" src="assets/screenshots/layout-hybrid.png" width="780" height="360" loading="lazy" decoding="async" alt="synthetic landscape preview of the Hybrid layout, flush to the top edge: one large blue top screen with two small purple screens stacked beside it.">
             <div class="body"><h4>Hybrid <span class="tag tag-gpu">Preset · GPU</span></h4><p>One large top screen with two small screens stacked beside it, flush to the top edge.</p></div>
           </figure>
         </div>
@@ -311,7 +268,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
 
       <div class="layout-block">
         <h3>Portrait <span class="count">3 presets</span></h3>
-        <p>Portrait keeps the whole control set in the empty band below the picture, so the screens are never covered; the 0.2.1 default portrait view and its HOME-slot Settings button are shown in the controls section above.</p>
+        <p>Portrait keeps the whole control set in the empty band below the picture, so the screens are never covered; the default portrait view and its HOME-slot Settings button are shown in the controls section above.</p>
       </div>
       <p class="fine">Screen rotation and orientation are kept, and custom layouts now rotate and swap with the GPU presenter. If no GPU presenter can be created, the app falls back to the screen-readback path. Render resolution (1x–4x) still applies on the next game load; 0.2.0 adds Integer scaling and Screen aspect (Fit / 4:3 / Stretch) under Settings → Graphics and removes the read-only Renderer row.</p>
     </div>
@@ -331,7 +288,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
             <figcaption>Portrait — the whole pad sits below the picture.</figcaption>
           </figure>
           <figure class="shot-figure">
-            <img src="assets/screenshots/pause-virtual-controls.png" width="800" height="1734" loading="lazy" decoding="async" alt="0.2.1 synthetic in-game menu preview: the iOS-style grouped menu with the running game name and its rows, including Virtual controls.">
+            <img src="assets/screenshots/pause-virtual-controls.png" width="800" height="1734" loading="lazy" decoding="async" alt="synthetic in-game menu preview: the iOS-style grouped menu with the running game name and its rows, including Virtual controls.">
             <figcaption>Pause menu — the 0.2.1 in-game menu and its Virtual controls card.</figcaption>
           </figure>
         </div>
