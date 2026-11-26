@@ -447,7 +447,7 @@ final class MockPackBackend: PackBackend {
         }
     }
 
-    func build(titleIDs: [String], mode buildMode: BuildMode, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage] {
+    func build(titleIDs: [String], mode buildMode: BuildMode, advancedOptions: AdvancedBuildOptions, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage] {
         if buildMode == .dryRun {
             onLine(.info, "dry run: printed the macOS command plan; nothing was built")
             return []
@@ -612,7 +612,7 @@ final class MissingPackBackend: PackBackend {
     func inspectROM(_ path: String) async throws -> DetectedROM { throw missing() }
     func importROM(_ path: String, displayName: String?, includeROM: Bool, force: Bool) async throws -> DetectedPackage { throw missing() }
     func listPackages() async throws -> [DetectedPackage] { throw missing() }
-    func build(titleIDs: [String], mode: BuildMode, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage] { throw missing() }
+    func build(titleIDs: [String], mode: BuildMode, advancedOptions: AdvancedBuildOptions, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage] { throw missing() }
     func verify() async throws -> [String] { throw missing() }
     func readManifest(titleID: String) async throws -> PackageManifest { throw missing() }
     func exportBuildPackage(titleID: String, outputDirectory: String) async throws -> ExportedBuildPackage { throw missing() }

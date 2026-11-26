@@ -39,6 +39,18 @@ target/debug/3ds2apple-pack catalog --all
 target/debug/3ds2apple-pack pack --all --execute --fake-shell --ipa-out ../IPA
 ```
 
+Advanced build settings (Deploy page, collapsed by default) change the AOT codegen
+attributes of the next build; the defaults reproduce the documented baseline:
+
+    target/debug/3ds2apple-pack build --queued --execute --opt-level O3 --lto --fast-math
+    # validation: --opt-level is O1|O2|O3|Oz; an unknown value is rejected
+
+Every plan step/command carries `THREEDS2APPLE_AOT_OPT` / `_LTO` / `_FAST_MATH`
+(the AOT scripts read them, see [scripts/README.md](../scripts/README.md) §5.1), so
+the default `-O2` build command is byte-for-byte unchanged. The macOS plan JSON
+also reports `buildOptions` and `cacheMarker` (`opt=...;lto=...;fastmath=...`),
+the same marker the launchers record in their build-cache key.
+
 Self-contained packages copy the user's ROM into the package as
 `GameRom.<ext>`, hashed and recorded as `romFile`/`romSha256`/`romBytes`, so the
 phone never imports game data. Pass `--include-rom` to `packages add`,

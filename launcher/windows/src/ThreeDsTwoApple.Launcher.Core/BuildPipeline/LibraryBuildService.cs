@@ -97,7 +97,7 @@ public sealed class LibraryBuildService
             }
 
             var outcome = await _provider.BuildAsync(
-                new PackBuildRequest(entry.TitleID, name, entry.ProductCode, entry.RomPath, _workspace.WorkDirectory),
+                new PackBuildRequest(entry.TitleID, name, entry.ProductCode, entry.RomPath, _workspace.WorkDirectory, _workspace.BuildOptions),
                 new ScaledProgress(progress, index, total),
                 line => log?.Invoke("[build] " + line),
                 cancellationToken).ConfigureAwait(false);

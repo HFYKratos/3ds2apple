@@ -19,12 +19,80 @@ pub struct BuildStep {
     pub program: String,
     /// Arguments passed as an array (never a shell string).
     pub args: Vec<String>,
+    /// Extra environment variables for this step (AOT codegen options).
+    pub env: Vec<(String, String)>,
+}
+
+/// AOT codegen options from the launcher's advanced build settings.
+/// Defaults reproduce the 0.2.1 behaviour: -O2, no LTO, no fast-math.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodegenOptions {
+    /// One of O1/O2/O3/Oz.
+    pub opt_level: String,
+    /// Add -flto to the compile and the link.
+    pub lto: bool,
+    /// Add -ffast-math (changes guest float results; measurement only).
+    pub fast_math: bool,
+}
+
+impl Default for CodegenOptions {
+    fn default() -> Self {
+        Self {
+            opt_level: "O2".to_string(),
+            lto: false,
+            fast_math: false,
+        }
+    }
+}
+
+impl CodegenOptions {
+    /// Validate the optimization level and normalise the string.
+    pub fn validate(&self) -> Result<()> {
+        match self.opt_level.as_str() {
+            "O1" | "O2" | "O3" | "Oz" => Ok(()),
+            other => Err(PackError::invalid(format!(
+                "--opt-level must be O1, O2, O3 or Oz (got {other:?})"
+            ))),
+        }
+    }
+
+    /// Environment variable assignments passed to the build scripts (the AOT
+    /// scripts read THREEDS2APPLE_AOT_OPT/LTO/FAST_MATH, see scripts/README.md).
+    pub fn env_assignments(&self) -> Vec<(String, String)> {
+        vec![
+            ("THREEDS2APPLE_AOT_OPT".to_string(), self.opt_level.clone()),
+            (
+                "THREEDS2APPLE_AOT_LTO".to_string(),
+                if self.lto { "1" } else { "0" }.to_string(),
+            ),
+            (
+                "THREEDS2APPLE_AOT_FAST_MATH".to_string(),
+                if self.fast_math { "1" } else { "0" }.to_string(),
+            ),
+        ]
+    }
+
+    /// Canonical short marker used in launcher build-cache keys.
+    pub fn cache_marker(&self) -> String {
+        format!(
+            "opt={};lto={};fastmath={}",
+            self.opt_level,
+            if self.lto { 1 } else { 0 },
+            if self.fast_math { 1 } else { 0 }
+        )
+    }
 }
 
 impl BuildStep {
-    /// Render the step as a copy-pasteable shell line (arguments quoted).
+    /// Render the step as a copy-pasteable shell line (environment + arguments).
     pub fn render(&self) -> String {
         let mut line = String::new();
+        for (key, value) in &self.env {
+            line.push_str(key);
+            line.push('=');
+            line.push_str(&shell_quote(value));
+            line.push(' ');
+        }
         line.push_str(&shell_quote(&self.program));
         for arg in &self.args {
             line.push(' ');
@@ -144,7 +212,7 @@ pub fn is_valid_slug(value: &str) -> bool {
 }
 
 /// The three macOS steps for one game: recomp, linked runtime, game pack.
-pub fn steps(entry: &QueueEntry, out_root: &Path) -> Vec<BuildStep> {
+pub fn steps(entry: &QueueEntry, out_root: &Path, options: &CodegenOptions) -> Vec<BuildStep> {
     let rom = entry.rom_path.clone();
     let slug = entry.slug.clone();
     let title = entry.title_id.clone();
@@ -168,27 +236,31 @@ pub fn steps(entry: &QueueEntry, out_root: &Path) -> Vec<BuildStep> {
         pack_args.push("--rom".to_string());
         pack_args.push(rom.clone());
     }
+    let env = options.env_assignments();
     vec![
         BuildStep {
             label: "recompiling (3dsrecomp -> generated C -> libgame.a)".to_string(),
             program: "scripts/build-recomp-ios.sh".to_string(),
             args: vec![rom, slug.clone(), "--auto-serial".to_string()],
+            env: env.clone(),
         },
         BuildStep {
             label: "linking (linked libzakuro_ios.a + libgame.a)".to_string(),
             program: "scripts/build-linked-ios-lib.sh".to_string(),
             args: vec![slug.clone(), "--title-id".to_string(), title],
+            env: env.clone(),
         },
         BuildStep {
             label: "packaging (GamePack.dylib -> out/packages/<titleID>)".to_string(),
             program: "scripts/build-game-pack.sh".to_string(),
             args: pack_args,
+            env,
         },
     ]
 }
 
 /// Human-readable plan block for one or more entries.
-pub fn render_plan(entries: &[QueueEntry], out_root: &Path) -> String {
+pub fn render_plan(entries: &[QueueEntry], out_root: &Path, options: &CodegenOptions) -> String {
     let mut text = String::new();
     for (index, entry) in entries.iter().enumerate() {
         text.push_str(&format!(
@@ -198,7 +270,7 @@ pub fn render_plan(entries: &[QueueEntry], out_root: &Path) -> String {
             entry.title_id,
             entry.slug
         ));
-        for step in steps(entry, out_root) {
+        for step in steps(entry, out_root, options) {
             text.push_str(&step.render());
             text.push('\n');
         }
@@ -217,17 +289,23 @@ pub fn shell_quote_join(command: &[String]) -> String {
 }
 
 /// Execute the plan on this machine (macOS only; the CLI enforces that).
-pub fn execute(entries: &[QueueEntry], out_root: &Path, repo_root: &Path) -> Result<()> {
+pub fn execute(
+    entries: &[QueueEntry],
+    out_root: &Path,
+    repo_root: &Path,
+    options: &CodegenOptions,
+) -> Result<()> {
     if !cfg!(target_os = "macos") {
         return Err(PackError::invalid(
             "the real AOT build must run on macOS with Xcode or on Windows with the launcher's bundled LLVM toolchain; run it on the matching host (use --fake on Linux/Windows for a preview package)",
         ));
     }
     for entry in entries {
-        for step in steps(entry, out_root) {
+        for step in steps(entry, out_root, options) {
             eprintln!("== {} ({})", step.label, entry.title_id);
             let status = std::process::Command::new(&step.program)
                 .args(&step.args)
+                .envs(step.env.iter().map(|(key, value)| (key, value)))
                 .current_dir(repo_root)
                 .status()
                 .map_err(|error| PackError::io(repo_root.join(&step.program), error))?;
@@ -279,7 +357,8 @@ mod tests {
     #[test]
     fn plan_commands_match_the_script_contract() {
         let entry = entry();
-        let steps = steps(&entry, Path::new("out"));
+        let options = CodegenOptions::default();
+        let steps = steps(&entry, Path::new("out"), &options);
         assert_eq!(steps.len(), 3);
         assert_eq!(steps[0].program, "scripts/build-recomp-ios.sh");
         assert_eq!(
@@ -306,7 +385,7 @@ mod tests {
         let rendered = steps[0].render();
         assert!(rendered.contains("scripts/build-recomp-ios.sh"));
         assert!(rendered.contains("Pokemon Y.cci"));
-        assert!(render_plan(&[entry], Path::new("out")).contains("# 1."));
+        assert!(render_plan(&[entry], Path::new("out"), &options).contains("# 1."));
     }
 
     #[test]
@@ -315,5 +394,49 @@ mod tests {
         assert_eq!(shell_quote("two words"), "'two words'");
         assert_eq!(shell_quote("it's"), "'it'\\''s'");
         assert_eq!(shell_quote(""), "''");
+    }
+
+    #[test]
+    fn codegen_options_are_passed_to_every_aot_step() {
+        let entry = entry();
+        let default_options = CodegenOptions::default();
+        default_options.validate().unwrap();
+        assert_eq!(default_options.cache_marker(), "opt=O2;lto=0;fastmath=0");
+        let default_steps = steps(&entry, Path::new("out"), &default_options);
+        for step in &default_steps {
+            assert!(step
+                .env
+                .iter()
+                .any(|(key, value)| key == "THREEDS2APPLE_AOT_OPT" && value == "O2"));
+            assert!(step
+                .env
+                .iter()
+                .any(|(key, value)| key == "THREEDS2APPLE_AOT_LTO" && value == "0"));
+            assert!(step
+                .env
+                .iter()
+                .any(|(key, value)| key == "THREEDS2APPLE_AOT_FAST_MATH" && value == "0"));
+        }
+        let rendered = default_steps[0].render();
+        assert!(rendered.starts_with("THREEDS2APPLE_AOT_OPT=O2 "), "{rendered}");
+        assert!(rendered.contains("scripts/build-recomp-ios.sh"));
+
+        let custom = CodegenOptions {
+            opt_level: "O3".to_string(),
+            lto: true,
+            fast_math: true,
+        };
+        custom.validate().unwrap();
+        assert_eq!(custom.cache_marker(), "opt=O3;lto=1;fastmath=1");
+        let custom_steps = steps(&entry, Path::new("out"), &custom);
+        let rendered = custom_steps[0].render();
+        assert!(rendered.starts_with("THREEDS2APPLE_AOT_OPT=O3 "), "{rendered}");
+        assert!(rendered.contains("THREEDS2APPLE_AOT_LTO=1 "), "{rendered}");
+        assert!(rendered.contains("THREEDS2APPLE_AOT_FAST_MATH=1 "), "{rendered}");
+        assert!(render_plan(&[entry], Path::new("out"), &custom).contains("THREEDS2APPLE_AOT_OPT=O3"));
+
+        let mut invalid = CodegenOptions::default();
+        invalid.opt_level = "O9".to_string();
+        assert!(invalid.validate().is_err());
     }
 }

@@ -981,3 +981,49 @@ fn builds_export_list_and_import_round_trip() {
     let replaced_json: serde_json::Value = serde_json::from_str(&replaced.stdout).unwrap();
     assert_eq!(replaced_json["imported"]["replaced"], true);
 }
+
+/// Advanced build settings: the CLI accepts --opt-level/--lto/--fast-math and
+/// prints the THREEDS2APPLE_AOT_* environment for the scripts; an unknown level
+/// is rejected before anything runs.
+#[test]
+fn build_plan_reports_the_codegen_options() {
+    let temp = TempDir::new().unwrap();
+    let out = temp.path().join("out");
+    let rom = temp.path().join("Example Game.cci");
+    std::fs::write(&rom, synthetic_ncsd(POKEMON_Y, "CTR-P-EK2A")).unwrap();
+    let out_arg = out.display().to_string();
+    let base = |extra: &[&str]| {
+        let mut args = vec!["--out".to_string(), out_arg.clone()];
+        args.extend(extra.iter().map(|value| value.to_string()));
+        args
+    };
+    let add = run(&base(&[
+        "packages", "add", "--roms", rom.to_str().unwrap(),
+    ]));
+    assert!(add.success, "packages add failed: {}", add.stderr);
+
+    let plan = run(&base(&[
+        "build", "--queued", "--opt-level", "O3", "--lto", "--fast-math",
+    ]));
+    assert!(plan.success, "plan failed: {}\n{}", plan.stdout, plan.stderr);
+    assert!(plan.stdout.contains("THREEDS2APPLE_AOT_OPT=O3"), "{}", plan.stdout);
+    assert!(plan.stdout.contains("THREEDS2APPLE_AOT_LTO=1"), "{}", plan.stdout);
+    assert!(plan.stdout.contains("THREEDS2APPLE_AOT_FAST_MATH=1"), "{}", plan.stdout);
+    assert!(plan.stdout.contains("--fast-math changes guest float results"), "{}", plan.stdout);
+
+    let json = run(&base(&[
+        "--json", "build", "--queued", "--opt-level", "Oz",
+    ]));
+    assert!(json.success, "json plan failed: {}", json.stderr);
+    let value: serde_json::Value = serde_json::from_str(&json.stdout).unwrap();
+    assert_eq!(value["buildOptions"]["optLevel"], "Oz");
+    assert_eq!(value["cacheMarker"], "opt=Oz;lto=0;fastmath=0");
+    assert_eq!(
+        value["commands"][0]["env"]["THREEDS2APPLE_AOT_OPT"].as_str(),
+        Some("Oz")
+    );
+
+    let invalid = run(&base(&["build", "--queued", "--opt-level", "O9"]));
+    assert!(!invalid.success, "O9 must be rejected");
+    assert!(invalid.stderr.contains("opt-level"), "{}", invalid.stderr);
+}

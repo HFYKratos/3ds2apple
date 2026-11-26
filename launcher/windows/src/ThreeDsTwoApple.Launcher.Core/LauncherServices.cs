@@ -106,7 +106,7 @@ public sealed class LauncherServices
         var plumeSignPath = _locator.FindPlumeSign();
         PlumeSign = plumeSignPath is null ? null : new PlumeSignRunner(_runner, plumeSignPath, _workspace.LogsDirectory);
         LocalTools = LocalToolchainResolver.Resolve(_locator);
-        BuildCompatibility = new ToolchainBuildCompatibilityProvider(_runner, LocalTools);
+        BuildCompatibility = new ToolchainBuildCompatibilityProvider(_runner, LocalTools, () => _workspace.BuildOptions);
     }
 
     private DevPushClient? BuildDevPush()

@@ -291,6 +291,7 @@ struct DeployScreen: View {
                 emptyState
             } else {
                 deviceCard
+                advancedSettingsCard
                 selectionCard
                 if let report = model.deployReport {
                     DeployReportCard(report: report, model: model, strings: strings)
@@ -352,6 +353,76 @@ struct DeployScreen: View {
                     value: settings.installedBundleID.isEmpty ? strings.deployNotInstalledBundle : settings.installedBundleID,
                     mono: true
                 )
+            }
+        }
+    }
+
+    /// Deploy -> Advanced build settings: collapsed by default; the defaults keep
+    /// the documented -O2 / no LTO / no fast-math behaviour. Changing an option
+    /// applies to the next build (builder CLI flags -> THREEDS2APPLE_AOT_* -> scripts).
+    private var advancedSettingsCard: some View {
+        Card {
+            DisclosureGroup {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(strings.advancedBuildBody)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(LauncherTheme.mutedText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 8) {
+                        Text(strings.advancedBuildOptLevel)
+                            .font(.system(size: 11.5))
+                        Picker("", selection: Binding(
+                            get: { settings.advancedBuildOptions.optLevel },
+                            set: { level in
+                                settings.setAdvancedBuildOptions(AdvancedBuildOptions(
+                                    optLevel: level,
+                                    lto: settings.advancedAotLto,
+                                    fastMath: settings.advancedAotFastMath
+                                ))
+                            }
+                        )) {
+                            ForEach(AdvancedBuildOptions.optLevels, id: \.self) { level in
+                                Text(level).tag(level)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 90)
+                    }
+                    Toggle(strings.advancedBuildLto, isOn: Binding(
+                        get: { settings.advancedAotLto },
+                        set: { value in
+                            settings.setAdvancedBuildOptions(AdvancedBuildOptions(
+                                optLevel: settings.advancedAotOptLevel,
+                                lto: value,
+                                fastMath: settings.advancedAotFastMath
+                            ))
+                        }
+                    ))
+                    .toggleStyle(.switch)
+                    Toggle(strings.advancedBuildFastMath, isOn: Binding(
+                        get: { settings.advancedAotFastMath },
+                        set: { value in
+                            settings.setAdvancedBuildOptions(AdvancedBuildOptions(
+                                optLevel: settings.advancedAotOptLevel,
+                                lto: settings.advancedAotLto,
+                                fastMath: value
+                            ))
+                        }
+                    ))
+                    .toggleStyle(.switch)
+                    Text(strings.advancedBuildSummary(settings.advancedBuildOptions.describe))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(LauncherTheme.mutedText)
+                    Button(strings.advancedBuildReset) {
+                        settings.resetAdvancedBuildOptions()
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .disabled(model.isBusy)
+                }
+                .padding(.top, 6)
+            } label: {
+                Text(strings.advancedBuildTitle)
+                    .font(LauncherTheme.rounded(13, weight: .semibold))
             }
         }
     }

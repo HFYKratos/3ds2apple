@@ -194,6 +194,14 @@ struct LauncherStrings {
     var deployButtonFormat: String
     var deployNoSelection: String
     var deployNoGames: String
+    // Deploy -> Advanced build settings (AOT codegen options)
+    var advancedBuildTitle: String
+    var advancedBuildBody: String
+    var advancedBuildOptLevel: String
+    var advancedBuildLto: String
+    var advancedBuildFastMath: String
+    var advancedBuildSummaryFormat: String
+    var advancedBuildReset: String
     var deployDeviceTitle: String
     var deployDeviceNone: String
     var deployDetectDevice: String
@@ -422,6 +430,16 @@ struct LauncherStrings {
         deployButtonFormat = t("Deploy %d game(s) to phone", "一键部署（%d 个游戏）")
         deployNoSelection = t("Select at least one game to deploy.", "请至少勾选一个游戏再部署。")
         deployNoGames = t("Your library is empty. Import a game first.", "游戏库还是空的，请先导入游戏。")
+        advancedBuildTitle = t("Advanced build settings", "高级构建设置")
+        advancedBuildBody = t(
+            "Applied to the next build. The defaults keep the current behaviour; the same options are part of the Windows launcher's build cache key.",
+            "应用于下一次构建。默认值保持现有行为；这些选项也是 Windows 启动器构建缓存 key 的一部分。"
+        )
+        advancedBuildOptLevel = t("Optimization level", "优化级别")
+        advancedBuildLto = t("Link-time optimization (LTO)", "链接时优化（LTO）")
+        advancedBuildFastMath = t("Fast-math (changes guest float results)", "fast-math（改变 guest 浮点结果）")
+        advancedBuildSummaryFormat = t("Current: %@. Applied to the next build.", "当前：%@。应用于下一次构建。")
+        advancedBuildReset = t("Reset to defaults", "恢复默认值")
         deployDeviceTitle = t("Target device", "目标设备")
         deployDeviceNone = t("No iPhone/iPad detected. Connect it, unlock it and tap Trust.", "未检测到 iPhone/iPad。请连接、解锁并点按信任。")
         deployDetectDevice = t("Detect device", "检测设备")
@@ -608,6 +626,10 @@ struct LauncherStrings {
 
     func ipaExportFailed(_ message: String) -> String {
         String(format: ipaExportFailedFormat, message)
+    }
+
+    func advancedBuildSummary(_ describe: String) -> String {
+        String(format: advancedBuildSummaryFormat, describe)
     }
 
     /// Compile hardware line: cores + RAM + 3dsrecomp's automatic parallelism.

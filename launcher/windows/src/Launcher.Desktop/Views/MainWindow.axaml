@@ -172,6 +172,25 @@
             </StackPanel>
           </Border>
 
+          <!-- Advanced build settings: collapsed by default; defaults keep the current
+               behaviour (O2 / LTO off / fast-math off). Changing an option invalidates
+               the build cache and applies to the next build. -->
+          <Border Classes="card">
+            <Expander Header="{Binding L.DeployAdvancedTitle}" IsExpanded="False">
+              <StackPanel Spacing="10">
+                <TextBlock Text="{Binding L.DeployAdvancedBody}" Classes="muted" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <TextBlock Text="{Binding L.DeployAdvancedOptLevel}" VerticalAlignment="Center" />
+                  <ComboBox ItemsSource="{Binding AotOptLevelOptions}" SelectedItem="{Binding SelectedAotOptLevel}" Width="120" />
+                </StackPanel>
+                <CheckBox Content="{Binding L.DeployAdvancedLto}" IsChecked="{Binding AotLto}" />
+                <CheckBox Content="{Binding L.DeployAdvancedFastMath}" IsChecked="{Binding AotFastMath}" />
+                <TextBlock Text="{Binding AdvancedBuildSummary}" Classes="caption" TextWrapping="Wrap" />
+                <Button Content="{Binding L.DeployAdvancedReset}" Command="{Binding ResetAdvancedBuildCommand}" Classes="ghost" HorizontalAlignment="Left" />
+              </StackPanel>
+            </Expander>
+          </Border>
+
           <!-- Device-aware incremental deploy: what is installed and what this run will do. -->
           <Border Classes="card">
             <StackPanel Spacing="6">

@@ -116,6 +116,14 @@ public sealed class LocalizedText
         _ => string.Empty,
     };
 
+    // Deploy -> Advanced build settings (AOT codegen options).
+    public string DeployAdvancedTitle => Loc.T("deploy.advanced.title");
+    public string DeployAdvancedBody => Loc.T("deploy.advanced.body");
+    public string DeployAdvancedOptLevel => Loc.T("deploy.advanced.optLevel");
+    public string DeployAdvancedLto => Loc.T("deploy.advanced.lto");
+    public string DeployAdvancedFastMath => Loc.T("deploy.advanced.fastMath");
+    public string DeployAdvancedReset => Loc.T("deploy.advanced.reset");
+
     // Settings
     public string SettingsTitle => Loc.T("settings.title");
     public string SettingsClose => Loc.T("settings.close");

@@ -199,6 +199,28 @@ the format.
   conflict/replace, missing CLI, workspace state) and the Rust `builder/pack`
   tests (`builds::tests` + the CLI round trip in `tests/cli_local.rs`).
 
+### Advanced build settings (Deploy page, collapsed by default)
+
+The Deploy page has a collapsed **Advanced build settings** section with the AOT
+optimization level (O1/O2/O3/Oz), link-time optimization and fast-math, plus a
+**Reset to defaults** button. The defaults are exactly the shipped behaviour
+(O2 / LTO off / fast-math off) and keep the default build command unchanged.
+
+- The values persist in the portable `state.json` and apply to the **next**
+  build. Changing one invalidates the build-cache key: `buildCompatVersion`
+  now includes `opts=opt=..;lto=..;fastmath=..`, so affected games rebuild on the
+  next **Build now**/**Deploy** instead of reusing a stale pack (unchanged
+  defaults keep reusing existing packs until the toolchain marker changes).
+- The Windows local build (3dsrecomp + LLVM) compiles the generated C with a
+  fixed `-O2` after CC's leading arguments, so a non-default option writes a
+  small compiler wrapper (a `.cmd` invoked through `cmd.exe` with a space-free
+  relative path) that appends `-O3`/`-flto`/`-ffast-math` after the fixed flags.
+  The command is unchanged for the defaults.
+- The macOS launcher passes the same options to `3ds2apple-pack build`, which
+  forwards `THREEDS2APPLE_AOT_*` to `scripts/`.
+- Unverified on Windows hardware: the wrapper path is unit-tested but a real
+  native build with non-default options still needs a Windows/QA pass.
+
 ### Unsigned single-game IPA export (Library row "Export IPA")
 
 Each Library card with a real AOT GamePack has **Export IPA** next to

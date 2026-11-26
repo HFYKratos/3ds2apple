@@ -187,6 +187,15 @@ struct BuildArgs {
     /// resulting package is self-contained.
     #[arg(long)]
     include_rom: bool,
+    /// AOT optimization level passed to the build scripts (default O2).
+    #[arg(long, default_value = "O2", value_name = "O1|O2|O3|Oz")]
+    opt_level: String,
+    /// Enable link-time optimization (-flto) in the AOT build.
+    #[arg(long)]
+    lto: bool,
+    /// Enable fast-math (-ffast-math); changes guest float results.
+    #[arg(long = "fast-math")]
+    fast_math: bool,
 }
 
 #[derive(Debug, Args)]
@@ -684,6 +693,12 @@ fn cmd_build(out: &Path, args: BuildArgs, json: bool) -> Result<i32> {
             "--display-name applies to a single ROM; import one ROM at a time to rename",
         ));
     }
+    let codegen = plan::CodegenOptions {
+        opt_level: args.opt_level.clone(),
+        lto: args.lto,
+        fast_math: args.fast_math,
+    };
+    codegen.validate()?;
     let mut errors: Vec<Value> = Vec::new();
     let mut titles: Vec<String> = Vec::new();
     if !args.roms.is_empty() {
@@ -808,7 +823,7 @@ fn cmd_build(out: &Path, args: BuildArgs, json: bool) -> Result<i32> {
                 )));
             }
         }
-        if let Err(error) = plan::execute(&entries, out, &repo_root) {
+        if let Err(error) = plan::execute(&entries, out, &repo_root, &codegen) {
             for entry in &entries {
                 let _ = ops::mark_failed(out, &entry.title_id, &error.to_string());
             }
@@ -844,25 +859,41 @@ fn cmd_build(out: &Path, args: BuildArgs, json: bool) -> Result<i32> {
     }
 
     // Default: print the macOS plan without running anything.
-    let text = plan::render_plan(&entries, out);
+    let text = plan::render_plan(&entries, out, &codegen);
     if json {
-        let commands: Vec<Vec<String>> = entries
+        let commands: Vec<Value> = entries
             .iter()
-            .flat_map(|entry| plan::steps(entry, out))
+            .flat_map(|entry| plan::steps(entry, out, &codegen))
             .map(|step| {
                 let mut command = vec![step.program.clone()];
                 command.extend(step.args.iter().cloned());
-                command
+                let env: std::collections::BTreeMap<String, String> = step
+                    .env
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect();
+                json!({"program": step.program, "args": command[1..].to_vec(), "env": env})
             })
             .collect();
         println!(
             "{}",
-            serde_json::to_string_pretty(
-                &json!({"mode": "plan", "commands": commands, "errors": errors})
-            )?
+            serde_json::to_string_pretty(&json!({
+                "mode": "plan",
+                "commands": commands,
+                "buildOptions": {
+                    "optLevel": codegen.opt_level,
+                    "lto": codegen.lto,
+                    "fastMath": codegen.fast_math,
+                },
+                "cacheMarker": codegen.cache_marker(),
+                "errors": errors,
+            }))?
         );
     } else {
         println!("{text}");
+        if codegen.fast_math {
+            println!("# warning: --fast-math changes guest float results; use it for measurement builds only");
+        }
         println!("# real build: run the commands above from the repository root on macOS,");
         println!(
             "# or run 'build --queued --execute' on the Mac; '--fake' writes placeholders here."

@@ -487,6 +487,7 @@ public sealed class MainViewModel : ObservableObject
             return Task.CompletedTask;
         }, () => !IsBusy);
         ConfirmImportReplaceCommand = new AsyncRelayCommand(ConfirmImportReplaceAsync, () => CanConfirmImportReplace);
+        ResetAdvancedBuildCommand = new RelayCommand(() => UpdateBuildOptions(AdvancedBuildOptions.Default), () => !IsBusy);
         RebuildLanguageOptions();
         RebuildDeploySteps();
         Log($"workspace: {_services.Workspace.Root} ({_services.Workspace.RootReason})");
@@ -543,6 +544,7 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand ToggleDeployLogCommand { get; }
     public AsyncRelayCommand ImportBuildPackageCommand { get; }
     public AsyncRelayCommand ConfirmImportReplaceCommand { get; }
+    public RelayCommand ResetAdvancedBuildCommand { get; }
 
     /// <summary>Localized UI strings; replaced whenever the language changes.</summary>
     public LocalizedText L { get => _localized; private set => SetProperty(ref _localized, value); }
@@ -639,6 +641,77 @@ public sealed class MainViewModel : ObservableObject
     public bool HasGames => Games.Count > 0;
 
     public bool IsLibraryEmpty => Games.Count == 0;
+
+    // --- Deploy -> Advanced settings (AOT codegen options, applied to the next build) ---
+
+    public IReadOnlyList<string> AotOptLevelOptions => AdvancedBuildOptions.OptLevels;
+
+    public string SelectedAotOptLevel
+    {
+        get => _services.Workspace.BuildOptions.OptLevel;
+        set
+        {
+            if (!AdvancedBuildOptions.OptLevels.Contains(value) || string.Equals(value, SelectedAotOptLevel, StringComparison.Ordinal))
+            {
+                return;
+            }
+            UpdateBuildOptions(new AdvancedBuildOptions(value, AotLto, AotFastMath));
+        }
+    }
+
+    public bool AotLto
+    {
+        get => _services.Workspace.BuildOptions.Lto;
+        set
+        {
+            if (value == AotLto)
+            {
+                return;
+            }
+            UpdateBuildOptions(new AdvancedBuildOptions(SelectedAotOptLevel, value, AotFastMath));
+        }
+    }
+
+    public bool AotFastMath
+    {
+        get => _services.Workspace.BuildOptions.FastMath;
+        set
+        {
+            if (value == AotFastMath)
+            {
+                return;
+            }
+            UpdateBuildOptions(new AdvancedBuildOptions(SelectedAotOptLevel, AotLto, value));
+        }
+    }
+
+    public bool IsAdvancedBuildCustomized => !_services.Workspace.BuildOptions.IsDefault;
+
+    public string AdvancedBuildSummary => Loc.T("deploy.advanced.summary", _services.Workspace.BuildOptions.Describe());
+
+    /// <summary>Persist one advanced-option change; the cache key includes it, so affected packs rebuild.</summary>
+    private void UpdateBuildOptions(AdvancedBuildOptions options)
+    {
+        var normalized = options.Normalized();
+        _services.Workspace.SetBuildOptions(normalized);
+        OnPropertyChanged(nameof(SelectedAotOptLevel));
+        OnPropertyChanged(nameof(AotLto));
+        OnPropertyChanged(nameof(AotFastMath));
+        OnPropertyChanged(nameof(IsAdvancedBuildCustomized));
+        OnPropertyChanged(nameof(AdvancedBuildSummary));
+        Log("advanced build settings: " + normalized.CacheMarker
+            + " (applied to the next build; the build cache key includes these options)");
+        _ = RefreshAfterAdvancedOptionsChangeAsync();
+    }
+
+    private async Task RefreshAfterAdvancedOptionsChangeAsync()
+    {
+        await ResolveBuildCompatibilityAsync().ConfigureAwait(true);
+        foreach (var row in Games)
+        {
+            row.Refresh();
+        }
+    }
 
     public string GameCountText => Loc.T("library.count", Games.Count);
 
@@ -2063,6 +2136,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ReadinessDetail));
         OnPropertyChanged(nameof(GameCountText));
         OnPropertyChanged(nameof(BuildAllLabel));
+        OnPropertyChanged(nameof(AdvancedBuildSummary));
         OnPropertyChanged(nameof(DeploySelectedCountText));
         OnPropertyChanged(nameof(DeployStateLabel));
         OnPropertyChanged(nameof(DeployMessage));
@@ -2207,7 +2281,7 @@ public sealed class MainViewModel : ObservableObject
                  {
                      DeployCommand, ConfirmOrphanedDeployCommand, StopDeployCommand, BuildAllCommand, RefreshDevicesCommand, RefreshPrerequisitesCommand,
                      RefreshStatusCommand, RefreshReadinessCommand, OpenImpactorCommand,
-                     ImportBuildPackageCommand, ConfirmImportReplaceCommand,
+                     ImportBuildPackageCommand, ConfirmImportReplaceCommand, ResetAdvancedBuildCommand,
                  })
         {
             switch (command)

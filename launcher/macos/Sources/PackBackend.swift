@@ -64,7 +64,9 @@ protocol PackBackend: AnyObject {
     /// an already built GamePack. First imports must not force.
     func importROM(_ path: String, displayName: String?, includeROM: Bool, force: Bool) async throws -> DetectedPackage
     func listPackages() async throws -> [DetectedPackage]
-    func build(titleIDs: [String], mode: BuildMode, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage]
+    /// Batch build; the advanced AOT codegen options are passed to the pack CLI
+    /// (which forwards the THREEDS2APPLE_AOT_* variables to the scripts) and apply to this build.
+    func build(titleIDs: [String], mode: BuildMode, advancedOptions: AdvancedBuildOptions, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage]
     func verify() async throws -> [String]
     func readManifest(titleID: String) async throws -> PackageManifest
     /// Export one game's portable .32a build package into workspace/builds. The
@@ -314,12 +316,18 @@ final class PackCLI: PackBackend {
         return PackJSON.parsePackages(Data(result.stdout.utf8)).packages
     }
 
-    func build(titleIDs: [String], mode: BuildMode, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage] {
+    func build(titleIDs: [String], mode: BuildMode, advancedOptions: AdvancedBuildOptions, onLine: @escaping (LogLevel, String) -> Void) async throws -> [DetectedPackage] {
         var arguments = ["build", "--queued"]
         switch mode {
         case .dryRun: break
         case .fake: arguments.append("--fake")
         case .real: arguments.append("--execute")
+        }
+        let codegen = advancedOptions.normalized
+        if !codegen.isDefault {
+            arguments.append(contentsOf: ["--opt-level", codegen.optLevel])
+            if codegen.lto { arguments.append("--lto") }
+            if codegen.fastMath { arguments.append("--fast-math") }
         }
         arguments.append("--json")
         let result = try await run(arguments, onLine: onLine)

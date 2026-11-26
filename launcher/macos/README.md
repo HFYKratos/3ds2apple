@@ -74,6 +74,12 @@ tooltip and the log — there is no manual "check" button).
   `ditto` into `workspace/exports/<build-slug>-<version>-unsigned.ipa`. The UI
   shows the path and asks the user to sign it with Sideloadly/AltStore; nothing is
   signed, installed or uploaded.
+  The Deploy page also has a collapsed **高级构建设置 / Advanced build settings**
+  disclosure: optimization level (O1/O2/O3/Oz), LTO and fast-math, persisted in
+  the launcher settings with **恢复默认值 / Reset to defaults**. Defaults keep the
+  -O2 / no-LTO / no-fast-math baseline; the options are passed to
+  `3ds2apple-pack build` (`--opt-level/--lto/--fast-math`), which forwards
+  `THREEDS2APPLE_AOT_*` to the scripts for the next build.
 - **Deploy** - device status, the checkbox selection list (one or several games),
   the single **一键部署 / Deploy selected** button, the detected compile-hardware
   line (logical cores · RAM · 3dsrecomp's automatic full-core parallelism), then

@@ -1033,7 +1033,7 @@ final class AppModel: ObservableObject {
             // logical CPU under a memory budget (same as the Windows launcher).
             appendLog(.info, "build", "compile hardware: " + hardware.describe)
             setDeployStep(1, .running, strings.deployCompileHardware(hardware))
-            _ = try await pack.build(titleIDs: titles, mode: kind == .mock ? .fake : .real) { [weak self] level, line in
+            _ = try await pack.build(titleIDs: titles, mode: kind == .mock ? .fake : .real, advancedOptions: settings.advancedBuildOptions) { [weak self] level, line in
                 Task { @MainActor in self?.appendLog(level, "build", line) }
             }
             var built: [String] = []
