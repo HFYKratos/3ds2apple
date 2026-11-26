@@ -52,6 +52,10 @@
 #   0010-presenter-rotation-and-swap.patch the custom layout's picture rotation
 #                                        inside the app's rectangles, and the
 #                                        screen swap for every layout (ABI 8)
+#   0011-remove-enhancements-data.patch compliance, not a feature: replace
+#                                        upstream's bundled community cheat-code
+#                                        table with "" so no title name or code
+#                                        line is compiled into the library
 #
 # Application is idempotent: a patch already in the tree is reported and
 # skipped, so re-running a build script is safe even when the checkout was
