@@ -77,8 +77,9 @@ protocol PackBackend: AnyObject {
     /// An existing package is only replaced when replace is true.
     func importBuildPackage(path: String, replace: Bool) async throws -> ImportedBuildPackage
     /// Write a single-game schema-2 GameCatalog.json with autoLaunch=true through
-    /// the pack CLI (the single catalogue schema writer) for a single-game IPA.
-    func writeAutoLaunchCatalog(titleID: String, catalogOut: String) async throws
+    /// the pack CLI (the single catalogue schema writer) for a single-game IPA and
+    /// inject the canonical romFile of the embedded game data (Roms/<TITLEID>.<ext>).
+    func writeAutoLaunchCatalog(titleID: String, romFile: String, catalogOut: String) async throws
     /// Allocate the selected built GamePacks into one shell app/IPA. The app is
     /// ROM-free by construction (packages hold no bundled GameRom); the IPA only
     /// carries Frameworks/GamePack-<TITLEID>.dylib + GameCatalog.json.
@@ -435,7 +436,7 @@ final class PackCLI: PackBackend {
         return package
     }
 
-    func writeAutoLaunchCatalog(titleID: String, catalogOut: String) async throws {
+    func writeAutoLaunchCatalog(titleID: String, romFile: String, catalogOut: String) async throws {
         let arguments = ["catalog", "--title-id", titleID, "--catalog-out", catalogOut, "--auto-launch", "--json"]
         let result = try await run(arguments)
         if !result.succeeded {
@@ -445,6 +446,34 @@ final class PackCLI: PackBackend {
                 hint: tailHint(result),
                 detail: result.combined,
                 exitCode: result.exitCode
+            )
+        }
+        // The builder CLI owns the catalogue schema; the launcher adds the embedded
+        // game-data path to the single game entry (canonical Roms/<TITLEID>.<ext>).
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: catalogOut)),
+              var root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              var games = root["games"] as? [[String: Any]],
+              games.count == 1 else {
+            throw LauncherFailure(
+                code: "catalog_failed",
+                message: "Could not read the single-game GameCatalog.json.",
+                hint: "Update 3ds2apple-pack; this is a tool mismatch.",
+                detail: catalogOut,
+                exitCode: nil
+            )
+        }
+        games[0]["romFile"] = romFile
+        root["games"] = games
+        do {
+            let updated = try JSONSerialization.data(withJSONObject: root, options: [.sortedKeys])
+            try updated.write(to: URL(fileURLWithPath: catalogOut))
+        } catch {
+            throw LauncherFailure(
+                code: "catalog_failed",
+                message: "Could not write the embedded romFile into GameCatalog.json.",
+                hint: "Check that the launcher can write the export staging folder.",
+                detail: catalogOut,
+                exitCode: nil
             )
         }
     }

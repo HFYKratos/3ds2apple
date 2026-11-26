@@ -221,30 +221,38 @@ optimization level (O1/O2/O3/Oz), link-time optimization and fast-math, plus a
 - Unverified on Windows hardware: the wrapper path is unit-tested but a real
   native build with non-default options still needs a Windows/QA pass.
 
-### Unsigned single-game IPA export (Library row "Export IPA")
+### Unsigned single-game IPA export with embedded game data (Library row "Export IPA")
 
 Each Library card with a real AOT GamePack has **Export IPA** next to
-**Export .32a**/**Build now**. It composes one unsigned single-game IPA from the
-pinned ROM-free shell template:
+**Export .32a**/**Build now**. It composes one **unsigned, self-contained**
+single-game IPA from the pinned shell template, so after the user signs and
+installs it the game opens directly with no launcher push:
 
 1. the pack CLI writes a schema-2 `GameCatalog.json` for the one title with
-   `--auto-launch` (the additive root field `autoLaunch: true`; the iOS shell
-   opens the game as soon as its library is ready);
-2. `IpaComposer` composes the template + the single `Frameworks/GamePack-<TITLEID>.dylib`
-   into a ROM-free app IPA;
-3. the IPA is rewritten to carry the autoLaunch catalogue and to replace every
-   template `AppIcon*.png` with the game's SMDH cover resized to the template
-   pixel size (SkiaSharp; the 48x48 SMDH icon is upscaled, which is soft but
-   recognisable). A missing/unreadable cover keeps the template icons and adds a
-   warning;
-4. the result is verified (Payload/*.app, no `Roms/`, schema-2 catalogue with the
-   title + autoLaunch, GamePack present, SHA-256) and written to
+   `--auto-launch`; the launcher adds the root `autoLaunch: true` and the
+   canonical `romFile` (`Roms/<TITLEID>.<cci|3ds|ncch|cxi>`) to the single game
+   entry, matching `builder/pack` `rom_relative_path`;
+2. `IpaComposer` composes the template + the single
+   `Frameworks/GamePack-<TITLEID>.dylib`;
+3. the IPA is rewritten to embed the user's own ROM as
+   `Roms/<TITLEID>.<ext>` (extension taken from the library ROM path, lower-cased;
+   missing ROM or an unsupported extension fails with an actionable message),
+   carry the autoLaunch/romFile catalogue, and replace every template
+   `AppIcon*.png` with the game's SMDH cover resized to the template pixel size
+   (SkiaSharp; the 48x48 SMDH icon is upscaled, which is soft but recognisable).
+   A missing/unreadable cover keeps the template icons and adds a warning;
+4. the result is verified (Payload/*.app, exactly one non-empty `Roms/` entry
+   matching the catalogue `romFile`, no extra `Roms/` entries, schema-2 catalogue
+   with one title + autoLaunch + romFile, GamePack present, SHA-256) and written to
    `<portable data root>/workspace/exports/<build-slug>-<version>-unsigned.ipa`.
 
-The UI shows the output path plus **unsigned IPA: sign it with Sideloadly or
-AltStore before installing**. Nothing is signed, installed or uploaded. Tests:
-`SingleGameIpaExportTests` (icon generator, IPA structure/catalogue, missing
-cover fallback, template/pack/catalog failures).
+The output is roughly the GamePack plus the ROM in size (logged with the byte
+counts). The UI shows the path and **unsigned IPA with your own game data
+embedded: sign it with Sideloadly or AltStore, keep this file local and never
+upload or share it**. Nothing is signed, installed or uploaded. Tests:
+`SingleGameIpaExportTests` (embedded ROM entry + catalogue romFile, extension
+normalisation, missing/unsupported ROM failures, exactly-one-Roms gate, icon
+generator, missing cover fallback, template/pack/catalog failures).
 
 ## Stack
 

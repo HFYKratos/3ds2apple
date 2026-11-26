@@ -3,11 +3,13 @@
 //  3ds2apple macOS launcher
 //
 //  Library "Export IPA": one unsigned single-game IPA composed from the pinned
-//  shell template. The template is unpacked (unzip), the game's GamePack and a
-//  single-game GameCatalog.json with autoLaunch are written into the app bundle,
-//  the template AppIcon*.png files are replaced with the ROM's SMDH cover
-//  (NSImage), and the result is zipped back with ditto. Nothing is signed,
-//  installed or uploaded; the user signs it with Sideloadly/AltStore.
+//  shell template. The template is unpacked (unzip), the game's GamePack, its own
+//  ROM (Roms/<TITLEID>.<ext>) and a single-game GameCatalog.json with autoLaunch +
+//  romFile are written into the app bundle, the template AppIcon*.png files are
+//  replaced with the ROM's SMDH cover (NSImage), and the result is zipped back
+//  with ditto. Nothing is signed, installed or uploaded; the user signs it with
+//  Sideloadly/AltStore. The IPA contains the user's own game data, so it stays in
+//  the local portable workspace and must never be uploaded or shared.
 //
 
 import AppKit
@@ -21,6 +23,10 @@ struct SingleGameIpaExportResult: Equatable {
     var bytes: Int64
     var replacedIcons: Int
     var warnings: [String]
+    /// Size of the embedded game data (the user's own ROM).
+    var romBytes: Int64 = 0
+    /// Bundle-relative path of the embedded data (Roms/<TITLEID>.<ext>).
+    var romRelativePath: String = ""
 }
 
 /// Composes the unsigned single-game IPA on this Mac. The launcher only
@@ -54,15 +60,24 @@ final class SingleGameIpaExporter {
         return slug + "-" + suffix + "-" + (safeVersion.isEmpty ? "0.0.0" : safeVersion) + "-unsigned.ipa"
     }
 
+    /// ROM extensions the runtime boots and the builder catalogue accepts.
+    static let romExtensions = ["cci", "3ds", "ncch", "cxi"]
+
+    /// Canonical bundle-relative ROM path: Roms/<TITLEID>.<lowercase ext>.
+    static func romRelativePath(titleID: String, extensionName: String) -> String {
+        "Roms/" + titleID.uppercased() + "." + extensionName.lowercased()
+    }
+
     func export(
         shellTemplateIpaPath: String,
         packPath: String,
         titleID: String,
         displayName: String,
         coverPath: String?,
+        romPath: String,
         version: String,
         outputDirectory: String,
-        writeCatalog: (String) async throws -> Void,
+        writeCatalog: (String, String) async throws -> Void,
         onLine: @escaping (LogLevel, String) -> Void
     ) async throws -> SingleGameIpaExportResult {
         if !fileManager.fileExists(atPath: shellTemplateIpaPath) {
@@ -83,6 +98,28 @@ final class SingleGameIpaExporter {
                 exitCode: nil
             )
         }
+        let romExtension = (romPath as NSString).pathExtension.lowercased()
+        if !fileManager.fileExists(atPath: romPath) {
+            throw LauncherFailure(
+                code: "rom_missing",
+                message: "The game's ROM is missing: " + (romPath.isEmpty ? "(no ROM path recorded)" : romPath),
+                hint: "The single-game IPA embeds the game data, so import/re-add the ROM (or restore its file) and export again.",
+                detail: romPath,
+                exitCode: nil
+            )
+        }
+        if !Self.romExtensions.contains(romExtension) {
+            throw LauncherFailure(
+                code: "rom_unsupported",
+                message: "Cannot embed " + (romPath as NSString).lastPathComponent + ": only ." + Self.romExtensions.joined(separator: "/.") + " ROMs are supported.",
+                hint: "Use the decrypted .3ds/.cci you imported, or export the .32a build package instead.",
+                detail: romPath,
+                exitCode: nil
+            )
+        }
+        let romRelative = Self.romRelativePath(titleID: titleID, extensionName: romExtension)
+        let romAttributes = try? fileManager.attributesOfItem(atPath: romPath)
+        let romBytes = (romAttributes?[.size] as? NSNumber)?.int64Value ?? 0
         try? fileManager.createDirectory(atPath: outputDirectory, withIntermediateDirectories: true)
         let staging = (outputDirectory as NSString)
             .appendingPathComponent(".single-game-" + String(UUID().uuidString.prefix(8)))
@@ -132,15 +169,32 @@ final class SingleGameIpaExporter {
         }
         try fileManager.copyItem(atPath: packPath, toPath: packDestination)
 
+        // Embed the user's own game data: exactly one canonical Roms entry. The
+        // template itself is ROM-free, so a stale Roms/ directory (if any) is
+        // replaced; the resulting IPA is intentionally NOT ROM-free.
+        let roms = (appRoot as NSString).appendingPathComponent("Roms")
+        if fileManager.fileExists(atPath: roms) {
+            try? fileManager.removeItem(atPath: roms)
+        }
+        try fileManager.createDirectory(atPath: roms, withIntermediateDirectories: true)
+        let embeddedRom = (appRoot as NSString).appendingPathComponent(romRelative)
+        if fileManager.fileExists(atPath: embeddedRom) {
+            try? fileManager.removeItem(atPath: embeddedRom)
+        }
+        try fileManager.copyItem(atPath: romPath, toPath: embeddedRom)
+
         let catalogPath = (appRoot as NSString).appendingPathComponent("GameCatalog.json")
-        try await writeCatalog(catalogPath)
+        try await writeCatalog(catalogPath, romRelative)
         guard let catalogData = try? Data(contentsOf: URL(fileURLWithPath: catalogPath)),
               let catalogObject = (try? JSONSerialization.jsonObject(with: catalogData)) as? [String: Any],
-              (catalogObject["autoLaunch"] as? Bool) == true else {
+              (catalogObject["autoLaunch"] as? Bool) == true,
+              let catalogGames = catalogObject["games"] as? [[String: Any]],
+              catalogGames.count == 1,
+              (catalogGames[0]["romFile"] as? String) == romRelative else {
             throw LauncherFailure(
                 code: "catalog_invalid",
-                message: "The single-game GameCatalog.json is missing the autoLaunch marker.",
-                hint: "Update 3ds2apple-pack; this is a tool mismatch.",
+                message: "The single-game GameCatalog.json is missing autoLaunch or the embedded romFile.",
+                hint: "Update 3ds2apple-pack / the launcher; this is a tool mismatch.",
                 detail: catalogPath,
                 exitCode: nil
             )
@@ -194,11 +248,32 @@ final class SingleGameIpaExporter {
             warnings.append("The game has no readable SMDH cover (cover.png); the template app icon was kept.")
         }
 
-        let roms = (appRoot as NSString).appendingPathComponent("Roms")
-        if fileManager.fileExists(atPath: roms) {
-            try? fileManager.removeItem(atPath: roms)
-            onLine(.warn, "removed a Roms/ directory from the shell template (the IPA must be ROM-free)")
+        // Structure gate before zipping: exactly one non-empty embedded game-data
+        // file, named exactly as the catalogue says.
+        let romEntries = ((try? fileManager.contentsOfDirectory(atPath: roms)) ?? [])
+            .filter { $0 == (romRelative as NSString).lastPathComponent }
+        if romEntries.count != 1 {
+            throw LauncherFailure(
+                code: "rom_embed_failed",
+                message: "The single-game IPA must contain exactly one embedded game-data file.",
+                hint: "This is a launcher bug; retry the export and include the log when reporting.",
+                detail: romRelative,
+                exitCode: nil
+            )
         }
+        let embeddedAttributes = try? fileManager.attributesOfItem(atPath: embeddedRom)
+        let embeddedBytes = (embeddedAttributes?[.size] as? NSNumber)?.int64Value ?? 0
+        if embeddedBytes <= 0 || embeddedBytes != romBytes {
+            throw LauncherFailure(
+                code: "rom_embed_failed",
+                message: "The embedded game data is incomplete (" + String(embeddedBytes) + " of " + String(romBytes) + " bytes).",
+                hint: "Check free disk space in the portable data folder and retry.",
+                detail: embeddedRom,
+                exitCode: nil
+            )
+        }
+        warnings.append("This IPA contains your own game data (" + romRelative + ", "
+            + FileProbe.formatBytes(romBytes) + "). Keep it local, never upload or share it, and sign it yourself (Sideloadly/AltStore).")
 
         let fileName = Self.outputFileName(displayName: displayName, titleID: titleID, version: version)
         let outputPath = (outputDirectory as NSString).appendingPathComponent(fileName)
@@ -223,13 +298,16 @@ final class SingleGameIpaExporter {
         let data = try Data(contentsOf: URL(fileURLWithPath: outputPath))
         let sha = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         onLine(.success, "single-game IPA: " + outputPath + " (" + FileProbe.formatBytes(Int64(data.count))
-            + ", sha256 " + sha + ", " + String(replacedIcons) + " icon(s))")
+            + ", sha256 " + sha + ", " + String(replacedIcons) + " icon(s), embedded game data "
+            + romRelative + " " + FileProbe.formatBytes(romBytes) + ") - contains the user's own game data; keep it local, sign it yourself")
         return SingleGameIpaExportResult(
             ipaPath: outputPath,
             sha256: sha,
             bytes: Int64(data.count),
             replacedIcons: replacedIcons,
-            warnings: warnings
+            warnings: warnings,
+            romBytes: romBytes,
+            romRelativePath: romRelative
         )
     }
 

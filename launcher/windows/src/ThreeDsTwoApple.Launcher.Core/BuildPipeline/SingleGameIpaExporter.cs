@@ -19,7 +19,9 @@ public sealed record SingleGameIpaExportResult(
     long Bytes,
     int GameCount,
     int ReplacedIconCount,
-    IReadOnlyList<string> Warnings)
+    IReadOnlyList<string> Warnings,
+    long RomBytes = 0,
+    string RomRelativePath = "")
 {
     public static SingleGameIpaExportResult Failure(string error) =>
         new(false, error, null, string.Empty, 0, 0, 0, Array.Empty<string>());
@@ -27,19 +29,25 @@ public sealed record SingleGameIpaExportResult(
 
 /// <summary>
 /// Composes one unsigned, single-game IPA from the shell template: the game's
-/// GamePack, a schema-2 GameCatalog.json with the root autoLaunch marker, and
-/// the game's SMDH cover replacing the template AppIcon*.png set.
+/// GamePack, a schema-2 GameCatalog.json with the root autoLaunch marker, the
+/// game's own ROM embedded as Roms/&lt;TITLEID&gt;.&lt;ext&gt;, and the SMDH cover
+/// replacing the template AppIcon*.png set.
 ///
 /// Reuses <see cref="IpaComposer"/> for the ROM-free template+packs+catalog
-/// composition, then rewrites the result to add autoLaunch and the app icons so
-/// the tested deploy composition path stays untouched. Nothing is signed,
-/// installed or uploaded; the caller tells the user to sign it (Sideloadly /
-/// AltStore). The output is user data under workspace/exports.
+/// composition, then rewrites the result to add autoLaunch, romFile, the ROM and
+/// the app icons so the tested deploy composition path stays untouched. Nothing
+/// is signed, installed or uploaded; the caller tells the user to sign it
+/// (Sideloadly / AltStore). The output contains the user's own game data: it is
+/// user data under workspace/exports and must never be uploaded or committed.
 /// </summary>
 public sealed class SingleGameIpaExporter
 {
     public const string ExportsDirectoryName = "exports";
     public const string GameCatalogFileName = "GameCatalog.json";
+    public const string RomsDirectoryName = "Roms";
+
+    /// <summary>ROM extensions the runtime boots and the builder catalogue accepts.</summary>
+    public static readonly IReadOnlyList<string> RomExtensions = new[] { "cci", "3ds", "ncch", "cxi" };
 
     private readonly PackCli _packCli;
     private readonly IpaComposer _composer;
@@ -62,10 +70,38 @@ public sealed class SingleGameIpaExporter
         return slug + "-" + safeVersion + "-unsigned.ipa";
     }
 
+    /// <summary>
+    /// Canonical bundle-relative ROM path for one title: Roms/&lt;TITLEID&gt;.&lt;ext&gt;
+    /// (lower-case extension), matching builder/pack catalog rom_relative_path.
+    /// </summary>
+    public static string RomRelativePath(string titleId, string extension) =>
+        RomsDirectoryName + "/" + GameInfoWriter.NormalizeTitleId(titleId) + "." + extension.TrimStart('.').ToLowerInvariant();
+
+    /// <summary>Validate the ROM source and return its path plus canonical relative path.</summary>
+    public static (string Path, string Extension, string RelativePath, long Bytes)? ResolveRom(string? romPath, string titleId, out string? error)
+    {
+        error = null;
+        if (string.IsNullOrWhiteSpace(romPath) || !File.Exists(romPath))
+        {
+            error = "The game's ROM is missing: " + (romPath ?? "(no ROM path recorded)")
+                + ". The single-game IPA embeds the game data, so import/re-add the ROM (or copy it back to its original path) and export again.";
+            return null;
+        }
+        var extension = Path.GetExtension(romPath).TrimStart('.').ToLowerInvariant();
+        if (!RomExtensions.Contains(extension))
+        {
+            error = "Cannot embed " + Path.GetFileName(romPath) + ": only ." + string.Join("/.", RomExtensions)
+                + " ROMs are supported (or export the .32a build package instead).";
+            return null;
+        }
+        return (Path.GetFullPath(romPath), extension, RomRelativePath(titleId, extension), new FileInfo(romPath).Length);
+    }
+
     public async Task<SingleGameIpaExportResult> ExportAsync(
         string shellTemplateIpaPath,
         ComposedPack pack,
         string? coverPath,
+        string? romPath,
         string version,
         string outputDirectory,
         Action<string>? log = null,
@@ -97,6 +133,12 @@ public sealed class SingleGameIpaExporter
             return SingleGameIpaExportResult.Failure(
                 templateInspection.Error ?? "The shell template is not a launcher-compatible ROM-free IPA.");
         }
+        var rom = ResolveRom(romPath, pack.TitleID, out var romError);
+        if (rom is null)
+        {
+            return SingleGameIpaExportResult.Failure(romError ?? "The game's ROM could not be resolved.");
+        }
+        var resolvedRom = rom.Value;
 
         Directory.CreateDirectory(outputDirectory);
         var staging = Path.Combine(outputDirectory, ".single-game-" + Guid.NewGuid().ToString("N")[..8]);
@@ -105,7 +147,8 @@ public sealed class SingleGameIpaExporter
         try
         {
             var title = GameInfoWriter.NormalizeTitleId(pack.TitleID);
-            log?.Invoke("single-game IPA: template " + shellTemplateIpaPath + "; game " + title);
+            log?.Invoke("single-game IPA: template " + shellTemplateIpaPath + "; game " + title
+                + "; ROM " + resolvedRom.RelativePath + " (" + resolvedRom.Bytes + " bytes)");
             var catalogPath = Path.Combine(staging, "GameCatalog.generated.json");
             var catalogProcess = await _packCli.CatalogAsync(new[] { title }, catalogPath, autoLaunch: true, cancellationToken).ConfigureAwait(false);
             if (!catalogProcess.Ok || !File.Exists(catalogPath))
@@ -115,7 +158,7 @@ public sealed class SingleGameIpaExporter
             }
             var catalogJson = await File.ReadAllTextAsync(catalogPath, cancellationToken).ConfigureAwait(false);
             catalogJson = IpaComposer.NormalizeCatalog(catalogJson, new[] { title });
-            catalogJson = AddAutoLaunch(catalogJson);
+            catalogJson = AddSingleGameFields(catalogJson, resolvedRom.RelativePath);
 
             var composed = await _composer.ComposeAsync(
                 shellTemplateIpaPath,
@@ -140,7 +183,9 @@ public sealed class SingleGameIpaExporter
                 finalPath,
                 composed.AppRoot,
                 catalogJson,
-                replacements);
+                replacements,
+                composed.AppRoot + resolvedRom.RelativePath,
+                resolvedRom.Path);
             File.Delete(composed.IpaPath);
 
             var verification = VerifyStructure(finalPath, title);
@@ -153,8 +198,13 @@ public sealed class SingleGameIpaExporter
             var (sha256, bytes) = HashFile(finalPath);
             var replacedCount = replacements is null ? 0 : replacedIcons;
             log?.Invoke("single-game IPA: wrote " + finalPath + " (" + bytes + " bytes, sha256 " + sha256
-                        + ", " + replacedCount + " icon(s) replaced, autoLaunch=true)");
-            return new SingleGameIpaExportResult(true, null, finalPath, sha256, bytes, 1, replacedCount, warnings);
+                + ", " + replacedCount + " icon(s) replaced, ROM " + resolvedRom.RelativePath
+                + " " + resolvedRom.Bytes + " bytes, autoLaunch=true)");
+            warnings.Add(
+                "This IPA contains your own game data (" + resolvedRom.RelativePath + ", "
+                + resolvedRom.Bytes + " bytes). Keep it local, never upload or share it, and sign it yourself (Sideloadly/AltStore).");
+            return new SingleGameIpaExportResult(true, null, finalPath, sha256, bytes, 1, replacedCount, warnings,
+                resolvedRom.Bytes, resolvedRom.RelativePath);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or LauncherToolException)
         {
@@ -166,19 +216,34 @@ public sealed class SingleGameIpaExporter
         }
     }
 
-    /// <summary>Add the additive root field autoLaunch:true to a normalised catalogue.</summary>
-    internal static string AddAutoLaunch(string catalogJson)
+    /// <summary>
+    /// Add the root autoLaunch marker and the game's canonical romFile to a
+    /// normalised single-game catalogue (builder-compatible Roms/&lt;TITLEID&gt;.&lt;ext&gt;).
+    /// </summary>
+    internal static string AddSingleGameFields(string catalogJson, string romRelativePath)
     {
         using var document = Json.TryParse(catalogJson);
         if (document is null)
         {
             throw new LauncherToolException("catalog_failed", "The generated GameCatalog.json is not valid JSON.", "Update 3ds2apple-pack; this is a tool mismatch.");
         }
-        var games = new List<JsonElement>();
+        var games = new List<Dictionary<string, object?>>();
         foreach (var game in Json.Array(document.RootElement, "games"))
         {
-            games.Add(game.Clone());
+            var copy = new Dictionary<string, object?>();
+            foreach (var property in game.EnumerateObject())
+            {
+                copy[property.Name] = property.Value.Clone();
+            }
+            games.Add(copy);
         }
+        if (games.Count != 1)
+        {
+            throw new LauncherToolException("catalog_failed",
+                "GameCatalog.json must list exactly one game for a single-game IPA (found " + games.Count + ").",
+                "Update 3ds2apple-pack; this is a tool mismatch.");
+        }
+        games[0]["romFile"] = romRelativePath;
         var output = new Dictionary<string, object?>
         {
             ["schemaVersion"] = Json.Long(document.RootElement, "schemaVersion") ?? 2,
@@ -215,7 +280,9 @@ public sealed class SingleGameIpaExporter
         string destinationIpaPath,
         string appRoot,
         string catalogJson,
-        IReadOnlyDictionary<string, byte[]>? iconReplacements)
+        IReadOnlyDictionary<string, byte[]>? iconReplacements,
+        string romEntryName,
+        string romPath)
     {
         var catalogEntryName = appRoot + GameCatalogFileName;
         var replacedIcons = 0;
@@ -225,8 +292,16 @@ public sealed class SingleGameIpaExporter
         {
             foreach (var entry in source.Entries)
             {
+                var relative = entry.FullName.StartsWith(appRoot, StringComparison.OrdinalIgnoreCase)
+                    ? entry.FullName[appRoot.Length..]
+                    : entry.FullName;
                 if (string.Equals(entry.FullName, catalogEntryName, StringComparison.OrdinalIgnoreCase))
                 {
+                    continue;
+                }
+                if (relative.StartsWith(RomsDirectoryName + "/", StringComparison.OrdinalIgnoreCase))
+                {
+                    // The template must be ROM-free; drop anything stale so exactly one ROM remains.
                     continue;
                 }
                 if (iconReplacements is not null
@@ -246,6 +321,13 @@ public sealed class SingleGameIpaExporter
                 using var sourceStream = entry.Open();
                 using var targetStream = copied.Open();
                 sourceStream.CopyTo(targetStream);
+            }
+            var romEntry = destination.CreateEntry(romEntryName, CompressionLevel.Optimal);
+            romEntry.ExternalAttributes = 0x81A4 << 16;
+            using (var romSource = File.OpenRead(romPath))
+            using (var romTarget = romEntry.Open())
+            {
+                romSource.CopyTo(romTarget);
             }
             var catalog = destination.CreateEntry(catalogEntryName, CompressionLevel.Optimal);
             catalog.ExternalAttributes = 0x81A4 << 16;
@@ -306,12 +388,14 @@ public sealed class SingleGameIpaExporter
                 return (false, "GameCatalog.json must list exactly one game (found " + games.Count + ")");
             }
             var game = games[0];
+            var normalizedTitle = GameInfoWriter.NormalizeTitleId(titleId);
             var catalogTitle = Json.String(game, "titleID", "titleId") ?? string.Empty;
-            if (!string.Equals(catalogTitle, GameInfoWriter.NormalizeTitleId(titleId), StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(catalogTitle, normalizedTitle, StringComparison.OrdinalIgnoreCase))
             {
                 return (false, "GameCatalog.json lists " + catalogTitle + ", expected " + titleId);
             }
-            var expectedPack = appRoot + IpaComposer.FrameworksDirectory + "/GamePack-" + GameInfoWriter.NormalizeTitleId(titleId) + ".dylib";
+            var expectedPackRelative = IpaComposer.FrameworksDirectory + "/GamePack-" + normalizedTitle + ".dylib";
+            var expectedPack = appRoot + expectedPackRelative;
             var packEntry = archive.Entries.FirstOrDefault(entry =>
                 string.Equals(entry.FullName, expectedPack, StringComparison.OrdinalIgnoreCase));
             if (packEntry is null || packEntry.Length <= 0)
@@ -319,20 +403,44 @@ public sealed class SingleGameIpaExporter
                 return (false, "the GamePack is missing from " + expectedPack);
             }
             var packFile = Json.String(game, "packFile") ?? string.Empty;
-            var expectedRelative = IpaComposer.FrameworksDirectory + "/GamePack-" + GameInfoWriter.NormalizeTitleId(titleId) + ".dylib";
-            if (!string.Equals(packFile, expectedRelative, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(packFile, expectedPackRelative, StringComparison.OrdinalIgnoreCase))
             {
-                return (false, "GameCatalog.json names packFile " + packFile + ", expected " + expectedRelative);
+                return (false, "GameCatalog.json names packFile " + packFile + ", expected " + expectedPackRelative);
             }
-            foreach (var entry in archive.Entries)
+
+            // Exactly one game-data entry: Roms/<TITLEID>.<cci|3ds|ncch|cxi>, non-empty,
+            // named by the catalogue; any other Roms/ entry is refused.
+            var romFile = Json.String(game, "romFile") ?? string.Empty;
+            var romRelative = romFile.StartsWith(RomsDirectoryName + "/", StringComparison.OrdinalIgnoreCase)
+                ? romFile[(RomsDirectoryName.Length + 1)..]
+                : string.Empty;
+            var stem = romRelative.Contains('.') ? romRelative[..romRelative.LastIndexOf('.')] : romRelative;
+            var extension = romRelative.Contains('.') ? romRelative[(romRelative.LastIndexOf('.') + 1)..].ToLowerInvariant() : string.Empty;
+            if (string.IsNullOrWhiteSpace(romRelative)
+                || !string.Equals(stem, normalizedTitle, StringComparison.OrdinalIgnoreCase)
+                || !RomExtensions.Contains(extension))
             {
-                var relative = entry.FullName.StartsWith(appRoot, StringComparison.OrdinalIgnoreCase)
-                    ? entry.FullName[appRoot.Length..]
-                    : entry.FullName;
-                if (relative.StartsWith("Roms/", StringComparison.OrdinalIgnoreCase))
-                {
-                    return (false, "the IPA contains game data (" + entry.FullName + ")");
-                }
+                return (false, "GameCatalog.json romFile must be " + RomsDirectoryName + "/" + normalizedTitle
+                    + ".<" + string.Join("|", RomExtensions) + "> (got " + (romFile.Length == 0 ? "<missing>" : romFile) + ")");
+            }
+            var expectedRom = appRoot + RomsDirectoryName + "/" + stem + "." + extension;
+            var romEntries = archive.Entries
+                .Where(entry => entry.FullName.StartsWith(appRoot + RomsDirectoryName + "/", StringComparison.OrdinalIgnoreCase)
+                                && !entry.FullName.EndsWith("/", StringComparison.Ordinal))
+                .ToList();
+            if (romEntries.Count != 1)
+            {
+                return (false, "the IPA must contain exactly one game-data entry in " + RomsDirectoryName
+                    + " (found " + romEntries.Count + ")");
+            }
+            var singleRom = romEntries[0];
+            if (!string.Equals(singleRom.FullName, expectedRom, StringComparison.OrdinalIgnoreCase))
+            {
+                return (false, "the IPA game-data entry is " + singleRom.FullName + ", expected " + expectedRom);
+            }
+            if (singleRom.Length <= 0)
+            {
+                return (false, "the embedded game data is empty (" + singleRom.FullName + ")");
             }
             return (true, null);
         }
