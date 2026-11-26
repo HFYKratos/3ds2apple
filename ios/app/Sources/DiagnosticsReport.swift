@@ -254,6 +254,8 @@ enum DiagnosticsExporter {
         screen=\(Int(screen.bounds.width * screen.scale))x\(Int(screen.bounds.height * screen.scale)) @\(screen.scale)x
         phase=\(phaseDescription(model.phase))
         game=\(model.currentGame.map { "\($0.title) (\($0.titleID))" } ?? "none")
+        auto_launch=\(AutoLaunch.diagnosticsLine)
+        auto_launch_definition=the optional "autoLaunch" flag in the bundle GameCatalog.json is honoured once per process: a single-game IPA starts its one game after the Documents scan and the ROM SHA-256 check; a game whose data is missing or fails the check stays on the home page and this line says why. not requested for a normal multi-game shell
         paused=\(model.isPaused ? 1 : 0)
         background_suspended=\(model.isBackgroundSuspended ? 1 : 0)
         background_snapshot=\(model.backgroundSnapshotDiagnostics)
