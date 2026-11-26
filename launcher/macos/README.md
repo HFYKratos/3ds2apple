@@ -51,41 +51,49 @@ tooltip and the log — there is no manual "check" button).
 
 - **Library** - game cards with the ROM's own SMDH icon (packages/<TITLEID>/
   cover.png), the localized SMDH title for the app language, publisher,
-  title/Title ID, phase badge, ROM/GamePack sizes and one staged-data line;
-  remove only (no editable name input, no build/install/push buttons). Import is
-  a single **导入 / Import** button that opens the file picker and imports the
-  chosen decrypted .3ds/.cci in one action (no path field, name override or
-  explanatory card). A game whose ROM has no SMDH icon keeps the initials
-  placeholder. Importing a ROM that is already in the library re-imports its
-  package with ``--force`` (SMDH cover/metadata self-heal, built GamePack kept).
-  Each card also has **导出 .32a / Export .32a** (enabled only for a real AOT
-  GamePack) and the header has **导入 .32a / Import .32a**. The portable build
-  package goes to `workspace/builds/<build-slug>.32a`: the GamePack, GameInfo,
-  optional cover and the user's ROM when the CLI can find one
-  (package copy, queued ROM path or `workspace/launcher-roms`). Import is
-  validated by the Rust CLI (`3ds2apple-pack builds`) before anything is
-  installed into `workspace/packages/<TITLEID>/`; an existing package asks for
-  confirmation before it is replaced. Nothing is signed, installed or uploaded:
-  a .32a can contain game data, so it stays local.
-  **Export IPA** (also on each real-pack card) composes one unsigned, self-contained
-  single-game IPA from the pinned shell template: the GamePack + the user's own ROM
-  embedded as `Roms/<TITLEID>.<cci|3ds|ncch|cxi>` + a `GameCatalog.json` with
-  `autoLaunch: true` and the matching `romFile` (the pack CLI writes the catalogue
-  with `--auto-launch`; the launcher injects the embedded-data path) + the SMDH
-  cover replacing every template `AppIcon*.png` (NSImage), zipped with `ditto`
-  into `workspace/exports/<build-slug>-<version>-unsigned.ipa`. A missing ROM or an
-  unsupported extension fails with a clear error; the staged bundle is checked to
-  contain exactly one non-empty `Roms/` file named by the catalogue before zipping.
-  The output is roughly GamePack + ROM in size. The UI shows the path and asks the
-  user to sign it with Sideloadly/AltStore: **the IPA contains the user's own game
-  data, so it stays in the local portable workspace and must never be uploaded or
-  shared**. Nothing is signed, installed or uploaded.
-  The Deploy page also has a collapsed **高级构建设置 / Advanced build settings**
-  disclosure: optimization level (O1/O2/O3/Oz), LTO and fast-math, persisted in
-  the launcher settings with **恢复默认值 / Reset to defaults**. Defaults keep the
-  -O2 / no-LTO / no-fast-math baseline; the options are passed to
-  `3ds2apple-pack build` (`--opt-level/--lto/--fast-math`), which forwards
-  `THREEDS2APPLE_AOT_*` to the scripts for the next build.
+  title/Title ID, phase badge, ROM/GamePack sizes and one staged-data line. Import
+  is the single **导入 ROM / Import ROM** button that opens the file picker and
+  imports the chosen decrypted .3ds/.cci in one action; the header also has one
+  **导入 / Import** button for `.32a` build packages, whose save panel title is
+  **导入构建包 / Import build package** and whose file types are filtered to `.32a`.
+  A game whose ROM has no SMDH icon keeps the initials placeholder. Importing a ROM
+  that is already in the library re-imports its package with ``--force`` (SMDH
+  cover/metadata self-heal, built GamePack kept).
+  Each card has text-only **导出 / Export** (disabled until a real AOT GamePack
+  exists; the card points at building it first) and a red destructive **移除 /
+  Remove** with its confirmation alert; the buttons sit in a wrapping row so the
+  card stays inside the minimum window width. **Export** opens a sheet where the
+  user picks the format and destination:
+  - **`.32a` 构建包 / `.32a` build package** — writes `workspace/builds/<build-slug>.32a`
+    (or the chosen folder): the GamePack, GameInfo, optional cover and the user's ROM
+    when the CLI can find one (package copy, queued ROM path or
+    `workspace/launcher-roms`).
+  - **未签名单游戏 IPA / Unsigned single-game IPA** — composes one unsigned,
+    self-contained single-game IPA from the pinned shell template: the GamePack + the
+    user's own ROM embedded as `Roms/<TITLEID>.<cci|3ds|ncch|cxi>` + a `GameCatalog.json`
+    with `autoLaunch: true` and the matching `romFile` (the pack CLI writes the
+    catalogue with `--auto-launch`; the launcher injects the embedded-data path) +
+    the SMDH cover replacing every template `AppIcon*.png` (NSImage), zipped with
+    `ditto` into `workspace/exports/<build-slug>-<version>-unsigned.ipa` (or the
+    chosen save path). A missing ROM or an unsupported extension fails with a clear
+    error; the staged bundle is checked to contain exactly one non-empty `Roms/` file
+    named by the catalogue before zipping. The output is roughly GamePack + ROM in
+    size.
+  In both cases the sheet states that the file can contain the user's own game data,
+  so it stays in the local portable workspace and must never be uploaded or shared;
+  the IPA is unsigned and the user must sign it with Sideloadly/AltStore. Nothing is
+  signed, installed or uploaded by the launcher. Importing a `.32a` is validated by
+  the Rust CLI (`3ds2apple-pack builds`) before anything is installed into
+  `workspace/packages/<TITLEID>/`; an existing package asks for confirmation before
+  it is replaced.
+  The launcher **Settings** sheet also holds the **高级构建设置 / Advanced build
+  settings** card (moved from Deploy): optimization level (O1/O2/O3/Oz, default O2),
+  LTO (default off) and fast-math (default off; it changes guest floating-point
+  results and is for measurement/experiments only), each with its impact text and a
+  **恢复默认值 / Reset to defaults** button. Defaults keep the -O2 / no-LTO /
+  no-fast-math baseline; the options are passed to `3ds2apple-pack build`
+  (`--opt-level/--lto/--fast-math`), which forwards `THREEDS2APPLE_AOT_*` to the
+  scripts for the next build and invalidates the affected build-cache entries.
 - **Deploy** - device status, the checkbox selection list (one or several games),
   the single **一键部署 / Deploy selected** button, the detected compile-hardware
   line (logical cores · RAM · 3dsrecomp's automatic full-core parallelism), then
@@ -95,7 +103,8 @@ tooltip and the log — there is no manual "check" button).
   button; success shows an explicit Done state.
 - **Settings** (gear) - language (System / English / 简体中文), Apple ID/Xcode
   signing status (read-only, auto-detected Team ID), device status + installed
-  app ID, logs (export/clear), About. No build-mode, tool-path, UDID, bundle-ID or
+  app ID, the **高级构建设置 / Advanced build settings** card (AOT optimization
+  level, LTO, fast-math; moved here from Deploy), logs (export/clear), About. No build-mode, tool-path, UDID, bundle-ID or
   sign/install-strategy controls.
 
 Language: the interface follows the macOS system UI language (Simplified Chinese
@@ -123,7 +132,10 @@ Release builds are universal (arm64 + x86_64). Headless modes used on the build 
 
 `scripts/vm-build.sh` does the whole Release build, the self-checks, the
 dark/light + English/Chinese screenshots and the user-facing ZIP in one shot on a
-Mac; it needs no ROM, phone, Apple ID or network. The ZIP is written to
+Mac; it needs no ROM, phone, Apple ID or network. The committed
+`screenshots/*.png` set predates the one-dialog Export/Import flow and the Settings
+build-options card, so those UI changes still need a screenshot refresh (tracked
+separately). The ZIP is written to
 **out/launchers/3ds2apple-launcher-<version>-macos-app.zip** (gitignored) and
 contains the `.app` plus `LICENSE`, `NOTICE` and `THIRD_PARTY.md` at the ZIP root,
 byte-identical to the repository files (enforced by

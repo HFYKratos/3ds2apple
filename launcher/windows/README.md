@@ -19,17 +19,23 @@ UI, log and diagnostics export. The current development checkout adds a Deploy
 window-close cleanup (a running deploy is stopped and its 3dsrecomp/clang/lld/
 devpush/plumesign processes are terminated before the launcher exits), and merges the
 two duplicate "not built yet" Library strings into one status line. This checkout compiles cleanly (0 errors, warnings as
-errors) and its **240 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
+errors) and its **266 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
 `--self-test` on Linux/WSL with the embedded payload (32 PASS / 0 FAIL / 0 WARN), and on a
 Windows host natively through `scripts/release/win-selftest.sh` (32 PASS / 0 FAIL / 0 WARN).
-The UI has exactly two sections (Library, Deploy) plus a minimal Settings gear; it is
-localized (English / 简体中文) and uses the iOS app icon. The user-facing package is a ZIP
+The UI has exactly two sections (Library, Deploy) plus a Settings page; it is
+localized (English / 简体中文) and uses the iOS app icon. The Library has one
+**Export** action per built game that opens a format/destination dialog (a portable
+`.32a` build package or an unsigned single-game IPA), one header **Import** for
+`.32a` build packages (the ROM import is **Import ROM**), **Build now** on every card
+and a red destructive **Remove**; the advanced AOT build settings moved from Deploy
+to Settings. The user-facing package is a ZIP
 with exactly one self-contained exe (the 0.1.5 package: 157,455,106 B, SHA-256
 `e37a924e…b2e16`; the 0.1.4 package was 157,292,331 B; the package
 embeds the LLVM 23.1.6 Windows toolchain, which dominates its size).
-Synthetic (non-game) UI captures (pre-0.1.2) are in `docs/ui/v4-*.png`; the 0.1.2
-Deploy-prerequisite and Settings renders are generated into `out/ui-smoke/` (gitignored)
-by the developer-only `--ui-smoke` mode. The Windows 11 device path (import, local
+Synthetic (non-game) UI captures are in `docs/ui/v4-*.png` (rendered by the
+developer-only `--ui-smoke` mode); they still show the earlier two-button export flow,
+so the one-dialog Export/Import flow and the Settings build options need a screenshot
+refresh, tracked separately. The Windows 11 device path (import, local
 compile, Impactor signing, devpush and launch) was verified by the maintainers on the
 0.1.0 build; the 0.1.1-0.1.5 additions still need a device pass (device acceptance
 steps: see the root [README.md](../../README.md) usage section).
@@ -70,15 +76,19 @@ travels as an internal devpush/plumesign command argument.
 
 ## What it does
 
-1. **Library**: import a decrypted .3ds/.cci you own. Only headers are read (title ID,
-   product code, name) by the existing 3ds2apple-pack CLI; the ROM is not copied. List,
-   remove, and pre-build games: **Build now** on one card or **Build all** in the header
-   compiles the GamePack ahead of a deploy and shows progress + the recorded cache state.
-   Cards show the title, publisher, ROM size, GamePack size/state and the build-cache
-   label (`Built · cache b1a2b3c4` or the exact reason a rebuild is needed); a game
-   that was never built shows one combined status line (Deploy compiles it
-   automatically, Build now compiles it ahead of time) instead of two near-duplicates. SHA-256
-   values stay in the verification/log output and are not shown as raw digests in the UI.
+1. **Library**: import a decrypted .3ds/.cci you own with **Import ROM**. Only headers
+   are read (title ID, product code, name) by the existing 3ds2apple-pack CLI; the ROM is
+   not copied. The header also has one **Import** for a `.32a` build package (its picker
+   is filtered to `.32a` and titled **Import build package**). **Build now** on one card
+   or **Build all** in the header compiles the GamePack ahead of a deploy and shows
+   progress plus the recorded cache state. Cards show the title, publisher, ROM size,
+   GamePack size/state and the build-cache label (`Built · cache b1a2b3c4` or the exact
+   reason a rebuild is needed); a game that was never built shows one combined status
+   line, and the **Export** button stays disabled until a real GamePack exists (the card
+   says to build first). **Export** opens the format/destination dialog described below;
+   **Remove** is the red destructive card action with its confirmation. The action row
+   wraps instead of overflowing at the 900 px minimum window width. SHA-256 values stay
+   in the verification/log output and are not shown as raw digests in the UI.
    Install/push actions stay on the Deploy page.
 2. **Deploy**: the page opens with a prerequisite panel — five green/red status lights
    (iPhone/iPad connected over USB, signing tools pinned to the Impactor v2.7.3 SHA-256,
@@ -108,7 +118,8 @@ travels as an internal devpush/plumesign command argument.
      for the next attempt. Closing the launcher window during a deploy runs the same
      cleanup before the window closes, so no background compiler/signer survives.
 3. **Settings** (gear): language, Apple ID / Open Impactor, device status/refresh, logs
-   (show/export/open/self-test), about. The language picker keeps showing the current
+   (show/export/open/self-test), about, and the **Advanced build settings** card (AOT
+   optimization level, LTO, fast-math) that used to be on Deploy. The language picker keeps showing the current
    language after a switch (labels refresh in place; the persisted key format is
    unchanged). Build mode, tool paths, UDID and bundle-id overrides are no longer user
    settings — bundled tools are auto-detected, and the device UDID is internal only
@@ -172,39 +183,54 @@ install/push, and a marker write failure only warns (the next deploy treats the 
 state as unknown and updates once). The macOS launcher keeps the previous full deploy
 path for now: this incremental behaviour is Windows-only.
 
-### Portable .32a build packages (Library export/import)
+### Library export dialog and build-package import
 
-Each Library card has **Export .32a** next to **Build now** (enabled only for a
-real AOT GamePack) and the Library header has **Import .32a**. The launcher only
-passes paths and parses the pack CLI JSON; the Rust CLI
-(`3ds2apple-pack builds export|import|list`, see
-[builder/README.md](../../builder/README.md)) is the single writer/validator of
-the format.
+The Library has one **Export** action per card (enabled only for a real AOT GamePack;
+the card explains that Export becomes available after the GamePack exists) and one
+header **Import** for `.32a` build packages. **Export** opens an in-window dialog:
 
-- Export writes `<portable data root>/workspace/builds/<build-slug>.32a`, a ZIP
-  with `manifest.json` (schema v1), `GamePack-<TITLEID>.dylib`, `GameInfo.json`,
-  optional `cover.png` and the user's `GameRom.<ext>` when the CLI can find it
-  (the package copy, the queued ROM path or `workspace/launcher-roms`). Without a
-  ROM the export still succeeds and the UI states that deploying it needs the
-  original ROM.
-- Import validates the ZIP/manifest/SHA-256/Mach-O structure, installs into
-  `workspace/out/packages/<TITLEID>/`, marks the queue built and refreshes the
-  Library so the game is immediately deployable. An existing package is reported
-  as a conflict with a **Replace existing package** confirmation (unrelated user
-  files in the package directory are kept).
-- The result path (or the exact error) is shown inline in the Library and in the
-  launcher log; the UI states that **a .32a can contain game data, so it must stay
-  local** (never upload or commit it). Nothing is signed, installed or uploaded.
-- Tests: `BuildPackageServiceTests.cs` (argument mapping, JSON parsing,
-  conflict/replace, missing CLI, workspace state) and the Rust `builder/pack`
-  tests (`builds::tests` + the CLI round trip in `tests/cli_local.rs`).
+- **Format**: **.32a build package** or **Unsigned single-game IPA**.
+- **Destination**: a folder for the .32a (default `workspace/builds`) or a save-file
+  path for the IPA (default `workspace/exports`).
+- **Description and warnings** for the chosen format, including that the file can
+  contain the user's own game data and must stay local, and that the IPA is unsigned
+  and needs Sideloadly or AltStore.
 
-### Advanced build settings (Deploy page, collapsed by default)
+For the `.32a` format the pack CLI writes `<portable data root>/workspace/builds/<build-slug>.32a`,
+a ZIP with `manifest.json` (schema v1), `GamePack-<TITLEID>.dylib`, `GameInfo.json`,
+optional `cover.png` and the user's `GameRom.<ext>` when the CLI can find it (the
+package copy, the queued ROM path or `workspace/launcher-roms`). Without a ROM the
+export still succeeds and the UI states that deploying it needs the original ROM.
+**Import** opens its
+picker filtered to `.32a` with the title **Import build package**, validates the
+ZIP/manifest/SHA-256/Mach-O structure, installs into
+`workspace/out/packages/<TITLEID>/`, marks the queue built and refreshes the Library
+so the game is immediately deployable. An existing package is reported as a conflict
+with a **Replace existing package** confirmation (unrelated user files in the package
+directory are kept). The launcher only passes paths and parses the pack CLI JSON; the
+Rust CLI (`3ds2apple-pack builds export|import|list`, see
+[builder/README.md](../../builder/README.md)) is the single writer/validator of the
+format. The result path (or the exact error) is shown inline in the Library and in the
+launcher log; the UI states that **a .32a can contain game data, so it must stay
+local** (never upload or commit it). Nothing is signed, installed or uploaded. Tests:
+`BuildPackageServiceTests.cs` (argument mapping, JSON parsing, conflict/replace,
+missing CLI, workspace state) and the Rust `builder/pack` tests (`builds::tests` + the
+CLI round trip in `tests/cli_local.rs`).
 
-The Deploy page has a collapsed **Advanced build settings** section with the AOT
-optimization level (O1/O2/O3/Oz), link-time optimization and fast-math, plus a
-**Reset to defaults** button. The defaults are exactly the shipped behaviour
-(O2 / LTO off / fast-math off) and keep the default build command unchanged.
+### Advanced build settings (Settings page)
+
+The **Advanced build settings** card lives in Settings (Deploy no longer shows it):
+the AOT optimization level (O1/O2/O3/Oz), link-time optimization and fast-math, plus
+a **Reset to defaults** button. Each option carries its impact text:
+
+- **Optimization level** (default O2): a higher level builds slower and may perform
+  better; measure on a device before relying on it.
+- **LTO** (default off): longer build/link time, a possible small performance gain.
+- **Fast-math** (default off): changes guest floating-point results; for measurement
+  and experiments only, and never enabled by the default release build.
+
+The defaults are exactly the shipped behaviour (O2 / LTO off / fast-math off) and
+keep the default build command unchanged.
 
 - The values persist in the portable `state.json` and apply to the **next**
   build. Changing one invalidates the build-cache key: `buildCompatVersion`
@@ -221,12 +247,12 @@ optimization level (O1/O2/O3/Oz), link-time optimization and fast-math, plus a
 - Unverified on Windows hardware: the wrapper path is unit-tested but a real
   native build with non-default options still needs a Windows/QA pass.
 
-### Unsigned single-game IPA export with embedded game data (Library row "Export IPA")
+### Unsigned single-game IPA export with embedded game data (Library Export dialog)
 
-Each Library card with a real AOT GamePack has **Export IPA** next to
-**Export .32a**/**Build now**. It composes one **unsigned, self-contained**
-single-game IPA from the pinned shell template, so after the user signs and
-installs it the game opens directly with no launcher push:
+In the Library card's **Export** dialog, the **Unsigned single-game IPA** format
+composes one **unsigned, self-contained** single-game IPA from the pinned shell
+template with the destination chosen by the user (default `workspace/exports`), so
+after the user signs and installs it the game opens directly with no launcher push:
 
 1. the pack CLI writes a schema-2 `GameCatalog.json` for the one title with
    `--auto-launch`; the launcher adds the root `autoLaunch: true` and the
@@ -300,7 +326,7 @@ generator, missing cover fallback, template/pack/catalog failures).
       Hardware/                           logical/physical cores + RAM probe for the compile line
       src/Launcher.Desktop/             Avalonia UI (Program, App, MainWindow, view model,
                                         Localization/LocalizedText, Assets/app.ico + placeholder)
-      tests/ThreeDsTwoApple.Launcher.Core.Tests/   240 xUnit tests (incl. DeployFlowTests + DeviceDeployTests +
+      tests/ThreeDsTwoApple.Launcher.Core.Tests/   266 xUnit tests (incl. DeployFlowTests + DeviceDeployTests +
                                                   DeployCancellationTests + ProcessRunnerTests + BuildCacheTests +
                                                   ComposedIpaVerifierTests)
       vendor/impactor/             PINS.json + MIT / MPL-2.0 licence texts + source note
@@ -361,7 +387,8 @@ v2.7.3/plumesign, the Bin tool CLIs, 3dsrecomp.exe and the official LLVM 23.1.6 
 (first-run extraction exercised with an isolated HOME) and on real Windows 11 (all checks
 PASS, no warnings, shell template v0.2.2). Real Windows window captures in English and
 Simplified Chinese, plus a headless render of the red not-ready status light, are under
-`docs/ui/v4-*.png`.
+`docs/ui/v4-*.png`; those captures predate the one-dialog Export/Import flow and the
+Settings build options, whose media refresh is tracked separately.
 
 ## Assemble a distribution (release step)
 
