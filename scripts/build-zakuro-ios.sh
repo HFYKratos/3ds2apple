@@ -71,6 +71,9 @@ fi
 # interval, GPU execution timings and the renderer A/B switches). Idempotent: an
 # already patched checkout is left as it is, and a patch that no longer applies
 # is a warning, so a locally moved checkout can still be used for experiments.
+# One of them is a compliance change, not a runtime feature: 0011 removes
+# upstream's bundled community cheat-code table from the build, and the check
+# after the build fails if it is missing.
 # shellcheck source=lib/zakuro-patches.sh
 source "$ROOT/scripts/lib/zakuro-patches.sh"
 apply_zakuro_patches "$ZAKURO_DIR"
@@ -131,3 +134,43 @@ cargo build -p zakuro-ios --release --target aarch64-apple-ios
 mkdir -p "$ROOT/build/ios"
 cp target/aarch64-apple-ios/release/libzakuro_ios.a "$ROOT/build/ios/libzakuro_ios.a"
 echo "built: $ROOT/build/ios/libzakuro_ios.a"
+
+# Compliance check: the shipped library must not carry upstream's bundled
+# community cheat-code table (crates/zakuro-core/src/enhancements.txt, pulled in
+# by include_str! and removed by patches/0011-remove-enhancements-data.patch).
+# The table is upstream's own file in the gitignored checkout, never committed
+# here, so the check reads it locally and searches the built archive for its
+# lines instead of keeping a copy of them in the repository. A hit means the
+# patch did not apply; that fails the build, because shipping the table is not
+# acceptable. ZAKURO_SKIP_ENHANCEMENTS_CHECK=1 is for a local experiment only.
+if [[ "${ZAKURO_SKIP_ENHANCEMENTS_CHECK:-0}" != "1" ]]; then
+  python3 - "$ROOT/build/ios/libzakuro_ios.a" \
+    "$ZAKURO_DIR/crates/zakuro-core/src/enhancements.txt" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+library, data = Path(sys.argv[1]), Path(sys.argv[2])
+if not data.is_file():
+    print("[enhancements] warning: no enhancements.txt in the checkout; the data check is skipped")
+    raise SystemExit(0)
+lines = data.read_text(encoding="utf-8", errors="replace").splitlines()
+# The long lines are the title headers, names, authors and code lines; the
+# file's own short prose is not unique and is skipped.
+needles = [
+    line.strip().encode()
+    for line in lines
+    if len(line.strip()) >= 16 and not line.lstrip().startswith("#")
+]
+if not needles:
+    print("[enhancements] warning: no checkable line in enhancements.txt; the data check is skipped")
+    raise SystemExit(0)
+blob = library.read_bytes()
+needle = re.compile(b"|".join(re.escape(line) for line in needles))
+if needle.search(blob):
+    print("[enhancements] error: the built library carries upstream's bundled community code table;", file=sys.stderr)
+    print("[enhancements]        patches/0011-remove-enhancements-data.patch did not apply.", file=sys.stderr)
+    raise SystemExit(1)
+print(f"[enhancements] {len(needles)} lines of upstream's bundled code table are not in the library")
+PY
+fi

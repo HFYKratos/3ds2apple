@@ -1,0 +1,47 @@
+# 0011-remove-enhancements-data.patch
+#
+# Compliance: upstream Zakuro bundles a community cheat-code table
+# (crates/zakuro-core/src/enhancements.txt: titles, names, authors and code
+# lines) that enhancements.rs pulls in with include_str!. The 3ds2apple app
+# ships a code database nowhere (AGENTS.md §2.5 and §2.14), so this patch
+# replaces the table with an empty string: the loader still calls
+# enhancements::build / enhancements::cheats and gets nothing, and no title name
+# or code line is compiled into libzakuro_ios.a. The two unit tests that read
+# the table are disabled; they test the data, which is gone in this build.
+#
+# The data file itself stays in the gitignored checkout (upstream's own file,
+# never committed in this repository); nothing is copied out of it and no file
+# is deleted, so this patch carries no code line, title name or author.
+#
+# Verified by scripts/build-zakuro-ios.sh after the build: it reads the local
+# data file and searches the built static library for its lines; a hit means the
+# patch did not apply. The runtime's behaviour is unchanged: the iOS loader
+# never enabled a builtin enhancement anyway (Config.enhancements is empty).
+
+diff --git a/crates/zakuro-core/src/enhancements.rs b/crates/zakuro-core/src/enhancements.rs
+index c4ce1be..41b2ec3 100644
+--- a/crates/zakuro-core/src/enhancements.rs
++++ b/crates/zakuro-core/src/enhancements.rs
+@@ -2,8 +2,11 @@
+ 
+ use crate::cheats::Cheat;
+ 
+-/// the codes, game after game, title id and name, then each enhancement's name, build, author, notes and code
+-const LIST: &str = include_str!("enhancements.txt");
++/// the codes, game after game, title id and name, then each enhancement's name, build, author, notes and code.
++///
++/// Empty in the 3ds2apple iOS build: its own patch replaces the bundled table
++/// with nothing, so no community codes or title names ship inside the app.
++const LIST: &str = "";
+ 
+ /// one enhancement for a game
+ #[derive(Debug, Clone, PartialEq)]
+@@ -68,7 +71,7 @@ pub fn cheats(program_id: u64, build: &str, on: &[String]) -> Vec<Cheat> {
+         .collect()
+ }
+ 
+-#[cfg(test)]
++#[cfg(any())] // the data is gone in this build; its tests test the data
+ mod tests {
+     use super::*;
+ 

@@ -147,6 +147,11 @@ The app-side thresholds, log lines and diagnostics fields are documented in
 | `zk_save_state_copy(system, out, cap)` | Copy the measured saved state, or only report its length with `out == NULL`; returns the full byte count (a short buffer is logged), `0` on error |
 | `zk_save_state_discard(system)` | Release a measured saved state that will not be copied (tens of MiB) |
 | `zk_load_state(system, data, length)` | Restore a saved state: `0` loaded, `-1` bad handle, `-2` bad argument, `-3` refused |
+| `zk_cheats_load(system, path)` | Load a title's cheat file through the app's own path (UTF-8, the Citra/Azahar text): returns how many were loaded, `-1` bad handle, `-2` bad path, `-3` unreadable, `-4` past the limits; the enabled entries run from the next frame |
+| `zk_cheats_save(system, path)` | Write the player's cheats back in the same text (`*citra_enabled` on the enabled ones) through a temporary file and a rename: `0`/`-1`/`-2`/`-3` |
+| `zk_cheats_count(system)` | How many of the player's cheats the system has; `-1` for NULL |
+| `zk_cheats_json(system)` | The player's cheats as JSON (schema 1: `name`, `enabled`, `lines`, `invalidLines`) within `ZK_CHEATS_JSON_MAX_BYTES`; library-owned thread-local pointer like `zk_keyboard_request_json` |
+| `zk_cheats_set_enabled(system, index, enabled)` | Turn entry `index` (the JSON list order) on or off, applied from the next frame: `0`/`-1`/`-2` no such index/`-3` builtin (this build carries none) |
 | `zk_presenter_create(ui_view, width, height)` | Make a Vulkan presenter for a `UIView` whose layer is a `CAMetalLayer`; returns an opaque presenter or NULL |
 | `zk_presenter_resize(presenter, width, height)` | New drawable size in pixels (layout/rotation/render scale); the swapchain rebuilds on the next present |
 | `zk_presenter_destroy(presenter)` | Release the presenter; destroy its systems first |
@@ -285,6 +290,38 @@ handle call. After a successful load, drop the audio buffered before it (the
 DSP state went back too) and refresh the HUD; the state also carries the GPU's
 guest-side state, and the hardware paths rebuild the host GPU state from the
 restored memory on the next frame.
+
+## Cheat codes
+
+A title's Action Replay / Gateway codes run through Zakuro's own cheat engine:
+`System::run_frame` calls `cheats::run` at the start of every emulated frame,
+before the CPU steps, so the ABI in [`src/cheats.rs`](src/cheats.rs) only loads,
+writes, lists and switches the player's file — there is no tick call to make and
+no frame loop to pause for a load or a toggle; a switch applies from the next
+frame.
+
+- **The file belongs to the app.** The path is an argument, never
+  `Config::data_dir`: the shell keeps `Documents/Cheats/<TITLEID>.txt`, outside
+  the per-game data directory (the Save Manager archives that directory
+  wholesale) and under the app's Files sharing, and decides when a title's file
+  is imported, edited and saved.
+- **Format.** The text Citra and Azahar write: `[name]` sections, `*` notes, a
+  `*citra_enabled` marker and `XXXXXXXX YYYYYYYY` lines. `zk_cheats_load` uses
+  the runtime's own parser; a malformed line is kept and written back but not
+  run (`invalidLines` in the JSON), like Citra.
+- **Limits.** 256 KiB per file, 128 cheats and 1024 lines per cheat at this
+  level; the runtime additionally caps one cheat at 100000 executed steps per
+  frame, so a looping code cannot freeze the frame loop.
+- **What it does not do.** Turning an entry off does not undo the bytes it
+  already wrote (Citra behaves the same). A code that patches the game's code
+  has to run the affected functions in the interpreter on an AOT build, so data
+  patches are the supported case.
+- **No bundled database.** Upstream Zakuro also carries a community
+  "enhancements" table keyed by title; `patches/0011-remove-enhancements-data.patch`
+  removes it from this build (the loader still calls `enhancements::build` and
+  gets nothing), so no code line or title name is compiled into
+  `libzakuro_ios.a`. `scripts/build-zakuro-ios.sh` fails the build if the table
+  is in the library.
 
 ## Threading
 
@@ -495,6 +532,16 @@ truncated, damaged and foreign states, and a real save → load round trip on a
 console with no ROM loaded. They need no game either, only a few hundred MiB of
 host RAM.
 
+The cheat ABI has host tests in `src/cheats.rs`: parsing CRLF files and
+enabled markers, the file/count/line limits, the JSON escaping and its bound,
+the atomic save (no `.tmp` left behind), and a `System` with no ROM loading,
+toggling, writing and reloading a file through the C functions:
+
+```bash
+cd third_party/zakuro
+cargo test -p zakuro-ios --lib cheats
+```
+
 The software-keyboard JSON and ABI have host tests in `src/lib.rs`
 (`keyboard_json_carries_every_field`,
 `keyboard_json_escapes_quotes_and_control_characters`,
@@ -514,12 +561,14 @@ src/lib.rs       C ABI, handle/error handling, linked table wiring, hardware FFI
                  software-keyboard JSON/FFI
 src/presenter.rs A1 CAMetalLayer presentation: presenter/swapchain FFI, touch mapping
 src/savestate.rs  saved states: size/copy/discard/load FFI, container preflight
+src/cheats.rs    cheat file FFI: load/save/count/json/set_enabled, atomic write
 src/perf.rs      frame-time logging and profiler helpers
 build.rs         linked-build title ID validation
 Cargo.toml       staticlib crate; `linked` and `profiling` features
 METAL.md         Metal/MoltenVK evaluation, A0/A1 plan, build and device steps
-patches/         upstream Zakuro patches: iOS MoltenVK lookup and the
-                5 s pipeline-cache save interval
+patches/         upstream Zakuro patches: the iOS MoltenVK lookup, the
+                 5 s pipeline-cache save interval, the GPU A/B switches and
+                 presenter layouts, and the enhancements-data removal
 ```
 
 ## Limitations
@@ -532,3 +581,6 @@ patches/         upstream Zakuro patches: iOS MoltenVK lookup and the
   the swapchain is rebuilt on rotation/layout changes. 3D stereo, frame
   interpolation and texture packs are not exposed by the app yet.
 - Generated game code is game-derived and must never be committed.
+- Cheat codes that patch a game's own code are not a supported case on the AOT
+  path: the functions they change fall back to the interpreter. Data patches
+  (memory writes) are what the shell exposes.

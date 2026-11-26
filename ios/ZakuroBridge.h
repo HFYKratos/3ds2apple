@@ -27,6 +27,12 @@
  * app that never calls them keeps the old behaviour (the title just keeps
  * waiting), and the app polls them on the runtime serial queue.
  *
+ * Cheat codes: one title's Action Replay / Gateway codes in the player's own
+ * file (the Citra/Azahar text) are loaded, written, listed and switched with
+ * the zk_cheats_*() calls below. The runtime applies the enabled ones once per
+ * emulated frame by itself and nothing is bundled in the app; the app keeps the
+ * file at Documents/Cheats/<TITLEID>.txt.
+ *
  * No CPU JIT: iOS forbids executable memory. This is the AOT + interpreter
  * build, so nothing here creates executable pages.
  */
@@ -352,6 +358,132 @@ void zk_save_state_discard(zk_system_t system);
  * let the next frame redraw; the GPU's guest-side state is part of the state.
  */
 int32_t zk_load_state(zk_system_t system, const uint8_t *data, size_t length);
+
+/* ---------------------------------------------------- cheat codes (player) -- */
+
+/**
+ * Cheat files: one title's Action Replay / Gateway codes, in the text format
+ * Citra and Azahar write (`[name]` sections, `*` notes, a `*citra_enabled`
+ * marker on the entries that are on, and `XXXXXXXX YYYYYYYY` lines).
+ *
+ * The file is the player's own and is never bundled with the app or the
+ * runtime: these calls read and write a path the app names, so the app keeps it
+ * at Documents/Cheats/<TITLEID>.txt, outside the per-game data directory (the
+ * Save Manager archives that directory wholesale) and under the app's Files
+ * sharing. No code database ships in the binary.
+ *
+ * The runtime runs the enabled entries once per emulated frame by itself:
+ * zk_run_frame() calls Zakuro's frame loop, which applies them before the CPU
+ * steps. There is no tick call to make and no frame to pause for a load or a
+ * toggle; a change applies from the next frame. Turning an entry off does not
+ * put back bytes it already wrote, like Citra: the game's memory keeps what the
+ * code wrote until the title overwrites it or a saved state is loaded.
+ *
+ * Only data patches are exercised on device. A code that rewrites the game's
+ * code has to run those functions in the interpreter on an AOT build, which is
+ * a frame-rate cliff; the app says so in its UI.
+ *
+ * Every call runs on the runtime's serial queue, like every other call that
+ * takes a handle.
+ */
+
+/** The largest cheat file zk_cheats_load() reads, in bytes. Mirrors
+ *  ZK_CHEATS_MAX_FILE_BYTES in ios/zakuro-ios/src/cheats.rs. */
+#define ZK_CHEATS_MAX_FILE_BYTES (256u * 1024u)
+/** The most cheats one file may define. Mirrors ZK_CHEATS_MAX_CHEATS. */
+#define ZK_CHEATS_MAX_CHEATS 128u
+/** The most code lines one cheat may carry. Mirrors ZK_CHEATS_MAX_LINES. */
+#define ZK_CHEATS_MAX_LINES 1024u
+/** The largest JSON document zk_cheats_json() returns, not counting the NUL.
+ *  Mirrors ZK_CHEATS_JSON_MAX_BYTES. */
+#define ZK_CHEATS_JSON_MAX_BYTES (256u * 1024u)
+
+/** zk_cheats_load()/zk_cheats_save(): the call succeeded. */
+#define ZK_CHEATS_OK 0
+/** zk_cheats_load()/zk_cheats_save()/zk_cheats_set_enabled(): NULL/invalid
+ *  zk_system_t. */
+#define ZK_CHEATS_BAD_HANDLE (-1)
+/** zk_cheats_load()/zk_cheats_save(): NULL or non-UTF-8 path. */
+#define ZK_CHEATS_BAD_PATH (-2)
+/** zk_cheats_load()/zk_cheats_save(): the file could not be read or written;
+ *  zk_last_error() names the OS error. */
+#define ZK_CHEATS_READ_FAILED (-3)
+/** zk_cheats_load(): the file, its cheat count or one cheat's line count is
+ *  past this ABI's limits (the macros above). */
+#define ZK_CHEATS_TOO_LARGE (-4)
+/** zk_cheats_set_enabled(): no cheat at that index. */
+#define ZK_CHEATS_BAD_INDEX (-2)
+/** zk_cheats_set_enabled(): the entry is a builtin enhancement, not the
+ *  player's (this build carries none). */
+#define ZK_CHEATS_REFUSED (-3)
+
+/**
+ * Loads the cheat file at @p path (UTF-8, the Citra/Azahar text) and replaces
+ * the player's cheats of the running system with it; the entries marked
+ * `*citra_enabled` run from the next frame. Nothing else is touched, and the
+ * runtime keeps running: no frame loop pause is needed.
+ *
+ * A malformed line is kept and written back but not run (it is counted as
+ * `invalidLines` by zk_cheats_json()), the same way the desktop frontend and
+ * Citra treat one; a section with no line at all defines no cheat.
+ *
+ * Returns the number of cheats loaded (0 for a file with no `[name]` section),
+ * or a negative ::ZK_CHEATS_* code with the reason in zk_last_error() on the
+ * calling thread; a success clears that error. A refused load leaves the
+ * system's previous cheats in place.
+ *
+ * @param path  UTF-8 path of the file to read.
+ */
+int32_t zk_cheats_load(zk_system_t system, const char *path);
+
+/**
+ * Writes the player's cheats to @p path in the same text, with the
+ * `*citra_enabled` marker on the entries that are on, through a sibling
+ * temporary file and a rename: an interrupted save leaves the previous file
+ * whole. The parent directory is created when missing. Returns
+ * ::ZK_CHEATS_OK, or -1/-2/-3 as zk_cheats_load(); the reason is in
+ * zk_last_error() on the calling thread.
+ */
+int32_t zk_cheats_save(zk_system_t system, const char *path);
+
+/**
+ * How many of the player's cheats the system has (0 when nothing was loaded),
+ * or -1 for a NULL handle.
+ */
+int32_t zk_cheats_count(zk_system_t system);
+
+/**
+ * The player's cheats as one JSON document, or NULL for a NULL handle.
+ *
+ * Schema 1:
+ *
+ * {"schema":1,"cheats":[{"name":"Example","enabled":true,"lines":2,
+ *  "invalidLines":0}]}
+ *
+ *  name         the section's name, cut to 256 UTF-8 bytes at a character
+ *               boundary to keep the document bounded.
+ *  enabled      whether the entry runs each frame (the `*citra_enabled`
+ *               marker in the file).
+ *  lines        how many `XXXXXXXX YYYYYYYY` lines the entry has.
+ *  invalidLines lines the runtime keeps and writes back but does not run.
+ *
+ * The document is always within ::ZK_CHEATS_JSON_MAX_BYTES, so no copy buffer
+ * is needed. The pointer is owned by the library and stays valid until the next
+ * zk_cheats_json() call on the same thread; copy it (String(cString:) in Swift)
+ * and never free it.
+ */
+const char *zk_cheats_json(zk_system_t system);
+
+/**
+ * Turns entry @p index on (nonzero @p enabled) or off; the change applies from
+ * the next frame. @p index is the list order zk_cheats_json() reports, i.e. the
+ * player's own cheat order.
+ *
+ * 0 done, ::ZK_CHEATS_BAD_HANDLE for NULL, ::ZK_CHEATS_BAD_INDEX when there is
+ * no cheat at that index, ::ZK_CHEATS_REFUSED for a builtin enhancement entry
+ * (this build carries none). Call it on the runtime's serial queue.
+ */
+int32_t zk_cheats_set_enabled(zk_system_t system, int32_t index, int32_t enabled);
 
 /* ------------------------------- presentation on the app's CAMetalLayer -- */
 
