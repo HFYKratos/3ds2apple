@@ -96,36 +96,39 @@ embedded in the launchers; the licence texts also remain in the repository (and
 inside the Windows launcher payload); each asset's SHA-256 digest is visible on
 the GitHub Release assets page (and can be computed locally).
 
-### Release body: bilingual update highlights
+### Release body: fixed bilingual format
 
-Release notes contain the version plus short bilingual highlights; the usage
-guide is only in the README (link to it, do not paste install steps). Use this
-shape:
+Every Release page uses the same body: a version heading, new features and
+fixes, with each item bilingual. The body describes only the changes in that
+version — no known-issue lists, installation instructions or asset lists (issues
+live in the issue tracker, usage in the README and assets are shown
+automatically by GitHub).
 
 ```markdown
-### 新功能 / New features
+# <version>
+
+### 新功能 / What's new
 - 中文一句话说明新功能
   *One-line English description of the new feature*
 
 ### 修复 / Fixes
 - 中文一句话说明修复
   *One-line English description of the fix*
-
-### 变化 / Changes
-- 中文一句话说明行为或兼容性变化
-  *One-line English description of the change*
 ```
 
-- Write Chinese first as a bold one-liner, then the English line in italics,
-  matching the layout used on the project's release pages.
-- Keep each item to one line; omit an empty section.
-- **The first public release uses the same section format:** put the initial
-  feature list under `新功能 / New features` and a short verification note under
-  `说明 / Notes`; leave out the fixes/changes sections.
-- Do not put rules, restrictions, asset checklists or installation walk-throughs
-  in the Release body; those belong in the repository README.
-- Note unverified platforms honestly (for example "macOS device install not yet
-  verified by the maintainers").
+- Write the Chinese line first, then the English line in italics, matching the
+  project's existing release pages.
+- Keep each item to one line and describe a user-facing change.
+- Always include both `新功能 / What's new` and `修复 / Fixes`; if a section has
+  nothing, write `- 无 / None` rather than dropping it.
+- Do not include a known-issues section, an installation walk-through, an asset
+  checklist or a usage guide in the Release body. Link to the README for usage
+  and installation instead.
+- Note an unverified platform in one factual sentence at most.
+- **README and website updates never contain a per-version update log.** Keep
+  capabilities in the existing Features / Controls / Layouts sections without
+  version headings; version-specific change history belongs on the Release page
+  only.
 
 ### Process
 
