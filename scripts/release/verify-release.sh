@@ -235,7 +235,7 @@ check_win_selftest_log() {
   pass_lines="$(tr -d '\r' < "$log" 2>/dev/null | LC_ALL=C grep -a -c '^\[PASS\]' || true)"
   fail_lines="$(tr -d '\r' < "$log" 2>/dev/null | LC_ALL=C grep -a -c '^\[FAIL\]' || true)"
   warn_lines="$(tr -d '\r' < "$log" 2>/dev/null | LC_ALL=C grep -a -c '^\[WARN\]' || true)"
-  if [ "$pass_lines" -ne 32 ]; then
+  if [ "$pass_lines" -ne 33 ]; then
     problems="$problems 33 PASS lines expected, found $pass_lines;"
   fi
   if [ "$fail_lines" -ne 0 ]; then
