@@ -213,7 +213,7 @@ done
 check "en/zh tables have the run-speed and update-channel keys" \
   bash -c 'for key in "Run speed limit" "Update channel" "Stable" "Beta" "High power use" "Update available"; do grep -Fq -- "\"$key\" =" ios/app/Resources/en.lproj/Localizable.strings && grep -Fq -- "\"$key\" =" ios/app/Resources/zh-Hans.lproj/Localizable.strings || exit 1; done'
 check "the app README documents the new settings categories" \
-  contains ios/app/README.md 'General / System / Gamepad / Graphics / Layout / Sound / Debug / Other'
+  contains ios/app/README.md 'General / System / Gamepad / Cheats / Graphics / Layout / Sound / Debug / Other'
 check "the app README documents the AOT verification rows" contains ios/app/README.md 'AOT verification rows'
 check "the app README documents the Layout performance monitoring group" contains ios/app/README.md 'Performance monitoring'
 check "the app README documents the Reset All Settings action" contains ios/app/README.md 'Reset All Settings'
