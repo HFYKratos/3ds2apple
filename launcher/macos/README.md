@@ -81,10 +81,11 @@ tooltip and the log — there is no manual "check" button).
     named by the catalogue before zipping. The output is roughly GamePack + ROM in
     size.
   Both files are named `<TITLEID>-<English SMDH name><ext>` (no build slug, version
-  or `unsigned` suffix) and a successful export reports only `Exported: <path>`.
+  or `unsigned` suffix) and the success message is just `Exported: <path>`.
   After signing and installing the single-game IPA, the home screen shows the game's
   own localized name (the launcher rewrites `CFBundleDisplayName`/`CFBundleName` and
-  adds `InfoPlist.strings` for each SMDH language; English fallback), the app opens
+  adds `InfoPlist.strings` files for every SMDH `displayNames` language, English
+  always present), the app opens
   straight into the game with no library or home page, a data-validation failure
   shows a dedicated error screen with Try again / Export logs, and the in-game menu
   omits Per-Application Settings and Close game because there is nothing to return to
@@ -139,7 +140,7 @@ About panel. Regenerate it with `bash scripts/make-app-icon.sh`.
 Release builds are universal (arm64 + x86_64). Headless modes used on the build VM:
 
     BIN=build/Build/Products/Release/3ds2apple-launcher.app/Contents/MacOS/3ds2apple-launcher
-    "$BIN" --selfcheck                                    # 207 logic/flow/i18n/shell-runtime checks, exit 0/1
+    "$BIN" --selfcheck                                    # 212 logic/flow/i18n/shell-runtime checks, exit 0/1
     "$BIN" --screenshot-dir screenshots --mock --lang all  # offscreen non-game UI PNGs
 
 `scripts/vm-build.sh` does the whole Release build, the self-checks, the

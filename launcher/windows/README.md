@@ -19,7 +19,7 @@ UI, log and diagnostics export. The current development checkout adds a Deploy
 window-close cleanup (a running deploy is stopped and its 3dsrecomp/clang/lld/
 devpush/plumesign processes are terminated before the launcher exits), and merges the
 two duplicate "not built yet" Library strings into one status line. This checkout compiles cleanly (0 errors, warnings as
-errors) and its **272 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
+errors) and its **278 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
 `--self-test` on Linux/WSL with the embedded payload (33 PASS / 0 FAIL / 0 WARN), and on a
 Windows host natively through `scripts/release/win-selftest.sh` (33 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a Settings page; it is
@@ -202,7 +202,7 @@ header **Import** whose picker accepts decrypted ROMs and `.32a` build packages.
 - **Description and warnings** for the chosen format, including that the file can
   contain the user's own game data and must stay local, and that the IPA is unsigned
   and needs Sideloadly or AltStore.
-- **Result**: a successful export reports only `Exported: <path>`.
+- **Result**: a successful export shows just `Exported: <path>`.
 
 For the `.32a` format the pack CLI writes `<portable data root>/workspace/builds/<TITLEID>-<English SMDH name>.32a`,
 a ZIP with `manifest.json` (schema v1), `GamePack-<TITLEID>.dylib`, `GameInfo.json`,
@@ -220,12 +220,15 @@ with a **Replace existing package** confirmation (unrelated user files in the pa
 directory are kept). The launcher only passes paths and parses the pack CLI JSON; the
 Rust CLI (`3ds2apple-pack builds export|import|list`, see
 [builder/README.md](../../builder/README.md)) is the single writer/validator of the
-format. A successful export reports only `Exported: <path>` (or the exact error) inline in
+format. A successful export shows just `Exported: <path>` (or the exact error) inline in
 the Library and in the launcher log; the UI states that **a .32a can contain game data, so it must stay
 local** (never upload or commit it). Nothing is signed, installed or uploaded. Tests:
 `BuildPackageServiceTests.cs` (argument mapping, JSON parsing, conflict/replace,
-missing CLI, workspace state) and the Rust `builder/pack` tests (`builds::tests` + the
-CLI round trip in `tests/cli_local.rs`).
+missing CLI, workspace state), `ExportNamingAndRomPathTests.cs` (both export names
+with sanitizing, imported-package `RomPath`, embedded GameRom resolution),
+`SingleGameIpaExportTests.cs` (localized IPA app label + `InfoPlist.strings`, path-only
+success copy) and the Rust `builder/pack` tests (`builds::tests` + the CLI round trip
+in `tests/cli_local.rs`, 16/16).
 
 ### Advanced build settings (Settings page)
 
@@ -290,7 +293,7 @@ screen instead of a library:
    `<portable data root>/workspace/exports/<TITLEID>-<English SMDH name>.ipa`.
 
 The output is roughly the GamePack plus the ROM in size (logged with the byte
-counts). A successful export reports only `Exported: <path>`; the export dialog's
+counts). A successful export shows just `Exported: <path>`; the export dialog's
 warning states that the IPA is **unsigned and with your own game data embedded:**
 sign it with Sideloadly or AltStore, keep this file local and never upload or
 share it. Nothing is signed, installed or uploaded. Tests:
@@ -306,7 +309,7 @@ generator, missing cover fallback, template/pack/catalog failures).
   Deploy pipeline + device-aware deploy planner + composed-IPA verifier, IPA composition,
   signing, push, localization catalog, embedded single-file payload, build-compatibility
   cache) / ThreeDsTwoApple.Launcher.Desktop (Avalonia shell) /
-  ThreeDsTwoApple.Launcher.Core.Tests (272 xUnit tests).
+  ThreeDsTwoApple.Launcher.Core.Tests (278 xUnit tests).
 - All external work goes through CLI tools passed as argument arrays (never a
   shell string): 3ds2apple-pack, devpush, the official plumesign.
   The launcher never re-implements ROM parsing, the AOT compile/link,
@@ -344,7 +347,8 @@ generator, missing cover fallback, template/pack/catalog failures).
       Hardware/                           logical/physical cores + RAM probe for the compile line
       src/Launcher.Desktop/             Avalonia UI (Program, App, MainWindow, view model,
                                         Localization/LocalizedText, Assets/app.ico + placeholder)
-      tests/ThreeDsTwoApple.Launcher.Core.Tests/   272 xUnit tests (incl. DeployFlowTests + DeviceDeployTests +
+      tests/ThreeDsTwoApple.Launcher.Core.Tests/   278 xUnit tests (incl. ExportNamingAndRomPathTests +
+                                                  SingleGameIpaExportTests + DeployFlowTests + DeviceDeployTests +
                                                   DeployCancellationTests + ProcessRunnerTests + BuildCacheTests +
                                                   ComposedIpaVerifierTests)
       vendor/impactor/             PINS.json + MIT / MPL-2.0 licence texts + source note
