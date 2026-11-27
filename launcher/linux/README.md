@@ -62,7 +62,11 @@ layout matches `DistributionLayout.LinuxExpectedRelativePaths`:
     Bin/3ds2apple-pack, Bin/devpush
     Bin/3dsrecomp, Bin/llvm/bin/{clang,llvm-ar,ld64.lld}, Bin/llvm/lib/clang/<ver>/include
     tools/winbuild/darwin-stubs, tools/winbuild/zk_gamepack_shim.c, tools/winbuild/include
-    PINS-local-aot.json, licenses/LICENSE, licenses/NOTICE, licenses/THIRD_PARTY.md
+    PINS-local-aot.json
+    licenses/LICENSE, licenses/NOTICE, licenses/THIRD_PARTY.md (the three repository
+      licence texts, copied verbatim; the optional local-AOT toolchain licences are
+      staged as licenses/LLVM-LICENSE.txt and licenses/3dsrecomp-LICENSE.txt and
+      never replace the repository texts)
 
 Run the packaged build with `/path/to/3ds2apple-launcher --self-test`, then start
 the GUI. On a headless machine use `xvfb-run -a ./3ds2apple-launcher`.
@@ -74,6 +78,10 @@ v2.7.3 Linux binary (SHA-256/size in `vendor/PINS.json`; download it from the
 upstream release). It is never committed (`vendor/.gitignore`) and is only
 executed, not modified. Impactor is MIT; the embedded apple-codesign library is
 MPL-2.0 — see `vendor/LICENSE-*.txt` and `vendor/README-source-and-licenses.txt`.
+The local-AOT payload additionally carries the official LLVM licence
+(Apache-2.0 WITH LLVM-exception) as `licenses/LLVM-LICENSE.txt` and the 3dsrecomp
+licence as `licenses/3dsrecomp-LICENSE.txt` when those sources are available;
+`licenses/{LICENSE,NOTICE,THIRD_PARTY.md}` always stay the repository texts.
 The launcher provides no ROM, key, IPA or game asset and never uploads anything.
 
 ## Real-device acceptance

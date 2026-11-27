@@ -160,8 +160,19 @@ if [ "$MAKE_LOCAL_AOT" = "1" ]; then
   cp -a "$REPO/ios/zakuro-ios/include" "$OUTPUT/tools/winbuild/include"
   cp "$RECOMPILER_BIN" "$OUTPUT/Bin/3dsrecomp"
   chmod +x "$OUTPUT/Bin/3dsrecomp" "$OUTPUT/Bin/llvm/bin/"* "$OUTPUT/Bin/llvm/lib/"*.so* 2>/dev/null || true
-  for license in /usr/share/licenses/llvm/LICENSE "$REPO/third_party/3dsrecomp/LICENSE" "$REPO/third_party/3dsrecomp/LICENSE.txt"; do
-    [ -f "$license" ] && cp "$license" "$OUTPUT/licenses/" 2>/dev/null || true
+  # Toolchain licence texts are additional evidence: stage them under distinct
+  # names so the upstream files (both named LICENSE) can never overwrite the
+  # repository licence texts staged in the payload step above. 0.3.0 shipped a
+  # Linux tar whose licenses/LICENSE was the LLVM licence because of exactly
+  # that basename collision; the guard below now makes it a build failure.
+  if [ -f /usr/share/licenses/llvm/LICENSE ]; then
+    cp /usr/share/licenses/llvm/LICENSE "$OUTPUT/licenses/LLVM-LICENSE.txt"
+  fi
+  for license in "$REPO/third_party/3dsrecomp/LICENSE" "$REPO/third_party/3dsrecomp/LICENSE.txt"; do
+    if [ -f "$license" ]; then
+      cp "$license" "$OUTPUT/licenses/3dsrecomp-LICENSE.txt"
+      break
+    fi
   done
   LLVM_VERSION="$( ( "$OUTPUT/Bin/llvm/bin/clang" --version 2>/dev/null || true ) | head -1)"
   {
@@ -174,6 +185,19 @@ if [ "$MAKE_LOCAL_AOT" = "1" ]; then
     echo "}"
   } > "$OUTPUT/PINS-local-aot.json"
   echo "[linux] local AOT: 3dsrecomp + $LLVM_VERSION + Darwin stubs/shim/include"
+fi
+
+# Cheap guard: the three repository licence texts in licenses/ must still be the
+# repository files after every staging step (payload + optional local-AOT
+# toolchain licences), so a future basename collision fails the build instead of
+# shipping a wrong license text. Only checked when the payload staged them.
+if [ "$MAKE_PAYLOAD" = "1" ]; then
+  for text in LICENSE NOTICE THIRD_PARTY.md; do
+    if ! cmp -s "$REPO/$text" "$OUTPUT/licenses/$text"; then
+      echo "error: licenses/$text no longer matches the repository $text (a toolchain licence overwrote it)" >&2
+      exit 2
+    fi
+  done
 fi
 
 BIN="$OUTPUT/3ds2apple-launcher"
