@@ -61,7 +61,9 @@ timeout="$(wda_validate_timeout "$timeout")"
 wda_require_pmd3
 
 if ! output="$(wda_pmd3 developer wda status --port "$port" --timeout "$timeout" 2>&1)"; then
-  [ -n "$output" ] && printf '%s\n' "$output" >&2
+  if [ -n "$output" ]; then
+    printf '%s\n' "$output" >&2
+  fi
   wda_device_hint "$port"
   wda_fail "WDA status failed on device port $port"
 fi

@@ -95,9 +95,13 @@ fi
 
 if ! output="$(wda_pmd3 developer wda swipe "$start_x" "$start_y" "$end_x" "$end_y" \
   --duration "$duration" --port "$port" --timeout "$timeout" 2>&1)"; then
-  [ -n "$output" ] && printf '%s\n' "$output" >&2
+  if [ -n "$output" ]; then
+    printf '%s\n' "$output" >&2
+  fi
   wda_device_hint "$port"
   wda_fail "WDA swipe ($start_x,$start_y) -> ($end_x,$end_y) failed on device port $port"
 fi
 wda_info "swipe: ($start_x,$start_y) -> ($end_x,$end_y) duration ${duration}s"
-[ -n "$output" ] && printf '%s\n' "$output"
+if [ -n "$output" ]; then
+  printf '%s\n' "$output"
+fi

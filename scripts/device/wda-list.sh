@@ -87,7 +87,9 @@ if [ "$with_rect" -eq 1 ]; then arguments+=(--with-rect); fi
 if [ -n "$types" ]; then arguments+=(--types "$types"); fi
 
 if ! output="$(wda_pmd3 "${arguments[@]}" 2>&1)"; then
-  [ -n "$output" ] && printf '%s\n' "$output" >&2
+  if [ -n "$output" ]; then
+    printf '%s\n' "$output" >&2
+  fi
   wda_device_hint "$port"
   wda_fail "WDA element list failed on device port $port"
 fi

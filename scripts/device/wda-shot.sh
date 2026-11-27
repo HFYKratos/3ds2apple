@@ -81,11 +81,15 @@ mkdir -p "$(dirname "$out")" || wda_die "cannot create the screenshot directory:
 wda_require_pmd3
 
 if ! output="$(wda_pmd3 developer wda screenshot "$out" --port "$port" --timeout "$timeout" 2>&1)"; then
-  [ -n "$output" ] && printf '%s\n' "$output" >&2
+  if [ -n "$output" ]; then
+    printf '%s\n' "$output" >&2
+  fi
   wda_device_hint "$port"
   wda_fail "WDA screenshot failed on device port $port"
 fi
 [ -s "$out" ] || wda_fail "WDA reported success but no screenshot file was written: $out"
 bytes="$(wc -c <"$out" | tr -d ' ')"
 wda_info "screenshot: $out ($bytes bytes)"
-[ -n "$output" ] && printf '%s\n' "$output"
+if [ -n "$output" ]; then
+  printf '%s\n' "$output"
+fi
