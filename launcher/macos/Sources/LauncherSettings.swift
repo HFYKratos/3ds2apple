@@ -40,6 +40,10 @@ final class LauncherSettings: ObservableObject {
     @Published var advancedAotOptLevel: String
     @Published var advancedAotLto: Bool
     @Published var advancedAotFastMath: Bool
+    /// RomPath overrides for games imported from a .32a (persisted): the entry's
+    /// RomPath is the imported package path, and the embedded GameRom is resolved
+    /// from it for the IPA export and the Documents push.
+    @Published var importedRomPaths: [String: String]
     /// Human summary when the previous <checkout>/out workspace was adopted on
     /// this launch (nil when there was nothing to migrate).
     @Published var migrationSummary: String?
@@ -71,6 +75,20 @@ final class LauncherSettings: ObservableObject {
         advancedAotOptLevel = persist ? defaults.string(forKey: Keys.aotOptLevel) ?? "O2" : "O2"
         advancedAotLto = persist ? defaults.bool(forKey: Keys.aotLto) : false
         advancedAotFastMath = persist ? defaults.bool(forKey: Keys.aotFastMath) : false
+        importedRomPaths = persist
+            ? (defaults.dictionary(forKey: Keys.importedRomPaths) as? [String: String] ?? [:])
+            : [:]
+    }
+
+    /// Recorded .32a path for a game imported from a build package.
+    func importedRomPath(for titleID: String) -> String? {
+        importedRomPaths[titleID.uppercased()]
+    }
+
+    /// Persist the imported .32a path for a game (the card shows it and the
+    /// single-game IPA / deploy resolve the embedded GameRom from it).
+    func setImportedRomPath(_ path: String, for titleID: String) {
+        importedRomPaths[titleID.uppercased()] = path
     }
 
     /// Current advanced codegen options (normalised to a supported level).
@@ -104,6 +122,7 @@ final class LauncherSettings: ObservableObject {
         defaults.set(advancedAotOptLevel, forKey: Keys.aotOptLevel)
         defaults.set(advancedAotLto, forKey: Keys.aotLto)
         defaults.set(advancedAotFastMath, forKey: Keys.aotFastMath)
+        defaults.set(importedRomPaths, forKey: Keys.importedRomPaths)
     }
 
     // MARK: - Portable data root paths
@@ -172,6 +191,7 @@ final class LauncherSettings: ObservableObject {
         static let aotOptLevel = "zl.aotOptLevel"
         static let aotLto = "zl.aotLto"
         static let aotFastMath = "zl.aotFastMath"
+    static let importedRomPaths = "zl.libraryImportedRomPaths"
     }
 }
 

@@ -750,7 +750,7 @@ public sealed class MainViewModel : ObservableObject
 
     private string DefaultIpaDestination(GameRow row) =>
         Path.Combine(_services.Workspace.Root, SingleGameIpaExporter.ExportsDirectoryName,
-            SingleGameIpaExporter.OutputFileName(row.Entry.DisplayName, row.TitleID, LauncherInfo.Version));
+            SingleGameIpaExporter.OutputFileName(row.Entry.DisplayName, row.TitleID));
 
     private void RaiseExportDialogProperties()
     {
@@ -1147,11 +1147,13 @@ public sealed class MainViewModel : ObservableObject
         return (Loc.T("library.buildStatus.built", label), true);
     }
 
-    private static bool RomFingerprintChanged(LibraryEntry entry, BuildArtifact artifact)
+    private bool RomFingerprintChanged(LibraryEntry entry, BuildArtifact artifact)
     {
         try
         {
-            var info = new FileInfo(entry.RomPath);
+            // .32a-imported entries record the package path; compare the embedded GameRom.
+            var rom = GameRomResolver.Resolve(entry, RomCacheDirectory, out _);
+            var info = new FileInfo(rom?.Path ?? entry.RomPath);
             if (!info.Exists)
             {
                 return true;
@@ -1260,10 +1262,7 @@ public sealed class MainViewModel : ObservableObject
                 return;
             }
             var package = outcome.Packages[0];
-            var rom = package.RomIncluded
-                ? Loc.T("library.buildPackage.withRom")
-                : Loc.T("library.buildPackage.withoutRom");
-            SetBuildPackageStatus(Loc.T("library.buildPackage.exported", package.Path, rom), warning: !package.RomIncluded);
+            SetBuildPackageStatus(Loc.T("library.buildPackage.exported", package.Path), warning: false);
             Log("exported build package " + package.TitleID + " -> " + package.Path
                 + " (" + package.Bytes + " bytes, sha256 " + package.Sha256
                 + ", rom " + (package.RomIncluded ? "included" : "not included") + ")");
@@ -1333,6 +1332,15 @@ public sealed class MainViewModel : ObservableObject
             }
             _pendingImportReplacePath = null;
             var package = outcome.Package!;
+            // The .32a replaces the standalone ROM for this entry: RomPath records the
+            // imported package (persisted), and every ROM consumer resolves the
+            // package's GameRom copy through GameRomResolver.
+            if (_services.Workspace.Find(package.TitleID) is { } importedEntry)
+            {
+                importedEntry.RomPath = Path.GetFullPath(path);
+                _services.Workspace.Upsert(importedEntry);
+                _services.Workspace.SaveState();
+            }
             SetBuildPackageStatus(Loc.T("library.buildPackage.imported", package.DisplayName, package.PackageDir), warning: false);
             foreach (var warning in outcome.Warnings)
             {
@@ -1381,10 +1389,11 @@ public sealed class MainViewModel : ObservableObject
             SetBuildPackageStatus(Loc.T("library.ipaExportFailed", Loc.T("library.ipaLibraryUnavailable")), warning: true);
             return;
         }
-        var romPath = ResolveIpaRomPath(row);
+        var romPath = ResolveIpaRomPath(row, out var romError);
         if (string.IsNullOrWhiteSpace(romPath) || !File.Exists(romPath))
         {
-            SetBuildPackageStatus(Loc.T("library.ipaNeedsRom"), warning: true);
+            SetBuildPackageStatus(Loc.T("library.ipaExportFailed", romError ?? Loc.T("library.ipaNeedsRom")), warning: true);
+            Log("single-game IPA: " + (romError ?? "the game's ROM could not be resolved"));
             return;
         }
         SetBusy(true, Loc.T("status.exportIpa"));
@@ -1395,7 +1404,10 @@ public sealed class MainViewModel : ObservableObject
                 ? Path.Combine(_services.Workspace.Root, SingleGameIpaExporter.ExportsDirectoryName)
                 : Path.GetDirectoryName(Path.GetFullPath(savePath))
                     ?? Path.Combine(_services.Workspace.Root, SingleGameIpaExporter.ExportsDirectoryName);
-            var outputFileName = string.IsNullOrWhiteSpace(savePath) ? null : Path.GetFileName(savePath);
+            // TITLE_ID-English name.ipa; a user-typed save file name is kept verbatim.
+            var outputFileName = string.IsNullOrWhiteSpace(savePath)
+                ? SingleGameIpaExporter.OutputFileName(row.Entry.DisplayName, row.TitleID)
+                : Path.GetFileName(savePath);
             var exporter = new SingleGameIpaExporter(packCli);
             var pack = new ComposedPack(row.TitleID, row.Entry.DisplayName, row.Entry.ProductCode, 1, packPath);
             var result = await exporter.ExportAsync(
@@ -1406,6 +1418,7 @@ public sealed class MainViewModel : ObservableObject
                 LauncherInfo.Version,
                 outputDirectory,
                 outputFileName,
+                displayNames: row.Entry.DisplayNames,
                 line => Log("[ipa] " + line)).ConfigureAwait(true);
             if (!result.Ok)
             {
@@ -1414,9 +1427,7 @@ public sealed class MainViewModel : ObservableObject
                 StatusText = Loc.T("status.ipaExportFailed");
                 return;
             }
-            SetBuildPackageStatus(
-                Loc.T("library.ipaExported", result.IpaPath!, result.Bytes + " bytes", Loc.T("library.ipaUnsignedHint")),
-                warning: false);
+            SetBuildPackageStatus(Loc.T("library.ipaExported", result.IpaPath!), warning: false);
             Log("exported unsigned single-game IPA " + result.IpaPath + " (" + result.Bytes + " bytes, sha256 " + result.Sha256
                 + ", icons replaced " + result.ReplacedIconCount + ", embedded game data " + result.RomRelativePath
                 + " " + result.RomBytes + " bytes) - contains the user's own game data; sign it yourself (Sideloadly/AltStore), keep it local, never upload it");
@@ -1438,27 +1449,18 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>ROM used for the single-game IPA: the library path, else the package's GameRom copy.</summary>
-    private static string? ResolveIpaRomPath(GameRow row)
+    /// <summary>Launcher-owned cache for ROMs pulled out of imported .32a files.</summary>
+    private string RomCacheDirectory => Path.Combine(_services.Workspace.WorkDirectory, "rom-cache");
+
+    /// <summary>
+    /// ROM used for the single-game IPA: the original ROM path, else the package's
+    /// GameRom copy. A game imported from a .32a has RomPath = the package, so the
+    /// resolver reads GameRom.&lt;ext&gt; from the imported package (or the .32a ZIP).
+    /// </summary>
+    private string? ResolveIpaRomPath(GameRow row, out string? error)
     {
-        if (!string.IsNullOrWhiteSpace(row.Entry.RomPath) && File.Exists(row.Entry.RomPath))
-        {
-            return row.Entry.RomPath;
-        }
-        var packageDirectory = row.Entry.PackageDir;
-        if (string.IsNullOrWhiteSpace(packageDirectory))
-        {
-            return null;
-        }
-        foreach (var extension in SingleGameIpaExporter.RomExtensions)
-        {
-            var candidate = Path.Combine(packageDirectory, "GameRom." + extension);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-        return null;
+        var resolved = GameRomResolver.Resolve(row.Entry, RomCacheDirectory, out error);
+        return resolved?.Path;
     }
 
     /// <summary>Developer-only (`--ui-smoke`): deterministic Library rows for UI screenshots.</summary>
@@ -2171,16 +2173,12 @@ public sealed class MainViewModel : ObservableObject
     };
 
     /// <summary>Local ROM size for the "n of m current" line (cheap; never reads the file).</summary>
-    private static long? LocalRomBytes(LibraryEntry entry)
+    private long? LocalRomBytes(LibraryEntry entry)
     {
-        if (string.IsNullOrWhiteSpace(entry.RomPath))
-        {
-            return null;
-        }
         try
         {
-            var info = new FileInfo(entry.RomPath);
-            return info.Exists ? info.Length : null;
+            // For a .32a-imported game this is the embedded GameRom size, not the archive.
+            return GameRomResolver.Resolve(entry, RomCacheDirectory, out _)?.Bytes;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {

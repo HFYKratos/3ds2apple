@@ -494,12 +494,11 @@ final class AppModel: ObservableObject {
         pack.outRoot.appendingPathComponent("exports", isDirectory: true).path
     }
 
-    /// Default full IPA path for the export dialog (workspace/exports/<slug>-<version>-unsigned.ipa).
+    /// Default full IPA path for the export dialog (workspace/exports/TITLE_ID-English name.ipa).
     func defaultIpaPath(for game: GameEntry) -> String {
         let name = SingleGameIpaExporter.outputFileName(
             displayName: game.displayName,
-            titleID: game.titleID,
-            version: LauncherInfo.version
+            titleID: game.titleID
         )
         return exportsDirectory + "/" + name
     }
@@ -622,8 +621,7 @@ final class AppModel: ObservableObject {
         appendLog(.command, "build", "builds export --title-id " + game.titleID + " --output-dir " + directory + " --json")
         do {
             let package = try await pack.exportBuildPackage(titleID: game.titleID, outputDirectory: directory)
-            let rom = package.romIncluded ? strings.buildPackageWithRom : strings.buildPackageWithoutRom
-            setBuildPackageStatus(strings.buildPackageExported(package.path, rom), warning: !package.romIncluded)
+            setBuildPackageStatus(strings.buildPackageExported(package.path), warning: false)
             appendLog(.success, "build", "exported .32a for " + package.titleID + " -> " + package.path
                 + " (" + FileProbe.formatBytes(package.bytes) + ", sha256 " + package.sha256
                 + ", rom " + (package.romIncluded ? "included" : "not included") + ")")
@@ -658,6 +656,25 @@ final class AppModel: ObservableObject {
         do {
             let package = try await pack.importBuildPackage(path: path, replace: replace)
             pendingImportReplacePath = nil
+            // The .32a replaces the standalone ROM for this game: store the package
+            // path (persisted) and let GameRomResolver read the embedded GameRom.
+            settings.setImportedRomPath(path, for: package.titleID)
+            settings.save()
+            let packageDirectory = pack.outRoot.appendingPathComponent("packages/" + package.titleID).path
+            let resolved = GameRomResolver.resolve(
+                romPath: path,
+                packageDirectory: packageDirectory,
+                cacheDirectory: pack.outRoot.appendingPathComponent("rom-cache").path
+            )
+            updateGame(package.titleID) { entry in
+                entry.romPath = path
+                if resolved.error == nil, let bytes = FileProbe.size(resolved.path), bytes > 0 {
+                    entry.romBytes = bytes
+                }
+            }
+            if game(id: package.titleID) == nil {
+                await restoreLibrary()
+            }
             setBuildPackageStatus(strings.buildPackageImported(package.displayName, package.packageDir), warning: false)
             for warning in package.warnings {
                 appendLog(.warn, "build", warning)
@@ -699,13 +716,21 @@ final class AppModel: ObservableObject {
             setBuildPackageStatus(strings.buildPackageNeedsPack, warning: true)
             return
         }
+        // A .32a-imported game stores the package in romPath: resolve the embedded
+        // GameRom (imported package copy, then the archive itself) before exporting.
+        let packageDirectory = pack.outRoot.appendingPathComponent("packages/" + game.titleID).path
+        let resolved = GameRomResolver.resolve(
+            romPath: game.romPath,
+            packageDirectory: packageDirectory,
+            cacheDirectory: pack.outRoot.appendingPathComponent("rom-cache").path
+        )
         let romSource: String
-        if !game.romPath.isEmpty, FileProbe.exists(game.romPath) {
-            romSource = game.romPath
+        if resolved.error == nil, !resolved.path.isEmpty {
+            romSource = resolved.path
         } else if let staged = game.romDataPath, FileProbe.exists(staged) {
             romSource = staged
         } else {
-            setBuildPackageStatus(strings.ipaNeedsRom, warning: true)
+            setBuildPackageStatus(strings.ipaExportFailed(resolved.error ?? strings.ipaNeedsRom), warning: true)
             return
         }
         guard beginBusy() else { return }
@@ -732,6 +757,7 @@ final class AppModel: ObservableObject {
                 packPath: packPath,
                 titleID: titleID,
                 displayName: game.displayName,
+                displayNames: game.displayNames,
                 coverPath: game.coverPath,
                 romPath: romSource,
                 version: LauncherInfo.version,
@@ -744,10 +770,7 @@ final class AppModel: ObservableObject {
                     Task { @MainActor in self?.appendLog(level, "ipa", line) }
                 }
             )
-            setBuildPackageStatus(
-                strings.ipaExported(result.ipaPath, FileProbe.formatBytes(result.bytes), strings.ipaUnsignedHint),
-                warning: false
-            )
+            setBuildPackageStatus(strings.ipaExported(result.ipaPath), warning: false)
             appendLog(.success, "ipa", "exported unsigned single-game IPA " + result.ipaPath
                 + " (" + FileProbe.formatBytes(result.bytes) + ", sha256 " + result.sha256
                 + ", icons replaced " + String(result.replacedIcons)
@@ -920,7 +943,7 @@ final class AppModel: ObservableObject {
             packageDirectory: packageDirectory,
             coverPath: package.coverPath ?? manifest?.coverPath
         )
-        let romPath = manifest?.romPath ?? ""
+        let romPath = settings.importedRomPath(for: package.titleID) ?? manifest?.romPath ?? ""
         let extensionName = (romPath as NSString).pathExtension.lowercased()
         let container: String
         switch extensionName {
@@ -1055,13 +1078,29 @@ final class AppModel: ObservableObject {
         if let staged = game.romDataPath, FileProbe.exists(staged), (FileProbe.size(staged) ?? 0) > 0 {
             return
         }
+        let packageDirectory = pack.outRoot.appendingPathComponent("packages/" + game.titleID).path
+        let resolved = GameRomResolver.resolve(
+            romPath: game.romPath,
+            packageDirectory: packageDirectory,
+            cacheDirectory: pack.outRoot.appendingPathComponent("rom-cache").path
+        )
+        guard resolved.error == nil, !resolved.path.isEmpty else {
+            throw LauncherFailure(
+                code: "rom_missing",
+                message: resolved.error ?? "The game's ROM is missing.",
+                hint: "Import the ROM again (or re-import a .32a that contains game data) and retry.",
+                detail: game.romPath,
+                exitCode: nil
+            )
+        }
+        let extensionName = ((resolved.path as NSString).pathExtension).lowercased()
         let rom = DetectedROM(
-            path: game.romPath,
+            path: resolved.path,
             titleID: game.titleID,
             displayName: game.displayName,
             productCode: game.productCode,
-            container: game.container,
-            bytes: game.romBytes,
+            container: (extensionName == "cxi" || extensionName == "ncch") ? "ncch" : "ncsd",
+            bytes: FileProbe.size(resolved.path) ?? game.romBytes,
             contentBytes: nil,
             titleVersion: nil
         )

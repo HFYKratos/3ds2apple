@@ -116,8 +116,6 @@ struct LauncherStrings {
     var importUnsupportedFormat: String
     var buildPackageReplace: String
     var buildPackageNeedsPack: String
-    var buildPackageWithRom: String
-    var buildPackageWithoutRom: String
     var buildPackageExportedFormat: String
     var buildPackageImportedFormat: String
     var buildPackageExportFailedFormat: String
@@ -140,7 +138,6 @@ struct LauncherStrings {
     // Unsigned single-game IPA export (result/log strings)
     var ipaExportedFormat: String
     var ipaExportFailedFormat: String
-    var ipaUnsignedHint: String
     var ipaNeedsRom: String
     var emptyLibraryTitle: String
     var emptyLibraryMessage: String
@@ -355,15 +352,7 @@ struct LauncherStrings {
             "Build the GamePack first: Export becomes available once the GamePack exists.",
             "请先构建 GamePack：生成后才能导出。"
         )
-        buildPackageWithRom = t(
-            "(includes game data; keep it local, never upload or commit it)",
-            "（包含游戏数据——仅保留在本地，切勿上传或提交）"
-        )
-        buildPackageWithoutRom = t(
-            "(no game data; deploying it needs the original ROM)",
-            "（不含游戏数据——部署时需要原始 ROM）"
-        )
-        buildPackageExportedFormat = t("Exported %@  %@", "已导出 %@  %@")
+        buildPackageExportedFormat = t("Exported: %@", "已导出：%@")
         buildPackageImportedFormat = t("Imported %@ into %@", "已导入 %@ 到 %@")
         buildPackageExportFailedFormat = t("Export failed: %@", "导出失败：%@")
         buildPackageImportFailedFormat = t("Import failed: %@", "导入失败：%@")
@@ -376,8 +365,8 @@ struct LauncherStrings {
         exportFormatBuildPackage = t(".32a build package", ".32a 构建包")
         exportFormatIpa = t("Unsigned single-game IPA", "未签名单游戏 IPA")
         exportDetailBuildPackage = t(
-            "Writes <slug>.32a into the selected folder (portable build package: GamePack + GameInfo + cover; includes game data when it can be found).",
-            "把 <slug>.32a 写入所选文件夹（便携构建包：GamePack + GameInfo + 封面；能找到游戏数据时一并包含）。"
+            "Writes <TITLE_ID>-<English game name>.32a into the selected folder (portable build package: GamePack + GameInfo + cover; includes game data when it can be found).",
+            "把 <TITLE_ID>-<英文游戏名>.32a 写入所选文件夹（便携构建包：GamePack + GameInfo + 封面；能找到游戏数据时一并包含）。"
         )
         exportDetailIpa = t(
             "Composes an unsigned single-game IPA with this game's AOT pack, the shell, the app icons and your own game data embedded, so it opens directly after signing/installing.",
@@ -396,12 +385,8 @@ struct LauncherStrings {
         exportBrowse = t("Choose…", "选择…")
         exportConfirm = t("Export", "导出")
         exportCancel = t("Cancel", "取消")
-        ipaExportedFormat = t("Exported %@ (%@)  %@", "已导出 %@（%@）  %@")
+        ipaExportedFormat = t("Exported: %@", "已导出：%@")
         ipaExportFailedFormat = t("IPA export failed: %@", "IPA 导出失败：%@")
-        ipaUnsignedHint = t(
-            "Unsigned IPA with your own game data embedded: sign it with Sideloadly or AltStore, keep this file local and never upload or share it.",
-            "未签名 IPA（已内嵌你自己的游戏数据）：安装前请用 Sideloadly 或 AltStore 自签名；文件仅保存在本地，切勿上传或外传。"
-        )
         ipaNeedsRom = t(
             "The game's ROM is required: the single-game IPA embeds the game data. Re-import the ROM (or restore its file) and export again.",
             "需要该游戏的 ROM：单游戏 IPA 会内嵌游戏数据。请重新导入 ROM（或恢复原文件）后再导出。"
@@ -662,8 +647,8 @@ struct LauncherStrings {
 
     // MARK: - Portable .32a build packages
 
-    func buildPackageExported(_ path: String, _ rom: String) -> String {
-        String(format: buildPackageExportedFormat, path, rom)
+    func buildPackageExported(_ path: String) -> String {
+        String(format: buildPackageExportedFormat, path)
     }
 
     func buildPackageImported(_ name: String, _ packageDir: String) -> String {
@@ -682,8 +667,8 @@ struct LauncherStrings {
         String(format: buildPackageConflictFormat, message)
     }
 
-    func ipaExported(_ path: String, _ size: String, _ hint: String) -> String {
-        String(format: ipaExportedFormat, path, size, hint)
+    func ipaExported(_ path: String) -> String {
+        String(format: ipaExportedFormat, path)
     }
 
     func ipaExportFailed(_ message: String) -> String {
