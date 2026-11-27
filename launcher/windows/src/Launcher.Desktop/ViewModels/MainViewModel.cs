@@ -1306,10 +1306,12 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
         var service = _services.CreateBuildPackageService();
+        var compatibility = _buildCompatibility ?? await _services.BuildCompatibility.ResolveAsync().ConfigureAwait(true);
+        _buildCompatibility = compatibility;
         SetBusy(true, Loc.T("status.buildPackageImport"));
         try
         {
-            var outcome = await service.ImportAsync(path, replace).ConfigureAwait(true);
+            var outcome = await service.ImportAsync(path, replace, compatibility).ConfigureAwait(true);
             if (!outcome.Ok)
             {
                 var message = outcome.Error ?? "unknown error";
@@ -1338,7 +1340,18 @@ public sealed class MainViewModel : ObservableObject
                 _services.Workspace.Upsert(importedEntry);
                 _services.Workspace.SaveState();
             }
-            SetBuildPackageStatus(Loc.T("library.buildPackage.imported", package.DisplayName, package.PackageDir), warning: false);
+            var cacheNote = outcome.BuildCacheStatus switch
+            {
+                BuildCacheImportStatus.Recorded => Loc.T("library.buildPackage.cacheRecorded"),
+                BuildCacheImportStatus.NoGameData => Loc.T("library.buildPackage.cacheNoRom"),
+                BuildCacheImportStatus.Mismatch => Loc.T("library.buildPackage.cacheMismatch"),
+                _ => Loc.T("library.buildPackage.cacheMissing"),
+            };
+            SetBuildPackageStatus(
+                Loc.T("library.buildPackage.imported", package.DisplayName, package.PackageDir) + " " + cacheNote,
+                warning: outcome.BuildCacheStatus != BuildCacheImportStatus.Recorded);
+            Log("build cache after .32a import: " + cacheNote
+                + (string.IsNullOrWhiteSpace(outcome.BuildCacheDetail) ? string.Empty : " (" + outcome.BuildCacheDetail + ")"));
             foreach (var warning in outcome.Warnings)
             {
                 Log("build package: " + warning);
