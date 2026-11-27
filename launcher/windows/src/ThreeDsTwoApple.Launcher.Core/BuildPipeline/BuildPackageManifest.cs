@@ -222,10 +222,10 @@ public static class BuildPackageManifestReader
             detail = "the package GamePack ABI " + manifest.PackAbiVersion + " differs from this launcher (" + current.GamePackAbi + ")";
             return false;
         }
-        // Linux cannot recompile AOT GamePacks locally (P2), so a package built on
-        // Windows/macOS is the only source of a real GamePack. Its recorded toolchain
-        // is therefore not comparable to this host's (missing) Windows toolchain; trust
-        // the package's ABI + embedded ROM and record the artifact under the current
+        // Linux builds GamePacks locally with its bundled toolchain, but an imported
+        // .32a may have been produced on Windows/macOS with different toolchain versions.
+        // The package's recorded toolchain is therefore not comparable to this host's;
+        // trust the package ABI + embedded ROM and record the artifact under the current
         // (stable) Linux recipe marker so BuildCachePolicy reuses it on Deploy.
         if (!LauncherPlatform.IsLinux)
         {

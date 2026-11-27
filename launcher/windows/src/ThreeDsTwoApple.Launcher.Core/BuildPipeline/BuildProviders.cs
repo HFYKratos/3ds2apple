@@ -63,31 +63,6 @@ public interface IPackBuildProvider
         CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// Linux P1/P2 placeholder: local AOT GamePack compilation is not available yet. It
-/// never produces a placeholder pack; games that already have a cached/imported real
-/// GamePack deploy normally (the orchestrator reuses them and never calls this).
-/// </summary>
-public sealed class LinuxBuildUnavailableProvider : IPackBuildProvider
-{
-    public string Name => "Linux local build (not available in P1/P2)";
-
-    public bool Installable => false;
-
-    public Task<PackBuildOutcome> BuildAsync(
-        PackBuildRequest request,
-        IProgress<BuildProgress>? progress,
-        Action<string>? log,
-        CancellationToken cancellationToken = default)
-    {
-        log?.Invoke("Linux local AOT compilation is not available yet (P2).");
-        progress?.Report(new BuildProgress("unsupported", null, "Linux local AOT build is not available yet"));
-        return Task.FromResult(PackBuildOutcome.Failure(
-            "linux_build_unsupported",
-            "Local AOT GamePack compilation is not available on Linux yet (P2). Import an already-built .32a that contains the GamePack (Windows/macOS) — deploy and signing work without recompiling."));
-    }
-}
-
 /// <summary>Builds a deterministic placeholder pack locally (preview; never installable).</summary>
 public sealed class PreviewBuildProvider : IPackBuildProvider
 {

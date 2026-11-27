@@ -76,6 +76,24 @@ public sealed class LocalizationTests
     }
 
     [Fact]
+    public void LinuxLocalAotTextsDescribeTheCurrentCapability()
+    {
+        foreach (var tag in new[] { LanguageCatalog.EnglishTag, LanguageCatalog.ChineseSimplifiedTag })
+        {
+            var subtitle = LanguageCatalog.Text(tag, "deploy.subtitleLinux");
+            var about = LanguageCatalog.Text(tag, "settings.aboutBodyLinux");
+            Assert.DoesNotContain("P2", subtitle);
+            Assert.DoesNotContain("P2", about);
+            Assert.DoesNotContain("not available", about.ToLowerInvariant());
+            Assert.DoesNotContain("暂不可用", about);
+            Assert.Contains("3dsrecomp", subtitle);
+            Assert.Contains("3dsrecomp", about);
+            Assert.Contains(".32a", subtitle);
+            Assert.Contains(".32a", about);
+        }
+    }
+
+    [Fact]
     public void UnknownKeyFallsBackToTheKeyItself()
     {
         Assert.Equal("no.such.key", LanguageCatalog.Text(LanguageCatalog.EnglishTag, "no.such.key"));

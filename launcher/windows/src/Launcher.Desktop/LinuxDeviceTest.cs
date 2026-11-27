@@ -206,7 +206,7 @@ internal static class LinuxDeviceTest
         }
     }
 
-    /// <summary>P2: build a real GamePack from a user ROM with the Linux payload's own toolchain, then export a .32a.</summary>
+    /// <summary>AOT: build a real GamePack from a user ROM with the Linux payload's own toolchain, then export a .32a.</summary>
     private static async Task<int> RunAotBuildAsync(
         LauncherServices services,
         string romPath,
