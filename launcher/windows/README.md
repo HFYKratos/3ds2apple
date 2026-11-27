@@ -113,6 +113,12 @@ travels as an internal devpush/plumesign command argument.
      and there is no silent fallback — a missing toolchain is one actionable error.
    - compose one ROM-free app IPA from the pinned shell template + all selected packs +
      a schema-2 GameCatalog.json, and **verify the packs + catalogue before signing**.
+     The composed catalogue never carries a bundled-ROM `romFile` (nor
+     `romSha256`/`romBytes`), even for packs restored from an imported `.32a`
+     that embeds its GameRom: that provenance only describes the build package.
+     The game data is pushed to Documents/Games, and iOS treats a catalogue
+     `romFile` as a required `Roms/<TITLEID>.<ext>` inside the app bundle, so
+     keeping it would make the card show "game data missing" and block launch.
    - sign and install the whole IPA with the bundled official Impactor v2.7.3 + plumesign
      (unmodified, SHA-256 pinned, MIT + MPL-2.0 licences preserved).
    - push each selected GameRom.cci + optional cover.png + GameInfo.json (last) into

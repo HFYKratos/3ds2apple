@@ -43,8 +43,13 @@ public sealed class IpaComposerTests
         return ipaPath;
     }
 
-    /// <summary>Fake pack CLI: writes the catalogue the real Rust CLI would write.</summary>
-    private static FakeProcessRunner CatalogRunner(List<string>? seenTitleIds = null)
+    /// <summary>
+    /// Fake pack CLI: writes the catalogue the real Rust CLI would write. With
+    /// <paramref name="bundledRomFields"/> it also emits the legacy
+    /// romFile/romSha256/romBytes that a package imported from a .32a with its
+    /// GameRom carries in GameInfo.json.
+    /// </summary>
+    private static FakeProcessRunner CatalogRunner(List<string>? seenTitleIds = null, bool bundledRomFields = false)
     {
         return new FakeProcessRunner(request =>
         {
@@ -62,7 +67,12 @@ public sealed class IpaComposerTests
             if (catalogOut is not null)
             {
                 var games = string.Join(",", titleIds.Select(id =>
-                    "{\"titleID\":\"" + id + "\",\"displayName\":\"Demo\",\"productCode\":\"CTR-P-DEMO\",\"aot\":true,\"aotVersion\":1,\"packFile\":\"Frameworks/GamePack-" + id + ".dylib\",\"packABIVersion\":1}"));
+                {
+                    var romFields = bundledRomFields
+                        ? ",\"romFile\":\"Roms/" + id + ".cci\",\"romSha256\":\"" + new string('a', 64) + "\",\"romBytes\":16900"
+                        : string.Empty;
+                    return "{\"titleID\":\"" + id + "\",\"displayName\":\"Demo\",\"productCode\":\"CTR-P-DEMO\",\"aot\":true,\"aotVersion\":1,\"packFile\":\"Frameworks/GamePack-" + id + ".dylib\",\"packABIVersion\":1" + romFields + "}";
+                }));
                 File.WriteAllText(catalogOut, "{\"schemaVersion\":2,\"games\":[" + games + "]}");
             }
             return new ProcessResult(0, string.Empty, string.Empty, false, true);
@@ -113,6 +123,72 @@ public sealed class IpaComposerTests
         Assert.Equal("Frameworks/GamePack-" + TitleId + ".dylib", game.GetProperty("packFile").GetString());
         Assert.Equal("zk_gamepack_register", game.GetProperty("registrationSymbol").GetString());
         Assert.Equal(1, game.GetProperty("packABIVersion").GetInt32());
+    }
+
+    /// <summary>
+    /// Regression for the .32a-import defect: a package whose GameInfo.json records
+    /// romFile (because the build package embedded its GameRom) makes the pack CLI
+    /// emit a catalogue romFile. The launcher-first shell is ROM-free (the data is
+    /// pushed to Documents/Games), so the composed catalogue must drop it - iOS
+    /// AOTPackageLoader treats a catalogue romFile as a required bundled
+    /// Roms/&lt;TITLEID&gt;.&lt;ext&gt; and otherwise refuses to launch the game.
+    /// </summary>
+    [Fact]
+    public async Task ComposedCatalogDropsBundledRomFieldsFromImportedPackages()
+    {
+        using var temp = new TempDir();
+        var template = BuildTemplate(temp);
+        var packPath = temp.Bytes("GamePack.dylib", MachOMagic);
+        var composer = new IpaComposer(new PackCli(
+            CatalogRunner(bundledRomFields: true),
+            "pack",
+            Path.Combine(temp.Path, "out")));
+        var composed = await composer.ComposeAsync(template, new[]
+        {
+            new ComposedPack(TitleId, "Demo", "CTR-P-DEMO", 1, packPath),
+        }, Path.Combine(temp.Path, "composed"));
+
+        using var output = ZipFile.OpenRead(composed.IpaPath);
+        var catalogEntry = output.GetEntry("Payload/demo.app/GameCatalog.json");
+        Assert.NotNull(catalogEntry);
+        string catalogJson;
+        using (var reader = new StreamReader(catalogEntry!.Open()))
+        {
+            catalogJson = reader.ReadToEnd();
+        }
+        Assert.DoesNotContain("romFile", catalogJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("romSha256", catalogJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("romBytes", catalogJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("Roms/", catalogJson, StringComparison.Ordinal);
+        using var catalog = JsonDocument.Parse(catalogJson);
+        var game = catalog.RootElement.GetProperty("games")[0];
+        Assert.Equal(TitleId, game.GetProperty("titleID").GetString());
+        Assert.Equal("Frameworks/GamePack-" + TitleId + ".dylib", game.GetProperty("packFile").GetString());
+        Assert.True(game.GetProperty("aot").GetBoolean());
+        Assert.Equal(1, game.GetProperty("packABIVersion").GetInt32());
+    }
+
+    [Fact]
+    public void NormalizeCatalogDropsBundledRomFieldsAndKeepsTheRest()
+    {
+        var catalog = "{\"schemaVersion\":2,\"games\":[{\"titleID\":\"" + TitleId
+            + "\",\"displayName\":\"Demo\",\"productCode\":\"CTR-P-DEMO\",\"aot\":true,"
+            + "\"aotVersion\":1,\"packFile\":\"Frameworks/GamePack-" + TitleId + ".dylib\","
+            + "\"romFile\":\"Roms/" + TitleId + ".cci\",\"romSha256\":\"" + new string('a', 64)
+            + "\",\"romBytes\":16900,\"packABIVersion\":1,\"notes\":\"kept\"}]}";
+
+        var normalized = IpaComposer.NormalizeCatalog(catalog, new[] { TitleId });
+        Assert.DoesNotContain("romFile", normalized, StringComparison.Ordinal);
+        Assert.DoesNotContain("romSha256", normalized, StringComparison.Ordinal);
+        Assert.DoesNotContain("romBytes", normalized, StringComparison.Ordinal);
+        Assert.DoesNotContain("Roms/", normalized, StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(normalized);
+        var game = document.RootElement.GetProperty("games")[0];
+        Assert.Equal(TitleId, game.GetProperty("titleID").GetString());
+        Assert.Equal("Demo", game.GetProperty("displayName").GetString());
+        Assert.Equal("CTR-P-DEMO", game.GetProperty("productCode").GetString());
+        Assert.Equal("kept", game.GetProperty("notes").GetString());
+        Assert.Equal("zk_gamepack_register", game.GetProperty("registrationSymbol").GetString());
     }
 
     [Fact]

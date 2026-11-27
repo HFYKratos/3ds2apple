@@ -46,6 +46,17 @@ public sealed class IpaComposer : IComposedIpaComposer
     public const string RomsDirectory = "Roms";
     public const string RegistrationSymbol = "zk_gamepack_register";
 
+    /// <summary>
+    /// Legacy catalogue fields that say "this build bundles the game data inside
+    /// the app" (<c>romFile</c> and its provenance). The launcher-first shell is
+    /// ROM-free: game data is pushed to Documents/Games/TITLEID, so a composed
+    /// catalogue must not carry them. iOS <c>AOTPackageLoader.availability</c>
+    /// treats a catalogue <c>romFile</c> as a required bundled
+    /// <c>Roms/&lt;TITLEID&gt;.&lt;ext&gt;</c> file and refuses to launch the
+    /// card when it is absent (the .32a-import regression).
+    /// </summary>
+    internal static readonly string[] BundledRomCatalogFields = { "romFile", "romSha256", "romBytes" };
+
     // Unix mode bits live in the upper 16 bits of the zip external attributes, as
     // the macOS zip tool stores them. Copied entries keep their original modes.
     private const int UnixRegularFile0644 = 0x81A4 << 16;
@@ -200,7 +211,13 @@ public sealed class IpaComposer : IComposedIpaComposer
         return appEntry.FullName[..(index + ".app/".Length)];
     }
 
-    /// <summary>Validate the generated catalogue against the packs and fill registrationSymbol.</summary>
+    /// <summary>
+    /// Validate the generated catalogue against the packs, fill registrationSymbol
+    /// and drop every bundled-ROM field (see <see cref="BundledRomCatalogFields"/>):
+    /// a launcher-first shell keeps its game data in Documents, not in the app.
+    /// The single-game exporter adds the fields back deliberately when it embeds a
+    /// ROM into its own self-contained IPA (<c>SingleGameIpaExporter.AddSingleGameFields</c>).
+    /// </summary>
     internal static string NormalizeCatalog(string catalogJson, IReadOnlyList<string> titleIds)
     {
         using var document = Json.TryParse(catalogJson);
@@ -231,6 +248,14 @@ public sealed class IpaComposer : IComposedIpaComposer
             foreach (var property in game.EnumerateObject())
             {
                 copy[property.Name] = property.Value.Clone();
+            }
+            // Do not carry a bundled-ROM marker into the composed shell: the
+            // pack CLI derives it from GameInfo.romFile (a package imported from
+            // a .32a with its GameRom keeps that provenance), but this IPA does
+            // not contain the data - it was/will be pushed to Documents/Games.
+            foreach (var field in BundledRomCatalogFields)
+            {
+                copy.Remove(field);
             }
             copy["titleID"] = GameInfoWriter.NormalizeTitleId(title);
             copy["packFile"] = expected;

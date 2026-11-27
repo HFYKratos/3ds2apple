@@ -19,7 +19,11 @@ functional/parity reference and is not compiled here.
   - Deploy composes the ROM-free app IPA and runs
     `plumesign sign --package <ipa> --apple-id --register-and-install --udid <udid> -o <signed.ipa>`
     (falling back to sign + `device --install`), then pushes game data through the
-    Linux `devpush` device bridge.
+    Linux `devpush` device bridge. The composed GameCatalog never carries a
+    bundled-ROM `romFile` (nor `romSha256`/`romBytes`), even for packs imported
+    from a `.32a` that embeds its GameRom: the data lives in Documents/Games, and
+    a catalogue `romFile` would make iOS require `Roms/<TITLEID>.<ext>` inside
+    the app bundle and block launch.
   - "Refresh signing" re-signs/overwrite-installs the last composed or exported IPA
     without recompiling or recomposing it (free Apple ID 7-day renewal; app data in
     Documents/saves is kept).
