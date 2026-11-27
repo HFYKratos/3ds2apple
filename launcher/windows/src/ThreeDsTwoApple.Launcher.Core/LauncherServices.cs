@@ -7,6 +7,7 @@ using ThreeDsTwoApple.Launcher.Core.Signing;
 using ThreeDsTwoApple.Launcher.Core.Tools;
 using ThreeDsTwoApple.Launcher.Core.Util;
 using ThreeDsTwoApple.Launcher.Core.LauncherState;
+using ThreeDsTwoApple.Launcher.Core.Platform;
 
 namespace ThreeDsTwoApple.Launcher.Core;
 
@@ -149,7 +150,28 @@ public sealed class LauncherServices
     };
 
     /// <summary>The local build provider the Deploy page uses (there is no build-mode choice in the UI).</summary>
-    public IPackBuildProvider? CreateDeployBuildProvider() => CreateBuildProvider(PackBuildMode.LocalWinbuild);
+    public IPackBuildProvider? CreateDeployBuildProvider() =>
+        LauncherPlatform.IsLinux ? new LinuxBuildUnavailableProvider() : CreateBuildProvider(PackBuildMode.LocalWinbuild);
+
+    /// <summary>Linux: plumesign account status/login helper (null when plumesign is missing).</summary>
+    public PlumesignAccountService? CreatePlumesignAccountService() =>
+        PlumeSign is null ? null : new PlumesignAccountService(_runner, PlumeSign.PlumeSignPath);
+
+    private async Task<PlumesignAccountStatus> PlumesignAccountStatusAsync(CancellationToken cancellationToken)
+    {
+        if (CreatePlumesignAccountService() is not { } account)
+        {
+            return new PlumesignAccountStatus(false, "plumesign was not found — stage the official Linux binary (see launcher/linux/vendor/PINS.json).", "missing");
+        }
+        try
+        {
+            return await account.StatusAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return new PlumesignAccountStatus(false, "Could not read the plumesign account state: " + exception.Message, exception.Message);
+        }
+    }
 
     /// <summary>One batch deploy pipeline over the currently resolved tools.</summary>
     public DeployOrchestrator CreateDeployOrchestrator(ShellManifest shell) => new(
@@ -201,6 +223,11 @@ public sealed class LauncherServices
     /// </summary>
     public async Task<DeployPrerequisiteReport> CheckDeployPrerequisitesAsync(CancellationToken cancellationToken = default)
     {
+        if (LauncherPlatform.IsLinux)
+        {
+            return await CheckLinuxDeployPrerequisitesAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         var deviceSummaries = new List<string>();
         var bridgeFound = DevPush is not null;
         var bridgeEnumerates = false;
@@ -304,13 +331,166 @@ public sealed class LauncherServices
         return index > 0 ? message[..index] : message;
     }
 
+    // --- Linux (P1): no Windows Impactor GUI/local MSVC toolchain; plumesign + usbmuxd + devpush.
+
+    private async Task<HostReadiness> CheckLinuxAsync(CancellationToken cancellationToken)
+    {
+        var tools = new List<ToolStatus>();
+        var packPath = _locator.FindPackCli();
+        var packProbe = await ToolLocator.ProbeAsync("3ds2apple-pack", packPath, _runner, new[] { "--version" }, cancellationToken).ConfigureAwait(false);
+        tools.Add(new ToolStatus("3ds2apple-pack", packProbe.Ready, packProbe.Ready ? "ready" : "missing", packProbe.Describe()));
+
+        var devPushPath = _locator.FindDevPush();
+        if (devPushPath is null)
+        {
+            tools.Add(new ToolStatus("devpush (Linux device bridge)", false, "missing",
+                "devpush was not found — stage the Linux build in Bin/devpush or set THREEDS2APPLE_DEVPUSH."));
+        }
+        else
+        {
+            var probe = await new DevPushClient(_runner, devPushPath).ProbeAsync(cancellationToken).ConfigureAwait(false);
+            tools.Add(new ToolStatus("devpush (Linux device bridge)", probe.Ready, probe.Ready ? "ready" : "failed", probe.Describe()));
+        }
+
+        var plumeSignPath = PlumeSign?.PlumeSignPath;
+        var pin = plumeSignPath is null ? null : LinuxPlumesignPins.Verify(plumeSignPath);
+        tools.Add(new ToolStatus("plumesign (official Linux CLI)", pin?.Ok == true, pin?.Ok == true ? "ready" : "missing",
+            plumeSignPath is null
+                ? "plumesign-linux-x86_64 was not found — see launcher/linux/vendor/PINS.json."
+                : pin!.Describe()));
+
+        var account = await PlumesignAccountStatusAsync(cancellationToken).ConfigureAwait(false);
+        tools.Add(new ToolStatus("Apple ID sign-in (plumesign account)", account.SignedIn,
+            account.SignedIn ? "ready" : "missing", account.Summary));
+
+        var shell = await LoadShellAsync(cancellationToken).ConfigureAwait(false);
+        var shellReady = false;
+        if (shell is null)
+        {
+            tools.Add(new ToolStatus("Shell template IPA", false, "missing",
+                "Shell/manifest.json is missing — stage the ROM-free shell template (see launcher/linux/README.md)."));
+        }
+        else
+        {
+            var verification = shell.Verify(ShellDirectory);
+            var compatibility = ShellTemplateRules.ValidateManifest(shell);
+            shellReady = verification.Ok && compatibility.Ok;
+            tools.Add(new ToolStatus("Shell template IPA", shellReady, shellReady ? "ready" : "invalid",
+                shellReady ? "v" + shell.Version + " build " + shell.Build + " (" + shell.BundleId + ")" : verification.Error ?? compatibility.Error ?? "invalid"));
+        }
+
+        tools.Add(new ToolStatus("local AOT build (Linux, P2)", false, "unsupported",
+            "Not available in P1/P2: deploy imported .32a packages that already contain a GamePack; no Linux recompilation yet."));
+
+        var installReady = pin?.Ok == true && shellReady;
+        return new HostReadiness(
+            tools,
+            CanPreviewBuild: false,
+            CanInstallShell: installReady,
+            CanPush: DevPush is not null,
+            CanLocalBuild: false,
+            CanDeploy: Pack is not null && installReady);
+    }
+
+    private async Task<DeployPrerequisiteReport> CheckLinuxDeployPrerequisitesAsync(CancellationToken cancellationToken)
+    {
+        var deviceSummaries = new List<string>();
+        var bridgeEnumerates = false;
+        string? bridgeVersion = null;
+        if (DevPush is { } devPush)
+        {
+            try
+            {
+                using var probeTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                probeTimeout.CancelAfter(TimeSpan.FromSeconds(8));
+                var probe = await devPush.ProbeAsync(probeTimeout.Token).ConfigureAwait(false);
+                bridgeVersion = probe.Version;
+                if (probe.Ready)
+                {
+                    using var devicesTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    devicesTimeout.CancelAfter(TimeSpan.FromSeconds(8));
+                    var devices = await devPush.DevicesAsync(devicesTimeout.Token).ConfigureAwait(false);
+                    bridgeEnumerates = true;
+                    deviceSummaries.AddRange(devices.Where(device => device.IsUsb).Select(device => device.Display));
+                }
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested
+                                               && exception is LauncherToolException or OperationCanceledException or IOException or UnauthorizedAccessException)
+            {
+                // Red prerequisite row instead of a crash.
+            }
+        }
+        if (deviceSummaries.Count == 0)
+        {
+            try
+            {
+                using var muxTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                muxTimeout.CancelAfter(TimeSpan.FromSeconds(4));
+                var muxDevices = await Mux.ListDevicesAsync(TimeSpan.FromSeconds(3), muxTimeout.Token).ConfigureAwait(false);
+                deviceSummaries.AddRange(muxDevices.Where(device => device.IsUsb)
+                    .Select(device => Privacy.DescribeDevice(null, device.ConnectionType)));
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested
+                                               && exception is LauncherToolException or OperationCanceledException or IOException or UnauthorizedAccessException)
+            {
+                // usbmuxd not running: the device row stays red with its Linux hint.
+            }
+        }
+
+        var plumeSignPath = PlumeSign?.PlumeSignPath;
+        var pin = plumeSignPath is null ? null : LinuxPlumesignPins.Verify(plumeSignPath);
+        var account = await PlumesignAccountStatusAsync(cancellationToken).ConfigureAwait(false);
+        var signingReady = pin?.Ok == true && account.SignedIn;
+        var shell = Shell ?? await LoadShellAsync(cancellationToken).ConfigureAwait(false);
+        var shellVerified = false;
+        string? shellDetail = null;
+        if (shell is not null)
+        {
+            shellDetail = "v" + shell.Version + " build " + shell.Build;
+            try
+            {
+                var verification = shell.Verify(ShellDirectory);
+                var compatibility = ShellTemplateRules.ValidateManifest(shell);
+                shellVerified = verification.Ok && compatibility.Ok;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                shellVerified = false;
+            }
+        }
+
+        return DeployPrerequisiteEvaluator.Evaluate(new DeployPrerequisiteInputs(
+            SigningToolsPinned: signingReady,
+            SigningDetail: signingReady
+                ? "plumesign v" + LinuxPlumesignPins.TestedVersion + " · Apple ID signed in"
+                : account.Summary,
+            LocalToolchainResolved: false,
+            MissingLocalTools: new[] { "Linux local AOT build (P2) — import a .32a that already contains a GamePack" },
+            LocalToolchainDetail: string.Empty,
+            DeviceBridgeFound: DevPush is not null,
+            DeviceBridgeEnumerates: bridgeEnumerates,
+            DeviceBridgeVersion: bridgeVersion,
+            DeviceSummaries: deviceSummaries,
+            ShellManifestPresent: shell is not null,
+            ShellVerified: shellVerified,
+            ShellDetail: shellDetail));
+    }
+
     public PushService? CreatePushService() => DevPush is null ? null : new PushService(DevPush);
 
     /// <summary>Composes the installable app IPA (shell template + packs + catalogue).</summary>
     public IpaComposer? CreateComposer() => Pack is null ? null : new IpaComposer(Pack);
 
-    public ShellInstallService? CreateShellInstallService() =>
-        PlumeSign is null ? null : new ShellInstallService(Impactor, Mux, PlumeSign, _workspace.WorkDirectory);
+    public IAppIpaInstaller? CreateShellInstallService()
+    {
+        if (PlumeSign is null)
+        {
+            return null;
+        }
+        return LauncherPlatform.IsLinux
+            ? new LinuxShellInstallService(PlumeSign, DevPush, _workspace.WorkDirectory)
+            : new ShellInstallService(Impactor, Mux, PlumeSign, _workspace.WorkDirectory);
+    }
 
     public async Task<ShellManifest?> LoadShellAsync(CancellationToken cancellationToken = default)
     {
@@ -321,6 +501,10 @@ public sealed class LauncherServices
     /// <summary>Probe every tool without blocking on the phone or the Mac.</summary>
     public async Task<HostReadiness> CheckAsync(CancellationToken cancellationToken = default)
     {
+        if (LauncherPlatform.IsLinux)
+        {
+            return await CheckLinuxAsync(cancellationToken).ConfigureAwait(false);
+        }
         var tools = new List<ToolStatus>();
         var packPath = _locator.FindPackCli();
         var packProbe = await ToolLocator.ProbeAsync("3ds2apple-pack", packPath, _runner, new[] { "--version" }, cancellationToken).ConfigureAwait(false);

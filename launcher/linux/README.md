@@ -1,71 +1,86 @@
-# 3ds2apple Linux launcher (0.2.3 P0 baseline)
+# 3ds2apple Linux launcher (0.2.3 P0/P1/P3)
 
 Linux desktop launcher for 3ds2apple. It reuses the shared Avalonia UI and engine
 sources from launcher/windows (same Library, Deploy and Settings pages, same
 launcher state and build-package formats); the macOS SwiftUI launcher is only a
 functional/parity reference and is not compiled here.
 
-## What works in P0
+## What works
 
-- `dotnet publish -r linux-x64` produces a self-contained executable and the
-  Avalonia window starts on Linux (X11/Wayland via Avalonia).
-- The Library page (import ROM/.32a UI, export dialog, build cache display) and
-  the Settings/Deploy pages render and are usable.
-- `--self-test` passes on Linux (optional Windows-only payload/tool probes are
-  reported as warnings, not failures).
-- The headless UI smoke mode (`--ui-smoke`) runs under Xvfb/WSLg and is used for
-  the reproducible screenshots under `out/ui-smoke/`.
+- Self-contained `linux-x64` GUI: Library (import ROM/.32a, export dialog, build
+  cache), Deploy, Settings; `--self-test` and the headless `--ui-smoke` mode run
+  on Linux (X11/Wayland; Xvfb/WSLg works for screenshots).
+- Signing/installing uses the official `plumesign-linux-x86_64` from Impactor
+  v2.7.3 (SHA-256 pinned in `vendor/PINS.json`, never committed):
+  - Settings → "Sign in with plumesign" opens a terminal for
+    `plumesign account login`; the Apple ID/password/2FA stay in that terminal
+    and in plumesign's own store (`~/.config/PlumeImpactor`). The launcher only
+    reads whether an account is saved; it never sees or logs credentials.
+  - Deploy composes the ROM-free app IPA and runs
+    `plumesign sign --package <ipa> --apple-id --register-and-install --udid <udid> -o <signed.ipa>`
+    (falling back to sign + `device --install`), then pushes game data through the
+    Linux `devpush` device bridge.
+  - "Refresh signing" re-signs/overwrite-installs the last composed or exported IPA
+    without recompiling or recomposing it (free Apple ID 7-day renewal; app data in
+    Documents/saves is kept).
+- Devices are discovered through `devpush` (Linux build) with a read-only
+  `usbmuxd` fallback (`/var/run/usbmuxd`; override with
+  `THREEDS2APPLE_USBMUXD_SOCKET`). USB + unlock + Trust is required.
+- Imported `.32a` packages (built on Windows/macOS) deploy without recompiling:
+  their embedded GamePack + build cache are used directly.
 
-## Not done yet (P1+)
+## Not available yet (P2)
 
-- Signing/installing on Linux is not wired yet: the Deploy page currently reports
-  the Windows toolchain/warnings. P1 adds the official `plumesign-linux-x86_64`
-  login (PTY/terminal interaction for the Apple ID + 2FA, nothing logged),
-  `sign --package --register-and-install` and device push.
-- Local AOT GamePack compilation on Linux is R&D (P2). Imported `.32a` packages
-  that already contain a GamePack remain the supported path until then.
-- Linux packaging (tar.gz/AppImage), desktop entry/icon and licence staging into
-  a release payload are P3.
-- The embedded distribution payload (shell template, pack/devpush CLIs, signing
-  helpers) is staged separately by the Linux packaging script; P0 builds use the
-  developer layout (`THREEDS2APPLE_*` overrides or PATH).
+- Local AOT GamePack compilation on Linux is not implemented (P2 R&D). The Deploy
+  page states this explicitly and the build step fails with an actionable message;
+  it never produces a placeholder pack. Deploy imported `.32a` packages instead.
 
 ## Build
 
-Requirements: .NET 10 SDK (or set `DOTNET` to the dotnet binary), a Linux x86-64
-host. No ROM, Apple ID, network or iPhone is needed for the P0 build.
+Requirements: .NET 10 SDK (or set `DOTNET`) for building on a Linux x86-64 host.
+The release payload additionally needs the macOS-built shell template, the Linux
+pack CLI/devpush builds and the official plumesign binary.
 
-    ./launcher/linux/build-linux.sh            # self-contained folder in out/launchers/
-    ./launcher/linux/build-linux.sh --tar      # also writes a .tar.gz
-    out/launchers/3ds2apple-launcher-linux-x64/3ds2apple-launcher --self-test
-    out/launchers/3ds2apple-launcher-linux-x64/3ds2apple-launcher   # GUI
+    # developer build (no payload)
+    ./launcher/linux/build-linux.sh
 
-The ZIP/tar contains the launcher plus LICENSE, NOTICE and THIRD_PARTY.md. It is
-user data free: no ROM, key, IPA or game asset is included.
+    # P3 release payload + tar.gz
+    ./launcher/linux/build-linux.sh --payload --tar \
+      --shell-dir /path/to/out/shell \
+      --pack-bin  builder/target/release/3ds2apple-pack \
+      --devpush-bin tools/devpush/target/release/devpush \
+      --plumesign launcher/linux/vendor/plumesign-linux-x86_64
 
-## Signing dependency: official plumesign for Linux
+Output: `out/launchers/3ds2apple-launcher-linux-x64/` (+ `.tar.gz`). The payload
+layout matches `DistributionLayout.LinuxExpectedRelativePaths`:
 
-The launcher does not bundle a signer in the repository. The official
-Impactor v2.7.3 release provides `plumesign-linux-x86_64`; the verified copy lives
-in `launcher/linux/vendor/` and is listed in `PINS.json` (SHA-256/size). The
-binary is never committed (see `vendor/.gitignore`) and is redistributed
-unmodified from the upstream release page:
+    Shell/manifest.json, Shell/3ds2apple-shell.ipa
+    ThirdParty/Impactor/plumesign-linux-x86_64 (+ PINS/licences/README)
+    Bin/3ds2apple-pack, Bin/devpush
+    licenses/LICENSE, licenses/NOTICE, licenses/THIRD_PARTY.md
 
-- Impactor: MIT (see `vendor/LICENSE-Impactor-MIT.txt`),
-- apple-codesign embedded in Impactor: MPL-2.0 (see
-  `vendor/LICENSE-apple-codesign-MPL-2.0.txt`).
+Run the packaged build with `/path/to/3ds2apple-launcher --self-test`, then start
+the GUI. On a headless machine use `xvfb-run -a ./3ds2apple-launcher`.
 
-P1 verifies the binary against `PINS.json` before use. The launcher never asks for
-or logs the Apple ID, password or 2FA code: accounts are handled by plumesign and
-stay in `~/.config/PlumeImpactor`.
+## Signing dependency and licences
 
-## Layout
+`launcher/linux/vendor/plumesign-linux-x86_64` is the unmodified official Impactor
+v2.7.3 Linux binary (SHA-256/size in `vendor/PINS.json`; download it from the
+upstream release). It is never committed (`vendor/.gitignore`) and is only
+executed, not modified. Impactor is MIT; the embedded apple-codesign library is
+MPL-2.0 — see `vendor/LICENSE-*.txt` and `vendor/README-source-and-licenses.txt`.
+The launcher provides no ROM, key, IPA or game asset and never uploads anything.
 
-    launcher/linux/
-      README.md                this file
-      build-linux.sh           publish a self-contained linux-x64 launcher
-      vendor/
-        PINS.json              official plumesign-linux pin (sha256/size/version)
-        LICENSE-*.txt          upstream licences (MIT / MPL-2.0)
-        README-source-and-licenses.txt
-        plumesign-linux-x86_64 verified binary (git-ignored, download manually)
+## Real-device acceptance
+
+1. Connect the iPhone/iPad by USB, unlock and tap Trust; install/start usbmuxd.
+2. Settings → Sign in with plumesign; enter the Apple ID and 2FA in the terminal.
+3. Import a ROM or an already-built `.32a`; build (on Windows/macOS) or use the
+   imported GamePack.
+4. Deploy: compose → plumesign sign/install → devpush push → verify.
+5. After 7 days (free Apple ID), press Refresh signing; the app is overwrite-installed
+   and existing Documents/saves stay intact.
+
+Known P1/P3 gaps: no Linux local AOT compile (P2); AppImage/desktop-entry packaging
+and full QA screenshots on the CachyOS build machine are follow-ups; Deploy copy is
+Linux-aware but the local-build row is always an explicit red P2 row.

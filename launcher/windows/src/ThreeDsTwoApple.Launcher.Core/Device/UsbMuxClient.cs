@@ -32,27 +32,58 @@ public sealed class UsbMuxClient
 
     public async Task<IReadOnlyList<MuxDevice>> ListDevicesAsync(TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
-        using var client = new TcpClient();
-        try
+        Socket socket;
+        if (OperatingSystem.IsLinux())
         {
-            using var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            connectTimeout.CancelAfter(timeout ?? TimeSpan.FromSeconds(4));
-            await client.ConnectAsync(_host, _port, connectTimeout.Token).ConfigureAwait(false);
+            // Linux usbmuxd listens on a UNIX domain socket; Apple Devices/iTunes is a
+            // Windows-only service. Allow an explicit socket override for tests/containers.
+            var socketPath = Environment.GetEnvironmentVariable("THREEDS2APPLE_USBMUXD_SOCKET");
+            if (string.IsNullOrWhiteSpace(socketPath))
+            {
+                socketPath = "/var/run/usbmuxd";
+            }
+            socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+            try
+            {
+                using var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                connectTimeout.CancelAfter(timeout ?? TimeSpan.FromSeconds(4));
+                await socket.ConnectAsync(new UnixDomainSocketEndPoint(socketPath), connectTimeout.Token).ConfigureAwait(false);
+            }
+            catch (Exception error) when (!cancellationToken.IsCancellationRequested
+                                           && error is OperationCanceledException or SocketException)
+            {
+                socket.Dispose();
+                throw new LauncherToolException("usbmuxd_unavailable",
+                    "usbmuxd did not answer on " + socketPath + ".",
+                    "Install/start usbmuxd (libimobiledevice), connect the iPhone/iPad, tap Trust, then refresh.");
+            }
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        else
         {
-            throw new LauncherToolException("usbmuxd_unavailable",
-                $"The Apple device service did not answer on {_host}:{_port}.",
-                "Install Apple Devices (or iTunes) from Apple, start it, connect the iPhone/iPad, then refresh.");
-        }
-        catch (SocketException error)
-        {
-            throw new LauncherToolException("usbmuxd_unavailable",
-                $"Could not reach the Apple device service on {_host}:{_port} ({error.SocketErrorCode}).",
-                "Install Apple Devices (or iTunes) from Apple, start it, connect the iPhone/iPad, then refresh.");
+            socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            try
+            {
+                using var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                connectTimeout.CancelAfter(timeout ?? TimeSpan.FromSeconds(4));
+                await socket.ConnectAsync(_host, _port, connectTimeout.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                socket.Dispose();
+                throw new LauncherToolException("usbmuxd_unavailable",
+                    $"The Apple device service did not answer on {_host}:{_port}.",
+                    "Install Apple Devices (or iTunes) from Apple, start it, connect the iPhone/iPad, then refresh.");
+            }
+            catch (SocketException error)
+            {
+                socket.Dispose();
+                throw new LauncherToolException("usbmuxd_unavailable",
+                    $"Could not reach the Apple device service on {_host}:{_port} ({error.SocketErrorCode}).",
+                    "Install Apple Devices (or iTunes) from Apple, start it, connect the iPhone/iPad, then refresh.");
+            }
         }
 
-        using var stream = client.GetStream();
+        using var stream = new NetworkStream(socket, ownsSocket: true);
         using var ioTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         ioTimeout.CancelAfter(timeout ?? TimeSpan.FromSeconds(6));
 
