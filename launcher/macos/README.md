@@ -101,9 +101,20 @@ tooltip and the log — there is no manual "check" button).
   it is replaced. The imported entry's ROM path is the imported `.32a` itself; later
   builds, deploys and IPA exports resolve the ROM packed inside it, so the original
   ROM file is no longer needed.
-  The macOS launcher keeps the Export dialog and saved-state changes only in this
-  round: the Windows launcher's **Refresh signing** button is not implemented here
-  yet, so deploy again to renew a free Apple ID signature.
+  The macOS launcher has the same **续签 / Refresh signing** button on the Deploy
+  page. The launcher records the last Deploy-composed or single-game exported IPA
+  plus the signed shell app (entitlements and provisioning profile). A refresh
+  unpacks that IPA, re-codesigns the app and its nested Frameworks/MoltenVK and
+  GamePack dylibs with the local Apple Development certificate, copies the saved
+  provisioning profile, codesigns the app with the saved entitlements, runs
+  `codesign --verify --deep --strict`, then overwrite-installs with
+  `xcrun devicectl device install app` — so the existing app is updated, not
+  replaced. It never recompiles, recomposes, deletes the app or wipes data
+  (Documents and saves survive), and it only renews the 7-day free Apple ID
+  signature: adding games or updating GamePacks still needs Deploy. Disabled
+  until an IPA exists; a missing saved signed shell app reports that one Deploy
+  is needed first. The VM ran xcodebuild and `--selfcheck` 212/212; real-device
+  re-sign/install still needs acceptance testing (no device in the VM).
   The launcher **Settings** sheet also holds the **高级构建设置 / Advanced build
   settings** card (moved from Deploy): optimization level (O1/O2/O3/Oz, default O2),
   LTO (default off) and fast-math (default off; it changes guest floating-point
@@ -113,7 +124,10 @@ tooltip and the log — there is no manual "check" button).
   (`--opt-level/--lto/--fast-math`), which forwards `THREEDS2APPLE_AOT_*` to the
   scripts for the next build and invalidates the affected build-cache entries.
 - **Deploy** - device status, the checkbox selection list (one or several games),
-  the single **一键部署 / Deploy selected** button, the detected compile-hardware
+  the single **一键部署 / Deploy selected** button, the **续签 / Refresh signing**
+  button (disabled until an IPA exists; it re-signs and overwrite-installs the last
+  composed/exported IPA in place to renew the 7-day signature with the local Apple
+  Development certificate, keeping Documents and saves), the detected compile-hardware
   line (logical cores · RAM · 3dsrecomp's automatic full-core parallelism), then
   the ordered step report
   (check device & Apple ID -> compile -> compose IPA -> verify IPA -> sign &
@@ -209,13 +223,13 @@ it from a source tree).
       Models.swift             value types (game, deploy report, IPA inspection, push plan, ...)
       PortableData.swift       portable data root policy + one-time <checkout>/out migration
       Hardware.swift           logical/physical cores + RAM probe for the compile line
-      LauncherSettings.swift   small persisted state (language, portable root, installed library + bundle ID)
+      LauncherSettings.swift   small persisted state (language, portable root, installed library + bundle ID, last IPA + signed shell for refresh signing)
       CommandRunner.swift      async Process wrapper + mock runner
       Toolchain.swift          auto-detected tools + readiness probe + Team ID detection
       PackBackend.swift        typed 3ds2apple-pack CLI wrapper + JSON parsing (incl. SMDH displayNames/publisher/coverPath)
       GameInfoWriter.swift     launcher -> shell GameInfo.json (push layout)
       PushPlanner.swift        Documents/Games/TITLEID plan: ROM, cover.png, GameInfo.json last
-      InstallBackend.swift     signed shell build, IPA inspection, codesign + devicectl, Apple error mapper
+      InstallBackend.swift     signed shell build, IPA inspection, codesign + devicectl, in-place refresh signing, Apple error mapper
       ShellRuntime.swift       pinned MoltenVK.framework source + embedding / Metal-HUD readiness verification
       DeviceBridge.swift       devpush contract v1 client (NDJSON) + mock bridge
       MockBackends.swift       deterministic fixtures, mock CLI/installer/bridge
