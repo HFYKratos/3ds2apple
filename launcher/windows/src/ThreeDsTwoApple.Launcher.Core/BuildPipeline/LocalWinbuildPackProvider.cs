@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using ThreeDsTwoApple.Launcher.Core.Models;
+using ThreeDsTwoApple.Launcher.Core.Platform;
 using ThreeDsTwoApple.Launcher.Core.Tools;
 using ThreeDsTwoApple.Launcher.Core.Util;
 
@@ -208,7 +209,7 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
         if (_tools is null)
         {
             return PackBuildOutcome.Failure(MissingToolsCode,
-                "No local build toolchain was resolved. The launcher expects Bin/3dsrecomp.exe and the official LLVM 23.1.6 tools in Bin/llvm (or an installed LLVM on PATH); this single message is shown instead of a hidden fallback.");
+                "No local build toolchain was resolved. The launcher expects Bin/3dsrecomp and the open-source LLVM clang/llvm-ar/ld64.lld tools under Bin/llvm (or THREEDS2APPLE_REPO/WINBUILD_LLVM_DIR for a source checkout).");
         }
         var missing = _tools.MissingTools(_fileExists, _directoryExists);
         if (missing.Count > 0)
@@ -222,7 +223,7 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
         }
         if (_packCli is null)
         {
-            return PackBuildOutcome.Failure(RecordFailedCode, "3ds2apple-pack.exe is missing; it writes the single GameInfo.json schema.");
+            return PackBuildOutcome.Failure(RecordFailedCode, "3ds2apple-pack is missing; it writes the single GameInfo.json schema.");
         }
 
         var buildName = BuildSlug.From(request.DisplayName, request.TitleID);
@@ -241,8 +242,40 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
             ["CPATH"] = _tools.DarwinStubsDirectory!,
             ["PATH"] = _tools.LlvmBinDirectory + Path.PathSeparator + (Environment.GetEnvironmentVariable("PATH") ?? string.Empty),
         };
+        if (LauncherPlatform.IsLinux && Path.GetDirectoryName(_tools.LlvmBinDirectory) is { } llvmRoot)
+        {
+            // The staged Linux LLVM subset keeps its shared libraries in <llvm>/lib.
+            var llvmLib = Path.Combine(llvmRoot, "lib");
+            if (_directoryExists(llvmLib))
+            {
+                env["LD_LIBRARY_PATH"] = llvmLib + Path.PathSeparator + (Environment.GetEnvironmentVariable("LD_LIBRARY_PATH") ?? string.Empty);
+            }
+        }
         var advanced = (request.AdvancedOptions ?? AdvancedBuildOptions.Default).Normalized();
-        if (!advanced.IsDefault)
+        if (LauncherPlatform.IsLinux)
+        {
+            // Linux hosts have their own /usr/include; Apple-target clang would otherwise
+            // pick up the host libc headers. Use the same no-SDK wrapper as
+            // tools/winbuild/recomp-port.sh: target + -nostdinc + resource headers + stubs.
+            try
+            {
+                env["CC"] = WriteLinuxCompilerWrapper(_tools, advanced, root);
+            }
+            catch (IOException error)
+            {
+                return PackBuildOutcome.Failure(RecompFailedCode,
+                    "Could not prepare the Darwin compiler wrapper: " + error.Message);
+            }
+            if (!advanced.IsDefault)
+            {
+                log?.Invoke("Advanced build settings: " + advanced.Describe());
+                if (advanced.FastMath)
+                {
+                    log?.Invoke("warning: fast-math changes guest float results; measurement builds only");
+                }
+            }
+        }
+        else if (!advanced.IsDefault)
         {
             try
             {
@@ -362,6 +395,23 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
     /// The default options never reach this method, so the default build command is
     /// byte-for-byte unchanged.
     /// </summary>
+    /// <summary>Linux no-SDK compiler wrapper for 3dsrecomp (mirrors tools/winbuild/darwin-cc.sh).</summary>
+    private static string WriteLinuxCompilerWrapper(LocalToolchain tools, AdvancedBuildOptions options, string root)
+    {
+        var codegenDirectory = Path.Combine(root, "codegen");
+        Directory.CreateDirectory(codegenDirectory);
+        var wrapper = Path.Combine(codegenDirectory, "darwin-clang.sh");
+        var suffix = options.IsDefault ? string.Empty : " " + options.CompilerArgumentSuffix();
+        var content = "#!/bin/sh\nexec \"" + tools.ClangPath + "\" -target arm64-apple-ios16.0 -nostdinc"
+                      + " -isystem \"" + tools.ResourceIncludeDirectory + "\""
+                      + " -isystem \"" + tools.DarwinStubsDirectory + "\""
+                      + " \"$@\"" + suffix + "\n";
+        File.WriteAllText(wrapper, content);
+        File.SetUnixFileMode(wrapper,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        return wrapper;
+    }
+
     internal static string WriteCompilerWrapper(
         LocalToolchain tools,
         AdvancedBuildOptions options,

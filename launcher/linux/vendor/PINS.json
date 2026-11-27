@@ -32,5 +32,13 @@
     "https://github.com/claration/impactor/tree/v2.7.3",
     "https://github.com/claration/impactor/tree/v2.7.3/3rdparty/apple-codesign-0.29.0"
   ],
-  "bundledBy": "manual download from the official v2.7.3 release into launcher/linux/vendor/ (git-ignored); launcher/linux/build-linux.sh and the P1 signing backend verify the SHA-256. Never rebuilt, patched or re-signed."
+  "bundledBy": "manual download from the official v2.7.3 release into launcher/linux/vendor/ (git-ignored); launcher/linux/build-linux.sh and the P1 signing backend verify the SHA-256. Never rebuilt, patched or re-signed.",
+  "localAot": {
+    "schema": "3ds2apple-linux-local-aot/1",
+    "purpose": "Local ROM -> GamePack AOT build on Linux: 3dsrecomp + open-source LLVM clang/ld64.lld + hand-written Darwin stubs, no Apple SDK.",
+    "recompiler": { "component": "3dsrecomp", "repo": "https://github.com/fearkov/3dsrecomp", "revision": "4b6de5d884b0d8bc337e16c07b84a0824e55a0e1", "license": "see upstream repository LICENSE" },
+    "llvm": { "component": "LLVM/Clang + LLD (official open-source release)", "preferredVersion": "23.1.6", "currentFallback": "23.1.5", "license": "Apache-2.0 WITH LLVM-exception", "note": "The exact 23.1.6 release asset could not be fetched on the current build network; 23.1.5 is staged and the actual version is written to PINS-local-aot.json in the release payload. Patch releases do not change the Mach-O/GamePack ABI." },
+    "darwinStubs": { "component": "tools/winbuild/darwin-stubs + zakuro GamePack shim/include", "license": "Apache-2.0 (same as this project)" },
+    "stagedBy": "launcher/linux/build-linux.sh --payload --local-aot (writes payload PINS-local-aot.json with actual versions/sha256)"
+  }
 }

@@ -22,7 +22,7 @@ internal static class Program
         {
             return SelfTest.Run(Console.Out, Console.Error);
         }
-        if (Array.Exists(args, a => a == "--linux-device-test"))
+        if (Array.Exists(args, a => a == "--linux-device-test") || Array.Exists(args, a => a == "--linux-aot-test"))
         {
             return LinuxDeviceTest.RunAsync(args).GetAwaiter().GetResult();
         }
