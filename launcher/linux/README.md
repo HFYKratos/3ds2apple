@@ -33,9 +33,8 @@ functional/parity reference and is not compiled here.
   `tools/winbuild/darwin-stubs`, the GamePack shim and headers), Deploy/Library can
   compile a user's ROM into a real arm64 iOS GamePack on this PC (3dsrecomp →
   clang `-target arm64-apple-ios16.0` → ld64.lld), then record/export a `.32a`.
-  No Apple SDK, macOS or Windows is used. The exact LLVM pin is 23.1.6 when
-  fetchable; the current CachyOS fallback is 23.1.5 (actual version is written to
-  the payload's `PINS-local-aot.json` — no version is misreported).
+  No Apple SDK, macOS or Windows is used. The staged LLVM pin is the exact official 23.1.6 release; the actual version is
+  written to the payload's `PINS-local-aot.json` (no version is misreported).
 
 ## Build
 

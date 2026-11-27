@@ -54,13 +54,15 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-DOTNET="${DOTNET:-dotnet}"
-if ! command -v "$DOTNET" >/dev/null 2>&1; then
-  if [ -x "$HOME/.dotnet10/dotnet" ]; then
-    DOTNET="$HOME/.dotnet10/dotnet"
-  else
-    echo "error: .NET 10 SDK not found (install it or set DOTNET=...)." >&2
-    exit 2
+if [ "$SKIP_PUBLISH" != "1" ]; then
+  DOTNET="${DOTNET:-dotnet}"
+  if ! command -v "$DOTNET" >/dev/null 2>&1; then
+    if [ -x "$HOME/.dotnet10/dotnet" ]; then
+      DOTNET="$HOME/.dotnet10/dotnet"
+    else
+      echo "error: .NET 10 SDK not found (install it or set DOTNET=...)." >&2
+      exit 2
+    fi
   fi
 fi
 
