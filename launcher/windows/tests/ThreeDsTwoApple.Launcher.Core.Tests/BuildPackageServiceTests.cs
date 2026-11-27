@@ -1,3 +1,6 @@
+using System.IO.Compression;
+using System.Text;
+using System.Text.Json;
 using ThreeDsTwoApple.Launcher.Core;
 using ThreeDsTwoApple.Launcher.Core.BuildPipeline;
 using ThreeDsTwoApple.Launcher.Core.LauncherState;
@@ -301,5 +304,181 @@ public sealed class BuildPackageServiceTests
         var tag = PackCli.PlatformTag();
         Assert.False(string.IsNullOrWhiteSpace(tag));
         Assert.Contains(tag, new[] { "windows", "macos", "linux" });
+    }
+
+    // --- 0.2.2-beta6: .32a build-cache restoration on import -----------------
+
+    private const string ManifestClang = "clang version 23.1.6";
+    private const string ManifestLlvm = "LLD 23.1.6";
+    private const string ManifestGamePackSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    private const string ManifestRomSha = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    private const string ManifestGameInfoSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    private static BuildCompatibility CurrentCompatibility(string clang = ManifestClang, string ld64 = ManifestLlvm, string options = "opt=O2;lto=0;fastmath=0") =>
+        BuildCompatibility.Create(clangVersion: clang, ld64Version: ld64, buildOptions: options);
+
+    /// <summary>Create a real .32a ZIP with the builder's manifest v1 layout.</summary>
+    private static string BuildPackageFile(
+        TempDir temp,
+        bool includeRom = true,
+        bool includeManifest = true,
+        bool includeToolchain = true,
+        string clang = ManifestClang,
+        string llvm = ManifestLlvm,
+        string optLevel = "O2",
+        bool lto = false,
+        bool fastMath = false)
+    {
+        var path = Path.Combine(temp.Path, TitleID + "-Example Game.32a");
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Create);
+        if (includeManifest)
+        {
+            var manifest = new Dictionary<string, object?>
+            {
+                ["format"] = "3ds2apple-build",
+                ["schemaVersion"] = 1,
+                ["titleID"] = TitleID,
+                ["displayName"] = "Example Game",
+                ["productCode"] = "CTR-T-EXMP",
+                ["aotVersion"] = 1,
+                ["appVersion"] = "0.2.2",
+                ["builtAt"] = "2026-01-31T12:34:56Z",
+                ["platform"] = "windows",
+                ["buildOptions"] = new Dictionary<string, object?>
+                {
+                    ["optLevel"] = optLevel,
+                    ["lto"] = lto,
+                    ["fastMath"] = fastMath,
+                },
+                ["pack"] = new Dictionary<string, object?>
+                {
+                    ["file"] = "GamePack-" + TitleID + ".dylib",
+                    ["bytes"] = 4096,
+                    ["sha256"] = ManifestGamePackSha,
+                    ["format"] = "macho",
+                    ["abiVersion"] = 1,
+                },
+                ["gameInfoSha256"] = ManifestGameInfoSha,
+                ["rom"] = includeRom
+                    ? new Dictionary<string, object?>
+                    {
+                        ["included"] = true,
+                        ["file"] = "GameRom.cci",
+                        ["bytes"] = 9,
+                        ["sha256"] = ManifestRomSha,
+                    }
+                    : new Dictionary<string, object?> { ["included"] = false },
+                ["sourceLauncher"] = new Dictionary<string, object?> { ["os"] = "windows", ["version"] = "0.2.2-beta5" },
+            };
+            if (includeToolchain)
+            {
+                manifest["toolchain"] = new Dictionary<string, object?> { ["clang"] = clang, ["llvm"] = llvm };
+            }
+            WriteEntry(archive, "manifest.json", JsonSerializer.Serialize(manifest));
+        }
+        WriteEntry(archive, "GamePack-" + TitleID + ".dylib", "fake-dylib");
+        WriteEntry(archive, "GameInfo.json", "{}");
+        if (includeRom)
+        {
+            WriteEntry(archive, "GameRom.cci", "rom-bytes");
+        }
+        return path;
+    }
+
+    private static void WriteEntry(ZipArchive archive, string name, string text)
+    {
+        var entry = archive.CreateEntry(name);
+        using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false));
+        writer.Write(text);
+    }
+
+    private static (LauncherWorkspace Workspace, PackCli Cli) CreateImportService(TempDir temp)
+    {
+        var packageDir = Path.Combine(temp.Path, "packages", TitleID);
+        var (workspace, cli, _) = Create(temp, request =>
+            request.Arguments.Contains("import")
+                ? new ProcessResult(0, ImportJson(packageDir), string.Empty, false, true)
+                : new ProcessResult(0, PackageListJson(packageDir), string.Empty, false, true));
+        return (workspace, cli);
+    }
+
+    [Fact]
+    public async Task ImportRecordsTheBuildCacheFromThePackageManifest()
+    {
+        using var temp = new TempDir();
+        var (workspace, cli) = CreateImportService(temp);
+        var service = new BuildPackageService(workspace, cli);
+        var packageFile = BuildPackageFile(temp);
+        var compatibility = CurrentCompatibility();
+
+        var outcome = await service.ImportAsync(packageFile, replace: false, compatibility);
+
+        Assert.True(outcome.Ok, outcome.Error);
+        Assert.Equal(BuildCacheImportStatus.Recorded, outcome.BuildCacheStatus);
+        var entry = workspace.Find(TitleID);
+        Assert.NotNull(entry);
+        Assert.NotNull(entry!.Build);
+        Assert.Equal(compatibility.BuildCompatVersion, entry.Build!.BuildCompatVersion);
+        Assert.Equal(ManifestGamePackSha, entry.Build.PackSha256);
+        Assert.Equal(4096, entry.Build.PackBytes);
+        Assert.Equal(ManifestRomSha, entry.Build.RomSha256);
+        Assert.Equal(9, entry.Build.RomBytes);
+        Assert.Equal("0.2.2-beta5", entry.Build.LauncherVersion);
+        Assert.NotNull(entry.BuiltAt);
+
+        // This is the actual Deploy decision: the imported GamePack is reusable.
+        var decision = BuildCachePolicy.Evaluate(
+            entry.Build, compatibility.BuildCompatVersion, entry.Build.RomSha256, "pack.dylib", _ => true);
+        Assert.True(decision.Reuse, decision.Detail);
+
+        // The record is persisted in state.json and survives a restart.
+        var reopened = LauncherWorkspace.Open(temp.Path);
+        Assert.NotNull(reopened.Find(TitleID)!.Build);
+    }
+
+    [Fact]
+    public async Task ImportOfAnotherToolchainDoesNotFakeReuse()
+    {
+        using var temp = new TempDir();
+        var (workspace, cli) = CreateImportService(temp);
+        var service = new BuildPackageService(workspace, cli);
+        var packageFile = BuildPackageFile(temp);
+
+        var outcome = await service.ImportAsync(packageFile, replace: false, CurrentCompatibility(clang: "clang version 24.0.0"));
+
+        Assert.True(outcome.Ok, outcome.Error);
+        Assert.Equal(BuildCacheImportStatus.Mismatch, outcome.BuildCacheStatus);
+        Assert.Contains("toolchain", outcome.BuildCacheDetail, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(workspace.Find(TitleID)!.Build);
+    }
+
+    [Fact]
+    public async Task ImportOfPackageWithoutGameDataKeepsNoCacheRecord()
+    {
+        using var temp = new TempDir();
+        var (workspace, cli) = CreateImportService(temp);
+        var service = new BuildPackageService(workspace, cli);
+        var packageFile = BuildPackageFile(temp, includeRom: false);
+
+        var outcome = await service.ImportAsync(packageFile, replace: false, CurrentCompatibility());
+
+        Assert.True(outcome.Ok, outcome.Error);
+        Assert.Equal(BuildCacheImportStatus.NoGameData, outcome.BuildCacheStatus);
+        Assert.Null(workspace.Find(TitleID)!.Build);
+    }
+
+    [Fact]
+    public async Task ImportOfLegacyPackageWithoutManifestFallsBackSafely()
+    {
+        using var temp = new TempDir();
+        var (workspace, cli) = CreateImportService(temp);
+        var service = new BuildPackageService(workspace, cli);
+        var packageFile = BuildPackageFile(temp, includeManifest: false);
+
+        var outcome = await service.ImportAsync(packageFile, replace: false, CurrentCompatibility());
+
+        Assert.True(outcome.Ok, outcome.Error);
+        Assert.Equal(BuildCacheImportStatus.Missing, outcome.BuildCacheStatus);
+        Assert.Null(workspace.Find(TitleID)!.Build);
     }
 }

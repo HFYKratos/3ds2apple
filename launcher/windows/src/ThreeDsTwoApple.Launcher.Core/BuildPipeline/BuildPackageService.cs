@@ -18,15 +18,18 @@ public sealed record BuildPackageExportOutcome(
 public sealed record BuildPackageImportOutcome(
     ImportedBuildPackageInfo? Package,
     IReadOnlyList<string> Warnings,
-    string? Error)
+    string? Error,
+    BuildCacheImportStatus BuildCacheStatus = BuildCacheImportStatus.Missing,
+    string? BuildCacheDetail = null)
 {
     public bool Ok => Package is not null && Error is null;
 }
 
 /// <summary>
 /// Library "Export .32a" / "Import .32a": composes the pack CLI arguments, parses
-/// the JSON and keeps the launcher state in sync. The Rust CLI is the single
-/// manifest/format writer; this class never parses a .32a itself.
+/// the JSON and keeps the launcher state in sync. The Rust CLI remains the single
+/// manifest/format writer; importing additionally reads the manifest.json entry to
+/// restore the build-cache record (0.2.2-beta6), it never re-implements the layout.
 ///
 /// Export writes to &lt;portable data root&gt;/workspace/export/32a, a gitignored user-data
 /// directory: a .32a can contain the user's ROM, so the UI must tell the user to
@@ -123,6 +126,7 @@ public sealed class BuildPackageService
     public async Task<BuildPackageImportOutcome> ImportAsync(
         string packagePath,
         bool replace,
+        BuildCompatibility? currentCompatibility = null,
         CancellationToken cancellationToken = default)
     {
         if (_packCli is null)
@@ -142,11 +146,42 @@ public sealed class BuildPackageService
                 result.Error ?? PackCli.FirstMeaningfulLine(result.Process));
         }
         var entry = await UpsertLibraryEntryAsync(result.Package!.TitleID, cancellationToken).ConfigureAwait(false);
+        var cacheStatus = BuildCacheImportStatus.Missing;
+        string? cacheDetail = null;
         if (entry is not null)
         {
             // 0.2.2-beta4: the imported .32a replaces the standalone ROM path. Every ROM
             // consumer resolves the package's embedded GameRom through GameRomResolver.
             entry.RomPath = Path.GetFullPath(packagePath);
+            // 0.2.2-beta6: restore the build-cache record from the package manifest so
+            // Deploy reuses the GamePack instead of recompiling it. A missing or
+            // mismatched manifest clears any stale record (never pretend reuse).
+            if (currentCompatibility is not null)
+            {
+                var recorded = BuildPackageManifestReader.TryCreateArtifact(
+                    packagePath, currentCompatibility, out var artifact, out cacheStatus, out cacheDetail);
+                if (recorded && artifact is not null)
+                {
+                    entry.Build = artifact;
+                    entry.BuiltAt = artifact.BuiltAt;
+                    entry.LastBuildName = artifact.BuildName;
+                }
+                else
+                {
+                    entry.Build = null;
+                    entry.BuiltAt = null;
+                    entry.LastBuildName = null;
+                }
+            }
+            else
+            {
+                entry.Build = null;
+                entry.BuiltAt = null;
+                entry.LastBuildName = null;
+                cacheStatus = BuildCacheImportStatus.Mismatch;
+                cacheDetail = "the current build recipe/toolchain could not be resolved; the next deploy will recompile";
+            }
+            _workspace.Upsert(entry);
             _workspace.SaveState();
         }
         return new BuildPackageImportOutcome(
@@ -154,7 +189,9 @@ public sealed class BuildPackageService
             result.Warnings,
             entry is null
                 ? "The package was imported, but the launcher could not refresh its library entry (3ds2apple-pack packages list failed)."
-                : null);
+                : null,
+            entry is null ? BuildCacheImportStatus.Missing : cacheStatus,
+            cacheDetail);
     }
 
     /// <summary>Read the imported package back from the CLI and upsert the library entry.</summary>

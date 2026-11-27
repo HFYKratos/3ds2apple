@@ -434,6 +434,10 @@ public static class LanguageCatalog
         ("library.buildPackage.exported", "Exported: {0}"),
         ("library.buildPackage.exportFailed", "Export failed: {0}"),
         ("library.buildPackage.imported", "Imported {0} into {1}"),
+        ("library.buildPackage.cacheRecorded", "Build cache recorded — this package can be deployed without recompiling."),
+        ("library.buildPackage.cacheMismatch", "Built with a different build recipe/toolchain — the next deploy will recompile it."),
+        ("library.buildPackage.cacheNoRom", "No game data embedded — the build cache cannot be recorded; deploying needs the original ROM."),
+        ("library.buildPackage.cacheMissing", "No manifest in this package (older CLI) — the next deploy will recompile it."),
         ("library.buildPackage.importFailed", "Import failed: {0}"),
         ("library.buildPackage.conflict", "A package for this game already exists. {0}"),
 
@@ -777,6 +781,10 @@ public static class LanguageCatalog
         ("library.buildPackage.exported", "已导出：{0}"),
         ("library.buildPackage.exportFailed", "导出失败：{0}"),
         ("library.buildPackage.imported", "已导入 {0} 到 {1}"),
+        ("library.buildPackage.cacheRecorded", "已记录构建缓存——可直接部署，无需重新编译。"),
+        ("library.buildPackage.cacheMismatch", "构建方法或工具链不同——下次部署会重新编译。"),
+        ("library.buildPackage.cacheNoRom", "未内嵌游戏数据——无法记录构建缓存；部署需要原始 ROM。"),
+        ("library.buildPackage.cacheMissing", "该包没有 manifest（旧版 CLI）——下次部署会重新编译。"),
         ("library.buildPackage.importFailed", "导入失败：{0}"),
         ("library.buildPackage.conflict", "该游戏已存在构建包。{0}"),
 
