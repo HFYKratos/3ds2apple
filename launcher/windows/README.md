@@ -19,7 +19,7 @@ UI, log and diagnostics export. The current development checkout adds a Deploy
 window-close cleanup (a running deploy is stopped and its 3dsrecomp/clang/lld/
 devpush/plumesign processes are terminated before the launcher exits), and merges the
 two duplicate "not built yet" Library strings into one status line. This checkout compiles cleanly (0 errors, warnings as
-errors) and its **288 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
+errors) and its **292 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
 `--self-test` on Linux/WSL with the embedded payload (33 PASS / 0 FAIL / 0 WARN), and on a
 Windows host natively through `scripts/release/win-selftest.sh` (33 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a Settings page; it is
@@ -80,7 +80,11 @@ travels as an internal devpush/plumesign command argument.
    (.3ds/.cci/.ncch/.cxi, multi-select) and `.32a` build packages, and the extension
    decides the path: ROMs are read header-only (title ID, product code, name) by the
    existing 3ds2apple-pack CLI and added to the library without copying the ROM, while a
-   `.32a` goes through the build-package import and its replace-conflict flow. Missing or
+   `.32a` goes through the build-package import and its replace-conflict flow. An imported
+   package whose `manifest.json` matches the current build recipe also restores its build
+   record: the import status confirms the build cache is recorded (or explains a
+   mismatch/legacy package) and **Build now**/**Deploy** reuse its GamePack instead of
+   recompiling. Missing or
    unsupported files are reported and nothing is imported for them; re-importing a ROM
    already in the library refreshes its SMDH metadata. **Build now** on one card
    or **Build all** in the header compiles the GamePack ahead of a deploy and shows
@@ -104,7 +108,8 @@ travels as an internal devpush/plumesign command argument.
    what the run will do (see "Device-aware incremental deploy" below). One action then runs,
    in order, with a live per-step state and one Retry button on failure:
    - compile each selected game locally (3dsrecomp + open-source LLVM/LLD on this PC; real
-     packs already built are reused). The old macOS Build Agent / preview choices are gone
+     packs already built are reused, including packs restored from an imported `.32a`
+     build cache). The old macOS Build Agent / preview choices are gone
      and there is no silent fallback — a missing toolchain is one actionable error.
    - compose one ROM-free app IPA from the pinned shell template + all selected packs +
      a schema-2 GameCatalog.json, and **verify the packs + catalogue before signing**.
@@ -120,7 +125,7 @@ travels as an internal devpush/plumesign command argument.
      "Cancelled" and the page returns to a deployable state; compiled packs are kept
      for the next attempt. Closing the launcher window during a deploy runs the same
      cleanup before the window closes, so no background compiler/signer survives.
-   - **Refresh signing** (Windows; the macOS launcher does not have it this round) —
+   - **Refresh signing** (Windows; the macOS launcher has the same button) —
      the Deploy prerequisites header has a **Refresh signing** button. It re-signs and
      overwrite-installs the last IPA recorded in the portable state — the most recent
      Deploy-composed app IPA or single-game export — through the existing
@@ -223,7 +228,19 @@ export still succeeds and the UI states that deploying it needs the original ROM
 Picking a `.32a` in the header **Import** runs the build-package import: it validates
 the ZIP/manifest/SHA-256/Mach-O structure, installs into
 `workspace/out/packages/<TITLEID>/`, marks the queue built and refreshes the Library
-so the game is immediately deployable. The imported entry's ROM path is the imported
+so the game is immediately deployable. The package's `manifest.json` also carries the
+build recipe: format/schema, the clang+LLVM toolchain, the AOT O-level/LTO/fast-math
+options, the GamePack SHA-256/bytes/ABI, the ROM SHA-256/bytes, the build time and the
+source launcher version. `BuildPackageManifestReader` validates it and, when the recipe
+matches the current `BuildCompatibility`, writes the normal library build record so
+`BuildCachePolicy` reuses the package's GamePack on the next **Build now**/**Deploy** —
+the import status confirms **build cache recorded** ("Build cache recorded — this
+package can be deployed without recompiling."). A different recipe/toolchain ("Built
+with a different build recipe/toolchain — the next deploy will recompile it."), a
+package without embedded game data ("No game data embedded — the build cache cannot be
+recorded; deploying needs the original ROM.") or a legacy package without the manifest
+("No manifest in this package (older CLI) — the next deploy will recompile it.") never
+pretends reuse: nothing is recorded and the status says why. The imported entry's ROM path is the imported
 `.32a` file itself; later builds, the data push and the single-game IPA export
 resolve the ROM packed inside it (the package copy, else a launcher-owned extraction),
 so the original ROM file is no longer needed. An existing package is reported as a conflict
@@ -235,7 +252,8 @@ format. A successful export shows just `Exported: <path>` (or the exact error) i
 the Library and in the launcher log; the UI states that **a .32a can contain game data, so it must stay
 local** (never upload or commit it). Nothing is signed, installed or uploaded. Tests:
 `BuildPackageServiceTests.cs` (argument mapping, JSON parsing, conflict/replace,
-missing CLI, workspace state), `ExportNamingAndRomPathTests.cs` (both export names
+missing CLI, workspace state, `.32a` manifest build-cache restore,
+toolchain/options mismatch, no-ROM and legacy fallbacks), `ExportNamingAndRomPathTests.cs` (both export names
 with sanitizing, imported-package `RomPath`, embedded GameRom resolution),
 `SingleGameIpaExportTests.cs` (localized IPA app label + `InfoPlist.strings`, path-only
 success copy), `ExportAndSigningRefreshTests.cs` (default export folders and folder
@@ -323,7 +341,7 @@ generator, missing cover fallback, template/pack/catalog failures).
   Deploy pipeline + device-aware deploy planner + composed-IPA verifier, IPA composition,
   signing, push, localization catalog, embedded single-file payload, build-compatibility
   cache) / ThreeDsTwoApple.Launcher.Desktop (Avalonia shell) /
-  ThreeDsTwoApple.Launcher.Core.Tests (288 xUnit tests).
+  ThreeDsTwoApple.Launcher.Core.Tests (292 xUnit tests).
 - All external work goes through CLI tools passed as argument arrays (never a
   shell string): 3ds2apple-pack, devpush, the official plumesign.
   The launcher never re-implements ROM parsing, the AOT compile/link,
@@ -347,6 +365,7 @@ generator, missing cover fallback, template/pack/catalog failures).
         BuildPipeline/IpaComposer.cs            shell template + packs + GameCatalog -> installable IPA
         BuildPipeline/LocalWinbuildPackProvider.cs  3dsrecomp + LLVM/LLD local build (the only Deploy path)
         BuildPipeline/BuildCompatibility.cs     buildCompatVersion marker + build-cache reuse policy
+        BuildPipeline/BuildPackageManifest.cs   .32a manifest reader + import build-cache restore
         BuildPipeline/LibraryBuildService.cs    Library "Build now"/"Build all" (same cache rules as Deploy)
         BuildPipeline/BuildProviders.cs         build provider contract + preview placeholder (not offered by the v2 UI)
         BuildPipeline/GamePackInspector.cs      Mach-O check so only real AOT packs are installed
@@ -361,7 +380,7 @@ generator, missing cover fallback, template/pack/catalog failures).
       Hardware/                           logical/physical cores + RAM probe for the compile line
       src/Launcher.Desktop/             Avalonia UI (Program, App, MainWindow, view model,
                                         Localization/LocalizedText, Assets/app.ico + placeholder)
-      tests/ThreeDsTwoApple.Launcher.Core.Tests/   288 xUnit tests (incl. ExportAndSigningRefreshTests +
+      tests/ThreeDsTwoApple.Launcher.Core.Tests/   292 xUnit tests (incl. ExportAndSigningRefreshTests +
                                                   ExportNamingAndRomPathTests + SingleGameIpaExportTests +
                                                   DeployFlowTests + DeviceDeployTests + DeployCancellationTests +
                                                   ProcessRunnerTests + BuildCacheTests + ComposedIpaVerifierTests)
