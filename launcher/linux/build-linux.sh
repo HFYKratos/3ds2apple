@@ -170,7 +170,7 @@ if [ "$MAKE_LOCAL_AOT" = "1" ]; then
     echo '  "llvm": "'"$LLVM_VERSION"'",'
     echo '  "ld64": "'"$( ("$OUTPUT/Bin/llvm/bin/ld64.lld" --version 2>/dev/null || true) | head -1 )"'",'
     echo '  "recompiler": "'"$(sha256sum "$OUTPUT/Bin/3dsrecomp" | awk '{print $1}')"'",'
-    echo '  "note": "Official open-source LLVM + 3dsrecomp binaries; exact LLVM pin is 23.1.6 when available, 23.1.5 is the current fallback on CachyOS."'
+    echo '  "note": "Official open-source LLVM + 3dsrecomp binaries; the exact LLVM pin is 23.1.6 and this file records the version actually staged."'
     echo "}"
   } > "$OUTPUT/PINS-local-aot.json"
   echo "[linux] local AOT: 3dsrecomp + $LLVM_VERSION + Darwin stubs/shim/include"
