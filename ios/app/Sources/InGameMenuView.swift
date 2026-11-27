@@ -540,7 +540,10 @@ struct InGameMenuView: View {
                 }
             }
             // The resolution row uses the system segmented control, the same
-            // control the 0.2.1 Settings redesign uses for this setting.
+            // control the 0.2.1 Settings redesign uses for this setting. The
+            // internal 3D scale is fixed when a system loads (no run-time
+            // renderer rebuild), so the row carries the same restart note as
+            // Settings -> Graphics.
             rowGroup {
                 resolutionRow
             }
@@ -564,6 +567,11 @@ struct InGameMenuView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+            SettingsRestartBadge()
+            Text(L10n.tr("Takes effect after restarting the game."))
+                .font(.footnote)
+                .foregroundStyle(secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, rowHorizontalPadding)
         .padding(.vertical, 10)
