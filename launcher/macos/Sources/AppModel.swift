@@ -1084,7 +1084,15 @@ final class AppModel: ObservableObject {
             packageDirectory: packageDirectory,
             cacheDirectory: pack.outRoot.appendingPathComponent("rom-cache").path
         )
-        guard resolved.error == nil, !resolved.path.isEmpty else {
+        // Mock mode has no user ROM on disk: the fixtures use placeholder romPaths and
+        // stageROMData synthesizes the push source itself, so preflight must not fail
+        // (0.2.2-beta4 regression: 13 mock deploy self-checks failed at step 0).
+        let resolvedPath: String
+        if resolved.error == nil, !resolved.path.isEmpty {
+            resolvedPath = resolved.path
+        } else if kind == .mock {
+            resolvedPath = game.romPath
+        } else {
             throw LauncherFailure(
                 code: "rom_missing",
                 message: resolved.error ?? "The game's ROM is missing.",
@@ -1093,14 +1101,14 @@ final class AppModel: ObservableObject {
                 exitCode: nil
             )
         }
-        let extensionName = ((resolved.path as NSString).pathExtension).lowercased()
+        let extensionName = ((resolvedPath as NSString).pathExtension).lowercased()
         let rom = DetectedROM(
-            path: resolved.path,
+            path: resolvedPath,
             titleID: game.titleID,
             displayName: game.displayName,
             productCode: game.productCode,
             container: (extensionName == "cxi" || extensionName == "ncch") ? "ncch" : "ncsd",
-            bytes: FileProbe.size(resolved.path) ?? game.romBytes,
+            bytes: FileProbe.size(resolvedPath) ?? game.romBytes,
             contentBytes: nil,
             titleVersion: nil
         )
