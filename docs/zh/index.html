@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>3ds2apple — 在 iPhone 与 iPad 上原生运行你自有的 Nintendo 3DS 游戏</title>
-<meta name="description" content="3ds2apple 把你自有的 Nintendo 3DS 游戏提前重编译为原生 ARM64，直接跑在 iPhone 与 iPad 上：图形经 MoltenVK 走 Metal，没有 CPU JIT，也没有解释器兜底。Windows、macOS 与 Linux 启动器，Apache-2.0，当前版本 0.2.1。">
+<meta name="description" content="3ds2apple 把你自有的 Nintendo 3DS 游戏提前重编译为原生 ARM64，直接跑在 iPhone 与 iPad 上：图形经 MoltenVK 走 Metal，没有 CPU JIT，也没有解释器兜底。Windows、macOS 与 Linux 启动器，Apache-2.0，当前版本 0.3.0。">
 <meta name="keywords" content="3ds2apple, iPhone 运行 3DS, iPad 运行 3DS, 3DS 原生移植, AOT 重编译, ARM64, Metal, MoltenVK, 无 JIT, iOS 16, 开源, Apache-2.0, 自备游戏">
 <meta name="author" content="HFYKratos">
 <meta name="robots" content="index, follow">
@@ -20,7 +20,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="3ds2apple">
 <meta property="og:title" content="3ds2apple — 自有 3DS 游戏，原生运行在 iPhone 与 iPad">
-<meta property="og:description" content="把你自有的 Nintendo 3DS 游戏重编译为原生 ARM64，经 MoltenVK 走 Metal：没有 CPU JIT，也没有解释器兜底。自备游戏，v0.2.1，Apache-2.0。">
+<meta property="og:description" content="把你自有的 Nintendo 3DS 游戏重编译为原生 ARM64，经 MoltenVK 走 Metal：没有 CPU JIT，也没有解释器兜底。自备游戏，v0.3.0，Apache-2.0。">
 <meta property="og:url" content="https://hfykratos.github.io/3ds2apple/zh/">
 <meta property="og:image" content="https://hfykratos.github.io/3ds2apple/assets/og.png">
 <meta property="og:image:type" content="image/png">
@@ -29,7 +29,7 @@
 <meta property="og:image:alt" content="3ds2apple：深色网格背景上的合成纵向预览与横向预览。">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="3ds2apple — 在 iPhone 与 iPad 上原生运行自有 3DS 游戏">
-<meta name="twitter:description" content="AOT ARM64 重编译，经 MoltenVK 走 Metal，没有 CPU JIT。自备游戏。版本 0.2.1，Apache-2.0。">
+<meta name="twitter:description" content="AOT ARM64 重编译，经 MoltenVK 走 Metal，没有 CPU JIT。自备游戏。版本 0.3.0，Apache-2.0。">
 <meta name="twitter:image" content="https://hfykratos.github.io/3ds2apple/assets/og.png">
 <script type="application/ld+json">
 {
@@ -41,7 +41,7 @@
   "description": "把你自有的 Nintendo 3DS 游戏提前重编译为原生 ARM64，并在 iPhone 与 iPad 上通过 Metal（MoltenVK）运行，没有 CPU JIT，也没有解释器兜底。",
   "url": "https://hfykratos.github.io/3ds2apple/zh/",
   "downloadUrl": "https://github.com/HFYKratos/3ds2apple/releases",
-  "softwareVersion": "0.2.1",
+  "softwareVersion": "0.3.0",
   "datePublished": "2026-11-25",
   "license": "https://www.apache.org/licenses/LICENSE-2.0",
   "isAccessibleForFree": true,
@@ -63,7 +63,7 @@
         <path d="M16 44h32l4 8H12z" fill="#efe2ff" opacity=".92"/>
       </svg>
       <span class="brand-name">3ds2apple</span>
-      <span class="brand-ver">v0.2.1</span>
+      <span class="brand-ver">v0.3.0</span>
     </a>
     <nav class="site-nav" aria-label="主导航">
       <a href="#why">为何原生</a>
@@ -86,22 +86,22 @@
       <div class="hero-copy">
         <p class="eyebrow">AOT Nintendo 3DS 运行环境 · iPhone / iPad</p>
         <h1>你自有的 <span class="nb">3DS 游戏</span>，<span class="accent">原生</span>运行在 <span class="nb">iPhone 与 iPad 上</span>。</h1>
-        <p class="lede">游戏代码会在电脑上被提前重编译为原生 ARM64，再直接运行在手机处理器上——图形经 MoltenVK 走 Metal，没有 CPU JIT，也没有解释器兜底。Windows 或 macOS 启动器负责编译、签名、安装与推送；Linux 启动器则签名并安装在这两台机器上准备好的 <code>.32a</code> 构建包。一个 App 装下整个游戏库。</p>
+        <p class="lede">游戏代码会在电脑上被提前重编译为原生 ARM64，再直接运行在手机处理器上——图形经 MoltenVK 走 Metal，没有 CPU JIT，也没有解释器兜底。Windows、macOS 或 Linux 启动器负责编译、签名、安装与推送；Linux 版自带本地 AOT 工具链（3dsrecomp + LLVM/LLD 23.1.6）。一个 App 装下整个游戏库。</p>
         <div class="cta-row">
-          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.1/3ds2apple-0.2.1-windows-x64.zip">
+          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-windows-x64.zip">
             <svg class="os" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 4.55 11 3.4v8.05H3V4.55Zm9-1.3 9-1.25v9.45h-9V3.25ZM3 12.45h8v8.05L3 19.4v-6.95Zm9 0h9v9.45l-9-1.25v-8.2Z"/></svg>
-            下载 Windows 版 <span class="meta">157.9 MB · zip</span>
+            下载 Windows 版 <span class="meta">158.3 MB · zip</span>
           </a>
-          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.1/3ds2apple-0.2.1-macos-universal.zip">
+          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-macos-universal.zip">
             <svg class="os" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M2 19h20"/></svg>
-            下载 macOS 版 <span class="meta">5.53 MB · zip</span>
+            下载 macOS 版 <span class="meta">5.88 MB · zip</span>
           </a>
-          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/latest">
+          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-linux-x86_64.tar.gz">
             <svg class="os" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3c-3 0-5 2-5 5 0 1.5.5 2 0 3-1 2-2 3-2 5 0 2 2 4 4 4 1 0 2-.5 3-.5s2 .5 3 .5c2 0 4-2 4-4 0-2-1-3-2-5-.5-1 0-1.5 0-3 0-3-2-5-5-5Z"/></svg>
-            下载 Linux 版 <span class="meta">x86_64 · tar.gz</span>
+            下载 Linux 版 <span class="meta">253.4 MB · tar.gz</span>
           </a>
         </div>
-        <p class="cta-note">v0.2.1 · 发布于 2026-11-25 · Apache-2.0 · <a href="https://github.com/HFYKratos/3ds2apple/releases" rel="noopener">全部版本</a> · <a href="#download">文件大小与 SHA-256</a></p>
+        <p class="cta-note">v0.3.0 · 发布于 2026-11-27 · Apache-2.0 · <a href="https://github.com/HFYKratos/3ds2apple/releases" rel="noopener">全部版本</a> · <a href="#download">文件大小与 SHA-256</a></p>
         <ul class="hero-facts">
           <li>iOS 16 及以上</li>
           <li>Windows 10/11</li>
@@ -122,7 +122,7 @@
   <section class="section dl-section" id="download">
     <div class="wrap">
       <div class="section-head">
-        <p class="eyebrow">下载 · v0.2.1</p>
+        <p class="eyebrow">下载 · v0.3.0</p>
         <h2>三个平台包，发布在 GitHub Releases。</h2>
         <p>Windows/macOS 的 zip 在根目录带 <code>LICENSE</code>、<code>NOTICE</code> 与 <code>THIRD_PARTY.md</code>，Linux 的 tar 则把同样三份文本放在启动器目录内；Release 从不附带游戏数据。</p>
       </div>
@@ -133,14 +133,14 @@
             <h3>Windows 启动器</h3>
             <span class="tag tag-gpu">已验证路径</span>
           </div>
-          <p class="dl-file">3ds2apple-0.2.1-windows-x64.zip</p>
-          <p class="dl-meta"><span>版本 <b>0.2.1</b></span><span>大小 <b>157,852,006 B</b>（157.9 MB）</span><span>Windows 10/11 x64</span></p>
+          <p class="dl-file">3ds2apple-0.3.0-windows-x64.zip</p>
+          <p class="dl-meta"><span>版本 <b>0.3.0</b></span><span>大小 <b>158,261,808 B</b>（158.3 MB）</span><span>Windows 10/11 x64</span></p>
           <p class="fine" style="margin:0">单个自包含的 <code>3ds2apple-launcher.exe</code>，无需 Mac 即可编译、签名、安装并推送。exe 未做代码签名：请先核对下方摘要，再选择「更多信息 → 仍要运行」。</p>
           <details>
             <summary>SHA-256 摘要</summary>
-            <code>627ad2af9feaa55c2651b31977d808b9bb7da38abe970430a7df8db8223e72ed</code>
+            <code>4d2a6f235bbd636535275feb1646074642ca41cb3620042459362ed4e4009cbf</code>
           </details>
-          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.1/3ds2apple-0.2.1-windows-x64.zip">下载 Windows 版</a>
+          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-windows-x64.zip">下载 Windows 版</a>
         </article>
         <article class="dl-card">
           <div class="dl-head">
@@ -148,35 +148,42 @@
             <h3>macOS 启动器</h3>
             <span class="tag tag-readback">开发者预览</span>
           </div>
-          <p class="dl-file">3ds2apple-0.2.1-macos-universal.zip</p>
-          <p class="dl-meta"><span>版本 <b>0.2.1</b></span><span>大小 <b>5,532,772 B</b>（5.53 MB）</span><span>macOS 13+，Intel + Apple 芯片</span></p>
+          <p class="dl-file">3ds2apple-0.3.0-macos-universal.zip</p>
+          <p class="dl-meta"><span>版本 <b>0.3.0</b></span><span>大小 <b>5,878,765 B</b>（5.88 MB）</span><span>macOS 13+，Intel + Apple 芯片</span></p>
           <p class="fine" style="margin:0">未公证：首次启动请右键 →「打开」。安装包<strong>尚未自包含</strong>（需要 Xcode、仓库检出与已构建工具），真机安装也尚未经维护者验证——见 <a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a>。</p>
           <details>
             <summary>SHA-256 摘要</summary>
-            <code>dd5b62c4a9cc099eb168d4cce501698c88274c9c4519d9f3d896449550572bf4</code>
+            <code>5849ed23c45ab5430b6b203846e3a74436569fc83830f068ea6fb55b8d49c588</code>
           </details>
-          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.1/3ds2apple-0.2.1-macos-universal.zip">下载 macOS 版</a>
+          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-macos-universal.zip">下载 macOS 版</a>
         </article>
         <article class="dl-card">
           <div class="dl-head">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3c-3 0-5 2-5 5 0 1.5.5 2 0 3-1 2-2 3-2 5 0 2 2 4 4 4 1 0 2-.5 3-.5s2 .5 3 .5c2 0 4-2 4-4 0-2-1-3-2-5-.5-1 0-1.5 0-3 0-3-2-5-5-5Z"/></svg>
             <h3>Linux 启动器</h3>
-            <span class="tag tag-readback">测试版</span>
+            <span class="tag tag-readback">新增</span>
           </div>
-          <p class="dl-file">3ds2apple-&lt;version&gt;-linux-x86_64.tar.gz</p>
-          <p class="dl-meta"><span>版本 <b>最新</b></span><span>x86_64 Linux</span><span>tar.gz</span></p>
-          <p class="fine" style="margin:0">与 Windows 启动器共用界面与引擎。Linux <strong>暂不支持本地 AOT 编译</strong>：请先在 Windows 或 macOS 上构建 GamePack，导出 <code>.32a</code> 构建包，再在这里导入并部署。签名/安装使用内置官方 plumesign-linux，通过 USB 与 <code>usbmuxd</code> 完成。</p>
-          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/latest">下载 Linux 版</a>
+          <p class="dl-file">3ds2apple-0.3.0-linux-x86_64.tar.gz</p>
+          <p class="dl-meta"><span>版本 <b>0.3.0</b></span><span>大小 <b>253,412,656 B</b>（253.4 MB）</span><span>x86_64 Linux</span></p>
+          <p class="fine" style="margin:0">与 Windows 启动器共用界面与引擎。载荷内置<strong>本地 AOT 工具链</strong>（3dsrecomp + clang/LLD 23.1.6），Linux 可自行构建 GamePack；也可导入 <code>.32a</code> 构建包并复用其构建缓存。签名/安装使用内置官方 plumesign-linux，通过 USB 与 <code>usbmuxd</code> 完成。</p>
+          <details style="margin:10px 0">
+            <summary>SHA-256 摘要</summary>
+            <code>5b49140f7d5db9cbb1ed363ee4d36422ccc6b68cbae70fc325d246105430e5c6</code>
+          </details>
+          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-linux-x86_64.tar.gz">下载 Linux 版</a>
         </article>
       </div>
       <details class="verify">
         <summary>核对下载文件的 SHA-256</summary>
         <p class="muted">GitHub 也会在 Release 页面显示每个资产的 SHA-256。可在本地计算后比对：</p>
         <pre class="code-block"><code># Windows（PowerShell）
-Get-FileHash .\3ds2apple-0.2.1-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\3ds2apple-0.3.0-windows-x64.zip -Algorithm SHA256
 
 # macOS
-shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
+shasum -a 256 3ds2apple-0.3.0-macos-universal.zip
+
+# Linux
+sha256sum 3ds2apple-0.3.0-linux-x86_64.tar.gz</code></pre>
       </details>
     </div>
   </section>
@@ -191,7 +198,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
       <ol class="pipeline">
         <li><span class="step">01</span><h3>自有的 ROM</h3><p>导入你合法拥有并自行导出的已解密 <code>.3ds</code>/<code>.cci</code>；只读取 ROM 头与 SMDH 元数据。</p></li>
         <li><span class="step">02</span><h3>3dsrecomp → C</h3><p>静态重编译在电脑上提前翻译游戏代码；生成的代码不会提交或分享。</p></li>
-        <li><span class="step">03</span><h3>ARM64 GamePack</h3><p>用本机 LLVM（Windows）或 Apple clang（macOS）编译 <code>GamePack</code>，再由启动器合成不含 ROM 的基础 IPA。</p></li>
+        <li><span class="step">03</span><h3>ARM64 GamePack</h3><p>用本机 LLVM/LLD（Windows）、Apple clang（macOS）或内置 3dsrecomp + LLVM/LLD 23.1.6（Linux）编译 <code>GamePack</code>，再由启动器合成不含 ROM 的基础 IPA。</p></li>
         <li><span class="step">04</span><h3>MoltenVK → Metal</h3><p>PICA200 GPU 路径转换为 Metal；GPU presenter 绘制所有屏幕布局（预设与自定义矩形），每帧零屏幕回读。</p></li>
       </ol>
       <div class="why-grid">
@@ -395,14 +402,14 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
           <div class="head">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3c-3 0-5 2-5 5 0 1.5.5 2 0 3-1 2-2 3-2 5 0 2 2 4 4 4 1 0 2-.5 3-.5s2 .5 3 .5c2 0 4-2 4-4 0-2-1-3-2-5-.5-1 0-1.5 0-3 0-3-2-5-5-5Z"/></svg>
             <h3>Linux</h3>
-            <span class="status preview">测试版</span>
+            <span class="status preview">新增</span>
           </div>
           <ol class="steps">
-            <li>从最新 Release 下载 <code>3ds2apple-&lt;version&gt;-linux-x86_64.tar.gz</code>，解压到可写目录（x86_64 Linux，X11 或 Wayland，并安装 <code>usbmuxd</code>）。</li>
-            <li>先在 Windows 或 macOS 上构建 GamePack 并导出<b>已完成构建包</b>（<code>.32a</code>）：Linux 暂不支持本地 AOT 编译。用 USB 连接手机、解锁并信任电脑。</li>
-            <li><b>导入</b>该 <code>.32a</code>，在 <b>设置 → Sign in with plumesign</b> 中登录（Apple ID 与 2FA 只留在该终端），然后按 <b>部署</b>：启动器用内置 plumesign-linux 签名并覆盖安装，再通过 devpush 推送游戏数据。<b>续签</b> 可在不重新构建的情况下续 7 天签名。</li>
+            <li>从 Release 下载 <code>3ds2apple-0.3.0-linux-x86_64.tar.gz</code>，解压到可写目录（x86_64 Linux，X11 或 Wayland，并安装 <code>usbmuxd</code>）。载荷包含本地 AOT 工具链（3dsrecomp + clang/LLD 23.1.6）。</li>
+            <li><b>导入</b>你自有的已解密 ROM，用内置工具链在本地构建 GamePack；也可导入准备好的<b>已完成构建包</b>（<code>.32a</code>）并复用其 GamePack/构建缓存。用 USB 连接手机、解锁并信任电脑。</li>
+            <li>在 <b>设置 → Sign in with plumesign</b> 中登录（Apple ID 与 2FA 只留在该终端），然后按 <b>部署</b>：启动器编译 GamePack、合成 IPA，用内置 plumesign-linux 签名并覆盖安装，再通过 devpush 推送游戏数据。<b>续签</b> 可在不重新构建的情况下续 7 天签名。</li>
           </ol>
-          <p class="warn">Linux 只负责签名与安装准备好的构建；暂不能编译 GamePack。</p>
+          <p class="warn">Linux 用内置 3dsrecomp + LLVM/LLD 23.1.6 工具链本地构建 GamePack；也可部署导入的 <code>.32a</code> 包。</p>
         </article>
       </div>
       <p class="start-note"><strong>免费 Apple ID：</strong>每台设备 3 个 App、签名约 7 天有效——重新部署即可续期。付费开发者账号可解除这些限制。游戏数据位于 <code>Documents/Games/&lt;TITLEID&gt;/</code>；存档与存档状态位于 App 容器。重新部署或覆盖更新会保留它们；彻底卸载才会清除。电脑上的 ROM 不受影响。</p>
@@ -438,7 +445,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         </details>
         <details>
           <summary>启动器具体做了什么？</summary>
-          <div class="a"><p>读取 ROM 头与 SMDH 元数据，用本机 LLVM 或 Apple clang 为每款选中的游戏编译 GamePack，把不含 ROM 的基础 IPA 与 GameCatalog 合成，用你的 Apple ID 签名安装，然后只把 <code>GameRom.cci</code> 与 <code>GameInfo.json</code> 推送到 App 的 Documents 目录。Windows 启动器还会先检查已装 App 与游戏数据，做设备感知的增量部署：覆盖更新不丢 Documents 与存档，只推送缺失的数据。Linux 启动器共用界面与引擎，但跳过编译步骤：导入准备好的 <code>.32a</code> 包，复用其 GamePack/构建缓存，再用 plumesign-linux 签名安装。</p></div>
+          <div class="a"><p>读取 ROM 头与 SMDH 元数据，用本机 LLVM、Apple clang 或内置 3dsrecomp + LLVM/LLD 23.1.6（Linux）为每款选中的游戏编译 GamePack，把不含 ROM 的基础 IPA 与 GameCatalog 合成，用你的 Apple ID 签名安装，然后只把 <code>GameRom.cci</code> 与 <code>GameInfo.json</code> 推送到 App 的 Documents 目录。Windows 启动器还会先检查已装 App 与游戏数据，做设备感知的增量部署：覆盖更新不丢 Documents 与存档，只推送缺失的数据。Linux 启动器共用界面与引擎，但跳过编译步骤：导入准备好的 <code>.32a</code> 包，复用其 GamePack/构建缓存，再用 plumesign-linux 签名安装。</p></div>
         </details>
         <details>
           <summary>macOS 启动器可以正常用了吗？</summary>
@@ -446,7 +453,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         </details>
         <details>
           <summary>有 Linux 启动器吗？</summary>
-          <div class="a"><p>有。Linux x86_64 图形启动器与 Windows 启动器共用界面与引擎：可导入 ROM 与 <code>.32a</code> 构建包、复用匹配包的构建缓存、用内置官方 plumesign-linux 通过 USB（<code>usbmuxd</code>）签名并覆盖安装（Apple ID 与 2FA 只留在终端），通过 devpush 推送游戏数据，并用 <b>续签</b> 续 7 天签名。Linux 暂不支持本地 AOT 编译：请先在 Windows 或 macOS 上构建 GamePack 并导出 <code>.32a</code> 包，再在这里导入并部署。</p></div>
+          <div class="a"><p>有。Linux x86_64 图形启动器与 Windows 启动器共用界面与引擎：可导入 ROM 与 <code>.32a</code> 构建包、复用匹配包的构建缓存、用内置官方 plumesign-linux 通过 USB（<code>usbmuxd</code>）签名并覆盖安装（Apple ID 与 2FA 只留在终端），通过 devpush 推送游戏数据，并用 <b>续签</b> 续 7 天签名。载荷同样内置本地 AOT 工具链（3dsrecomp + clang/LLD 23.1.6），可直接在 Linux 上构建 GamePack；也可导入在其他机器构建的 <code>.32a</code> 包并复用其构建缓存。</p></div>
         </details>
         <details>
           <summary>App 会联网或收集数据吗？</summary>
@@ -478,7 +485,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
       <div class="limits">
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>部分菜单可能渲染异常</h3><p>个别游戏的某些菜单上屏可能出现花屏。诊断路径已检查，但修复仍在排查中——<a href="https://github.com/HFYKratos/3ds2apple/issues/2" rel="noopener">issue #2</a>。</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>macOS 仍是开发者预览</h3><p>macOS 启动器尚未自包含，真机安装尚未验证——<a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a>。Windows 路径才是已验证的。</p></div></article>
-        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>Linux 暂不支持本地 AOT 编译</h3><p>Linux 启动器能签名、安装与推送，但还不能自己构建 GamePack：请在 Windows 或 macOS 上构建，导出带游戏数据的 <code>.32a</code> 包，再在 Linux 上导入并部署。包内的 GamePack 与构建缓存会被直接复用，不会重新编译。</p></div></article>
+        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>Linux 启动器更新一些</h3><p>它用内置 3dsrecomp + LLVM/LLD 23.1.6 本地构建 GamePack，用 plumesign-linux 签名/安装，并通过 usbmuxd/devpush 推送；导入的 <code>.32a</code> 包会复用其构建缓存。真机使用量比 Windows 路径少——遇到问题请到 issue 反馈。</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>C 杆取决于游戏</h3><p>它通过 New 3DS 摇杆 API 上报；不读取该 API 的游戏会忽略它，用旧运行库构建的壳也不提供。默认隐藏——游戏读取摇杆时在「切换控制」里开启。</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>不承诺兼容性与性能</h3><p>部分游戏可能无法启动或运行较慢。README 里的参考数据来自维护者对特定游戏的实测，不构成保证。</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>尚未包含</h3><p>Delta 风格皮肤导入、金手指管理器、游戏说明书查看器、amiibo、麦克风、摄像头与网络/在线功能暂不包含——这些需要模拟器核心工作。CPU JIT、着色器 JIT、RPC 与 LLE 模块设置不适用于纯 AOT 架构。</p></div></article>
@@ -495,7 +502,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
           <p>3ds2apple 现已提供 Windows、macOS 与 Linux 版本。完整指南、诊断流程与全部已知限制都在 README 里。</p>
         </div>
         <div class="cta-row">
-          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.2.1" rel="noopener">获取 v0.2.1</a>
+          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.3.0" rel="noopener">获取 v0.3.0</a>
           <a class="btn btn-ghost" href="https://github.com/HFYKratos/3ds2apple/blob/main/README.zh-CN.md" rel="noopener">阅读 README</a>
           <a class="btn btn-ghost" href="../press/">媒体资料</a>
         </div>
@@ -549,7 +556,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
     </div>
     <div class="footer-bottom">
       <span>© 2026 3ds2apple contributors · 维护者 HFYKratos</span>
-      <span>v0.2.1 · 2026-11-25 · <a href="https://github.com/HFYKratos/3ds2apple" rel="noopener">GitHub</a></span>
+      <span>v0.3.0 · 2026-11-27 · <a href="https://github.com/HFYKratos/3ds2apple" rel="noopener">GitHub</a></span>
     </div>
   </div>
 </footer>

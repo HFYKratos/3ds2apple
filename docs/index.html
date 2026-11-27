@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>3ds2apple — run your own Nintendo 3DS games natively on iPhone &amp; iPad</title>
-<meta name="description" content="3ds2apple recompiles your own Nintendo 3DS games to native ARM64 ahead of time and runs them on iPhone and iPad: Metal through MoltenVK, no CPU JIT, no interpreter fallback. Windows, macOS and Linux launchers, Apache-2.0, version 0.2.1.">
+<meta name="description" content="3ds2apple recompiles your own Nintendo 3DS games to native ARM64 ahead of time and runs them on iPhone and iPad: Metal through MoltenVK, no CPU JIT, no interpreter fallback. Windows, macOS and Linux launchers, Apache-2.0, version 0.3.0.">
 <meta name="keywords" content="3ds2apple, Nintendo 3DS on iPhone, Nintendo 3DS on iPad, 3DS native port, AOT recompilation, ARM64, Metal, MoltenVK, no JIT, iOS 16, homebrew, Apache-2.0, bring your own games">
 <meta name="author" content="HFYKratos">
 <meta name="robots" content="index, follow">
@@ -20,7 +20,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="3ds2apple">
 <meta property="og:title" content="3ds2apple — your own 3DS games, native on iPhone &amp; iPad">
-<meta property="og:description" content="AOT-compiled ARM64 Nintendo 3DS games on iPhone and iPad: Metal via MoltenVK, no CPU JIT, no interpreter fallback. Bring your own legally owned, dumped games. v0.2.1, Apache-2.0.">
+<meta property="og:description" content="AOT-compiled ARM64 Nintendo 3DS games on iPhone and iPad: Metal via MoltenVK, no CPU JIT, no interpreter fallback. Bring your own legally owned, dumped games. v0.3.0, Apache-2.0.">
 <meta property="og:url" content="https://hfykratos.github.io/3ds2apple/">
 <meta property="og:image" content="https://hfykratos.github.io/3ds2apple/assets/og.png">
 <meta property="og:image:type" content="image/png">
@@ -29,7 +29,7 @@
 <meta property="og:image:alt" content="3ds2apple: a synthetic portrait preview and landscape preview on a dark grid background.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="3ds2apple — native 3DS games on iPhone &amp; iPad">
-<meta name="twitter:description" content="AOT ARM64 recompilation, Metal via MoltenVK, no CPU JIT. Bring your own games. Version 0.2.1, Apache-2.0.">
+<meta name="twitter:description" content="AOT ARM64 recompilation, Metal via MoltenVK, no CPU JIT. Bring your own games. Version 0.3.0, Apache-2.0.">
 <meta name="twitter:image" content="https://hfykratos.github.io/3ds2apple/assets/og.png">
 <meta name="twitter:image:alt" content="3ds2apple: your own Nintendo 3DS games, native on iPhone and iPad.">
 <script type="application/ld+json">
@@ -42,7 +42,7 @@
   "description": "Recompiles your own Nintendo 3DS games to native ARM64 ahead of time and runs them on iPhone and iPad with Metal via MoltenVK, no CPU JIT and no interpreter fallback.",
   "url": "https://hfykratos.github.io/3ds2apple/",
   "downloadUrl": "https://github.com/HFYKratos/3ds2apple/releases",
-  "softwareVersion": "0.2.1",
+  "softwareVersion": "0.3.0",
   "datePublished": "2026-11-25",
   "license": "https://www.apache.org/licenses/LICENSE-2.0",
   "isAccessibleForFree": true,
@@ -64,7 +64,7 @@
         <path d="M16 44h32l4 8H12z" fill="#efe2ff" opacity=".92"/>
       </svg>
       <span class="brand-name">3ds2apple</span>
-      <span class="brand-ver">v0.2.1</span>
+      <span class="brand-ver">v0.3.0</span>
     </a>
     <nav class="site-nav" aria-label="Primary">
       <a href="#why">Why native</a>
@@ -87,22 +87,22 @@
       <div class="hero-copy">
         <p class="eyebrow">AOT Nintendo 3DS runtime · iPhone &amp; iPad</p>
         <h1>Your own 3DS games, <span class="accent">native</span> on iPhone and iPad.</h1>
-        <p class="lede">Game code is recompiled ahead of time to native ARM64 and runs directly on the phone processor — Metal through MoltenVK, with no CPU JIT and no interpreter fallback. The Windows or macOS launcher compiles, signs, installs and pushes; the Linux launcher signs and installs <code>.32a</code> builds prepared on those machines. One app holds your whole library.</p>
+        <p class="lede">Game code is recompiled ahead of time to native ARM64 and runs directly on the phone processor — Metal through MoltenVK, with no CPU JIT and no interpreter fallback. The Windows, macOS or Linux launcher compiles, signs, installs and pushes; the Linux build ships its own local AOT toolchain (3dsrecomp + LLVM/LLD 23.1.6). One app holds your whole library.</p>
         <div class="cta-row">
-          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.1/3ds2apple-0.2.1-windows-x64.zip">
+          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-windows-x64.zip">
             <svg class="os" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 4.55 11 3.4v8.05H3V4.55Zm9-1.3 9-1.25v9.45h-9V3.25ZM3 12.45h8v8.05L3 19.4v-6.95Zm9 0h9v9.45l-9-1.25v-8.2Z"/></svg>
-            Download for Windows <span class="meta">157.9 MB · zip</span>
+            Download for Windows <span class="meta">158.3 MB · zip</span>
           </a>
-          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.1/3ds2apple-0.2.1-macos-universal.zip">
+          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-macos-universal.zip">
             <svg class="os" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M2 19h20"/></svg>
-            Download for macOS <span class="meta">5.53 MB · zip</span>
+            Download for macOS <span class="meta">5.88 MB · zip</span>
           </a>
-          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/latest">
+          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-linux-x86_64.tar.gz">
             <svg class="os" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3c-3 0-5 2-5 5 0 1.5.5 2 0 3-1 2-2 3-2 5 0 2 2 4 4 4 1 0 2-.5 3-.5s2 .5 3 .5c2 0 4-2 4-4 0-2-1-3-2-5-.5-1 0-1.5 0-3 0-3-2-5-5-5Z"/></svg>
-            Download for Linux <span class="meta">x86_64 · tar.gz</span>
+            Download for Linux <span class="meta">253.4 MB · tar.gz</span>
           </a>
         </div>
-        <p class="cta-note">v0.2.1 · released 2026-11-25 · Apache-2.0 · <a href="https://github.com/HFYKratos/3ds2apple/releases" rel="noopener">all releases</a> · <a href="#download">file sizes &amp; SHA-256</a></p>
+        <p class="cta-note">v0.3.0 · released 2026-11-27 · Apache-2.0 · <a href="https://github.com/HFYKratos/3ds2apple/releases" rel="noopener">all releases</a> · <a href="#download">file sizes &amp; SHA-256</a></p>
         <ul class="hero-facts">
           <li>iOS 16 and later</li>
           <li>Windows 10/11</li>
@@ -123,7 +123,7 @@
   <section class="section dl-section" id="download">
     <div class="wrap">
       <div class="section-head">
-        <p class="eyebrow">Download · v0.2.1</p>
+        <p class="eyebrow">Download · v0.3.0</p>
         <h2>Three platform packages, published on GitHub Releases.</h2>
         <p>The Windows and macOS zips carry <code>LICENSE</code>, <code>NOTICE</code> and <code>THIRD_PARTY.md</code> at their root; the Linux tar carries the same texts inside the launcher folder. No game data is ever attached to a release.</p>
       </div>
@@ -134,14 +134,14 @@
             <h3>Windows launcher</h3>
             <span class="tag tag-gpu">Verified path</span>
           </div>
-          <p class="dl-file">3ds2apple-0.2.1-windows-x64.zip</p>
-          <p class="dl-meta"><span>version <b>0.2.1</b></span><span>size <b>157,852,006 B</b> (157.9 MB)</span><span>Windows 10/11 x64</span></p>
+          <p class="dl-file">3ds2apple-0.3.0-windows-x64.zip</p>
+          <p class="dl-meta"><span>version <b>0.3.0</b></span><span>size <b>158,261,808 B</b> (158.3 MB)</span><span>Windows 10/11 x64</span></p>
           <p class="fine" style="margin:0">One self-contained <code>3ds2apple-launcher.exe</code> that builds, signs, installs and pushes without a Mac. The executable is not code-signed: check the digest below, then choose <em>More info → Run anyway</em>.</p>
           <details>
             <summary>SHA-256 digest</summary>
-            <code>627ad2af9feaa55c2651b31977d808b9bb7da38abe970430a7df8db8223e72ed</code>
+            <code>4d2a6f235bbd636535275feb1646074642ca41cb3620042459362ed4e4009cbf</code>
           </details>
-          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.1/3ds2apple-0.2.1-windows-x64.zip">Download for Windows</a>
+          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-windows-x64.zip">Download for Windows</a>
         </article>
         <article class="dl-card">
           <div class="dl-head">
@@ -149,35 +149,42 @@
             <h3>macOS launcher</h3>
             <span class="tag tag-readback">Developer preview</span>
           </div>
-          <p class="dl-file">3ds2apple-0.2.1-macos-universal.zip</p>
-          <p class="dl-meta"><span>version <b>0.2.1</b></span><span>size <b>5,532,772 B</b> (5.53 MB)</span><span>macOS 13+, Intel + Apple silicon</span></p>
+          <p class="dl-file">3ds2apple-0.3.0-macos-universal.zip</p>
+          <p class="dl-meta"><span>version <b>0.3.0</b></span><span>size <b>5,878,765 B</b> (5.88 MB)</span><span>macOS 13+, Intel + Apple silicon</span></p>
           <p class="fine" style="margin:0">Not notarised: right-click → <em>Open</em> on first launch. The package is <strong>not self-contained yet</strong> (Xcode, a checkout and built tools are required) and real-device installation is not verified by the maintainers — tracked in <a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a>.</p>
           <details>
             <summary>SHA-256 digest</summary>
-            <code>dd5b62c4a9cc099eb168d4cce501698c88274c9c4519d9f3d896449550572bf4</code>
+            <code>5849ed23c45ab5430b6b203846e3a74436569fc83830f068ea6fb55b8d49c588</code>
           </details>
-          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.1/3ds2apple-0.2.1-macos-universal.zip">Download for macOS</a>
+          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-macos-universal.zip">Download for macOS</a>
         </article>
         <article class="dl-card">
           <div class="dl-head">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3c-3 0-5 2-5 5 0 1.5.5 2 0 3-1 2-2 3-2 5 0 2 2 4 4 4 1 0 2-.5 3-.5s2 .5 3 .5c2 0 4-2 4-4 0-2-1-3-2-5-.5-1 0-1.5 0-3 0-3-2-5-5-5Z"/></svg>
             <h3>Linux launcher</h3>
-            <span class="tag tag-readback">Beta</span>
+            <span class="tag tag-readback">New</span>
           </div>
-          <p class="dl-file">3ds2apple-&lt;version&gt;-linux-x86_64.tar.gz</p>
-          <p class="dl-meta"><span>version <b>latest</b></span><span>x86_64 Linux</span><span>tar.gz</span></p>
-          <p class="fine" style="margin:0">Shares the Windows launcher's UI and engine. Linux has <strong>no local AOT compiler yet</strong>: build the GamePack on Windows or macOS, export a <code>.32a</code> package, then import and deploy it here. Signing/installing uses the bundled official plumesign-linux over USB with <code>usbmuxd</code>.</p>
-          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/latest">Download for Linux</a>
+          <p class="dl-file">3ds2apple-0.3.0-linux-x86_64.tar.gz</p>
+          <p class="dl-meta"><span>version <b>0.3.0</b></span><span>size <b>253,412,656 B</b> (253.4 MB)</span><span>x86_64 Linux</span></p>
+          <p class="fine" style="margin:0">Shares the Windows launcher's UI and engine. The payload bundles a <strong>local AOT toolchain</strong> (3dsrecomp + clang/LLD 23.1.6), so Linux builds GamePacks itself; it also imports <code>.32a</code> packages and reuses their build cache. Signing/installing uses the bundled official plumesign-linux over USB with <code>usbmuxd</code>.</p>
+          <details style="margin:10px 0">
+            <summary>SHA-256 digest</summary>
+            <code>5b49140f7d5db9cbb1ed363ee4d36422ccc6b68cbae70fc325d246105430e5c6</code>
+          </details>
+          <a class="btn btn-secondary" href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-linux-x86_64.tar.gz">Download for Linux</a>
         </article>
       </div>
       <details class="verify">
         <summary>Verify a download against these digests</summary>
         <p class="muted">GitHub shows the SHA-256 of every asset on the release page. Compute it locally and compare:</p>
         <pre class="code-block"><code># Windows (PowerShell)
-Get-FileHash .\3ds2apple-0.2.1-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\3ds2apple-0.3.0-windows-x64.zip -Algorithm SHA256
 
 # macOS
-shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
+shasum -a 256 3ds2apple-0.3.0-macos-universal.zip
+
+# Linux
+sha256sum 3ds2apple-0.3.0-linux-x86_64.tar.gz</code></pre>
       </details>
     </div>
   </section>
@@ -192,7 +199,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
       <ol class="pipeline">
         <li><span class="step">01</span><h3>Your own ROM</h3><p>Import a decrypted <code>.3ds</code>/<code>.cci</code> that you own and dumped yourself. Only the ROM header and SMDH metadata are read.</p></li>
         <li><span class="step">02</span><h3>3dsrecomp → C</h3><p>Static recompilation translates the game's code ahead of time on the host; generated code is never committed or shared.</p></li>
-        <li><span class="step">03</span><h3>ARM64 GamePack</h3><p>A local LLVM (Windows) or Apple clang (macOS) toolchain builds a <code>GamePack</code>, and the launcher composes a ROM-free base IPA.</p></li>
+        <li><span class="step">03</span><h3>ARM64 GamePack</h3><p>A local LLVM/LLD (Windows), Apple clang (macOS) or bundled 3dsrecomp + LLVM/LLD 23.1.6 (Linux) toolchain builds a <code>GamePack</code>, and the launcher composes a ROM-free base IPA.</p></li>
         <li><span class="step">04</span><h3>Metal via MoltenVK</h3><p>The PICA200 GPU path is translated to Metal; the GPU presenter draws every screen layout — presets and custom rectangles — with zero per-frame readback.</p></li>
       </ol>
       <div class="why-grid">
@@ -396,14 +403,14 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
           <div class="head">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3c-3 0-5 2-5 5 0 1.5.5 2 0 3-1 2-2 3-2 5 0 2 2 4 4 4 1 0 2-.5 3-.5s2 .5 3 .5c2 0 4-2 4-4 0-2-1-3-2-5-.5-1 0-1.5 0-3 0-3-2-5-5-5Z"/></svg>
             <h3>Linux</h3>
-            <span class="status preview">Beta</span>
+            <span class="status preview">New</span>
           </div>
           <ol class="steps">
-            <li>Download <code>3ds2apple-&lt;version&gt;-linux-x86_64.tar.gz</code> from the latest release and extract it into a writable folder (x86_64 Linux with X11 or Wayland and <code>usbmuxd</code>).</li>
-            <li>Build the GamePack on Windows or macOS and export a <b>Finished build package</b> (<code>.32a</code>): Linux has no local AOT compiler yet. Connect the phone by USB, unlock it and trust the computer.</li>
-            <li><b>Import</b> the <code>.32a</code>, sign in with <b>Settings → Sign in with plumesign</b> (your Apple ID and 2FA stay in that terminal), then press <b>Deploy</b>: the launcher signs and overwrite-installs with the bundled plumesign-linux and pushes the game data through devpush. <b>Refresh signing</b> renews the 7-day signature without rebuilding.</li>
+            <li>Download <code>3ds2apple-0.3.0-linux-x86_64.tar.gz</code> from the release and extract it into a writable folder (x86_64 Linux with X11 or Wayland and <code>usbmuxd</code>). The payload includes the local AOT toolchain (3dsrecomp + clang/LLD 23.1.6).</li>
+            <li><b>Import</b> your own decrypted ROM and build its GamePack locally with the bundled toolchain, or import a prepared <b>Finished build package</b> (<code>.32a</code>) and reuse its GamePack/build cache. Connect the phone by USB, unlock it and trust the computer.</li>
+            <li>Sign in with <b>Settings → Sign in with plumesign</b> (your Apple ID and 2FA stay in that terminal), then press <b>Deploy</b>: the launcher compiles the GamePack, composes the IPA, signs and overwrite-installs with the bundled plumesign-linux and pushes the game data through devpush. <b>Refresh signing</b> renews the 7-day signature without rebuilding.</li>
           </ol>
-          <p class="warn">Linux signs and installs prepared builds; it does not compile GamePacks yet.</p>
+          <p class="warn">Linux builds GamePacks locally with the bundled 3dsrecomp + LLVM/LLD 23.1.6 toolchain; it also deploys imported <code>.32a</code> packages.</p>
         </article>
       </div>
       <p class="start-note"><strong>Free Apple ID:</strong> 3 apps per device and about 7 days of signing — deploy again to refresh. A paid developer account removes those limits. Game data lives in <code>Documents/Games/&lt;TITLEID&gt;/</code>; saves and save states live in the app container. A re-deploy or an overwrite update keeps them; a clean uninstall removes them. Your ROMs on the computer are never touched.</p>
@@ -447,7 +454,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
         </details>
         <details>
           <summary>Is there a Linux launcher?</summary>
-          <div class="a"><p>Yes — a Linux x86_64 GUI launcher that shares the Windows launcher's UI and engine. It imports ROMs and <code>.32a</code> packages, reuses a matching package's build cache, signs and overwrite-installs with the bundled official plumesign-linux over USB (<code>usbmuxd</code>; your Apple ID and 2FA stay in the terminal), pushes game data through devpush and renews the 7-day signature with <b>Refresh signing</b>. It has no local AOT compiler yet: build the GamePack on Windows or macOS, export a <code>.32a</code> package, then import and deploy it here.</p></div>
+          <div class="a"><p>Yes — a Linux x86_64 GUI launcher that shares the Windows launcher's UI and engine. It imports ROMs and <code>.32a</code> packages, reuses a matching package's build cache, signs and overwrite-installs with the bundled official plumesign-linux over USB (<code>usbmuxd</code>; your Apple ID and 2FA stay in the terminal), pushes game data through devpush and renews the 7-day signature with <b>Refresh signing</b>. The payload also bundles a local AOT toolchain (3dsrecomp + clang/LLD 23.1.6), so it builds GamePacks on Linux; a <code>.32a</code> package built elsewhere can be imported too and reuses its build cache.</p></div>
         </details>
         <details>
           <summary>Does the app phone home or collect data?</summary>
@@ -479,7 +486,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
       <div class="limits">
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>Some menus can render incorrectly</h3><p>In a few titles, certain menu screens can show corrupted graphics on the top screen. The diagnostics path has been examined but the fix is still under investigation — <a href="https://github.com/HFYKratos/3ds2apple/issues/2" rel="noopener">issue #2</a>.</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>macOS is a developer preview</h3><p>The macOS launcher is not self-contained yet and its real-device install is unverified — <a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a>. The Windows path is the verified one.</p></div></article>
-        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>Linux has no local AOT compiler yet</h3><p>The Linux launcher signs, installs and pushes, but it cannot build a GamePack itself: build on Windows or macOS, export a <code>.32a</code> package with the game data, then import and deploy it on Linux. The package's GamePack and build cache are reused without recompiling.</p></div></article>
+        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>The Linux launcher is newer</h3><p>It builds GamePacks locally with the bundled 3dsrecomp + LLVM/LLD 23.1.6, signs/installs with plumesign-linux and pushes through usbmuxd/devpush, and imported <code>.32a</code> packages reuse their build cache. It has had less real-device exposure than the Windows path — report issues on the tracker.</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>The C-stick depends on the game</h3><p>It is reported through the New 3DS nub API; a title that never reads the nub ignores it, and a shell built with an older runtime does not provide it. It is hidden by default — enable it in Toggle controls when a game uses the nub.</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>No compatibility or performance promises</h3><p>Some titles may fail to boot or run slowly. The reference numbers in the README come from the maintainers testing specific titles — they are not a guarantee.</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>Not yet included</h3><p>Delta-style skin import, a cheat manager, a game manual viewer, amiibo, microphone, camera and network/online features are not included — they need emulator-core work. CPU JIT, shader JIT, RPC and LLE module settings do not apply to the AOT-only architecture.</p></div></article>
@@ -496,7 +503,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
           <p>3ds2apple is available now for Windows, macOS and Linux. Read the README for the full guide, the diagnostics workflow and the complete list of limits.</p>
         </div>
         <div class="cta-row">
-          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.2.1" rel="noopener">Get v0.2.1</a>
+          <a class="btn btn-primary" href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.3.0" rel="noopener">Get v0.3.0</a>
           <a class="btn btn-ghost" href="https://github.com/HFYKratos/3ds2apple#readme" rel="noopener">Read the README</a>
           <a class="btn btn-ghost" href="press/">Press kit</a>
         </div>
@@ -550,7 +557,7 @@ shasum -a 256 3ds2apple-0.2.1-macos-universal.zip</code></pre>
     </div>
     <div class="footer-bottom">
       <span>© 2026 3ds2apple contributors · maintained by HFYKratos</span>
-      <span>v0.2.1 · 2026-11-25 · <a href="https://github.com/HFYKratos/3ds2apple" rel="noopener">GitHub</a></span>
+      <span>v0.3.0 · 2026-11-27 · <a href="https://github.com/HFYKratos/3ds2apple" rel="noopener">GitHub</a></span>
     </div>
   </div>
 </footer>

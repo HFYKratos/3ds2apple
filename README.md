@@ -17,8 +17,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.2.1"><img src="https://img.shields.io/badge/release-v0.2.1-brightgreen" alt="Latest release: v0.2.1"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/platforms-iOS%2016%2B%20%C2%B7%20Windows%2010%2F11%20%C2%B7%20macOS%2013%2B-blue" alt="Platforms: iOS 16+, Windows 10/11, macOS 13+"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.3.0"><img src="https://img.shields.io/badge/release-v0.3.0-brightgreen" alt="Latest release: v0.3.0"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/platforms-iOS%2016%2B%20%C2%B7%20Windows%2010%2F11%20%C2%B7%20macOS%2013%2B%20%C2%B7%20Linux%20x86__64-blue" alt="Platforms: iOS 16+, Windows 10/11, macOS 13+, Linux x86_64"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/github/downloads/HFYKratos/3ds2apple/total?label=downloads" alt="GitHub downloads"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/HFYKratos/3ds2apple/ci.yml?branch=main&label=CI" alt="CI status"></a>
 </p>
@@ -28,16 +28,16 @@
 ## Download
 
 <p align="center">
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.1/3ds2apple-0.2.1-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download the Windows launcher"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.1/3ds2apple-0.2.1-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download the macOS launcher"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Download the Linux launcher"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download the Windows launcher"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download the macOS launcher"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.0/3ds2apple-0.3.0-linux-x86_64.tar.gz"><img src="https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Download the Linux launcher"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="All releases on GitHub"></a>
 </p>
 
-<p align="center"><sub><b>Latest stable release: v0.2.1</b> · Windows 10/11 launcher (verified path) · macOS 13+ launcher (developer preview, see <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>) · Linux x86_64 launcher (beta: signs and installs .32a builds; no local AOT compiler yet) · the iOS app is composed, signed and installed by the launcher with your own Apple ID, so there is no separate iOS download.</sub></p>
+<p align="center"><sub><b>Latest stable release: v0.3.0</b> · Windows 10/11 launcher (verified path) · macOS 13+ launcher (developer preview, see <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>) · Linux x86_64 launcher (local AOT build included: bundled 3dsrecomp + LLVM/LLD 23.1.6) · the iOS app is composed, signed and installed by the launcher with your own Apple ID, so there is no separate iOS download.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/hero.png" width="880" alt="0.2.1 hero image: synthetic portrait and landscape previews with the wordmark.">
+  <img src="docs/assets/hero.png" width="880" alt="0.3.0 hero image: synthetic portrait and landscape previews with the wordmark.">
 </p>
 
 > [!NOTE]
@@ -69,7 +69,7 @@
     <td align="center" width="25%">✏️<br><b>Edit controls in-game</b><br><sub>Pause, drag controls over the picture and tap Done; per-button visibility, 10%–200% size and opacity.</sub></td>
     <td align="center" width="25%">💾<br><b>Saves and save states</b><br><sub>Battery saves in the app container, three instant save-state slots per game, save export and import in the Save Manager, and your own Citra/Azahar cheat code files with a per-code switch.</sub></td>
     <td align="center" width="25%">⏩<br><b>Fast-forward, performance overlay and HUD</b><br><sub>A 2x Fast-forward toggle, editable Quick save and Quick load, an optional performance overlay at the top edge of the picture (frame rate, frame time, speed, app and available memory, one of six places, switchable lines and an optional background), the system Metal HUD (off by default) and one-tap diagnostics export.</sub></td>
-    <td align="center" width="25%">🖥️<br><b>Windows, macOS and Linux launchers</b><br><sub>Import → build → sign → install → push from one window. The Windows launcher is verified and deploys incrementally without touching game data; the Linux launcher shares the same UI and signs/installs with its bundled plumesign-linux, deploying .32a packages built on Windows/macOS because Linux has no local AOT compiler yet. One Export dialog on a built game writes either a Finished build package (.32a) or a Ready-to-sign package (unsigned, self-contained single-game IPA); Import takes ROMs and brings a .32a package back, and the Settings page holds the advanced AOT build options.</sub></td>
+    <td align="center" width="25%">🖥️<br><b>Windows, macOS and Linux launchers</b><br><sub>Import → build → sign → install → push from one window. The Windows launcher is verified and deploys incrementally without touching game data; the Linux launcher shares the same UI, builds GamePacks locally with its bundled 3dsrecomp + LLVM/LLD 23.1.6 toolchain (or reuses an imported .32a build cache), and signs/installs with its bundled plumesign-linux. One Export dialog on a built game writes either a Finished build package (.32a) or a Ready-to-sign package (unsigned, self-contained single-game IPA); Import takes ROMs and brings a .32a package back, and the Settings page holds the advanced AOT build options.</sub></td>
   </tr>
 </table>
 
@@ -188,11 +188,11 @@ Not from this project. 3ds2apple ships no game data and provides no ROM, BIOS or
 
 ### Do I need a Mac?
 
-Not for the verified Windows path, and not for Linux: the Linux launcher runs on x86-64 Linux and signs/installs prepared `.32a` builds with its bundled plumesign, so no Mac is needed there either — but the GamePack still has to be built on Windows or macOS because Linux has no local AOT compiler yet. The macOS launcher is a **developer preview**: it needs macOS 13+, Xcode 15+ with your Apple ID, `xcodegen`, a repository checkout and the built tools, and its real-device install has not been verified by the maintainers yet (issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)).
+Not for the verified Windows path, and not for Linux: the Linux launcher runs on x86-64 Linux, builds GamePacks locally with its bundled 3dsrecomp + LLVM/LLD 23.1.6 toolchain and signs/installs with its bundled plumesign, so no Mac is needed there either. The macOS launcher is a **developer preview**: it needs macOS 13+, Xcode 15+ with your Apple ID, `xcodegen`, a repository checkout and the built tools, and its real-device install has not been verified by the maintainers yet (issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)).
 
 ### Is there a Linux launcher?
 
-Yes — a Linux x86_64 GUI launcher that reuses the Windows launcher's Avalonia UI and engine. It imports ROMs and `.32a` packages, reuses the build cache of a matching package, signs and overwrite-installs with the bundled official `plumesign-linux` (your Apple ID and 2FA stay in the terminal and plumesign's own store), pushes game data through the bundled `devpush` build and `usbmuxd`, and renews the 7-day signature with **Refresh signing**. Local AOT compilation is not available yet: build the GamePack on Windows or macOS, export a **Finished build package** (`.32a`), then import and deploy it on Linux. See [launcher/linux/README.md](launcher/linux/README.md).
+Yes — a Linux x86_64 GUI launcher that reuses the Windows launcher's Avalonia UI and engine. It imports ROMs and `.32a` packages, reuses the build cache of a matching package, signs and overwrite-installs with the bundled official `plumesign-linux` (your Apple ID and 2FA stay in the terminal and plumesign's own store), pushes game data through the bundled `devpush` build and `usbmuxd`, and renews the 7-day signature with **Refresh signing**. It also builds GamePacks locally: its payload bundles 3dsrecomp plus clang/LLD 23.1.6, so a ROM can go straight through compile → compose → sign → install without another computer. Alternatively, import a **Finished build package** (`.32a`) built elsewhere and reuse its GamePack and build cache. See [launcher/linux/README.md](launcher/linux/README.md).
 
 ### Is the app on the App Store?
 
@@ -258,8 +258,8 @@ They may. The six switches under **Settings → Graphics → Renderer optimisati
 | **iPhone / iPad** | iOS 16 and later. One app holds the library, the redesigned in-game menu, the full New 3DS control set with in-game layout editing, six landscape and three portrait screen layouts, save states, the performance overlay, per-app settings, your own cheat code files and six experimental renderer optimisations. |
 | **Windows** | Windows 10/11 x64. One self-contained launcher executable; builds, signs, installs and pushes without a Mac, exports portable `.32a` builds and unsigned self-contained single-game IPAs, and has the advanced AOT build settings in its Settings page. **Verified path.** |
 | **macOS** | macOS 13+ (Intel + Apple silicon). SwiftUI launcher using Xcode signing; the package is not self-contained yet and device install is not verified by the maintainers. **Developer preview.** |
-| **Linux** | Linux x86_64 desktop (X11 or Wayland). The same GUI launcher as Windows (shared Avalonia UI and engine): imports ROMs and `.32a` packages, reuses a matching package's build cache, signs and overwrite-installs with the bundled official plumesign-linux, and pushes game data through the bundled devpush build and usbmuxd. Local AOT compilation is not available yet, so Deploy uses `.32a` packages built on Windows/macOS. Verified end-to-end on the maintainer's CachyOS x86_64 machine. |
-| **Build host** | Windows (bundled LLVM/LLD) or macOS (Apple clang + Xcode); Linux signs and installs only for now. |
+| **Linux** | Linux x86_64 desktop (X11 or Wayland). The same GUI launcher as Windows (shared Avalonia UI and engine): imports ROMs and `.32a` packages, **builds GamePacks locally** with the bundled 3dsrecomp + LLVM/LLD 23.1.6 toolchain (or reuses a matching package's build cache), signs and overwrite-installs with the bundled official plumesign-linux, and pushes game data through the bundled devpush build and usbmuxd. Verified end-to-end on the maintainer's CachyOS x86_64 machine, including a Linux-built GamePack exported as `.32a`. |
+| **Build host** | Windows (bundled LLVM/LLD), macOS (Apple clang + Xcode) or Linux (bundled 3dsrecomp + LLVM/LLD 23.1.6). |
 
 ## Getting started
 
@@ -281,10 +281,10 @@ They may. The six switches under **Settings → Graphics → Renderer optimisati
 
 ### Linux launcher
 
-1. Download `3ds2apple-<version>-linux-x86_64.tar.gz` from [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases/latest) and extract it into a writable folder. The package is self-contained (launcher, pinned ROM-free shell template, bundled plumesign-linux/devpush and the three licence texts); it needs an x86_64 Linux desktop with X11 or Wayland.
+1. Download `3ds2apple-<version>-linux-x86_64.tar.gz` from [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases/latest) and extract it into a writable folder. The package is self-contained (launcher, pinned ROM-free shell template, bundled plumesign-linux/devpush, the local AOT toolchain — 3dsrecomp + clang/LLD 23.1.6 — and the three licence texts); it needs an x86_64 Linux desktop with X11 or Wayland.
 2. Install and start `usbmuxd`, connect the iPhone/iPad by USB, unlock it and tap Trust. The launcher reaches the device through its bundled `devpush` build (the read-only `usbmuxd` socket can be overridden with `THREEDS2APPLE_USBMUXD_SOCKET`).
-3. Prepare the game on Windows or macOS: build its GamePack and export a **Finished build package** (`.32a`). Linux has no local AOT compiler yet, so it cannot compile a GamePack itself; a matching package's GamePack and build cache are reused without recompiling.
-4. Start the launcher, open **Settings → Sign in with plumesign** and sign in to your Apple ID in the terminal it opens (password and 2FA stay in that terminal and in plumesign's own store; the launcher never sees or logs them). Then **Import** the `.32a`, select the game and press **Deploy**: the launcher composes a ROM-free IPA, signs and overwrite-installs it with the bundled plumesign, then pushes the game data through `devpush`.
+3. **Import** your own decrypted ROM and build its GamePack locally — the bundled 3dsrecomp + LLVM/LLD 23.1.6 toolchain runs on Linux. Alternatively import a **Finished build package** (`.32a`) built on Windows/macOS; a matching package's GamePack and build cache are reused without recompiling.
+4. Open **Settings → Sign in with plumesign** and sign in to your Apple ID in the terminal it opens (password and 2FA stay in that terminal and in plumesign's own store; the launcher never sees or logs them). Select the game and press **Deploy**: the launcher compiles the GamePack, composes a ROM-free IPA, signs and overwrite-installs it with the bundled plumesign, then pushes the game data through `devpush`.
 5. A free Apple ID signature expires after about 7 days; the same **Refresh signing** button re-signs and overwrite-installs the last IPA without rebuilding (data and saves are kept). The launcher's `--self-test` checks the payload, tools and licences; on a headless machine run it through `xvfb-run -a`.
 
 ### Phone data, saves and limits
@@ -300,7 +300,7 @@ Public builds are published on [GitHub Releases](https://github.com/HFYKratos/3d
 
 - `3ds2apple-<version>-windows-x64.zip` — Windows 10/11 launcher: the self-contained `3ds2apple-launcher.exe` plus `LICENSE`, `NOTICE` and `THIRD_PARTY.md`.
 - `3ds2apple-<version>-macos-universal.zip` — macOS 13+ launcher: `3ds2apple-launcher.app` (Intel + Apple silicon) plus `LICENSE`, `NOTICE` and `THIRD_PARTY.md`.
-- `3ds2apple-<version>-linux-x86_64.tar.gz` — Linux x86_64 launcher: the self-contained launcher, the pinned ROM-free shell template, the bundled plumesign-linux and devpush builds, and the three licence texts inside the launcher folder.
+- `3ds2apple-<version>-linux-x86_64.tar.gz` — Linux x86_64 launcher: the self-contained launcher, the pinned ROM-free shell template, the bundled plumesign-linux and devpush builds, the local AOT toolchain (3dsrecomp + clang/LLD 23.1.6) and the three licence texts inside the launcher folder.
 
 From 0.1.1 on the Windows/macOS zips carry those three license texts at their root and the Linux tar carries them inside the launcher folder, byte-identical to the copies in this repository, so a downloaded package is self-contained. They are not published as separate release assets, and the GPL projects listed in [THIRD_PARTY.md](THIRD_PARTY.md) remain read-only references — no GPL code or text is packaged. The 0.1.0 packages predate this and rely on the repository copies. The ROM-free shell template is embedded in all launchers and is not a separate download. GitHub shows the SHA-256 digest of every release asset; no game data is ever attached.
 
@@ -310,7 +310,7 @@ From 0.1.1 on the Windows/macOS zips carry those three license texts at their ro
 |---|---|
 | Windows launcher | `cd launcher/windows && dotnet build Launcher.slnx -c Release` / `dotnet test Launcher.slnx -c Debug` — see [launcher/windows/README.md](launcher/windows/README.md) |
 | macOS launcher | XcodeGen + `xcodebuild` on macOS — see [launcher/macos/README.md](launcher/macos/README.md) |
-| Linux launcher | `./launcher/linux/build-linux.sh` (developer build); add `--payload --tar` for the release payload — see [launcher/linux/README.md](launcher/linux/README.md) |
+| Linux launcher | `./launcher/linux/build-linux.sh` (developer build); add `--payload --tar --local-aot` for the release payload (bundles 3dsrecomp + LLVM/LLD 23.1.6) — see [launcher/linux/README.md](launcher/linux/README.md) |
 | iOS app / shell | `scripts/build-zakuro-ios.sh` → `scripts/build-ios-app.sh` → `scripts/package-ipa.sh` — see [scripts/README.md](scripts/README.md) |
 | Pack CLI (`3ds2apple-pack`) | `cd builder && cargo build --workspace` / `cargo test --workspace` — see [builder/README.md](builder/README.md) |
 | Device bridge (`devpush`) | `cargo build --release --manifest-path tools/devpush/Cargo.toml` — see [tools/devpush/README.md](tools/devpush/README.md) |
@@ -340,7 +340,7 @@ Each library card is built from what the launcher already read out of the ROM at
 
 ### Graphical launchers, next to zero setup
 
-There are launchers for Windows, macOS and Linux. On Windows and macOS, import your own decrypted `.3ds`/`.cci`, pick the games and press the one deploy button: the launcher compiles the GamePacks, composes a ROM-free base IPA, signs and installs it with your own Apple ID (bundled official Impactor/plumesign on Windows, Xcode automatic signing on macOS), then pushes only `GameRom.cci` + `GameInfo.json` into the app Documents folder. The Linux launcher shares the same Avalonia UI, engine, portable state and build-package formats: it signs and overwrite-installs with the bundled plumesign-linux (Apple ID/2FA in a terminal) and pushes through the bundled Linux devpush build and usbmuxd, but it has no local AOT compiler yet, so Deploy reuses the GamePack and build cache of a `.32a` package built on Windows/macOS.
+There are launchers for Windows, macOS and Linux. On Windows and macOS, import your own decrypted `.3ds`/`.cci`, pick the games and press the one deploy button: the launcher compiles the GamePacks, composes a ROM-free base IPA, signs and installs it with your own Apple ID (bundled official Impactor/plumesign on Windows, Xcode automatic signing on macOS), then pushes only `GameRom.cci` + `GameInfo.json` into the app Documents folder. The Linux launcher shares the same Avalonia UI, engine, portable state and build-package formats: it signs and overwrite-installs with the bundled plumesign-linux (Apple ID/2FA in a terminal) and pushes through the bundled Linux devpush build and usbmuxd, and it also builds GamePacks locally with the bundled 3dsrecomp + LLVM/LLD 23.1.6 toolchain; a matching `.32a` package's GamePack and build cache are reused when one is imported.
 
 The launchers keep a portable data folder beside the executable/.app (or the extracted Linux folder), read the ROM SMDH metadata (icon, localized name, publisher), detect the compile hardware and parallelise 3dsrecomp automatically, and show a startup readiness light plus a self-test so a missing tool never fails a deploy silently. On Windows, Deploy is device-aware: it reads the installed app and pushed games first, skips the work when the phone is already up to date, keeps game data and saves when it overwrites an app, and lists/asks about phone games missing from the local library before updating — their data is never deleted. Each built game can also be exported from the Library through one **Export** dialog as a portable `.32a` package (which can include the user's own game data) or as an unsigned, self-contained single-game IPA for sideloading (the game data is embedded in the IPA); a `.32a` can be imported again through the header's **Import**, and the Settings page's **Advanced build settings** tune the AOT optimisation level, link-time optimisation and fast-math for the next build.
 
