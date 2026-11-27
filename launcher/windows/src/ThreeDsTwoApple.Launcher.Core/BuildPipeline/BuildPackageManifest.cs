@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using ThreeDsTwoApple.Launcher.Core.Models;
+using ThreeDsTwoApple.Launcher.Core.Platform;
 
 namespace ThreeDsTwoApple.Launcher.Core.BuildPipeline;
 
@@ -221,30 +222,38 @@ public static class BuildPackageManifestReader
             detail = "the package GamePack ABI " + manifest.PackAbiVersion + " differs from this launcher (" + current.GamePackAbi + ")";
             return false;
         }
-        var clang = manifest.ClangVersion.Trim();
-        var llvm = manifest.LlvmVersion.Trim();
-        if (clang.Length == 0 || llvm.Length == 0
-            || string.Equals(clang, BuildCompatibility.UnknownVersion, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(llvm, BuildCompatibility.UnknownVersion, StringComparison.OrdinalIgnoreCase))
+        // Linux cannot recompile AOT GamePacks locally (P2), so a package built on
+        // Windows/macOS is the only source of a real GamePack. Its recorded toolchain
+        // is therefore not comparable to this host's (missing) Windows toolchain; trust
+        // the package's ABI + embedded ROM and record the artifact under the current
+        // (stable) Linux recipe marker so BuildCachePolicy reuses it on Deploy.
+        if (!LauncherPlatform.IsLinux)
         {
-            status = BuildCacheImportStatus.Mismatch;
-            detail = "the package manifest does not record the toolchain versions (old CLI); recompiling is required";
-            return false;
-        }
-        if (!string.Equals(clang, current.ClangVersion, StringComparison.Ordinal)
-            || !string.Equals(llvm, current.Ld64Version, StringComparison.Ordinal))
-        {
-            status = BuildCacheImportStatus.Mismatch;
-            detail = "the package was built with another toolchain (clang " + clang + ", llvm " + llvm
-                + "; this launcher has clang " + current.ClangVersion + ", llvm " + current.Ld64Version + ")";
-            return false;
-        }
-        if (!string.Equals(manifest.BuildOptionsMarker, current.BuildOptions, StringComparison.OrdinalIgnoreCase))
-        {
-            status = BuildCacheImportStatus.Mismatch;
-            detail = "the package was built with different AOT build options (" + manifest.BuildOptionsMarker
-                + "; this launcher uses " + current.BuildOptions + ")";
-            return false;
+            var clang = manifest.ClangVersion.Trim();
+            var llvm = manifest.LlvmVersion.Trim();
+            if (clang.Length == 0 || llvm.Length == 0
+                || string.Equals(clang, BuildCompatibility.UnknownVersion, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(llvm, BuildCompatibility.UnknownVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                status = BuildCacheImportStatus.Mismatch;
+                detail = "the package manifest does not record the toolchain versions (old CLI); recompiling is required";
+                return false;
+            }
+            if (!string.Equals(clang, current.ClangVersion, StringComparison.Ordinal)
+                || !string.Equals(llvm, current.Ld64Version, StringComparison.Ordinal))
+            {
+                status = BuildCacheImportStatus.Mismatch;
+                detail = "the package was built with another toolchain (clang " + clang + ", llvm " + llvm
+                    + "; this launcher has clang " + current.ClangVersion + ", llvm " + current.Ld64Version + ")";
+                return false;
+            }
+            if (!string.Equals(manifest.BuildOptionsMarker, current.BuildOptions, StringComparison.OrdinalIgnoreCase))
+            {
+                status = BuildCacheImportStatus.Mismatch;
+                detail = "the package was built with different AOT build options (" + manifest.BuildOptionsMarker
+                    + "; this launcher uses " + current.BuildOptions + ")";
+                return false;
+            }
         }
         artifact = new BuildArtifact
         {
@@ -259,7 +268,9 @@ public static class BuildPackageManifestReader
             BuiltAt = manifest.BuiltAt,
         };
         status = BuildCacheImportStatus.Recorded;
-        detail = "build cache recorded from the package manifest (" + current.ShortVersion + ")";
+        detail = LauncherPlatform.IsLinux
+            ? "build cache recorded from the package manifest; Linux reuses the imported GamePack without recompiling"
+            : "build cache recorded from the package manifest (" + current.ShortVersion + ")";
         return true;
     }
 
