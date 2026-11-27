@@ -15,13 +15,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check whitespace
         run: git diff --check
-      - name: Run layout, AOT, catalog and release self-checks
+      - name: Run layout, AOT, catalog, desktop and release self-checks
         run: |
           bash scripts/tests/perf-selfcheck.sh
           bash scripts/tests/library-selfcheck.sh
           bash scripts/tests/aot-selfcheck.sh
           bash scripts/tests/game-catalog-selfcheck.sh
           bash scripts/tests/desktop-aot-selfcheck.sh
+          bash scripts/tests/release-selfcheck.sh
   rust:
     name: Rust crates
     runs-on: ubuntu-latest
