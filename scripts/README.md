@@ -338,16 +338,25 @@ does not include ROMs or keys.
 
 ## Build host maintenance
 
-The CachyOS build host and its macOS VM are shared state; recover them with the
-checked-in script instead of ad-hoc qemu commands:
+The build host is the local Linux (CachyOS) machine; the macOS VM used for the
+iOS/macOS builds runs locally on the same machine under qemu. Recover it with
+the build-host helper instead of ad-hoc qemu commands:
 
 ```bash
-# from the build host project checkout
-bash ~/project/3ds2apple/scripts/vm-restart-8cpu.sh
-# it powers the VM down (ACPI, then quit if needed), starts boot-macos26.sh,
+# from the repository checkout on the build host
+bash scripts/vm-restart-8cpu.sh
+# it powers the VM down (ACPI, then quit if needed), starts ~/macos-vm/boot-macos26.sh,
 # waits for SSH on 127.0.0.1:2222 and runs caffeinate; check /tmp/vm-boot-new.log
-# and /home/kratos/macos-vm/serial-upgrade.log if it does not come up.
+# and ~/macos-vm/serial-upgrade.log if the VM does not come up.
 ```
+
+The helper is a build-host file and is not tracked in git, so a fresh clone has
+only this description. VM access is local: SSH is `kratoshuang@127.0.0.1:2222`
+with a locally held key, and the VM screen is a TigerVNC viewer on
+`127.0.0.1:5901` (no password, straight to the local qemu). No SSH tunnel or
+port-forward is involved. The host and the VM share the same CPU and RAM, so
+restart the VM only when no VM build is running and expect host builds and VM
+builds to compete for the same resources.
 
 ## When GitHub downloads stall
 
@@ -355,8 +364,8 @@ Direct GitHub release downloads from the build host can crawl or hang. Do **not*
 downgrade a pinned tool to work around it. Try a public GitHub release mirror
 prefix around the normal upstream asset path, then verify the artifact against
 the version/SHA-256 recorded in the relevant manifest or PINS before extracting.
-If the host has a Clash/HTTP proxy, export `HTTPS_PROXY` (and usually
-`HTTP_PROXY`) instead of changing tool versions; a local Clash port is not
-reachable from the remote build host unless a tunnel/port-forward is opened.
-Record the mirror and verification result in the task handoff so later builds do
-not silently drift.
+The build host is the local machine, so a Clash/HTTP proxy running there is
+directly usable: export `HTTPS_PROXY` (and usually `HTTP_PROXY`) for the
+download instead of changing tool versions; no tunnel or port-forward from
+another machine is involved. Record the mirror and verification result in the
+task handoff so later builds do not silently drift.

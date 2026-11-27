@@ -132,6 +132,19 @@ automatically by GitHub).
   version headings; version-specific change history belongs on the Release page
   only.
 
+### Build environment
+
+The build host is the local Linux (CachyOS) machine, and the macOS VM for the
+iOS/macOS builds (Xcode 26.6) runs locally on it. VM access is local only
+(SSH `127.0.0.1:2222`, VNC `127.0.0.1:5901`, no tunnel or port-forward):
+restart it with `bash scripts/vm-restart-8cpu.sh` from the checkout (see
+[scripts/README.md](scripts/README.md#build-host-maintenance)). The Windows
+**native** self-test (`scripts/release/win-selftest.sh`, step 1 below) needs a
+separate Windows host or WSL interop on one; this Linux build host has neither,
+so run that step on another machine. All other gates — the host self-checks, the
+offline release gate and the Rust tests — run on the Linux host, and the desktop
+launcher builds need the .NET 10 SDK installed there.
+
 ### Process
 
 1. Build the three packages and run the project test gates (`cargo test`,

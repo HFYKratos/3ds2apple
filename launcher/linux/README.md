@@ -39,8 +39,15 @@ functional/parity reference and is not compiled here.
 ## Build
 
 Requirements: .NET 10 SDK (or set `DOTNET`) for building on a Linux x86-64 host.
-The release payload additionally needs the macOS-built shell template, the Linux
-pack CLI/devpush builds and the official plumesign binary.
+The release payload additionally needs:
+
+- the macOS-built shell template (from the local macOS VM);
+- the Rust `3ds2apple-pack` and `devpush` Linux builds;
+- the official plumesign-linux binary (downloaded and pinned, never committed);
+- for `--local-aot`: the exact official LLVM 23.1.6 Linux toolchain (`clang`,
+  `llvm-ar`, `ld64.lld`, `lib/clang/23/include`) and a Linux `3dsrecomp` release
+  build (clone `third_party/3dsrecomp` at the pinned revision and
+  `cargo build --release`).
 
     # developer build (no payload)
     ./launcher/linux/build-linux.sh
@@ -51,8 +58,8 @@ pack CLI/devpush builds and the official plumesign binary.
       --pack-bin  builder/target/release/3ds2apple-pack \
       --devpush-bin tools/devpush/target/release/devpush \
       --plumesign launcher/linux/vendor/plumesign-linux-x86_64 \
-      --llvm-dir /path/to/llvm/bin \
-      --recompiler-bin /path/to/linux/3dsrecomp
+      --llvm-dir third_party/llvm-23.1.6-linux/bin \
+      --recompiler-bin third_party/3dsrecomp/target/release/3dsrecomp
 
 Output: `out/launchers/3ds2apple-launcher-linux-x64/` (+ `.tar.gz`). The payload
 layout matches `DistributionLayout.LinuxExpectedRelativePaths`:
@@ -113,7 +120,15 @@ The launcher provides no ROM, key, IPA or game asset and never uploads anything.
 5. After 7 days (free Apple ID), press Refresh signing; the app is overwrite-installed
    and existing Documents/saves stay intact.
 
-Known P2 gaps: the exact LLVM 23.1.6 release asset was not fetchable on the current
-build network (payload uses 23.1.5 and records the truth in PINS-local-aot.json);
-3dsrecomp is currently built on WSL and copied because CachyOS cargo cannot fetch its
-git dependency; AppImage/desktop-entry packaging is a follow-up.
+## Payload state (0.3.0)
+
+The published 0.3.0 payload carries the exact official LLVM **23.1.6** toolchain
+and the Linux `Bin/3dsrecomp`. `PINS-local-aot.json` records the actual staged
+versions and the recompiler SHA-256, and `scripts/release/verify-release.sh`
+pins LLVM 23.1.6 and cross-checks that digest against the shipped
+`Bin/3dsrecomp`.
+
+Remaining follow-ups are not release blockers: AppImage/desktop-entry packaging
+(the release artifact is the launcher-folder `tar.gz`), and the local-AOT path
+has had less real-device exposure than the Windows path — report issues on the
+tracker.
