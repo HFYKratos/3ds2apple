@@ -47,15 +47,15 @@ enum ShellRuntime {
     static let expectedSHA256 = "6cd5888490d08b36356d04c50c05e2eda5b9bcb3d0338ece693a28987de96aff"
 
     /// Pinned ROM-free shell template that carries the verified framework
-    /// (shell 0.3.0 build 1, Metal HUD + Documents file sharing enabled).
+    /// (shell 0.3.1 build 1, Metal HUD + Documents file sharing enabled).
     static let pinnedTemplateRelativePath = "out/shell/3ds2apple-shell.ipa"
-    /// Rebuilt 0.3.0 build 1 ROM-free shell IPA from current main (the 0.3.0
-    /// release; CFBundleShortVersionString and the package label are 0.3.0).
+    /// Rebuilt 0.3.1 build 1 ROM-free shell IPA from current main (the 0.3.1
+    /// release; CFBundleShortVersionString and the package label are 0.3.1).
     static let pinnedTemplateBytes: Int64 = 6_803_764
-    static let pinnedTemplateSHA256 = "9a6f286702fdf65077c573f4dcacc6bb07405892eba5851125d5704ee9c2c16a"
+    static let pinnedTemplateSHA256 = "c2d2aa2c094e051ae0884deb37433b188460349c41af530e6890a88c291aede6"
     /// The rebuilt shell identity the launcher is built against. The pinned
     /// template must report exactly these values; another shell build is refused.
-    static let expectedShellVersion = "0.3.0"
+    static let expectedShellVersion = "0.3.1"
     static let expectedShellBuild = "1"
 
     /// Info.plist keys the shell must keep: the Metal HUD build flag and the
