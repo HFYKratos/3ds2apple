@@ -143,6 +143,27 @@ public static class DistributionLayout
     /// <summary>Pre-portable extraction base used only as a fallback/migration source.</summary>
     public static string LegacyExtractionRoot() => Path.Combine(PortableLayout.LegacyDistributionBase(), LauncherInfo.Version);
 
+    /// <summary>
+    /// Expected payload for a Linux release package (0.2.3, staged by
+    /// launcher/linux/build-linux.sh). Kept separate from the Windows payload list
+    /// so the existing Windows package/test contract stays byte-compatible.
+    /// </summary>
+    public static IReadOnlyList<string> LinuxExpectedRelativePaths { get; } = new[]
+    {
+        "Shell/manifest.json",
+        "Shell/3ds2apple-shell.ipa",
+        "ThirdParty/Impactor/plumesign-linux-x86_64",
+        "ThirdParty/Impactor/LICENSE-Impactor-MIT.txt",
+        "ThirdParty/Impactor/LICENSE-apple-codesign-MPL-2.0.txt",
+        "ThirdParty/Impactor/README-source-and-licenses.txt",
+        "ThirdParty/Impactor/PINS.json",
+        "Bin/3ds2apple-pack",
+        "Bin/devpush",
+        "licenses/LICENSE",
+        "licenses/NOTICE",
+        "licenses/THIRD_PARTY.md",
+    };
+
     /// <summary>True when a directory looks like a multi-file launcher distribution.</summary>
     public static bool IsDistributionRoot(string? directory)
     {
@@ -151,6 +172,8 @@ public static class DistributionLayout
             return false;
         }
         return File.Exists(Path.Combine(directory, "Bin", "3ds2apple-pack.exe"))
+            || File.Exists(Path.Combine(directory, "Bin", "3ds2apple-pack"))
+            || File.Exists(Path.Combine(directory, "ThirdParty", "Impactor", "plumesign-linux-x86_64"))
             || File.Exists(Path.Combine(directory, "ThirdParty", "Impactor", "PINS.json"))
             || File.Exists(Path.Combine(directory, "Shell", "manifest.json"));
     }

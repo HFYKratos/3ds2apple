@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using ThreeDsTwoApple.Launcher.Core;
 using ThreeDsTwoApple.Launcher.Core.BuildPipeline;
+using ThreeDsTwoApple.Launcher.Core.Platform;
 using ThreeDsTwoApple.Launcher.Core.LauncherState;
 using ThreeDsTwoApple.Launcher.Core.Tools;
 using Xunit;
@@ -308,6 +309,33 @@ public sealed class BuildPackageServiceTests
 
     // --- 0.2.2-beta6: .32a build-cache restoration on import -----------------
 
+    [Fact]
+    public void LinuxImportRecordsForeignGamePackWithoutLocalToolchain()
+    {
+        using var temp = new TempDir();
+        var packageFile = BuildPackageFile(temp);
+        var currentWithoutLocalBuildTools = BuildCompatibility.Create();
+        var created = BuildPackageManifestReader.TryCreateArtifact(
+            packageFile, currentWithoutLocalBuildTools, out var artifact, out var status, out var detail);
+
+        if (LauncherPlatform.IsLinux)
+        {
+            Assert.True(created, detail);
+            Assert.NotNull(artifact);
+            Assert.Equal(BuildCacheImportStatus.Recorded, status);
+            Assert.Equal(currentWithoutLocalBuildTools.BuildCompatVersion, artifact!.BuildCompatVersion);
+            Assert.Equal(ManifestRomSha, artifact.RomSha256);
+            var decision = BuildCachePolicy.Evaluate(
+                artifact, currentWithoutLocalBuildTools.BuildCompatVersion, artifact.RomSha256, "pack.dylib", _ => true);
+            Assert.True(decision.Reuse, decision.Detail);
+        }
+        else
+        {
+            Assert.False(created);
+            Assert.Equal(BuildCacheImportStatus.Mismatch, status);
+        }
+    }
+
     private const string ManifestClang = "clang version 23.1.6";
     private const string ManifestLlvm = "LLD 23.1.6";
     private const string ManifestGamePackSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -447,9 +475,19 @@ public sealed class BuildPackageServiceTests
         var outcome = await service.ImportAsync(packageFile, replace: false, CurrentCompatibility(clang: "clang version 24.0.0"));
 
         Assert.True(outcome.Ok, outcome.Error);
-        Assert.Equal(BuildCacheImportStatus.Mismatch, outcome.BuildCacheStatus);
-        Assert.Contains("toolchain", outcome.BuildCacheDetail, StringComparison.OrdinalIgnoreCase);
-        Assert.Null(workspace.Find(TitleID)!.Build);
+        if (LauncherPlatform.IsLinux)
+        {
+            // Linux has no local AOT compiler: a real GamePack built with another
+            // toolchain is the expected input and must stay deployable.
+            Assert.Equal(BuildCacheImportStatus.Recorded, outcome.BuildCacheStatus);
+            Assert.NotNull(workspace.Find(TitleID)!.Build);
+        }
+        else
+        {
+            Assert.Equal(BuildCacheImportStatus.Mismatch, outcome.BuildCacheStatus);
+            Assert.Contains("toolchain", outcome.BuildCacheDetail, StringComparison.OrdinalIgnoreCase);
+            Assert.Null(workspace.Find(TitleID)!.Build);
+        }
     }
 
     [Fact]

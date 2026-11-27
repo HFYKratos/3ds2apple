@@ -153,6 +153,8 @@
                   <Button Content="{Binding L.SettingsAppleOpen}" Command="{Binding OpenImpactorCommand}" Classes="ghost" />
                 </StackPanel>
               </Grid>
+              <TextBlock Text="{Binding PlumesignAccountStatus}" Classes="caption" TextWrapping="Wrap"
+                         IsVisible="{Binding IsLinuxPlatform}" />
               <ItemsControl ItemsSource="{Binding DeployPrerequisites}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
@@ -314,7 +316,12 @@
                   <TextBlock Text="{Binding L.SettingsAppleBody}" Classes="muted" />
                   <TextBlock Text="{Binding InstalledBundleIdLine}" Classes="caption" />
                   <TextBlock Text="{Binding ShellStatus}" Classes="caption" />
+                  <TextBlock Text="{Binding PlumesignAccountStatus}" Classes="caption" TextWrapping="Wrap"
+                             IsVisible="{Binding IsLinuxPlatform}" />
                   <Button Content="{Binding L.SettingsAppleOpen}" Command="{Binding OpenImpactorCommand}" Classes="ghost" HorizontalAlignment="Left" />
+                  <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsLinuxPlatform}">
+                    <Button Content="{Binding L.SettingsAppleAccountRefresh}" Command="{Binding RefreshPlumesignAccountCommand}" Classes="ghost" />
+                  </StackPanel>
                   <TextBlock Text="{Binding L.AppImpactorNote}" Classes="caption" />
                 </StackPanel>
               </Border>

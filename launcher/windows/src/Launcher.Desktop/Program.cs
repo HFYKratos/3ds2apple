@@ -22,6 +22,10 @@ internal static class Program
         {
             return SelfTest.Run(Console.Out, Console.Error);
         }
+        if (Array.Exists(args, a => a == "--linux-device-test"))
+        {
+            return LinuxDeviceTest.RunAsync(args).GetAwaiter().GetResult();
+        }
         if (Array.Exists(args, a => a == "--version"))
         {
             Console.WriteLine(LauncherInfo.VersionLine);

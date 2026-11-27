@@ -1,6 +1,7 @@
 using ThreeDsTwoApple.Launcher.Core;
 using ThreeDsTwoApple.Launcher.Core.Deploy;
 using ThreeDsTwoApple.Launcher.Core.Localization;
+using ThreeDsTwoApple.Launcher.Core.Platform;
 
 namespace ThreeDsTwoApple.Launcher.App.ViewModels;
 
@@ -50,7 +51,12 @@ public sealed class LocalizedText
 
     // Deploy
     public string DeployTitle => Loc.T("deploy.title");
-    public string DeploySubtitle => Loc.T("deploy.subtitle");
+    public string DeploySubtitle => Loc.T(LauncherPlatform.IsLinux
+        ? "deploy.subtitleLinux"
+        : "deploy.subtitle");
+
+    /// <summary>True on the Linux build; drives platform-only controls in XAML.</summary>
+    public bool IsLinux => LauncherPlatform.IsLinux;
     public string DeploySelectAll => Loc.T("deploy.selectAll");
     public string DeploySelectNone => Loc.T("deploy.selectNone");
     public string DeployAction => Loc.T("deploy.action");
@@ -97,32 +103,49 @@ public sealed class LocalizedText
     // Deploy prerequisites (task-20): one green/red status light per row.
     public string DeployPrereqTitle => Loc.T("deploy.prereq.title");
     public string DeployPrereqRefresh => Loc.T("deploy.prereq.refresh");
-    public string DeployPrereqSigningNote => Loc.T("deploy.prereq.signing.note");
+    public string DeployPrereqSigningNote => Loc.T(LauncherPlatform.IsLinux
+        ? "deploy.prereq.signing.noteLinux"
+        : "deploy.prereq.signing.note");
 
     public string DeployPrereqSummary(int ready, int total) => Loc.T("deploy.prereq.summary", ready, total);
 
     public string DeployPrereqLabel(DeployPrerequisiteKind kind) => kind switch
     {
         DeployPrerequisiteKind.DeviceConnected => Loc.T("deploy.prereq.device.label"),
-        DeployPrerequisiteKind.SigningTools => Loc.T("deploy.prereq.signing.label"),
-        DeployPrerequisiteKind.LocalToolchain => Loc.T("deploy.prereq.toolchain.label"),
-        DeployPrerequisiteKind.DeviceBridge => Loc.T("deploy.prereq.bridge.label"),
+        DeployPrerequisiteKind.SigningTools => Loc.T(LauncherPlatform.IsLinux ? "deploy.prereq.signing.labelLinux" : "deploy.prereq.signing.label"),
+        DeployPrerequisiteKind.LocalToolchain => Loc.T(LauncherPlatform.IsLinux ? "deploy.prereq.toolchain.labelLinux" : "deploy.prereq.toolchain.label"),
+        DeployPrerequisiteKind.DeviceBridge => Loc.T(LauncherPlatform.IsLinux ? "deploy.prereq.bridge.labelLinux" : "deploy.prereq.bridge.label"),
         DeployPrerequisiteKind.ShellTemplate => Loc.T("deploy.prereq.shell.label"),
         _ => kind.ToString(),
     };
 
     /// <summary>One short action for a red row; <paramref name="detail"/> is the missing tool list for the toolchain.</summary>
-    public string DeployPrereqHint(DeployPrerequisiteKind kind, string detail) => kind switch
+    public string DeployPrereqHint(DeployPrerequisiteKind kind, string detail)
     {
-        DeployPrerequisiteKind.DeviceConnected => Loc.T("deploy.prereq.device.hint"),
-        DeployPrerequisiteKind.SigningTools => Loc.T("deploy.prereq.signing.hint"),
-        DeployPrerequisiteKind.LocalToolchain => string.IsNullOrWhiteSpace(detail)
-            ? Loc.T("deploy.prereq.toolchain.hint")
-            : Loc.T("deploy.prereq.toolchain.hint.missing", detail),
-        DeployPrerequisiteKind.DeviceBridge => Loc.T("deploy.prereq.bridge.hint"),
-        DeployPrerequisiteKind.ShellTemplate => Loc.T("deploy.prereq.shell.hint"),
-        _ => string.Empty,
-    };
+        if (LauncherPlatform.IsLinux)
+        {
+            return kind switch
+            {
+                DeployPrerequisiteKind.DeviceConnected => Loc.T("deploy.prereq.device.hintLinux"),
+                DeployPrerequisiteKind.SigningTools => Loc.T("deploy.prereq.signing.hintLinux"),
+                DeployPrerequisiteKind.LocalToolchain => Loc.T("deploy.prereq.toolchain.hintLinux"),
+                DeployPrerequisiteKind.DeviceBridge => Loc.T("deploy.prereq.bridge.hintLinux"),
+                DeployPrerequisiteKind.ShellTemplate => Loc.T("deploy.prereq.shell.hintLinux"),
+                _ => string.Empty,
+            };
+        }
+        return kind switch
+        {
+            DeployPrerequisiteKind.DeviceConnected => Loc.T("deploy.prereq.device.hint"),
+            DeployPrerequisiteKind.SigningTools => Loc.T("deploy.prereq.signing.hint"),
+            DeployPrerequisiteKind.LocalToolchain => string.IsNullOrWhiteSpace(detail)
+                ? Loc.T("deploy.prereq.toolchain.hint")
+                : Loc.T("deploy.prereq.toolchain.hint.missing", detail),
+            DeployPrerequisiteKind.DeviceBridge => Loc.T("deploy.prereq.bridge.hint"),
+            DeployPrerequisiteKind.ShellTemplate => Loc.T("deploy.prereq.shell.hint"),
+            _ => string.Empty,
+        };
+    }
 
     // Settings -> Advanced build settings (AOT codegen options).
     public string SettingsAdvancedTitle => Loc.T("settings.advanced.title");
@@ -139,16 +162,17 @@ public sealed class LocalizedText
     public string SettingsTitle => Loc.T("settings.title");
     public string SettingsClose => Loc.T("settings.close");
     public string SettingsAppleTitle => Loc.T("settings.appleTitle");
-    public string SettingsAppleBody => Loc.T("settings.appleBody");
-    public string SettingsAppleOpen => Loc.T("settings.appleOpen");
-    public string AppImpactorNote => Loc.T("app.impactorNote");
+    public string SettingsAppleBody => Loc.T(LauncherPlatform.IsLinux ? "settings.appleBodyLinux" : "settings.appleBody");
+    public string SettingsAppleOpen => Loc.T(LauncherPlatform.IsLinux ? "settings.appleOpenLinux" : "settings.appleOpen");
+    public string SettingsAppleAccountRefresh => Loc.T("settings.appleAccountRefresh");
+    public string AppImpactorNote => Loc.T(LauncherPlatform.IsLinux ? "app.impactorNoteLinux" : "app.impactorNote");
     public string SettingsDeviceTitle => Loc.T("settings.deviceTitle");
     public string DeviceRefresh => Loc.T("device.refresh");
-    public string DevicePrereqUsb => Loc.T("device.prereqUsb");
+    public string DevicePrereqUsb => Loc.T(LauncherPlatform.IsLinux ? "device.prereqUsbLinux" : "device.prereqUsb");
     public string DevicePrereqTrust => Loc.T("device.prereqTrust");
     public string DevicePrereqUnlock => Loc.T("device.prereqUnlock");
     public string SettingsLanguageTitle => Loc.T("settings.languageTitle");
-    public string SettingsLanguageBody => Loc.T("settings.languageBody");
+    public string SettingsLanguageBody => Loc.T(LauncherPlatform.IsLinux ? "settings.languageBodyLinux" : "settings.languageBody");
     public string SettingsLogsTitle => Loc.T("settings.logsTitle");
     public string SettingsLogsShow => Loc.T("settings.logsShow");
     public string SettingsLogsHide => Loc.T("settings.logsHide");
@@ -156,7 +180,7 @@ public sealed class LocalizedText
     public string SettingsLogsWorkspace => Loc.T("settings.logsWorkspace");
     public string SettingsLogsExport => Loc.T("settings.logsExport");
     public string SettingsAboutTitle => Loc.T("settings.aboutTitle");
-    public string SettingsAboutBody => Loc.T("settings.aboutBody", LauncherInfo.Version);
+    public string SettingsAboutBody => Loc.T(LauncherPlatform.IsLinux ? "settings.aboutBodyLinux" : "settings.aboutBody", LauncherInfo.Version);
     public string SettingsVersion => Loc.T("settings.version", LauncherInfo.Version);
     public string ReadinessTitle => Loc.T("readiness.title");
     public string ReadinessStatusReady => Loc.T("readiness.status.ready");

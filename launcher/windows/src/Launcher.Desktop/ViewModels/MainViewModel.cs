@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using ThreeDsTwoApple.Launcher.Core;
 using ThreeDsTwoApple.Launcher.Core.BuildPipeline;
+using ThreeDsTwoApple.Launcher.Core.Platform;
 using ThreeDsTwoApple.Launcher.Core.Deploy;
 using ThreeDsTwoApple.Launcher.Core.Distribution;
 using ThreeDsTwoApple.Launcher.Core.Hardware;
@@ -415,6 +416,9 @@ public sealed class MainViewModel : ObservableObject
     private string _shellStatus = string.Empty;
     private string _installedStatus = string.Empty;
     private Task? _prerequisiteRefresh;
+    private string _plumesignAccountStatus = string.Empty;
+    private bool _plumesignAccountSignedIn;
+
     private string _readinessState = "checking";
     private string _readinessDetail = string.Empty;
     private string _deployState = "idle";
@@ -473,6 +477,8 @@ public sealed class MainViewModel : ObservableObject
         RefreshPrerequisitesCommand = new AsyncRelayCommand(() => RefreshDeployPrerequisitesAsync(), () => !IsBusy);
         RefreshStatusCommand = new AsyncRelayCommand(() => RefreshStatusAsync(), () => !IsBusy);
         RefreshReadinessCommand = new AsyncRelayCommand(() => RefreshStatusAsync(), () => !IsBusy);
+        PlumesignLoginCommand = new RelayCommand(OpenPlumesignLogin, () => !IsBusy && IsLinuxPlatform);
+        RefreshPlumesignAccountCommand = new AsyncRelayCommand(RefreshPlumesignAccountAsync, () => !IsBusy && IsLinuxPlatform);
         OpenImpactorCommand = new RelayCommand(OpenImpactor, () => !IsBusy);
         OpenWorkspaceCommand = new RelayCommand(OpenWorkspace);
         ExportLogCommand = new RelayCommand(() => ExportLogRequested?.Invoke());
@@ -536,6 +542,8 @@ public sealed class MainViewModel : ObservableObject
     public AsyncRelayCommand RefreshStatusCommand { get; }
     public AsyncRelayCommand RefreshReadinessCommand { get; }
     public RelayCommand OpenImpactorCommand { get; }
+    public RelayCommand PlumesignLoginCommand { get; }
+    public AsyncRelayCommand RefreshPlumesignAccountCommand { get; }
     public RelayCommand OpenWorkspaceCommand { get; }
     public RelayCommand ExportLogCommand { get; }
     public RelayCommand ToggleDiagnosticsCommand { get; }
@@ -1289,6 +1297,9 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Library "Import .32a": called by the view after its file picker.</summary>
     public Task ImportBuildPackageAsync(string path) => ImportBuildPackageCoreAsync(path, replace: false);
 
+    /// <summary>Import .32a replacing an existing package (headless device test / prior confirmation).</summary>
+    public Task ImportBuildPackageReplaceAsync(string path) => ImportBuildPackageCoreAsync(path, replace: true);
+
     private async Task ConfirmImportReplaceAsync()
     {
         var path = _pendingImportReplacePath;
@@ -1567,6 +1578,30 @@ public sealed class MainViewModel : ObservableObject
     public string DeploySelectedCountText => Loc.T("deploy.selectedCount", SelectedDeployCount, DeployGames.Count);
 
     public bool CanDeploy => !IsBusy && SelectedDeployCount > 0;
+
+    /// <summary>True on the Linux launcher: platform-specific copy/controls are shown.</summary>
+    public bool IsLinuxPlatform => LauncherPlatform.IsLinux;
+
+    /// <summary>plumesign Apple ID account state (Linux); never contains the Apple ID.</summary>
+    public string PlumesignAccountStatus
+    {
+        get => _plumesignAccountStatus;
+        private set
+        {
+            if (SetProperty(ref _plumesignAccountStatus, value))
+            {
+                OnPropertyChanged(nameof(HasPlumesignAccountStatus));
+            }
+        }
+    }
+
+    public bool HasPlumesignAccountStatus => !string.IsNullOrWhiteSpace(_plumesignAccountStatus);
+
+    public bool PlumesignAccountSignedIn
+    {
+        get => _plumesignAccountSignedIn;
+        private set => SetProperty(ref _plumesignAccountSignedIn, value);
+    }
 
     /// <summary>True when a previously composed/exported IPA still exists to re-sign.</summary>
     public bool CanRefreshSigning => !IsBusy && new SigningRefreshService(_services.Workspace).CanRefresh;
@@ -2126,6 +2161,10 @@ public sealed class MainViewModel : ObservableObject
             SetReadinessState("failed");
             Log("status check failed: " + exception.Message);
         }
+        if (IsLinuxPlatform)
+        {
+            await RefreshPlumesignAccountAsync().ConfigureAwait(true);
+        }
     }
 
     private string BuildReadinessDetail(string summary)
@@ -2548,6 +2587,11 @@ public sealed class MainViewModel : ObservableObject
 
     private void OpenImpactor()
     {
+        if (IsLinuxPlatform)
+        {
+            OpenPlumesignLogin();
+            return;
+        }
         if (_services.PlumeSign is null)
         {
             Log("The bundled Impactor/plumesign was not found (ThirdParty/Impactor). Reinstall the launcher package.");
@@ -2562,6 +2606,68 @@ public sealed class MainViewModel : ObservableObject
         {
             Log("could not start Impactor: " + exception.Message);
         }
+    }
+
+    // --- Linux plumesign account (Apple ID login happens in a terminal; never logged) ---
+
+    private void OpenPlumesignLogin()
+    {
+        if (!IsLinuxPlatform || IsBusy)
+        {
+            return;
+        }
+        var account = _services.CreatePlumesignAccountService();
+        if (account is null)
+        {
+            PlumesignAccountStatus = Loc.T("settings.appleAccountMissing");
+            return;
+        }
+        var launch = account.OpenLoginTerminal();
+        if (launch.Launched)
+        {
+            PlumesignAccountStatus = Loc.T("settings.appleAccountLoginOpened");
+            Log("plumesign login: a terminal was opened for the Apple ID/2FA prompt (credentials stay in plumesign).");
+        }
+        else
+        {
+            PlumesignAccountStatus = Loc.T("settings.appleAccountLoginManual", launch.Command, launch.Error ?? string.Empty);
+            Log("plumesign login command (no terminal emulator found): " + launch.Command);
+        }
+    }
+
+    private async Task RefreshPlumesignAccountAsync()
+    {
+        if (!IsLinuxPlatform)
+        {
+            return;
+        }
+        PlumesignAccountStatus = Loc.T("settings.appleAccountChecking");
+        var account = _services.CreatePlumesignAccountService();
+        if (account is null)
+        {
+            PlumesignAccountSignedIn = false;
+            PlumesignAccountStatus = Loc.T("settings.appleAccountMissing");
+            RaiseCommandStates();
+            return;
+        }
+        try
+        {
+            var status = await account.StatusAsync().ConfigureAwait(true);
+            PlumesignAccountSignedIn = status.SignedIn;
+            PlumesignAccountStatus = status.SignedIn
+                ? Loc.T("settings.appleAccountSignedIn")
+                : status.Error is null
+                    ? Loc.T("settings.appleAccountSignedOut")
+                    : Loc.T("settings.appleAccountFailed", status.Summary);
+            Log("plumesign account: " + (status.SignedIn ? "signed in" : "not signed in"));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            PlumesignAccountSignedIn = false;
+            PlumesignAccountStatus = Loc.T("settings.appleAccountFailed", exception.Message);
+            Log("plumesign account check failed: " + exception.Message);
+        }
+        RaiseCommandStates();
     }
 
     private void OpenWorkspace()
@@ -2663,6 +2769,7 @@ public sealed class MainViewModel : ObservableObject
                  {
                      DeployCommand, ConfirmOrphanedDeployCommand, StopDeployCommand, BuildAllCommand, RefreshDevicesCommand, RefreshPrerequisitesCommand,
                      RefreshStatusCommand, RefreshReadinessCommand, OpenImpactorCommand,
+                     PlumesignLoginCommand, RefreshPlumesignAccountCommand,
                      ConfirmImportReplaceCommand, ResetAdvancedBuildCommand,
                      BrowseExportDestinationCommand, ConfirmExportCommand, CancelExportCommand, RefreshSigningCommand,
                  })

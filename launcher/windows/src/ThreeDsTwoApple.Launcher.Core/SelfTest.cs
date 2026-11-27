@@ -7,6 +7,7 @@ using ThreeDsTwoApple.Launcher.Core.Hardware;
 using ThreeDsTwoApple.Launcher.Core.Localization;
 using ThreeDsTwoApple.Launcher.Core.Models;
 using ThreeDsTwoApple.Launcher.Core.Portable;
+using ThreeDsTwoApple.Launcher.Core.Platform;
 using ThreeDsTwoApple.Launcher.Core.Signing;
 using ThreeDsTwoApple.Launcher.Core.Tools;
 using ThreeDsTwoApple.Launcher.Core.Util;
@@ -333,19 +334,50 @@ public static class SelfTest
                     ? "accepts a real pack + catalogue; rejects bare shell (" + bareVerification.ErrorCode + ") and zero packs (" + noPacksVerification.ErrorCode + ")"
                     : "a valid composed IPA was rejected: " + goodVerification.Describe());
 
-            // 9. Optional pinned Impactor bundle (present in a distribution, absent in dev).
-            var bundle = ImpactorBundle.Locate(distribution.Root).Verify();
-            if (!Directory.Exists(bundle.Directory))
+            // 9. Optional pinned signing bundle (present in a distribution, absent in dev).
+            if (LauncherPlatform.IsLinux)
             {
-                Line("WARN", "Impactor bundle", "ThirdParty/Impactor is not present (normal in a source checkout)");
+                var plumePath = locator.FindPlumeSign();
+                if (plumePath is null)
+                {
+                    Line("FAIL", "plumesign (official Linux CLI)",
+                        "plumesign-linux-x86_64 is not staged — put it in ThirdParty/Impactor (sha256 pinned in launcher/linux/vendor/PINS.json).");
+                }
+                else
+                {
+                    var status = LinuxPlumesignPins.Verify(plumePath);
+                    Line(status.Ok ? "PASS" : "FAIL", "plumesign (official Linux CLI)", status.Describe());
+                }
             }
             else
             {
-                Line(bundle.Ready ? "PASS" : "FAIL", "Impactor bundle", bundle.Summary);
+                var bundle = ImpactorBundle.Locate(distribution.Root).Verify();
+                if (!Directory.Exists(bundle.Directory))
+                {
+                    Line("WARN", "Impactor bundle", "ThirdParty/Impactor is not present (normal in a source checkout)");
+                }
+                else
+                {
+                    Line(bundle.Ready ? "PASS" : "FAIL", "Impactor bundle", bundle.Summary);
+                }
             }
 
-            // 10. Single-file distribution payload: embedded resources, extraction and the ROM-free shell template.
-            if (!distribution.HasEmbeddedPayload)
+            // 10. Distribution payload. Windows embeds resources in the single-file exe;
+            // Linux stages the same payload on disk next to the launcher (build-linux.sh --payload).
+            if (LauncherPlatform.IsLinux)
+            {
+                bool Exists(string relative) => File.Exists(Path.Combine(
+                    distribution.Root, relative.Replace('/', Path.DirectorySeparatorChar)));
+                var missingLinux = DistributionLayout.LinuxExpectedRelativePaths.Where(path => !Exists(path)).ToList();
+                var anyLinux = DistributionLayout.LinuxExpectedRelativePaths.Any(Exists);
+                Line(missingLinux.Count == 0 ? "PASS" : anyLinux ? "FAIL" : "WARN", "Linux release payload",
+                    missingLinux.Count == 0
+                        ? DistributionLayout.LinuxExpectedRelativePaths.Count + " payload files present (shell, plumesign, pack, devpush, licences)"
+                        : anyLinux
+                            ? "missing: " + string.Join(", ", missingLinux)
+                            : "not staged (developer build; run launcher/linux/build-linux.sh --payload)");
+            }
+            else if (!distribution.HasEmbeddedPayload)
             {
                 Line("WARN", "embedded distribution payload", "not present in this developer build (normal for Debug/source builds)");
             }

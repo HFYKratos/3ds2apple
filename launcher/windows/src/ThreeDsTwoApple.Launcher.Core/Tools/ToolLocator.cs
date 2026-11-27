@@ -44,13 +44,13 @@ public sealed class ToolLocator
     public const string LlvmTool = "llvm";
 
     /// <summary>3ds2apple-pack (ROM detection / package queue / GameInfo writer).</summary>
-    public string? FindPackCli() => Find(PackCliTool, "THREEDS2APPLE_PACK", "3ds2apple-pack", "Bin");
+    public string? FindPackCli() => Find(PackCliTool, "THREEDS2APPLE_PACK", Platform.LauncherPlatform.PackCliFileName, "Bin");
 
     /// <summary>devpush (device bridge CLI from task-16).</summary>
-    public string? FindDevPush() => Find(DevPushTool, "DEVPUSH_EXE", "devpush", "Bin");
+    public string? FindDevPush() => Find(DevPushTool, "DEVPUSH_EXE", Platform.LauncherPlatform.DevPushFileName, "Bin");
 
     /// <summary>3dsrecomp.exe (ROM -> generated C) for the experimental local build.</summary>
-    public string? FindRecompiler() => Find(RecompTool, "THREEDS2APPLE_RECOMP", "3dsrecomp", "Bin");
+    public string? FindRecompiler() => Find(RecompTool, "THREEDS2APPLE_RECOMP", Platform.LauncherPlatform.RecompilerFileName, "Bin");
 
     /// <summary>
     /// Official LLVM bin directory (clang.exe, llvm-ar.exe, ld64.lld.exe) for the
@@ -94,18 +94,20 @@ public sealed class ToolLocator
         return null;
     }
 
-    /// <summary>Official Impactor v2.7.3 portable executable, bundled unmodified.</summary>
-    public string? FindImpactor() => Find(
-        ImpactorTool,
-        "THREEDS2APPLE_IMPACTOR",
-        Signing.ImpactorPins.ImpactorFileName,
-        Path.Combine("ThirdParty", "Impactor"));
+    /// <summary>Official Impactor v2.7.3 portable executable (Windows GUI helper; Linux uses plumesign only).</summary>
+    public string? FindImpactor()
+    {
+        var name = Platform.LauncherPlatform.ImpactorFileName;
+        return name.Length == 0
+            ? null
+            : Find(ImpactorTool, "THREEDS2APPLE_IMPACTOR", name, Path.Combine("ThirdParty", "Impactor"));
+    }
 
-    /// <summary>Official plumesign CLI of the same Impactor release.</summary>
+    /// <summary>Official plumesign CLI of the same Impactor release (platform-specific name).</summary>
     public string? FindPlumeSign() => Find(
         PlumeSignTool,
         "THREEDS2APPLE_PLUMESIGN",
-        Signing.ImpactorPins.PlumeSignFileName,
+        Platform.LauncherPlatform.PlumeSignFileName,
         Path.Combine("ThirdParty", "Impactor"));
 
     public string ImpactorDirectory => Path.Combine(_distributionRoot, "ThirdParty", "Impactor");
