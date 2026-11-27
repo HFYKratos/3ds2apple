@@ -1,4 +1,4 @@
-# 3ds2apple Linux launcher (0.2.3 P0/P1/P3)
+# 3ds2apple Linux launcher
 
 Linux desktop launcher for 3ds2apple. It reuses the shared Avalonia UI and engine
 sources from launcher/windows (same Library, Deploy and Settings pages, same

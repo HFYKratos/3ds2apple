@@ -34,7 +34,7 @@
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="All releases on GitHub"></a>
 </p>
 
-<p align="center"><sub><b>Latest stable release: v0.3.0</b> · Windows 10/11 launcher (verified path) · macOS 13+ launcher (developer preview, see <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>) · Linux x86_64 launcher (local AOT build included: bundled 3dsrecomp + LLVM/LLD 23.1.6) · the iOS app is composed, signed and installed by the launcher with your own Apple ID, so there is no separate iOS download.</sub></p>
+<p align="center"><sub><b>Latest stable release: v0.3.0</b> · Windows 10/11 launcher (verified path) · macOS 13+ launcher (developer preview, see <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>) · Linux x86_64 launcher (verified path; local AOT build included: bundled 3dsrecomp + LLVM/LLD 23.1.6) · the iOS app is composed, signed and installed by the launcher with your own Apple ID, so there is no separate iOS download.</sub></p>
 
 <p align="center">
   <img src="docs/assets/hero.png" width="880" alt="0.3.0 hero image: synthetic portrait and landscape previews with the wordmark.">
@@ -45,7 +45,7 @@
 
 ## 30-second explainer
 
-3ds2apple is a native port pipeline for your own Nintendo 3DS games, not an emulator app. Import a decrypted ROM you dumped yourself into the Windows or macOS launcher: 3dsrecomp translates the 3DS code to C, your local LLVM or Apple clang toolchain builds one ARM64 `GamePack` per title, and the launcher composes a ROM-free base IPA, signs and installs it with your own Apple ID, then pushes only the game data (`GameRom.cci` + `GameInfo.json`) into the app's Documents folder. On the phone, the Zakuro HLE runtime executes that native code directly and MoltenVK turns the PICA200 GPU calls into Metal. One app holds the whole library, and the pause menu covers screen layouts, controls, save states and diagnostics. No games, keys or BIOS are included — bring your own.
+3ds2apple is a native port pipeline for your own Nintendo 3DS games, not an emulator app. Import a decrypted ROM you dumped yourself into the Windows, macOS or Linux launcher: 3dsrecomp translates the 3DS code to C, a local LLVM or Apple clang toolchain (or the Linux launcher's bundled 3dsrecomp + LLVM/LLD 23.1.6) builds one ARM64 `GamePack` per title, and the launcher composes a ROM-free base IPA, signs and installs it with your own Apple ID, then pushes only the game data (`GameRom.cci` + `GameInfo.json`) into the app's Documents folder. On the phone, the Zakuro HLE runtime executes that native code directly and MoltenVK turns the PICA200 GPU calls into Metal. One app holds the whole library, and the pause menu covers screen layouts, controls, save states and diagnostics. No games, keys or BIOS are included — bring your own.
 
 ## Demo
 
@@ -69,7 +69,7 @@
     <td align="center" width="25%">✏️<br><b>Edit controls in-game</b><br><sub>Pause, drag controls over the picture and tap Done; per-button visibility, 10%–200% size and opacity.</sub></td>
     <td align="center" width="25%">💾<br><b>Saves and save states</b><br><sub>Battery saves in the app container, three instant save-state slots per game, save export and import in the Save Manager, and your own Citra/Azahar cheat code files with a per-code switch.</sub></td>
     <td align="center" width="25%">⏩<br><b>Fast-forward, performance overlay and HUD</b><br><sub>A 2x Fast-forward toggle, editable Quick save and Quick load, an optional performance overlay at the top edge of the picture (frame rate, frame time, speed, app and available memory, one of six places, switchable lines and an optional background), the system Metal HUD (off by default) and one-tap diagnostics export.</sub></td>
-    <td align="center" width="25%">🖥️<br><b>Windows, macOS and Linux launchers</b><br><sub>Import → build → sign → install → push from one window. The Windows launcher is verified and deploys incrementally without touching game data; the Linux launcher shares the same UI, builds GamePacks locally with its bundled 3dsrecomp + LLVM/LLD 23.1.6 toolchain (or reuses an imported .32a build cache), and signs/installs with its bundled plumesign-linux. One Export dialog on a built game writes either a Finished build package (.32a) or a Ready-to-sign package (unsigned, self-contained single-game IPA); Import takes ROMs and brings a .32a package back, and the Settings page holds the advanced AOT build options.</sub></td>
+    <td align="center" width="25%">🖥️<br><b>Windows, macOS and Linux launchers</b><br><sub>Import → build → sign → install → push from one window. The Windows and Linux launchers are verified: Windows deploys incrementally without touching game data, and the Linux launcher shares the same UI, builds GamePacks locally with its bundled 3dsrecomp + LLVM/LLD 23.1.6 toolchain (or reuses an imported .32a build cache), and signs/installs with its bundled plumesign-linux. One Export dialog on a built game writes either a Finished build package (.32a) or a Ready-to-sign package (unsigned, self-contained single-game IPA); Import takes ROMs and brings a .32a package back, and the Settings page holds the advanced AOT build options.</sub></td>
   </tr>
 </table>
 
@@ -166,7 +166,7 @@ A built game has one **Export** action in the Library (disabled until a real AOT
 
 **Requirement:** a decrypted 3DS ROM that you own, an iPhone/iPad on iOS 16+ with Developer Mode enabled, a USB cable, and your own Apple ID for signing. No game data is included.
 
-1. **Download the launcher.** Windows 10/11: extract the zip into a writable folder (not `Program Files`) and run `3ds2apple-launcher.exe`; install *Apple Devices* so the phone is reachable over USB. macOS 13+: unzip `3ds2apple-launcher.app` (developer preview; it also needs Xcode 15+, `xcodegen`, a repository checkout and the built tools).
+1. **Download the launcher.** Windows 10/11: extract the zip into a writable folder (not `Program Files`) and run `3ds2apple-launcher.exe`; install *Apple Devices* so the phone is reachable over USB. macOS 13+: unzip `3ds2apple-launcher.app` (developer preview; it also needs Xcode 15+, `xcodegen`, a repository checkout and the built tools). Linux x86_64: extract `3ds2apple-<version>-linux-x86_64.tar.gz` into a writable folder; the package is self-contained.
 2. **Import and deploy.** Use the header **Import** for your own decrypted `.3ds`/`.cci` (the same picker also accepts a `.32a` build package), select the games and press the single deploy button: the launcher compiles one GamePack per game, composes a ROM-free IPA, signs and installs it with your own Apple ID, then pushes only the game data.
 3. **Play.** Open the app on the phone. Deploy again to add or remove games; pushed game data survives reinstalls and updates, and a clean uninstall clears it.
 
@@ -188,7 +188,7 @@ Not from this project. 3ds2apple ships no game data and provides no ROM, BIOS or
 
 ### Do I need a Mac?
 
-Not for the verified Windows path, and not for Linux: the Linux launcher runs on x86-64 Linux, builds GamePacks locally with its bundled 3dsrecomp + LLVM/LLD 23.1.6 toolchain and signs/installs with its bundled plumesign, so no Mac is needed there either. The macOS launcher is a **developer preview**: it needs macOS 13+, Xcode 15+ with your Apple ID, `xcodegen`, a repository checkout and the built tools, and its real-device install has not been verified by the maintainers yet (issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)).
+No. The Windows and Linux launchers build GamePacks locally (Windows ships its own LLVM/LLD toolchain, Linux ships 3dsrecomp + LLVM/LLD 23.1.6) and sign/install with their bundled Impactor/plumesign, so no Mac is needed for either verified path. The macOS launcher is a **developer preview**: it needs macOS 13+, Xcode 15+ with your Apple ID, `xcodegen`, a repository checkout and the built tools, and its real-device install has not been verified by the maintainers yet (issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)).
 
 ### Is there a Linux launcher?
 
@@ -235,7 +235,7 @@ They may. The six switches under **Settings → Graphics → Renderer optimisati
 - **Bring your own games.** No ROMs, keys, BIOS, system files or game assets are provided or linked; there is no piracy support. Only use decrypted ROMs that you legally own and dump yourself.
 - **No endorsement.** 3ds2apple is not affiliated with, sponsored or endorsed by Nintendo or Apple, and it is not distributed on the App Store. You sign and install it with your own Apple ID.
 - **No guarantees.** Compatibility and performance are per game: some titles may fail to boot or render incorrectly, and some menus in some titles can render incorrectly (issue [#2](https://github.com/HFYKratos/3ds2apple/issues/2)). Compatibility and performance are not guaranteed.
-- **macOS is a developer preview.** Its package is not self-contained and its real-device install is not yet verified by the maintainers (issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)); the Windows path is verified.
+- **macOS is a developer preview.** Its package is not self-contained and its real-device install is not yet verified by the maintainers (issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)); the Windows and Linux paths are verified.
 - **Custom screen layouts are on the GPU path since 0.1.6.** Arbitrary rectangles, four-way rotation and screen swap are drawn by the GPU presenter (0.1.5 and earlier used a slower readback path); a custom layout still applies from the next game load.
 - **No CPU JIT by design.** The shipping path is AOT code plus the Zakuro HLE runtime; there is no interpreter fallback.
 
@@ -258,7 +258,7 @@ They may. The six switches under **Settings → Graphics → Renderer optimisati
 | **iPhone / iPad** | iOS 16 and later. One app holds the library, the redesigned in-game menu, the full New 3DS control set with in-game layout editing, six landscape and three portrait screen layouts, save states, the performance overlay, per-app settings, your own cheat code files and six experimental renderer optimisations. |
 | **Windows** | Windows 10/11 x64. One self-contained launcher executable; builds, signs, installs and pushes without a Mac, exports portable `.32a` builds and unsigned self-contained single-game IPAs, and has the advanced AOT build settings in its Settings page. **Verified path.** |
 | **macOS** | macOS 13+ (Intel + Apple silicon). SwiftUI launcher using Xcode signing; the package is not self-contained yet and device install is not verified by the maintainers. **Developer preview.** |
-| **Linux** | Linux x86_64 desktop (X11 or Wayland). The same GUI launcher as Windows (shared Avalonia UI and engine): imports ROMs and `.32a` packages, **builds GamePacks locally** with the bundled 3dsrecomp + LLVM/LLD 23.1.6 toolchain (or reuses a matching package's build cache), signs and overwrite-installs with the bundled official plumesign-linux, and pushes game data through the bundled devpush build and usbmuxd. Verified end-to-end on the maintainer's CachyOS x86_64 machine, including a Linux-built GamePack exported as `.32a`. |
+| **Linux** | Linux x86_64 desktop (X11 or Wayland). The same GUI launcher as Windows (shared Avalonia UI and engine): imports ROMs and `.32a` packages, **builds GamePacks locally** with the bundled 3dsrecomp + LLVM/LLD 23.1.6 toolchain (or reuses a matching package's build cache), signs and overwrite-installs with the bundled official plumesign-linux, and pushes game data through the bundled devpush build and usbmuxd. Verified end-to-end on the maintainer's CachyOS x86_64 machine, including a Linux-built GamePack exported as `.32a`. **Verified path.** |
 | **Build host** | Windows (bundled LLVM/LLD), macOS (Apple clang + Xcode) or Linux (bundled 3dsrecomp + LLVM/LLD 23.1.6). |
 
 ## Getting started
@@ -377,7 +377,7 @@ licenses/          third-party license texts (Impactor MIT, apple-codesign MPL-2
 - **The C-stick depends on the game.** It is reported through the New 3DS nub API; a title that never reads the nub ignores it, and a shell built from an older runtime does not provide it.
 - **A mainland-China iPhone can ask for "wireless data" on the first text input.** This is a known iOS quirk: when the system text input first appears (for example the in-game keyboard overlay), UIKit's own dictation/network path check is attributed to the app, so iOS shows its "allow wireless data" alert. 3ds2apple makes no network requests and its cellular data usage stays at 0 — choose *Don't Allow* or *Wi-Fi only* and everything keeps working (a reinstall can show the alert again). Details in [ios/app/README.md](ios/app/README.md).
 - **Older installs and older pushes keep working.** `GameInfo.json` only gained optional fields (schema version stays 1), so game data pushed by a 0.1.0 launcher still validates and plays — until you redeploy, the card has no publisher, no real SMDH icon and no size. An app updated from 0.1.0 keeps its library and saves.
-- **The macOS package is a developer preview.** It is not self-contained and its device install has not been verified by the maintainers yet — the real-device acceptance call is tracked in [#1](https://github.com/HFYKratos/3ds2apple/issues/1); the Windows package is the verified path.
+- **The macOS package is a developer preview.** It is not self-contained and its device install has not been verified by the maintainers yet — the real-device acceptance call is tracked in [#1](https://github.com/HFYKratos/3ds2apple/issues/1); the Windows and Linux packages are the verified paths.
 - **Renderer optimisations are experimental.** The six switches under Settings → Graphics ship off, need an app relaunch and only change the GPU path; if a title shows graphical differences, turn them off one by one.
 - **Cheat codes are yours to supply.** The app ships no cheat database and downloads none; codes are user text files that should only patch game data — codes that rewrite the game's code can slow an AOT build down — so back up your saves first.
 - **No ROMs, keys or BIOS are provided.** Only decrypted ROMs that you own are supported.

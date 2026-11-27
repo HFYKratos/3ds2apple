@@ -37,7 +37,7 @@
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="GitHub에서 모든 릴리스 보기"></a>
 </p>
 
-<p align="center"><sub><b>최신 안정 버전: v0.3.0</b> · Windows 10/11 런처(검증된 경로) · macOS 13+ 런처(개발자 프리뷰, <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a> 참고) · Linux x86_64 런처(로컬 AOT 지원: 3dsrecomp + LLVM/LLD 23.1.6 내장) · iOS 앱은 런처가 사용자의 Apple ID로 구성·서명·설치하므로 별도의 iOS 다운로드는 없습니다.</sub></p>
+<p align="center"><sub><b>최신 안정 버전: v0.3.0</b> · Windows 10/11 런처(검증된 경로) · macOS 13+ 런처(개발자 프리뷰, <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a> 참고) · Linux x86_64 런처(검증된 경로; 로컬 AOT 지원: 3dsrecomp + LLVM/LLD 23.1.6 내장) · iOS 앱은 런처가 사용자의 Apple ID로 구성·서명·설치하므로 별도의 iOS 다운로드는 없습니다.</sub></p>
 
 <p align="center">
   <img src="docs/assets/hero.png" width="880" alt="0.3.0 hero image: synthetic portrait and landscape previews with the wordmark.">
@@ -48,7 +48,7 @@
 
 ## 30초 요약
 
-3ds2apple은 직접 소유한 Nintendo 3DS 게임을 위한 네이티브 이식 파이프라인이며 에뮬레이터 앱이 아닙니다. 직접 덤프한 복호화 ROM을 Windows 또는 macOS 런처로 가져오면 3dsrecomp가 3DS 코드를 C로 변환하고, 로컬 LLVM 또는 Apple clang 툴체인이 타이틀마다 ARM64 `GamePack` 하나를 빌드합니다. 런처는 ROM이 없는 베이스 IPA를 구성하고 사용자의 Apple ID로 서명·설치한 뒤 게임 데이터(`GameRom.cci` + `GameInfo.json`)만 앱의 Documents 폴더로 푸시합니다. 휴대폰에서는 Zakuro HLE 런타임이 이 네이티브 코드를 직접 실행하고 MoltenVK가 PICA200 GPU 호출을 Metal로 변환합니다. 앱 하나에 라이브러리 전체가 들어가고, 일시정지 메뉴에서 화면 레이아웃, 컨트롤, 세이브 스테이트, 진단을 다룰 수 있습니다. 게임, 키, BIOS는 포함되지 않습니다. 게임은 직접 준비하세요.
+3ds2apple은 직접 소유한 Nintendo 3DS 게임을 위한 네이티브 이식 파이프라인이며 에뮬레이터 앱이 아닙니다. 직접 덤프한 복호화 ROM을 Windows, macOS, Linux 런처로 가져오면 3dsrecomp가 3DS 코드를 C로 변환하고, 로컬 LLVM 또는 Apple clang 툴체인(Linux 런처는 내장 3dsrecomp + LLVM/LLD 23.1.6)이 타이틀마다 ARM64 `GamePack` 하나를 빌드합니다. 런처는 ROM이 없는 베이스 IPA를 구성하고 사용자의 Apple ID로 서명·설치한 뒤 게임 데이터(`GameRom.cci` + `GameInfo.json`)만 앱의 Documents 폴더로 푸시합니다. 휴대폰에서는 Zakuro HLE 런타임이 이 네이티브 코드를 직접 실행하고 MoltenVK가 PICA200 GPU 호출을 Metal로 변환합니다. 앱 하나에 라이브러리 전체가 들어가고, 일시정지 메뉴에서 화면 레이아웃, 컨트롤, 세이브 스테이트, 진단을 다룰 수 있습니다. 게임, 키, BIOS는 포함되지 않습니다. 게임은 직접 준비하세요.
 
 ## 데모
 
@@ -72,7 +72,7 @@
     <td align="center" width="25%">✏️<br><b>게임 내에서 컨트롤 편집</b><br><sub>일시정지한 화면 위에서 컨트롤을 드래그하고 '완료'를 탭하세요. 버튼별 표시, 10%–200% 크기, 불투명도를 지원합니다.</sub></td>
     <td align="center" width="25%">💾<br><b>세이브와 세이브 스테이트</b><br><sub>배터리 세이브는 앱 컨테이너에 저장되고, 게임마다 세이브 스테이트 슬롯 3개가 있으며, 세이브 관리자에서 내보내기와 가져오기, 그리고 코드별로 켜고 끌 수 있는 자신의 Citra/Azahar 치트 파일을 지원합니다.</sub></td>
     <td align="center" width="25%">⏩<br><b>빨리 감기, 성능 오버레이, HUD</b><br><sub>2x 빨리 감기 토글, 편집 가능한 빠른 저장과 빠른 불러오기, 선택형 성능 오버레이(화면 맨 위 가장자리에 표시. FPS, 프레임 시간, 속도, 앱 메모리, 사용 가능 메모리. 6개 위치, 줄 전환, 선택형 배경), 시스템 Metal HUD(기본 꺼짐), 원탭 진단 내보내기.</sub></td>
-    <td align="center" width="25%">🖥️<br><b>Windows, macOS, Linux 런처</b><br><sub>한 창에서 가져오기 → 빌드 → 서명 → 설치 → 푸시. Windows 런처는 검증된 경로이며 게임 데이터를 보존하는 증분 배포를 지원합니다. Linux 런처는 같은 UI를 공유하고 내장 plumesign-linux로 서명·설치하며, Linux는 내장 3dsrecomp + LLVM/LLD 23.1.6으로 GamePack을 로컬 빌드할 수 있으며 .32a 패키지 가져오기도 지원합니다. 빌드된 게임의 내보내기 대화상자 하나에서 빌드 완료 패키지(.32a) 또는 서명 가능한 패키지(서명되지 않은 자체 완결형 단일 게임 IPA)를 선택한 형식과 대상으로 내보낼 수 있고, 가져오기로 ROM을 추가하고 .32a 패키지도 다시 가져올 수 있으며, 고급 AOT 빌드 설정은 설정 페이지에 있습니다.</sub></td>
+    <td align="center" width="25%">🖥️<br><b>Windows, macOS, Linux 런처</b><br><sub>한 창에서 가져오기 → 빌드 → 서명 → 설치 → 푸시. Windows와 Linux 런처가 검증된 경로입니다: Windows는 게임 데이터를 보존하는 증분 배포를 지원하고, Linux 런처는 같은 UI를 공유하고 내장 plumesign-linux로 서명·설치하며, Linux는 내장 3dsrecomp + LLVM/LLD 23.1.6으로 GamePack을 로컬 빌드할 수 있으며 .32a 패키지 가져오기도 지원합니다. 빌드된 게임의 내보내기 대화상자 하나에서 빌드 완료 패키지(.32a) 또는 서명 가능한 패키지(서명되지 않은 자체 완결형 단일 게임 IPA)를 선택한 형식과 대상으로 내보낼 수 있고, 가져오기로 ROM을 추가하고 .32a 패키지도 다시 가져올 수 있으며, 고급 AOT 빌드 설정은 설정 페이지에 있습니다.</sub></td>
   </tr>
 </table>
 
@@ -169,7 +169,7 @@
 
 **필요 조건**: 직접 소유한 복호화 3DS ROM, 개발자 모드가 켜진 iOS 16+ iPhone/iPad, USB 케이블, 서명용 본인의 Apple ID. 게임 데이터는 포함되지 않습니다.
 
-1. **런처 다운로드.** Windows 10/11: zip을 쓰기 가능한 폴더(`Program Files` 제외)에 풀고 `3ds2apple-launcher.exe`를 실행합니다. USB로 휴대폰에 연결할 수 있게 *Apple Devices*를 설치하세요. macOS 13+: `3ds2apple-launcher.app`의 압축을 풉니다(개발자 프리뷰. Xcode 15+, `xcodegen`, 저장소 체크아웃, 빌드된 도구도 필요합니다).
+1. **런처 다운로드.** Windows 10/11: zip을 쓰기 가능한 폴더(`Program Files` 제외)에 풀고 `3ds2apple-launcher.exe`를 실행합니다. USB로 휴대폰에 연결할 수 있게 *Apple Devices*를 설치하세요. macOS 13+: `3ds2apple-launcher.app`의 압축을 풉니다(개발자 프리뷰. Xcode 15+, `xcodegen`, 저장소 체크아웃, 빌드된 도구도 필요합니다). Linux x86_64: `3ds2apple-<version>-linux-x86_64.tar.gz`를 쓰기 가능한 폴더에 풀면 됩니다(페이로드는 자체 완결형).
 2. **가져오기 및 배포.** 헤더의 **가져오기**로 직접 덤프한 복호화 `.3ds`/`.cci`(같은 선택기에서 `.32a` 빌드 패키지도 선택 가능)를 가져와 게임을 선택하고 유일한 배포 버튼을 누릅니다. 런처가 게임마다 GamePack을 컴파일하고(가져온 `.32a`의 빌드 방법이 일치하면 그 GamePack을 재사용해 다시 컴파일하지 않음), ROM이 없는 IPA를 구성하고, 본인의 Apple ID로 서명·설치한 뒤 게임 데이터만 푸시합니다.
 3. **플레이.** 휴대폰에서 앱을 엽니다. 게임 추가·제거는 다시 배포하면 되고, 푸시한 게임 데이터는 재설치와 업데이트 후에도 유지됩니다(완전 삭제 시 사라짐).
 
@@ -191,7 +191,7 @@ macOS 설정과 서명 제한을 포함한 자세한 절차는 [시작하기](#�
 
 ### Mac이 필요한가요?
 
-검증된 Windows 경로에는 필요 없고, Linux에도 Mac이 필요 없습니다. Linux 런처는 x86-64 Linux에서 실행되며 준비된 `.32a` 빌드를 내장 plumesign으로 서명·설치합니다. 내장 3dsrecomp + LLVM/LLD 23.1.6으로 GamePack을 로컬 빌드하고 내장 plumesign으로 서명·설치합니다. macOS 런처는 **개발자 프리뷰**입니다. macOS 13+, Apple ID로 로그인한 Xcode 15+, `xcodegen`, 저장소 체크아웃, 빌드된 도구가 필요하고, 실제 기기 설치가 아직 메인테이너에 의해 검증되지 않았습니다(이슈 [#1](https://github.com/HFYKratos/3ds2apple/issues/1)).
+아니요. Windows와 Linux 런처 모두 GamePack을 로컬 빌드하고(Windows는 내장 LLVM/LLD, Linux는 내장 3dsrecomp + LLVM/LLD 23.1.6) 각각 내장 Impactor/plumesign으로 서명·설치하므로, 두 검증된 경로 모두 Mac이 필요 없습니다. macOS 런처는 **개발자 프리뷰**입니다. macOS 13+, Apple ID로 로그인한 Xcode 15+, `xcodegen`, 저장소 체크아웃, 빌드된 도구가 필요하고, 실제 기기 설치가 아직 메인테이너에 의해 검증되지 않았습니다(이슈 [#1](https://github.com/HFYKratos/3ds2apple/issues/1)).
 
 ### Linux 런처가 있나요?
 
@@ -238,7 +238,7 @@ macOS 설정과 서명 제한을 포함한 자세한 절차는 [시작하기](#�
 - **게임은 직접 준비.** ROM, 키, BIOS, 시스템 파일, 게임 에셋을 제공하거나 링크하지 않으며 불법 복제 지원도 없습니다. 법적으로 소유하고 직접 덤프한 복호화 ROM만 사용하세요.
 - **제휴·승인 없음.** 3ds2apple은 Nintendo 또는 Apple과 제휴하거나 후원·승인받지 않았고 App Store로 배포되지 않습니다. 본인의 Apple ID로 서명해 설치합니다.
 - **보장 없음.** 호환성과 성능은 게임마다 다릅니다. 부팅에 실패하거나 렌더링이 잘못되는 타이틀이 있고, 일부 게임의 일부 메뉴가 잘못 그려질 수 있습니다(이슈 [#2](https://github.com/HFYKratos/3ds2apple/issues/2)). 호환성 또는 성능 보장은 없습니다.
-- **macOS는 개발자 프리뷰.** 패키지가 아직 자체 완결적이지 않고 실제 기기 설치도 메인테이너에 의해 검증되지 않았습니다(이슈 [#1](https://github.com/HFYKratos/3ds2apple/issues/1)). Windows가 검증된 경로입니다.
+- **macOS는 개발자 프리뷰.** 패키지가 아직 자체 완결적이지 않고 실제 기기 설치도 메인테이너에 의해 검증되지 않았습니다(이슈 [#1](https://github.com/HFYKratos/3ds2apple/issues/1)). Windows와 Linux가 검증된 경로입니다.
 - **사용자 지정 화면 레이아웃은 0.1.6부터 GPU 경로입니다.** 임의 사각형, 네 방향 회전, 상하 화면 교체를 GPU 프레젠터가 그립니다(0.1.5 이전은 느린 리드백 경로였습니다). 적용은 여전히 다음 게임 로드부터입니다.
 - **설계상 CPU JIT 없음.** 출시 경로는 AOT 코드와 Zakuro HLE 런타임이며 인터프리터 폴백이 없습니다.
 
@@ -261,7 +261,7 @@ macOS 설정과 서명 제한을 포함한 자세한 절차는 [시작하기](#�
 | **iPhone / iPad** | iOS 16 이상. 앱 하나에 라이브러리, 새로워진 인게임 메뉴, 게임 내 레이아웃 편집이 가능한 New 3DS 전체 컨트롤, 가로 6종/세로 3종 화면 레이아웃, 세이브 스테이트, 성능 오버레이, 앱별 설정, 자신의 치트 파일, 실험적 렌더러 최적화 6종이 들어갑니다. |
 | **Windows** | Windows 10/11 x64. 자체 완결형 단일 파일 런처. Mac 없이 빌드, 서명, 설치, 푸시가 가능하고 휴대용 `.32a` 빌드와 게임 데이터를 내장한 서명되지 않은 자체 완결형 단일 게임 IPA 내보내기, 설정 페이지에 고급 AOT 빌드 설정이 있습니다. **검증된 경로.** |
 | **macOS** | macOS 13+(Intel + Apple 실리콘). Xcode 서명을 쓰는 SwiftUI 런처. 패키지가 아직 자체 완결적이지 않고 실제 기기 설치가 메인테이너에 의해 검증되지 않았습니다. **개발자 프리뷰.** |
-| **Linux** | Linux x86_64 데스크톱(X11 또는 Wayland). Windows와 Avalonia UI·엔진을 공유하는 GUI 런처: ROM과 `.32a` 패키지 가져오기, 일치하는 패키지의 빌드 캐시 재사용, 내장 공식 plumesign-linux로 서명·덮어 설치, 내장 devpush와 usbmuxd로 게임 데이터 푸시를 지원합니다. **로컬 AOT 지원**: 내장 3dsrecomp + LLVM/LLD 23.1.6으로 GamePack을 빌드할 수 있고 `.32a` 가져오기와 빌드 캐시 재사용도 지원합니다. 메인테이너의 CachyOS x86_64 머신에서 종단 간 검증 완료. |
+| **Linux** | Linux x86_64 데스크톱(X11 또는 Wayland). Windows와 Avalonia UI·엔진을 공유하는 GUI 런처: ROM과 `.32a` 패키지 가져오기, 일치하는 패키지의 빌드 캐시 재사용, 내장 공식 plumesign-linux로 서명·덮어 설치, 내장 devpush와 usbmuxd로 게임 데이터 푸시를 지원합니다. **로컬 AOT 지원**: 내장 3dsrecomp + LLVM/LLD 23.1.6으로 GamePack을 빌드할 수 있고 `.32a` 가져오기와 빌드 캐시 재사용도 지원합니다. 메인테이너의 CachyOS x86_64 머신에서 종단 간 검증 완료. **검증된 경로.** |
 | **빌드 호스트** | Windows(내장 LLVM/LLD), macOS(Apple clang + Xcode) 또는 Linux(내장 3dsrecomp + LLVM/LLD 23.1.6). |
 
 ## 시작하기
@@ -380,7 +380,7 @@ licenses/          타사 라이선스 텍스트(Impactor MIT, apple-codesign MP
 - **C 스틱은 게임에 따라 다름.** New 3DS 너브 API로 보고되므로 너브를 읽지 않는 타이틀은 무시하고, 이전 런타임으로 빌드된 셸은 제공하지 않습니다.
 - **중국 본토 iPhone은 첫 텍스트 입력에서 "무선 데이터"를 요청할 수 있습니다.** 알려진 iOS 특성입니다. 시스템 텍스트 입력이 처음 나타날 때(예: 게임 내 키보드 오버레이) UIKit 자체의 받아쓰기/네트워크 경로 검사가 앱에 귀속되어 iOS가 "무선 데이터 허용" 알림을 표시합니다. 3ds2apple은 네트워크 요청을 전혀 하지 않고 셀룰러 데이터 사용량은 0으로 유지됩니다. *허용 안 함* 또는 *Wi-Fi만*을 선택해도 모두 동작합니다(재설치 시 다시 표시될 수 있음). 자세한 내용은 [ios/app/README.md](ios/app/README.md).
 - **이전 설치와 이전 푸시도 계속 동작.** `GameInfo.json`은 선택적 필드만 추가했고(스키마 버전은 1 유지) 0.1.0 런처가 푸시한 게임 데이터도 계속 검증·실행됩니다. 다시 배포하기 전까지 카드에는 퍼블리셔, 실제 SMDH 아이콘, 크기가 없습니다. 0.1.0에서 업데이트한 앱은 라이브러리와 세이브를 유지합니다.
-- **macOS 패키지는 개발자 프리뷰.** 자체 완결적이지 않고 실제 기기 설치도 아직 메인테이너에 의해 검증되지 않았습니다. 실제 기기 승인 요청은 [#1](https://github.com/HFYKratos/3ds2apple/issues/1)에서 추적합니다. Windows 패키지가 검증된 경로입니다.
+- **macOS 패키지는 개발자 프리뷰.** 자체 완결적이지 않고 실제 기기 설치도 아직 메인테이너에 의해 검증되지 않았습니다. 실제 기기 승인 요청은 [#1](https://github.com/HFYKratos/3ds2apple/issues/1)에서 추적합니다. Windows와 Linux 패키지가 검증된 경로입니다.
 - **렌더러 최적화는 실험적입니다.** 설정 → 그래픽의 스위치 6개는 기본으로 꺼져 있고 앱을 다시 실행해야 적용되며 GPU 경로에만 영향을 줍니다. 타이틀에 그래픽 차이가 나타나면 하나씩 끄세요.
 - **치트 코드는 직접 준비합니다.** 앱은 치트 데이터베이스를 포함하지 않고 다운로드하지도 않습니다. 코드는 직접 준비한 텍스트 파일이며 게임 데이터만 바꿔야 합니다. 게임 코드를 바꾸는 코드는 AOT 빌드에서 느려질 수 있으므로 사용 전에 세이브를 백업하세요.
 - **ROM, 키, BIOS는 제공하지 않습니다.** 직접 소유한 복호화 ROM만 지원합니다.

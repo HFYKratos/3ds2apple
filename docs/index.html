@@ -162,7 +162,7 @@
           <div class="dl-head">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3c-3 0-5 2-5 5 0 1.5.5 2 0 3-1 2-2 3-2 5 0 2 2 4 4 4 1 0 2-.5 3-.5s2 .5 3 .5c2 0 4-2 4-4 0-2-1-3-2-5-.5-1 0-1.5 0-3 0-3-2-5-5-5Z"/></svg>
             <h3>Linux launcher</h3>
-            <span class="tag tag-readback">New</span>
+            <span class="tag tag-gpu">Verified path</span>
           </div>
           <p class="dl-file">3ds2apple-0.3.0-linux-x86_64.tar.gz</p>
           <p class="dl-meta"><span>version <b>0.3.0</b></span><span>size <b>253,412,656 B</b> (253.4 MB)</span><span>x86_64 Linux</span></p>
@@ -397,13 +397,13 @@ sha256sum 3ds2apple-0.3.0-linux-x86_64.tar.gz</code></pre>
             <li>The package is <b>not self-contained yet</b>: it needs macOS 13+, Xcode 15+ with your Apple ID, <code>xcodegen</code>, a repository checkout and the built tools.</li>
             <li><b>Import → Deploy</b>: Apple clang compiles the GamePacks, Xcode automatic signing + <code>devicectl</code> installs the composed IPA, and the launcher pushes the game data.</li>
           </ol>
-          <p class="warn">macOS real-device installation is not verified by the maintainers yet — tracked in <a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a>. The Windows package is the verified path.</p>
+          <p class="warn">macOS real-device installation is not verified by the maintainers yet — tracked in <a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a>. The Windows and Linux packages are the verified paths.</p>
         </article>
         <article class="start-card">
           <div class="head">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3c-3 0-5 2-5 5 0 1.5.5 2 0 3-1 2-2 3-2 5 0 2 2 4 4 4 1 0 2-.5 3-.5s2 .5 3 .5c2 0 4-2 4-4 0-2-1-3-2-5-.5-1 0-1.5 0-3 0-3-2-5-5-5Z"/></svg>
             <h3>Linux</h3>
-            <span class="status preview">New</span>
+            <span class="status">Verified path</span>
           </div>
           <ol class="steps">
             <li>Download <code>3ds2apple-0.3.0-linux-x86_64.tar.gz</code> from the release and extract it into a writable folder (x86_64 Linux with X11 or Wayland and <code>usbmuxd</code>). The payload includes the local AOT toolchain (3dsrecomp + clang/LLD 23.1.6).</li>
@@ -446,11 +446,11 @@ sha256sum 3ds2apple-0.3.0-linux-x86_64.tar.gz</code></pre>
         </details>
         <details>
           <summary>What exactly does the launcher do?</summary>
-          <div class="a"><p>It reads your ROM's header and SMDH metadata, compiles one GamePack per selected game with a local LLVM or Apple clang toolchain, composes a ROM-free base IPA with a GameCatalog, signs and installs it with your Apple ID, then pushes only <code>GameRom.cci</code> and <code>GameInfo.json</code> into the app's Documents folder. On Windows the deploy is device-aware: it checks the installed app version and game data first, so an update overwrite-installs without losing Documents or saves and only pushes what is missing. The Linux launcher shares the UI and engine but skips the compile step: it imports a prepared <code>.32a</code> package, reuses its GamePack/build cache and signs/installs with plumesign-linux.</p></div>
+          <div class="a"><p>It reads your ROM's header and SMDH metadata, compiles one GamePack per selected game with a local LLVM or Apple clang toolchain, composes a ROM-free base IPA with a GameCatalog, signs and installs it with your Apple ID, then pushes only <code>GameRom.cci</code> and <code>GameInfo.json</code> into the app's Documents folder. On Windows the deploy is device-aware: it checks the installed app version and game data first, so an update overwrite-installs without losing Documents or saves and only pushes what is missing. The Linux launcher shares the UI and engine and follows the same path: its payload bundles 3dsrecomp + LLVM/LLD 23.1.6, so it compiles a GamePack from your ROM on Linux and signs/installs with plumesign-linux; importing a prepared <code>.32a</code> package and reusing its GamePack/build cache is an alternative.</p></div>
         </details>
         <details>
           <summary>Is the macOS launcher ready?</summary>
-          <div class="a"><p>It is a developer preview. The package is not self-contained (it needs Xcode, a checkout and the built tools) and real-device installation has not been verified by the maintainers yet — <a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a> tracks acceptance. The Windows launcher is the verified path.</p></div>
+          <div class="a"><p>It is a developer preview. The package is not self-contained (it needs Xcode, a checkout and the built tools) and real-device installation has not been verified by the maintainers yet — <a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a> tracks acceptance. The Windows and Linux launchers are the verified paths.</p></div>
         </details>
         <details>
           <summary>Is there a Linux launcher?</summary>
@@ -466,7 +466,7 @@ sha256sum 3ds2apple-0.3.0-linux-x86_64.tar.gz</code></pre>
         </details>
         <details>
           <summary>How do I update from an older version?</summary>
-          <div class="a"><p>Deploy again with the current launcher. On Windows the launcher detects the installed app and games and updates incrementally — the app is never uninstalled, so Documents and saves survive, and phone-only game data is never deleted. On macOS, run the same import → deploy flow as before.</p></div>
+          <div class="a"><p>Deploy again with the current launcher. On Windows the launcher detects the installed app and games and updates incrementally — the app is never uninstalled, so Documents and saves survive, and phone-only game data is never deleted. On macOS, run the same import → deploy flow as before. On Linux, deploy again the same way: an overwrite install keeps Documents and saves, and <b>Refresh signing</b> renews the 7-day signature.</p></div>
         </details>
         <details>
           <summary>How can I help?</summary>
@@ -485,7 +485,7 @@ sha256sum 3ds2apple-0.3.0-linux-x86_64.tar.gz</code></pre>
       </div>
       <div class="limits">
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>Some menus can render incorrectly</h3><p>In a few titles, certain menu screens can show corrupted graphics on the top screen. The diagnostics path has been examined but the fix is still under investigation — <a href="https://github.com/HFYKratos/3ds2apple/issues/2" rel="noopener">issue #2</a>.</p></div></article>
-        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>macOS is a developer preview</h3><p>The macOS launcher is not self-contained yet and its real-device install is unverified — <a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a>. The Windows path is the verified one.</p></div></article>
+        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>macOS is a developer preview</h3><p>The macOS launcher is not self-contained yet and its real-device install is unverified — <a href="https://github.com/HFYKratos/3ds2apple/issues/1" rel="noopener">issue #1</a>. Windows and Linux are the verified paths.</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>The Linux launcher is newer</h3><p>It builds GamePacks locally with the bundled 3dsrecomp + LLVM/LLD 23.1.6, signs/installs with plumesign-linux and pushes through usbmuxd/devpush, and imported <code>.32a</code> packages reuse their build cache. It has had less real-device exposure than the Windows path — report issues on the tracker.</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>The C-stick depends on the game</h3><p>It is reported through the New 3DS nub API; a title that never reads the nub ignores it, and a shell built with an older runtime does not provide it. It is hidden by default — enable it in Toggle controls when a game uses the nub.</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>No compatibility or performance promises</h3><p>Some titles may fail to boot or run slowly. The reference numbers in the README come from the maintainers testing specific titles — they are not a guarantee.</p></div></article>
