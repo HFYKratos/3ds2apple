@@ -58,17 +58,13 @@ public sealed class SingleGameIpaExporter
         _composer = new IpaComposer(packCli);
     }
 
-    /// <summary>Output file name for one game: build slug + launcher version + unsigned.</summary>
-    public static string OutputFileName(string displayName, string titleId, string version)
-    {
-        var slug = BuildSlug.From(displayName, titleId);
-        var safeVersion = new string(version.Where(c => char.IsLetterOrDigit(c) || c == '.' || c == '-' || c == '_').ToArray());
-        if (string.IsNullOrWhiteSpace(safeVersion))
-        {
-            safeVersion = LauncherInfo.Version;
-        }
-        return slug + "-" + safeVersion + "-unsigned.ipa";
-    }
+    /// <summary>
+    /// Output file name for one game: TITLE_ID-English game name.ipa (0.2.2-beta4;
+    /// no build slug, launcher version or "unsigned" suffix). Illegal file-name
+    /// characters become '_'; callers that allow a custom name keep the user's input.
+    /// </summary>
+    public static string OutputFileName(string displayName, string titleId) =>
+        ExportNaming.IpaFileName(displayName, titleId);
 
     /// <summary>
     /// Canonical bundle-relative ROM path for one title: Roms/&lt;TITLEID&gt;.&lt;ext&gt;
@@ -105,6 +101,7 @@ public sealed class SingleGameIpaExporter
         string version,
         string outputDirectory,
         string? outputFileName = null,
+        IReadOnlyDictionary<string, string>? displayNames = null,
         Action<string>? log = null,
         CancellationToken cancellationToken = default)
     {
@@ -185,7 +182,7 @@ public sealed class SingleGameIpaExporter
             }
 
             var fileName = string.IsNullOrWhiteSpace(outputFileName)
-                ? OutputFileName(pack.DisplayName, title, version)
+                ? OutputFileName(pack.DisplayName, title)
                 : Path.GetFileName(outputFileName);
             if (!fileName.EndsWith(".ipa", StringComparison.OrdinalIgnoreCase))
             {
@@ -199,7 +196,9 @@ public sealed class SingleGameIpaExporter
                 catalogJson,
                 replacements,
                 composed.AppRoot + resolvedRom.RelativePath,
-                resolvedRom.Path);
+                resolvedRom.Path,
+                pack.DisplayName,
+                displayNames);
             File.Delete(composed.IpaPath);
 
             var verification = VerifyStructure(finalPath, title);
@@ -296,9 +295,16 @@ public sealed class SingleGameIpaExporter
         string catalogJson,
         IReadOnlyDictionary<string, byte[]>? iconReplacements,
         string romEntryName,
-        string romPath)
+        string romPath,
+        string displayName,
+        IReadOnlyDictionary<string, string>? displayNames)
     {
         var catalogEntryName = appRoot + GameCatalogFileName;
+        var infoPlistEntryName = appRoot + AppDisplayNameRewriter.InfoPlistName;
+        var localizedNames = AppDisplayNameRewriter.LocalizedNames(displayName, displayNames);
+        var localizedEntryNames = localizedNames.Keys
+            .Select(language => appRoot + language + ".lproj/" + AppDisplayNameRewriter.InfoPlistStringsName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var replacedIcons = 0;
         TryDelete(destinationIpaPath);
         using var source = ZipFile.OpenRead(sourceIpaPath);
@@ -316,6 +322,25 @@ public sealed class SingleGameIpaExporter
                 if (relative.StartsWith(RomsDirectoryName + "/", StringComparison.OrdinalIgnoreCase))
                 {
                     // The template must be ROM-free; drop anything stale so exactly one ROM remains.
+                    continue;
+                }
+                if (string.Equals(entry.FullName, infoPlistEntryName, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Rename the home-screen app: CFBundleDisplayName/CFBundleName = game name.
+                    using var plistSource = entry.Open();
+                    using var plistMemory = new MemoryStream();
+                    plistSource.CopyTo(plistMemory);
+                    var rewritten = AppDisplayNameRewriter.RewriteInfoPlist(plistMemory.ToArray(), displayName);
+                    var plistEntry = destination.CreateEntry(entry.FullName, CompressionLevel.Optimal);
+                    plistEntry.LastWriteTime = entry.LastWriteTime;
+                    plistEntry.ExternalAttributes = entry.ExternalAttributes;
+                    using var plistTarget = plistEntry.Open();
+                    plistTarget.Write(rewritten);
+                    continue;
+                }
+                if (localizedEntryNames.Contains(entry.FullName))
+                {
+                    // Replaced below with the current game's localized display name.
                     continue;
                 }
                 if (iconReplacements is not null
@@ -348,6 +373,15 @@ public sealed class SingleGameIpaExporter
             using (var writer = new StreamWriter(catalog.Open(), new UTF8Encoding(false)))
             {
                 writer.Write(catalogJson);
+            }
+            foreach (var pair in localizedNames)
+            {
+                var stringsEntry = destination.CreateEntry(
+                    appRoot + pair.Key + ".lproj/" + AppDisplayNameRewriter.InfoPlistStringsName,
+                    CompressionLevel.Optimal);
+                stringsEntry.ExternalAttributes = 0x81A4 << 16;
+                using var stringsStream = stringsEntry.Open();
+                stringsStream.Write(AppDisplayNameRewriter.InfoPlistStrings(pair.Value));
             }
         }
         return replacedIcons;

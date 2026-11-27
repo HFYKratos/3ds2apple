@@ -145,6 +145,13 @@ public sealed class BuildPackageService
                 result.Error ?? PackCli.FirstMeaningfulLine(result.Process));
         }
         var entry = await UpsertLibraryEntryAsync(result.Package!.TitleID, cancellationToken).ConfigureAwait(false);
+        if (entry is not null)
+        {
+            // 0.2.2-beta4: the imported .32a replaces the standalone ROM path. Every ROM
+            // consumer resolves the package's embedded GameRom through GameRomResolver.
+            entry.RomPath = Path.GetFullPath(packagePath);
+            _workspace.SaveState();
+        }
         return new BuildPackageImportOutcome(
             result.Package,
             result.Warnings,

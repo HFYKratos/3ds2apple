@@ -188,8 +188,10 @@ public sealed class SingleGameIpaExportTests
         Assert.True(result.Ok, result.Error);
         Assert.NotNull(result.IpaPath);
         Assert.True(File.Exists(result.IpaPath));
-        Assert.EndsWith("-unsigned.ipa", result.IpaPath);
-        Assert.Contains("0.2.2", Path.GetFileName(result.IpaPath));
+        Assert.Equal(Path.Combine(outputDir, TitleId + "-Demo.ipa"), result.IpaPath);
+        var displayName = ReadPlistValue(result.IpaPath!, "CFBundleDisplayName");
+        Assert.Equal("Demo", displayName);
+        Assert.Equal("Demo", ReadPlistValue(result.IpaPath!, "CFBundleName"));
         Assert.Equal(15, result.ReplacedIconCount);
         Assert.Equal(1, result.GameCount);
         Assert.True(result.Bytes > 0);
@@ -467,11 +469,79 @@ public sealed class SingleGameIpaExportTests
     }
 
     [Fact]
-    public void OutputFileNameIsUnsignedAndCarriesTheSlug()
+    public void OutputFileNameMatchesTheBuildPackageBaseName()
     {
-        var name = SingleGameIpaExporter.OutputFileName("Demo Game", TitleId, "0.2.2");
-        Assert.EndsWith("-0.2.2-unsigned.ipa", name);
-        Assert.Contains("00055e00", name);
-        Assert.DoesNotContain(" ", name);
+        var name = SingleGameIpaExporter.OutputFileName("Demo Game", TitleId);
+        Assert.Equal(TitleId + "-Demo Game.ipa", name);
+        Assert.DoesNotContain("unsigned", name, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("0.2.2", name, StringComparison.Ordinal);
+
+        // Illegal file-name characters become '_' (same sanitizer as the .32a name).
+        Assert.Equal(TitleId + "-Demo_Game_ X_.ipa", SingleGameIpaExporter.OutputFileName("Demo/Game: X?", TitleId));
+        Assert.Equal(TitleId + "-game.ipa", SingleGameIpaExporter.OutputFileName("   ", TitleId));
+        Assert.Equal("0004000000055E00-示例游戏.ipa", SingleGameIpaExporter.OutputFileName("示例游戏", "0004000000055e00"));
+        Assert.Equal(TitleId + "-Demo Game.32a", ExportNaming.BuildPackageFileName("Demo Game", TitleId));
+    }
+
+    [Fact]
+    public async Task AppDisplayNameIsLocalizedFromGameInfoDisplayNames()
+    {
+        using var temp = new TempDir();
+        var template = BuildTemplate(temp);
+        var packPath = temp.Bytes("GamePack.dylib", MachOMagic);
+        var rom = FakeRomFile(temp);
+        var exporter = new SingleGameIpaExporter(new PackCli(CatalogRunner(CatalogJson()), "pack", Path.Combine(temp.Path, "out")));
+        var outputDir = Path.Combine(temp.Path, "exports");
+
+        var result = await exporter.ExportAsync(
+            template,
+            new ComposedPack(TitleId, "Demo", "CTR-P-DEMO", 1, packPath),
+            null,
+            rom,
+            "0.2.2",
+            outputDir,
+            displayNames: new Dictionary<string, string> { ["en"] = "Demo", ["zh-Hans"] = "演示游戏" });
+
+        Assert.True(result.Ok, result.Error);
+        using var archive = ZipFile.OpenRead(result.IpaPath!);
+        Assert.Equal("Demo", ReadPlistValue(archive, "Payload/demo.app/Info.plist", "CFBundleDisplayName"));
+        var chinese = ReadEntryText(archive, "Payload/demo.app/zh-Hans.lproj/InfoPlist.strings");
+        Assert.Contains("演示游戏", chinese, StringComparison.Ordinal);
+        Assert.Contains("CFBundleDisplayName", chinese, StringComparison.Ordinal);
+        var english = ReadEntryText(archive, "Payload/demo.app/en.lproj/InfoPlist.strings");
+        Assert.Contains("Demo", english, StringComparison.Ordinal);
+        // Bundle id is untouched by the display-name rewrite.
+        Assert.Null(archive.GetEntry("Payload/demo.app/Info.plist.bak"));
+    }
+
+    private static string ReadPlistValue(string ipaPath, string key)
+    {
+        using var archive = ZipFile.OpenRead(ipaPath);
+        return ReadPlistValue(archive, "Payload/demo.app/Info.plist", key);
+    }
+
+    private static string ReadPlistValue(ZipArchive archive, string entryName, string key)
+    {
+        var entry = archive.GetEntry(entryName) ?? throw new InvalidOperationException("missing " + entryName);
+        using var stream = entry.Open();
+        using var reader = new StreamReader(stream);
+        var document = System.Xml.Linq.XDocument.Parse(reader.ReadToEnd());
+        var values = document.Root?.Elements().FirstOrDefault()?.Elements().ToList() ?? new List<System.Xml.Linq.XElement>();
+        for (var index = 0; index + 1 < values.Count; index += 2)
+        {
+            if (values[index].Value == key)
+            {
+                return values[index + 1].Value;
+            }
+        }
+        throw new InvalidOperationException("missing plist key " + key);
+    }
+
+    private static string ReadEntryText(ZipArchive archive, string entryName)
+    {
+        var entry = archive.GetEntry(entryName) ?? throw new InvalidOperationException("missing " + entryName);
+        using var stream = entry.Open();
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
 }
