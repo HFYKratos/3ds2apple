@@ -126,8 +126,6 @@ struct LauncherStrings {
     var exportTitleFormat: String
     var exportFormatBuildPackage: String
     var exportFormatIpa: String
-    var exportDetailBuildPackage: String
-    var exportDetailIpa: String
     var exportDestinationBuildPackage: String
     var exportDestinationIpa: String
     var exportWarningsBuildPackage: String
@@ -362,18 +360,10 @@ struct LauncherStrings {
         )
         exportButton = t("Export", "导出")
         exportTitleFormat = t("Export %@", "导出 %@")
-        exportFormatBuildPackage = t(".32a build package", ".32a 构建包")
-        exportFormatIpa = t("Unsigned single-game IPA", "未签名单游戏 IPA")
-        exportDetailBuildPackage = t(
-            "Writes <TITLE_ID>-<English game name>.32a into the selected folder (portable build package: GamePack + GameInfo + cover; includes game data when it can be found).",
-            "把 <TITLE_ID>-<英文游戏名>.32a 写入所选文件夹（便携构建包：GamePack + GameInfo + 封面；能找到游戏数据时一并包含）。"
-        )
-        exportDetailIpa = t(
-            "Composes an unsigned single-game IPA with this game's AOT pack, the shell, the app icons and your own game data embedded, so it opens directly after signing/installing.",
-            "组合未签名单游戏 IPA：内嵌本游戏的 AOT 包、外壳、App 图标以及你自己的游戏数据，自签安装后可直接进入游戏。"
-        )
-        exportDestinationBuildPackage = t("Destination folder (default: workspace/builds)", "目标文件夹（默认 workspace/builds）")
-        exportDestinationIpa = t("Save IPA as (default: workspace/exports)", "保存 IPA 为（默认 workspace/exports）")
+        exportFormatBuildPackage = t("Finished build package", "已完成构建包")
+        exportFormatIpa = t("Ready-to-sign package", "可自签安装包")
+        exportDestinationBuildPackage = t("Export folder (default: workspace/export/32a)", "导出文件夹（默认 workspace/export/32a）")
+        exportDestinationIpa = t("Save IPA as (default: workspace/export/ipa)", "保存 IPA 到（默认 workspace/export/ipa）")
         exportWarningsBuildPackage = t(
             "May contain your own game data. Keep the file local; never upload, share or commit it.",
             "可能包含你自己的游戏数据；仅保存在本地，切勿上传、外传或提交。"

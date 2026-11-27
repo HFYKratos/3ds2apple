@@ -56,6 +56,8 @@ public sealed class LocalizedText
     public string DeployAction => Loc.T("deploy.action");
     public string DeployRunning => Loc.T("deploy.running");
     public string DeployRetry => Loc.T("deploy.retry");
+    public string DeployRefreshSigning => Loc.T("deploy.refreshSigning");
+    public string DeployRefreshSigningHint => Loc.T("deploy.refreshSigningHint");
     public string DeployIdleTitle => Loc.T("deploy.idleTitle");
     public string DeployIdleBody => Loc.T("deploy.idleBody");
     public string DeployDoneTitle => Loc.T("deploy.doneTitle");

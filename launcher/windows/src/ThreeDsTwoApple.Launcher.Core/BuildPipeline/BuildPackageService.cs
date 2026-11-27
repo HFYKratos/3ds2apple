@@ -28,15 +28,12 @@ public sealed record BuildPackageImportOutcome(
 /// the JSON and keeps the launcher state in sync. The Rust CLI is the single
 /// manifest/format writer; this class never parses a .32a itself.
 ///
-/// Export writes to &lt;portable data root&gt;/workspace/builds, a gitignored user-data
+/// Export writes to &lt;portable data root&gt;/workspace/export/32a, a gitignored user-data
 /// directory: a .32a can contain the user's ROM, so the UI must tell the user to
 /// keep it local and never upload or commit it.
 /// </summary>
 public sealed class BuildPackageService
 {
-    /// <summary>Directory (below the portable workspace root) that holds the .32a files.</summary>
-    public const string BuildsDirectoryName = "builds";
-
     private readonly LauncherWorkspace _workspace;
     private readonly PackCli? _packCli;
 
@@ -46,8 +43,8 @@ public sealed class BuildPackageService
         _packCli = packCli;
     }
 
-    /// <summary>Portable data root workspace/builds (user data, gitignored).</summary>
-    public string BuildsDirectory => Path.Combine(_workspace.Root, BuildsDirectoryName);
+    /// <summary>Portable data root workspace/export/32a (user data, gitignored).</summary>
+    public string BuildsDirectory => ExportPaths.BuildPackageDirectory(_workspace.Root);
 
     /// <summary>
     /// Export one or more built games into .32a files. The ROM bundled in the file

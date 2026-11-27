@@ -38,6 +38,16 @@ public sealed class LauncherStateDocument
     /// <summary>How many game packs were inside the last installed app.</summary>
     public int InstalledGameCount { get; set; }
 
+    /// <summary>
+    /// Last installable IPA composed by Deploy or exported from the Library. The
+    /// "Refresh signing" action re-signs and overwrite-installs exactly this file
+    /// (free Apple ID 7-day renewal) without rebuilding or composing again.
+    /// </summary>
+    public string? LastInstallableIpaPath { get; set; }
+
+    /// <summary>When <see cref="LastInstallableIpaPath"/> was recorded.</summary>
+    public DateTimeOffset? LastInstallableIpaAt { get; set; }
+
     public string? LastDeviceUdid { get; set; }
 
     public string? DevPushMockDirectory { get; set; }

@@ -38,11 +38,10 @@ public sealed record SingleGameIpaExportResult(
 /// the app icons so the tested deploy composition path stays untouched. Nothing
 /// is signed, installed or uploaded; the caller tells the user to sign it
 /// (Sideloadly / AltStore). The output contains the user's own game data: it is
-/// user data under workspace/exports and must never be uploaded or committed.
+/// user data under workspace/export/ipa and must never be uploaded or committed.
 /// </summary>
 public sealed class SingleGameIpaExporter
 {
-    public const string ExportsDirectoryName = "exports";
     public const string GameCatalogFileName = "GameCatalog.json";
     public const string RomsDirectoryName = "Roms";
 

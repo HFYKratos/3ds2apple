@@ -157,10 +157,6 @@ private struct LibraryExportSheet: View {
             }
             .pickerStyle(.radioGroup)
             .labelsHidden()
-            Text(isIpa ? strings.exportDetailIpa : strings.exportDetailBuildPackage)
-                .font(.system(size: 11))
-                .foregroundStyle(LauncherTheme.mutedText)
-                .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 4) {
                 Text(isIpa ? strings.exportDestinationIpa : strings.exportDestinationBuildPackage)
                     .font(.system(size: 10.5))
