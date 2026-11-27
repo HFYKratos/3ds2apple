@@ -488,7 +488,7 @@ public sealed class LauncherServices
             return null;
         }
         return LauncherPlatform.IsLinux
-            ? new LinuxShellInstallService(PlumeSign, DevPush, _workspace.WorkDirectory)
+            ? new LinuxShellInstallService(PlumeSign, DevPush, Mux, _workspace.WorkDirectory)
             : new ShellInstallService(Impactor, Mux, PlumeSign, _workspace.WorkDirectory);
     }
 

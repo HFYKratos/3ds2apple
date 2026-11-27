@@ -1297,6 +1297,9 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Library "Import .32a": called by the view after its file picker.</summary>
     public Task ImportBuildPackageAsync(string path) => ImportBuildPackageCoreAsync(path, replace: false);
 
+    /// <summary>Import .32a replacing an existing package (headless device test / prior confirmation).</summary>
+    public Task ImportBuildPackageReplaceAsync(string path) => ImportBuildPackageCoreAsync(path, replace: true);
+
     private async Task ConfirmImportReplaceAsync()
     {
         var path = _pendingImportReplacePath;

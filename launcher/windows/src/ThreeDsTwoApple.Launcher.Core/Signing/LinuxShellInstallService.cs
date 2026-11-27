@@ -16,12 +16,14 @@ public sealed class LinuxShellInstallService : IAppIpaInstaller
 {
     private readonly PlumeSignRunner _signer;
     private readonly DevPushClient? _bridge;
+    private readonly UsbMuxClient? _mux;
     private readonly string _workDirectory;
 
-    public LinuxShellInstallService(PlumeSignRunner signer, DevPushClient? bridge, string workDirectory)
+    public LinuxShellInstallService(PlumeSignRunner signer, DevPushClient? bridge, UsbMuxClient? mux, string workDirectory)
     {
         _signer = signer;
         _bridge = bridge;
+        _mux = mux;
         _workDirectory = workDirectory;
     }
 
@@ -85,12 +87,16 @@ public sealed class LinuxShellInstallService : IAppIpaInstaller
             }
         }
         log?.Invoke("Device selected for signing/install (UDID not logged).");
+        // plumesign's --udid matches the numeric usbmuxd DeviceID on the Windows
+        // path; on Linux the devpush/UI device is identified by UDID, so translate it
+        // through the read-only usbmuxd ListDevices client before signing.
+        var plumeDevice = await ResolvePlumeSignDeviceAsync(targetUdid, log, cancellationToken).ConfigureAwait(false);
         log?.Invoke("Signing the IPA with the official plumesign-linux-x86_64 (Apple ID session from ~/.config/PlumeImpactor)…");
 
         var signedDirectory = Path.Combine(_workDirectory, "signed");
         Directory.CreateDirectory(signedDirectory);
         var signedIpa = Path.Combine(signedDirectory, "app-" + bundleId.Replace('.', '-') + "-" + DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss") + ".ipa");
-        var request = new PlumeSignRequest(ipaPath, signedIpa, bundleId, "3ds2apple", targetUdid, RegisterAndInstall: true);
+        var request = new PlumeSignRequest(ipaPath, signedIpa, bundleId, "3ds2apple", plumeDevice, RegisterAndInstall: true);
         var result = await _signer.RunAsync(request, log, cancellationToken).ConfigureAwait(false);
         if (result.Success)
         {
@@ -103,10 +109,47 @@ public sealed class LinuxShellInstallService : IAppIpaInstaller
         if (File.Exists(signedIpa))
         {
             log?.Invoke("Signing finished but register-and-install did not confirm; retrying device install with the signed IPA.");
-            var install = await _signer.InstallSignedAppAsync(signedIpa, targetUdid, log, cancellationToken).ConfigureAwait(false);
+            var install = await _signer.InstallSignedAppAsync(signedIpa, plumeDevice, log, cancellationToken).ConfigureAwait(false);
             return new ShellInstallOutcome(install.Success, bundleId, signedIpa, install.Error, install.LogPath);
         }
         return new ShellInstallOutcome(false, bundleId, null, result.Error, result.LogPath);
+    }
+
+    /// <summary>
+    /// Translate a devpush UDID into the usbmuxd numeric device id that plumesign's
+    /// --udid expects (same value the Windows Impactor path uses). Returns the input
+    /// unchanged when usbmuxd is unavailable so the caller still gets plumesign's own
+    /// actionable error instead of a guessed override.
+    /// </summary>
+    private async Task<string> ResolvePlumeSignDeviceAsync(string udid, Action<string>? log, CancellationToken cancellationToken)
+    {
+        if (_mux is null)
+        {
+            return udid;
+        }
+        try
+        {
+            var devices = await _mux.ListDevicesAsync(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
+            var match = devices.FirstOrDefault(device => string.Equals(device.Udid, udid, StringComparison.OrdinalIgnoreCase))
+                        ?? devices.FirstOrDefault(device => device.IsUsb)
+                        ?? devices.FirstOrDefault();
+            if (match is null)
+            {
+                throw new LauncherToolException("device_not_found", "usbmuxd did not report the connected iPhone/iPad.",
+                    "Connect the iPhone/iPad by USB, unlock it, tap Trust and make sure usbmuxd is running, then retry.");
+            }
+            log?.Invoke("Resolved the usbmux device number for plumesign (UDID not logged).");
+            return match.DeviceId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch (LauncherToolException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException or UnauthorizedAccessException)
+        {
+            log?.Invoke("usbmuxd device-number lookup failed; passing the UDID to plumesign instead: " + exception.Message);
+            return udid;
+        }
     }
 
     private static bool IsPlausibleBundleId(string bundleId) =>
