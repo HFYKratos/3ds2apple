@@ -139,21 +139,30 @@ automatically by GitHub).
    `bash scripts/tests/release-selfcheck.sh`); the Windows package must pass
    its clean-folder `--self-test` and, on a Windows host, the native
    `bash scripts/release/win-selftest.sh --zip <windows zip> --expect-version <version>`
-   (32 PASS / 0 FAIL / 0 WARN, version line, exit 0).
+   (33 PASS / 0 FAIL / 0 WARN, version line, exit 0).
 2. Assemble the release directory (this also renames the build artifacts to the
    canonical asset names and runs the verifier):
 
    ```bash
    bash scripts/release/assemble-release.sh --version v<version> \
      --windows-zip out/launchers/3ds2apple-windows-single-<version>.zip \
-     --macos-zip out/launchers/3ds2apple-launcher-<version>-macos-app.zip
+     --macos-zip out/launchers/3ds2apple-launcher-<version>-macos-app.zip \
+     --linux-tar out/launchers/3ds2apple-launcher-linux-x64.tar.gz
    bash scripts/release/verify-release.sh --release-dir out/release/v<version> \
      [--win-selftest-log <log from win-selftest.sh>]
    ```
 
-   The verifier requires each package to carry `LICENSE`, `NOTICE` and
-   `THIRD_PARTY.md` at the ZIP root with SHA-256 digests equal to the repository
-   files, and it requires the expected platform packages.
+   The Linux `tar.gz` is built by
+   `launcher/linux/build-linux.sh --payload --local-aot --tar` (payload, local
+   AOT toolchain and `PINS-local-aot.json` included). The verifier requires the
+   release directory to hold exactly the three canonical packages; the zips must
+   carry `LICENSE`, `NOTICE` and `THIRD_PARTY.md` at the ZIP root with
+   SHA-256 digests equal to the repository files, and the Linux tar must hold one
+   top-level launcher folder with the launcher, the same licence texts at the
+   folder root and under `licenses/`, the shell template (whose
+   `Shell/manifest.json` version/bytes/sha256 are cross-checked), and
+   `PINS-local-aot.json` whose recompiler SHA-256 matches `Bin/3dsrecomp` and
+   whose LLVM version matches the pinned 23.1.6.
 
 3. Create the annotated tag and the GitHub Release; the **release title is only
    the version number** (`<version>`, e.g. `0.1.0`):

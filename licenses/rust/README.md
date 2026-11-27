@@ -34,4 +34,5 @@ Then replace the content between the two markers
 
 in `THIRD_PARTY.md` with the two generated `.md` files (in the order above).
 The release gate compares `THIRD_PARTY.md` byte-for-byte between the repository
-and both platform zips, so regenerate and commit it before packaging a release.
+and all three platform packages (both zips and the Linux tar.gz), so regenerate
+and commit it before packaging a release.
