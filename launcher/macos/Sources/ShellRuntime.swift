@@ -56,7 +56,7 @@ enum ShellRuntime {
     static let pinnedTemplateSHA256 = "0c1ba32eafbf4e6f39a83a3915da50b36dc6a35fecef36d3e327ad8a0c032183"
     /// The rebuilt shell identity the launcher is built against. The pinned
     /// template must report exactly these values; another shell build is refused.
-    static let expectedShellVersion = "0.2.2"
+    static let expectedShellVersion = "0.3.0"
     static let expectedShellBuild = "1"
 
     /// Info.plist keys the shell must keep: the Metal HUD build flag and the
