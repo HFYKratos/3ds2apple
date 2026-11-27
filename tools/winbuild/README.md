@@ -341,4 +341,3 @@ in `llvm-manifest.json`, and shown as a readiness row. Tests: command
 construction/environment, missing-tool errors, recompile/link failures, invalid
 Mach-O rejection (`LocalWinbuildPackProviderTests`; the full launcher suite is
 212 tests). See [launcher/windows/README.md](../../launcher/windows/README.md).
-
