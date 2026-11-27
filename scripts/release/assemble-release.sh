@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# assemble-release.sh - collect the two platform launcher packages into an
+# assemble-release.sh - collect the three platform launcher packages into an
 # auditable GitHub Release directory.
 #
-# Release policy (CONTRIBUTING.md#release-policy): a release carries exactly two
+# Release policy (CONTRIBUTING.md#release-policy): a release carries exactly three
 # assets and nothing else:
-#   3ds2apple-<ver>-windows-x64.zip      Windows launcher (self-contained exe +
-#                                        LICENSE/NOTICE/THIRD_PARTY.md at the ZIP root)
-#   3ds2apple-<ver>-macos-universal.zip  macOS launcher (.app + the same three
-#                                        licence texts at the ZIP root)
-# The licence texts ship INSIDE both zips and are never collected as separate
+#   3ds2apple-<ver>-windows-x64.zip       Windows launcher (self-contained exe +
+#                                         LICENSE/NOTICE/THIRD_PARTY.md at the ZIP root)
+#   3ds2apple-<ver>-macos-universal.zip   macOS launcher (.app + the same three
+#                                         licence texts at the ZIP root)
+#   3ds2apple-<ver>-linux-x86_64.tar.gz   Linux launcher folder (launcher, ROM-free
+#                                         shell template, plumesign, pack/devpush,
+#                                         licence texts and local-AOT toolchain)
+# The licence texts ship INSIDE the packages and are never collected as separate
 # assets (no SHA256SUMS.txt, no standalone LICENSE/NOTICE/THIRD_PARTY.md, no
-# shell IPA): the ROM-free shell template is embedded in the launchers and
-# GitHub shows each asset's SHA-256 digest on the Release page.
+# shell IPA): the ROM-free shell template is embedded in the Windows/macOS
+# launchers and carried inside the Linux package, and GitHub shows each asset's
+# SHA-256 digest on the Release page.
 #
 # Nothing is published or committed: the script only reads the git-ignored build
 # outputs (out/launchers/**) and copies them into out/release/<tag>/ (also
@@ -21,14 +25,16 @@
 #   - no file is ever deleted, moved or modified, including in out/;
 #   - verify-release.sh rejects extra files in the release directory.
 #
-# Build inputs keep their build names (out/launchers/3ds2apple-windows-single-*.zip
-# and out/launchers/3ds2apple-launcher-*-macos-app.zip); only the copies in the
+# Build inputs keep their build names (out/launchers/3ds2apple-windows-single-*.zip,
+# out/launchers/3ds2apple-launcher-*-macos-app.zip and
+# out/launchers/3ds2apple-launcher-linux-x64*.tar.gz); only the copies in the
 # release directory get the canonical names above.
 #
 # Usage:
 #   scripts/release/assemble-release.sh --version v0.1.0
 #   scripts/release/assemble-release.sh --version v0.1.0 --dry-run
-#   scripts/release/assemble-release.sh --version v0.1.0 --out-dir /tmp/release
+#   scripts/release/assemble-release.sh --version v0.1.0 --out-dir /tmp/release \
+#     --windows-zip W.zip --macos-zip M.zip --linux-tar L.tar.gz
 #
 # Exit codes: 0 = release directory ready, 1 = build/verification error,
 #             2 = usage/tooling error.
@@ -41,6 +47,7 @@ VERSION=""
 OUT_DIR=""
 WINDOWS_ZIP=""
 MACOS_ZIP=""
+LINUX_TAR=""
 DRY_RUN=0
 FORCE=0
 SKIP_VERIFY=0
@@ -48,7 +55,7 @@ DISCOVERED=""
 
 usage() {
   cat <<'EOF'
-Assemble the two-asset GitHub Release directory.
+Assemble the three-asset GitHub Release directory.
 
 Usage:
   scripts/release/assemble-release.sh --version <tag> [options]
@@ -63,14 +70,17 @@ Options:
                        out/launchers/3ds2apple-windows-single-*.zip.
   --macos-zip FILE     macOS launcher zip. Default: unique
                        out/launchers/3ds2apple-launcher-*-macos-app.zip.
+  --linux-tar FILE     Linux launcher tar.gz. Default: unique
+                       out/launchers/3ds2apple-launcher-linux-x64*.tar.gz.
   --dry-run            Validate inputs and print the plan; write nothing.
   --force              Replace an existing release file whose bytes differ.
   --skip-verify        Do not run verify-release.sh after assembling.
   -h, --help           Show this help and exit.
 
-The release directory contains only 3ds2apple-<ver>-windows-x64.zip and
-3ds2apple-<ver>-macos-universal.zip. The licence texts ship inside both zips
-(never as separate assets), the shell template is embedded in the launchers, and
+The release directory contains only 3ds2apple-<ver>-windows-x64.zip,
+3ds2apple-<ver>-macos-universal.zip and 3ds2apple-<ver>-linux-x86_64.tar.gz. The
+licence texts ship inside the packages (never as separate assets), the ROM-free
+shell template is embedded in the launchers and carried in the Linux package, and
 the release policy is in CONTRIBUTING.md#release-policy.
 EOF
 }
@@ -113,13 +123,13 @@ find_unique_dir_asset() {
     build_error "$label: no file matching $dir/$prefix*$suffix; build it first (see CONTRIBUTING.md#release-policy)"
   fi
   if [ "$count" -gt 1 ]; then
-    build_error "$label: multiple candidates in $dir; pass the exact path with --windows-zip/--macos-zip"
+    build_error "$label: multiple candidates in $dir; pass the exact path with --windows-zip/--macos-zip/--linux-tar"
   fi
   DISCOVERED="$first"
 }
 
 main() {
-  local w_src="" w_name="" m_src="" m_name="" release_version=""
+  local w_src="" w_name="" m_src="" m_name="" l_src="" l_name="" release_version=""
   local added=0 unchanged=0 changed=0 total_bytes=0
   local f
 
@@ -143,6 +153,11 @@ main() {
       --macos-zip)
         [ "$#" -ge 2 ] || die "--macos-zip requires a value"
         MACOS_ZIP="$2"
+        shift 2
+        ;;
+      --linux-tar)
+        [ "$#" -ge 2 ] || die "--linux-tar requires a value"
+        LINUX_TAR="$2"
         shift 2
         ;;
       --dry-run)
@@ -191,10 +206,16 @@ main() {
   else
     MACOS_ZIP="$(resolve_path "$MACOS_ZIP")"
   fi
+  if [ -z "$LINUX_TAR" ]; then
+    find_unique_dir_asset "$ROOT/out/launchers" "3ds2apple-launcher-linux-x64" ".tar.gz" "Linux launcher tar.gz"
+    LINUX_TAR="$DISCOVERED"
+  else
+    LINUX_TAR="$(resolve_path "$LINUX_TAR")"
+  fi
   [ -n "$OUT_DIR" ] || OUT_DIR="$ROOT/out/release/$VERSION"
   OUT_DIR="$(resolve_path "$OUT_DIR")"
 
-  for f in "$WINDOWS_ZIP" "$MACOS_ZIP"; do
+  for f in "$WINDOWS_ZIP" "$MACOS_ZIP" "$LINUX_TAR"; do
     [ -f "$f" ] || build_error "required build artifact not found: $f"
   done
 
@@ -204,8 +225,10 @@ main() {
   w_name="3ds2apple-$release_version-windows-x64.zip"
   m_src="$MACOS_ZIP"
   m_name="3ds2apple-$release_version-macos-universal.zip"
+  l_src="$LINUX_TAR"
+  l_name="3ds2apple-$release_version-linux-x86_64.tar.gz"
 
-  total_bytes=$(( $(file_bytes "$w_src") + $(file_bytes "$m_src") ))
+  total_bytes=$(( $(file_bytes "$w_src") + $(file_bytes "$m_src") + $(file_bytes "$l_src") ))
 
   if [ "$DRY_RUN" -eq 1 ]; then
     info "DRY-RUN: nothing will be written"
@@ -213,15 +236,18 @@ main() {
     info "release dir: $OUT_DIR"
     echo "[plan] $w_name <- $w_src"
     echo "[plan] $m_name <- $m_src"
+    echo "[plan] $l_name <- $l_src"
     echo "[plan] SHA-256 (paste into release notes if needed)"
     echo "  $(hash_file "$w_src")  $w_name"
     echo "  $(hash_file "$m_src")  $m_name"
+    echo "  $(hash_file "$l_src")  $l_name"
     if [ "$SKIP_VERIFY" -eq 0 ]; then
       info "running read-only verify-release.sh against the source artifacts"
-      "$SCRIPT_DIR/verify-release.sh" --windows-zip "$w_src" --macos-zip "$m_src" ||
+      "$SCRIPT_DIR/verify-release.sh" --windows-zip "$w_src" --macos-zip "$m_src" --linux-tar "$l_src" \
+        --expect-package-version "$release_version" ||
         build_error "verification of the source artifacts failed; fix them before assembling"
     fi
-    echo "DRY-RUN OK: 2 files ($total_bytes bytes) would be written to $OUT_DIR"
+    echo "DRY-RUN OK: 3 files ($total_bytes bytes) would be written to $OUT_DIR"
     exit 0
   fi
 
@@ -257,6 +283,7 @@ main() {
 
   sync_asset "$w_src" "$w_name"
   sync_asset "$m_src" "$m_name"
+  sync_asset "$l_src" "$l_name"
 
   if [ "$SKIP_VERIFY" -eq 0 ]; then
     info "running verify-release.sh on $OUT_DIR"
@@ -268,11 +295,12 @@ main() {
   echo "assemble-release: OK"
   echo "  tag:        $VERSION"
   echo "  directory:  $OUT_DIR"
-  echo "  files:      2 ($added added, $changed replaced, $unchanged unchanged)"
+  echo "  files:      3 ($added added, $changed replaced, $unchanged unchanged)"
   echo "  size:       $total_bytes bytes"
   echo "  sha256:"
   echo "    $(hash_file "$OUT_DIR/$w_name")  $w_name"
   echo "    $(hash_file "$OUT_DIR/$m_name")  $m_name"
+  echo "    $(hash_file "$OUT_DIR/$l_name")  $l_name"
   echo "next: tag v$release_version, then gh release create $VERSION --title \"$release_version\" --notes-file <notes.md> $OUT_DIR/*"
 }
 

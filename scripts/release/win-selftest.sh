@@ -20,7 +20,7 @@
 #   - prints one [PASS]/[FAIL] line per check:
 #       exit code 0,
 #       the exact final line "SELF-TEST OK" (no "with N warning(s)"),
-#       exactly 32 [PASS] lines, 0 [FAIL] lines, 0 [WARN] lines,
+#       exactly 33 [PASS] lines, 0 [FAIL] lines, 0 [WARN] lines,
 #       the version line "3ds2apple launcher self-test · 3ds2apple-launcher-windows/<ver>"
 #       where <ver> is --expect-version or parsed from
 #       3ds2apple-<ver>-windows-x64.zip;
@@ -33,7 +33,7 @@
 #     deleted.
 #
 # One run takes about a minute: the launcher extracts its ~300 MB payload beside
-# the exe and runs 32 host-side checks. The Windows host must be up; WSL interop
+# the exe and runs 33 host-side checks. The Windows host must be up; WSL interop
 # is enabled by default on Windows 10/11. Run it from a Windows drive mount
 # (e.g. /mnt/f/project/3ds2apple) so the exe can use a normal Win32 path.
 #
