@@ -48,6 +48,15 @@ protocol InstallBackend: AnyObject {
         options: InstallOptions,
         onProgress: @escaping (InstallProgress) -> Void
     ) async throws -> InstallResult
+    /// "Refresh signing": unpack an already-composed/exported IPA, re-sign every
+    /// nested code item + the app with this Mac's Apple Development identity and
+    /// overwrite-install it with devicectl. No compile, compose or app deletion.
+    func refreshInstall(
+        ipaPath: String,
+        signedBaseAppPath: String,
+        options: InstallOptions,
+        onProgress: @escaping (InstallProgress) -> Void
+    ) async throws -> InstallResult
 }
 
 // MARK: - Apple signing error translation
@@ -672,6 +681,127 @@ final class XcodeInstallBackend: InstallBackend {
         )
     }
 
+    // MARK: refresh signing (re-sign the last IPA in place)
+
+    func refreshInstall(
+        ipaPath: String,
+        signedBaseAppPath: String,
+        options: InstallOptions,
+        onProgress: @escaping (InstallProgress) -> Void
+    ) async throws -> InstallResult {
+        let started = Date()
+        guard let udid = options.deviceUDID, !udid.isEmpty else {
+            throw LauncherFailure(
+                code: "device_missing",
+                message: "No device selected.",
+                hint: "Connect the iPhone/iPad, tap Trust, then refresh the device list.",
+                detail: nil,
+                exitCode: nil
+            )
+        }
+        guard FileProbe.exists(ipaPath) else {
+            throw LauncherFailure(
+                code: "ipa_missing",
+                message: "The IPA to refresh was not found.",
+                hint: "Deploy once (or export a ready-to-sign package) so there is an IPA, then retry.",
+                detail: ipaPath,
+                exitCode: nil
+            )
+        }
+        guard FileProbe.exists(signedBaseAppPath) else {
+            throw LauncherFailure(
+                code: "shell_signing_app_missing",
+                message: "The last signed shell app is missing, so there are no entitlements/profile to reuse.",
+                hint: "Run Deploy once (it rebuilds the signed shell) and then press Refresh signing again.",
+                detail: signedBaseAppPath,
+                exitCode: nil
+            )
+        }
+        guard let identity = await firstSigningIdentityHash() else {
+            throw LauncherFailure(
+                code: "no_signing_assets",
+                message: "No Apple Development signing identity was found.",
+                hint: "Open Xcode -> Settings -> Accounts, sign in with your own Apple ID and let Xcode create the development certificate.",
+                detail: nil,
+                exitCode: nil
+            )
+        }
+        onProgress(InstallProgress(stage: "Unpacking IPA", fraction: 0.2, line: "unzip the saved IPA (no rebuild/compose)"))
+        let stagedApp = try await unpackIPA(ipaPath)
+        let packFiles = LibraryIPACatalog.packDylibFiles(inAppAt: stagedApp)
+        let catalogURL = URL(fileURLWithPath: stagedApp).appendingPathComponent("GameCatalog.json")
+        let facts = (try? Data(contentsOf: catalogURL)).flatMap { LibraryIPACatalog.parse($0) }
+        let titleIDs = facts?.titleIDs ?? []
+
+        if ShellRuntime.hasFramework(inShellAppAt: stagedApp) {
+            onProgress(InstallProgress(stage: "Signing MoltenVK", fraction: 0.3, line: "codesign nested Frameworks/MoltenVK.framework (local identity)"))
+            let frameworkBinary = stagedApp + "/" + ShellRuntime.binaryRelativePath
+            let sign = try await runner.run(CommandSpec(
+                executable: "/usr/bin/codesign",
+                arguments: ["--force", "--sign", identity, "--timestamp=none", frameworkBinary]
+            ), onLine: nil)
+            if !sign.succeeded {
+                throw AppleErrorMapper.failure(command: "codesign (MoltenVK.framework)", text: sign.combined)
+            }
+        }
+        onProgress(InstallProgress(stage: "Signing GamePacks", fraction: 0.4, line: "codesign embedded Frameworks/GamePack-*.dylib (local identity)"))
+        for pack in packFiles {
+            let sign = try await runner.run(CommandSpec(
+                executable: "/usr/bin/codesign",
+                arguments: ["--force", "--sign", identity, "--timestamp=none", stagedApp + "/" + pack]
+            ), onLine: nil)
+            if !sign.succeeded {
+                throw AppleErrorMapper.failure(command: "codesign (GamePack)", text: sign.combined)
+            }
+        }
+        try copyEmbeddedProfileIfNeeded(stagedApp: stagedApp, signedBaseAppPath: signedBaseAppPath)
+        onProgress(InstallProgress(stage: "Signing app bundle", fraction: 0.6, line: "codesign the app with the saved entitlements (local identity)"))
+        let entitlementsPath = await extractEntitlements(from: signedBaseAppPath)
+        var signArguments = ["--force", "--sign", identity, "--timestamp=none"]
+        if let entitlementsPath {
+            signArguments += ["--entitlements", entitlementsPath]
+        }
+        signArguments.append(stagedApp)
+        let signApp = try await runner.run(CommandSpec(executable: "/usr/bin/codesign", arguments: signArguments), onLine: nil)
+        if !signApp.succeeded {
+            throw AppleErrorMapper.failure(command: "codesign (app)", text: signApp.combined)
+        }
+        let verify = try await runner.run(CommandSpec(
+            executable: "/usr/bin/codesign",
+            arguments: ["--verify", "--deep", "--strict", stagedApp]
+        ), onLine: nil)
+        if !verify.succeeded {
+            throw LauncherFailure(
+                code: "signature_invalid",
+                message: "The re-signed app did not pass codesign verification.",
+                hint: "Check that the detected Team ID matches the Apple ID signed in to Xcode, then retry.",
+                detail: verify.combined,
+                exitCode: verify.exitCode
+            )
+        }
+        onProgress(InstallProgress(stage: "Installing with devicectl", fraction: 0.8, line: "xcrun devicectl device install app --device <device> (overwrite install)"))
+        let install = try await runner.run(CommandSpec(
+            executable: paths.xcrun,
+            arguments: ["devicectl", "device", "install", "app", "--device", udid, stagedApp]
+        ), onLine: { _, line in
+            onProgress(InstallProgress(stage: "Installing with devicectl", fraction: 0.9, line: line))
+        })
+        if !install.succeeded {
+            throw AppleErrorMapper.failure(command: "devicectl install", text: install.combined)
+        }
+        let bundleID = appBundleIdentifier(at: stagedApp) ?? ""
+        onProgress(InstallProgress(stage: "Installed", fraction: 1.0, line: "signature refreshed and installed in place (app data kept)."))
+        return InstallResult(
+            appPath: stagedApp,
+            signed: true,
+            installed: true,
+            verifiedBundleID: bundleID.isEmpty ? nil : bundleID,
+            packFiles: packFiles,
+            catalogTitleIDs: titleIDs,
+            duration: Date().timeIntervalSince(started)
+        )
+    }
+
     private func unpackIPA(_ ipaPath: String) async throws -> String {
         let directory = workRoot.appendingPathComponent("ipa-inspect-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -821,6 +951,36 @@ final class MockInstallBackend: InstallBackend {
             verifiedBundleID: overrideInstallBundleID ?? inspection.bundleID,
             packFiles: inspection.packFiles,
             catalogTitleIDs: inspection.catalogTitleIDs,
+            duration: 0.3
+        )
+    }
+
+    func refreshInstall(
+        ipaPath: String,
+        signedBaseAppPath: String,
+        options: InstallOptions,
+        onProgress: @escaping (InstallProgress) -> Void
+    ) async throws -> InstallResult {
+        installCalls += 1
+        let stages: [(String, Double, String)] = [
+            ("Unpacking IPA", 0.2, "unzip the saved IPA (mock)"),
+            ("Signing MoltenVK", 0.35, "codesign nested Frameworks/MoltenVK.framework (mock)"),
+            ("Signing GamePacks", 0.45, "codesign embedded Frameworks/GamePack-*.dylib (mock)"),
+            ("Signing app bundle", 0.65, "codesign the saved app with the saved entitlements (mock)"),
+            ("Installing with devicectl", 0.85, "xcrun devicectl device install app --device <mock> (mock)"),
+            ("Installed", 1.0, "signature refreshed and installed in place (mock)."),
+        ]
+        for stage in stages {
+            try? await Task.sleep(nanoseconds: 60_000_000)
+            onProgress(InstallProgress(stage: stage.0, fraction: stage.1, line: stage.2))
+        }
+        return InstallResult(
+            appPath: ipaPath,
+            signed: true,
+            installed: true,
+            verifiedBundleID: MockFixtures.installedShellBundleID,
+            packFiles: [],
+            catalogTitleIDs: [],
             duration: 0.3
         )
     }

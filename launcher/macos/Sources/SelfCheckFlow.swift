@@ -92,7 +92,10 @@ enum SelfCheckFlow {
         expect("deploy: every push uses the actual installed bundle id", plans.count == 2 && plans.allSatisfy { $0.bundleID == MockFixtures.installedShellBundleID })
         expect("deploy: every push verified (size/sha + listing)", plans.allSatisfy { $0.verified })
         expect("deploy: both games pushed", report?.pushedTitles.sorted() == [MockFixtures.titleAnimalCrossing, MockFixtures.titlePokemonY].sorted())
-        expect("deploy: installed library titles persisted", Set(model.settings.libraryInstalledTitles) == Set([MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing]))
+        expect("deploy: installed library titles persisted", Set(model.settings.libraryInstalledTitles) == Set([MockFixtures.titlePokemonY, MockFixtures.titleAnimalCrossing])
+               && model.settings.lastInstallableIpaPath == (report?.ipaPath ?? "")
+               && !model.settings.lastSignedShellAppPath.isEmpty
+               && model.canRefreshSigning)
         expect("deploy: games marked on device", model.game(id: MockFixtures.titlePokemonY)?.phase == .pushed && model.game(id: MockFixtures.titleAnimalCrossing)?.phase == .pushed)
         expect("deploy: task recorded as succeeded", model.tasks.first(where: { $0.kind == .deploy })?.state == .succeeded)
         expect("deploy: compile step reports the detected hardware",
@@ -106,7 +109,8 @@ enum SelfCheckFlow {
         emptySelection.resetForSelfCheck()
         emptySelection.games = MockFixtures.games()
         await emptySelection.deploySelected()
-        expect("deploy: empty selection is refused with a warning", emptySelection.deployReport == nil && emptySelection.banner?.kind == .warning)
+        expect("deploy: empty selection is refused with a warning", emptySelection.deployReport == nil && emptySelection.banner?.kind == .warning
+               && !emptySelection.canRefreshSigning)
 
         // 14. A failed compile must never install the bare shell.
         let failureModel = AppModel.mock(scenario: .library)

@@ -72,6 +72,8 @@ final class AppModel: ObservableObject {
     @Published var buildPackageStatus: String?
     /// true when buildPackageStatus is a warning/conflict (red) instead of a path (accent).
     @Published var buildPackageWarning = false
+    /// "Refresh signing" result/progress (free Apple ID 7-day renewal).
+    @Published var refreshSigningStatus = ""
     /// Set when an import hit an existing package: the UI offers "replace".
     @Published var pendingImportReplacePath: String?
     /// Library "Export" dialog: one action, format + destination, local-only user data.
@@ -770,6 +772,7 @@ final class AppModel: ObservableObject {
                     Task { @MainActor in self?.appendLog(level, "ipa", line) }
                 }
             )
+            settings.recordInstallableIpa(result.ipaPath)
             setBuildPackageStatus(strings.ipaExported(result.ipaPath), warning: false)
             appendLog(.success, "ipa", "exported unsigned single-game IPA " + result.ipaPath
                 + " (" + FileProbe.formatBytes(result.bytes) + ", sha256 " + result.sha256
@@ -1119,6 +1122,61 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Refresh signing (free Apple ID 7-day renewal)
+
+    var hasRefreshSigningStatus: Bool { !refreshSigningStatus.isEmpty }
+
+    /// True when a previously composed/exported IPA still exists to re-sign.
+    var canRefreshSigning: Bool {
+        !isBusy && !settings.lastInstallableIpaPath.isEmpty && FileProbe.exists(settings.lastInstallableIpaPath)
+    }
+
+    /// Re-sign + overwrite-install the last composed/exported IPA in place: no
+    /// compile, no compose, no app deletion; Documents and saves stay on the phone.
+    func refreshSigning() async {
+        guard !isBusy else { return }
+        let ipaPath = settings.lastInstallableIpaPath
+        guard !ipaPath.isEmpty, FileProbe.exists(ipaPath) else {
+            refreshSigningStatus = strings.refreshSigningNoIpa
+            appendLog(.warn, "refresh", strings.refreshSigningNoIpa)
+            return
+        }
+        guard let device = selectedDevice else {
+            refreshSigningStatus = strings.refreshSigningFailed(strings.deployDeviceNone)
+            return
+        }
+        let shellApp = settings.lastSignedShellAppPath
+        guard !shellApp.isEmpty, FileProbe.exists(shellApp) else {
+            refreshSigningStatus = strings.refreshSigningFailed(strings.refreshSigningNeedsDeploy)
+            appendLog(.warn, "refresh", strings.refreshSigningNeedsDeploy)
+            return
+        }
+        guard beginBusy() else { return }
+        defer { endBusy() }
+        refreshSigningStatus = strings.refreshSigningRunning
+        let options = InstallOptions(teamID: appleReadiness?.teamID ?? "", deviceUDID: device.udid, allowProvisioningUpdates: true)
+        do {
+            let result = try await installer.refreshInstall(
+                ipaPath: ipaPath,
+                signedBaseAppPath: shellApp,
+                options: options,
+                onProgress: { [weak self] progress in
+                    Task { @MainActor in self?.refreshSigningStatus = progress.line }
+                }
+            )
+            if let bundle = result.verifiedBundleID, !bundle.isEmpty {
+                settings.installedBundleID = bundle
+                settings.save()
+            }
+            refreshSigningStatus = strings.refreshSigningDone
+            appendLog(.success, "refresh", "re-signed and installed in place: " + ipaPath + " (app data kept)")
+        } catch {
+            let failure = error.launcherFailure()
+            refreshSigningStatus = strings.refreshSigningFailed(failure.message)
+            appendLog(.error, "refresh", "refresh signing failed: " + failure.message + " " + failure.hint)
+        }
+    }
+
     // MARK: - Deploy: one-click batch flow
 
     private func deployStepTitles(count: Int) -> [PipelineStage] {
@@ -1290,6 +1348,7 @@ final class AppModel: ObservableObject {
                 throw LauncherFailure(code: "library_ipa_missing", message: "The library IPA was not produced.", hint: "Check the packaging log and retry.", detail: result.summary, exitCode: nil)
             }
             settings.libraryIPAPath = produced
+            settings.recordInstallableIpa(produced, signedShellApp: shellApp)
             if var currentReport = deployReport {
                 currentReport.ipaPath = produced
                 deployReport = currentReport

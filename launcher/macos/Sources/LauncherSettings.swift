@@ -36,6 +36,13 @@ final class LauncherSettings: ObservableObject {
     /// from the signed app, or confirmed through the device bridge). The
     /// Documents push always uses this value, never a template default.
     @Published var installedBundleID: String
+    /// Last composed (Deploy) or exported single-game IPA, re-signable via
+    /// "Refresh signing" after the free Apple ID 7-day profile expires.
+    @Published var lastInstallableIpaPath: String
+    @Published var lastInstallableIpaAt: Date?
+    /// Path of the last xcodebuild-signed shell app, reused only for its
+    /// entitlements/provisioning profile when re-signing the saved IPA.
+    @Published var lastSignedShellAppPath: String
     /// Deploy -> Advanced build settings (persisted; defaults keep -O2/no LTO/no fast-math).
     @Published var advancedAotOptLevel: String
     @Published var advancedAotLto: Bool
@@ -72,6 +79,10 @@ final class LauncherSettings: ObservableObject {
         let installedAt = persist ? defaults.double(forKey: Keys.libraryInstalledAt) : 0
         libraryInstalledAt = installedAt > 0 ? Date(timeIntervalSince1970: installedAt) : nil
         installedBundleID = persist ? defaults.string(forKey: Keys.installedBundleID) ?? "" : ""
+        lastInstallableIpaPath = persist ? defaults.string(forKey: Keys.lastInstallableIpa) ?? "" : ""
+        let installableAt = persist ? defaults.double(forKey: Keys.lastInstallableIpaAt) : 0
+        lastInstallableIpaAt = installableAt > 0 ? Date(timeIntervalSince1970: installableAt) : nil
+        lastSignedShellAppPath = persist ? defaults.string(forKey: Keys.lastSignedShellApp) ?? "" : ""
         advancedAotOptLevel = persist ? defaults.string(forKey: Keys.aotOptLevel) ?? "O2" : "O2"
         advancedAotLto = persist ? defaults.bool(forKey: Keys.aotLto) : false
         advancedAotFastMath = persist ? defaults.bool(forKey: Keys.aotFastMath) : false
@@ -94,6 +105,18 @@ final class LauncherSettings: ObservableObject {
     /// Current advanced codegen options (normalised to a supported level).
     var advancedBuildOptions: AdvancedBuildOptions {
         AdvancedBuildOptions(optLevel: advancedAotOptLevel, lto: advancedAotLto, fastMath: advancedAotFastMath).normalized
+    }
+
+    /// Remember the last IPA that can be re-signed later (Deploy compose or
+    /// single-game export). The signed shell app is stored for entitlements/profile.
+    func recordInstallableIpa(_ ipaPath: String, signedShellApp: String? = nil) {
+        guard !ipaPath.isEmpty else { return }
+        lastInstallableIpaPath = ipaPath
+        lastInstallableIpaAt = Date()
+        if let signedShellApp, !signedShellApp.isEmpty {
+            lastSignedShellAppPath = signedShellApp
+        }
+        save()
     }
 
     /// Persist one advanced-options change (applies to the next build; the same
@@ -119,6 +142,9 @@ final class LauncherSettings: ObservableObject {
         defaults.set(libraryIPAPath, forKey: Keys.libraryIPA)
         defaults.set(libraryInstalledAt?.timeIntervalSince1970 ?? 0, forKey: Keys.libraryInstalledAt)
         defaults.set(installedBundleID, forKey: Keys.installedBundleID)
+        defaults.set(lastInstallableIpaPath, forKey: Keys.lastInstallableIpa)
+        defaults.set(lastInstallableIpaAt?.timeIntervalSince1970 ?? 0, forKey: Keys.lastInstallableIpaAt)
+        defaults.set(lastSignedShellAppPath, forKey: Keys.lastSignedShellApp)
         defaults.set(advancedAotOptLevel, forKey: Keys.aotOptLevel)
         defaults.set(advancedAotLto, forKey: Keys.aotLto)
         defaults.set(advancedAotFastMath, forKey: Keys.aotFastMath)
@@ -188,6 +214,9 @@ final class LauncherSettings: ObservableObject {
         static let libraryIPA = "zl.libraryIPA"
         static let libraryInstalledAt = "zl.libraryInstalledAt"
         static let installedBundleID = "zl.installedBundleID"
+    static let lastInstallableIpa = "zl.lastInstallableIpa"
+    static let lastInstallableIpaAt = "zl.lastInstallableIpaAt"
+    static let lastSignedShellApp = "zl.lastSignedShellApp"
         static let aotOptLevel = "zl.aotOptLevel"
         static let aotLto = "zl.aotLto"
         static let aotFastMath = "zl.aotFastMath"

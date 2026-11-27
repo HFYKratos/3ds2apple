@@ -444,6 +444,26 @@ struct DeployScreen: View {
                 .disabled(model.isBusy || model.selectedForDeploy.isEmpty)
             }
             .padding(.top, 4)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 10) {
+                    Button(strings.refreshSigning) {
+                        Task { await model.refreshSigning() }
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .disabled(!model.canRefreshSigning)
+                    Text(strings.refreshSigningHint)
+                        .font(.system(size: 10))
+                        .foregroundStyle(LauncherTheme.mutedText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                if model.hasRefreshSigningStatus {
+                    Text(model.refreshSigningStatus)
+                        .font(.system(size: 10))
+                        .foregroundStyle(LauncherTheme.accentDeep)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             HStack(spacing: 6) {
                 Image(systemName: "cpu")
                     .font(.system(size: 10, weight: .semibold))

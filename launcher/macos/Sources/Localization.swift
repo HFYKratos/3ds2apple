@@ -231,6 +231,13 @@ struct LauncherStrings {
     var deployDoneMessage: String
     var deployFailedTitle: String
     var deployRetry: String
+    var refreshSigning: String
+    var refreshSigningHint: String
+    var refreshSigningRunning: String
+    var refreshSigningDone: String
+    var refreshSigningNoIpa: String
+    var refreshSigningNeedsDeploy: String
+    var refreshSigningFailedFormat: String
     var deployLogTitle: String
     var deployNoteROMFree: String
     var deployInstalledBundle: String
@@ -493,6 +500,19 @@ struct LauncherStrings {
         deployDoneMessage = t("可以打开手机 App 游玩", "可以打开手机 App 游玩")
         deployFailedTitle = t("Deploy failed", "部署失败")
         deployRetry = t("Retry deploy", "重试部署")
+        refreshSigning = t("Refresh signing", "续签")
+        refreshSigningHint = t(
+            "Re-signs the last deployed or exported IPA in place (renews the 7-day free Apple ID signature). It does not add games or update GamePacks — use Deploy for that. Disabled until an IPA exists.",
+            "对最近一次部署或导出的 IPA 原地重签并覆盖安装（续上免费 Apple ID 的 7 天签名）。不会新增游戏或更新 GamePack（需要时请点“部署”）。没有可用 IPA 时不可用。"
+        )
+        refreshSigningRunning = t("Re-signing the last IPA...", "正在重签最近的 IPA...")
+        refreshSigningDone = t("Signature renewed and installed — app data kept.", "签名已续期并完成安装，数据保留。")
+        refreshSigningNoIpa = t("No IPA to re-sign yet. Press Deploy once (or export a ready-to-sign package) first.", "暂无可续签的 IPA：请先部署一次，或导出“可自签安装包”。")
+        refreshSigningNeedsDeploy = t(
+            "The last signed shell app is missing, so entitlements cannot be reused. Run Deploy once and retry.",
+            "上次签名用的 shell App 已不存在，无法复用签名权限。请先部署一次再重试。"
+        )
+        refreshSigningFailedFormat = t("Refresh signing failed: %@", "续签失败：%@")
         deployLogTitle = t("Deploy log", "部署日志")
         deployNoteROMFree = t(
             "Only AOT code goes into the signed app: the IPA is verified to contain the real GamePacks and a schema-2 GameCatalog, and no ROM/game data.",
@@ -564,6 +584,10 @@ struct LauncherStrings {
 
     func gamesCount(_ count: Int) -> String {
         String(format: libraryCountFormat, count)
+    }
+
+    func refreshSigningFailed(_ message: String) -> String {
+        String(format: refreshSigningFailedFormat, message)
     }
 
     func deploySelected(_ count: Int) -> String {
