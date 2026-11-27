@@ -242,14 +242,14 @@ Large generated files can exhaust memory on an 8 GB build VM:
 | `tests/game-catalog-selfcheck.sh` | Catalog helper: generation, schema validation, builder/script wiring, `--help` checks (Linux and macOS) |
 | `tests/desktop-aot-selfcheck.sh` | Desktop pipeline: synthetic ROM import, fake build, schema-v2 catalogue, preview IPA and script safety checks (no Xcode/ROM needed) |
 | `tests/perf-selfcheck.sh` | Performance contract: this file's performance section, diagnostics badge, AOT flags, MoltenVK hook |
-| `tests/release-selfcheck.sh` | Release gate: synthetic Windows/macOS zips and a synthetic Linux `tar.gz` prove `verify-release.sh` accepts the complete three-platform contract and rejects missing/altered licence texts, extra files, ROM payloads, Linux layout/shell-manifest/local-AOT violations and non-whitelisted IPAs; also drives `assemble-release.sh` (dry-run, three canonical assets, idempotent re-run, `--force`) (offline, python3 zip/tar, mktemp only) |
+| `tests/release-selfcheck.sh` | Release gate: synthetic Windows/macOS zips and a synthetic Linux `tar.gz` prove `verify-release.sh` accepts the complete three-platform contract and rejects missing/altered licence texts, extra files, ROM payloads, Linux layout/shell-manifest/local-AOT violations, a stale Linux launcher version (the v0.3.0 tar reported `0.2.2-beta6`) and non-whitelisted IPAs; also drives `assemble-release.sh` (dry-run, three canonical assets, idempotent re-run, `--force`) (offline, python3 zip/tar, mktemp only) |
 
 ## Release
 
 | Script | Purpose |
 |---|---|
 | `release/assemble-release.sh` | Collect the three platform packages (Windows zip, macOS zip and the Linux `tar.gz` built by `launcher/linux/build-linux.sh --payload --local-aot --tar`), rename them to canonical `3ds2apple-<ver>-{windows-x64.zip,macos-universal.zip,linux-x86_64.tar.gz}` names and run the three-platform verifier |
-| `release/verify-release.sh` | Three-platform release gate: exact ZIP entries + licence texts with repository digests; no ROM/pack/IPA/game data; optional Windows exe version and `--win-selftest-log` checks; for the Linux tar, one top-level launcher directory, required payload + local-AOT files, repository-identical licence texts, shell-manifest cross-check against the bundled shell template IPA and `PINS-local-aot.json` recompiler/LLVM-pin checks |
+| `release/verify-release.sh` | Three-platform release gate: exact ZIP entries + licence texts with repository digests; no ROM/pack/IPA/game data; optional Windows exe version and `--win-selftest-log` checks; for the Linux tar, one top-level launcher directory, required payload + local-AOT files, repository-identical licence texts, shell-manifest cross-check against the bundled shell template IPA, `PINS-local-aot.json` recompiler/LLVM-pin checks and the launcher binary's embedded `3ds2apple-launcher/<ver>` deps.json version against the release version (stale `--skip-publish` builds fail) |
 | `release/win-selftest.sh` | Runs a release Windows zip's exe `--self-test` natively on a Windows host through WSL interop and validates the exit code, `SELF-TEST OK`, 33 PASS / 0 FAIL / 0 WARN and the launcher version line (`--keep` keeps the log) |
 
 The full release policy (Windows/macOS/Linux packages, bilingual release notes,

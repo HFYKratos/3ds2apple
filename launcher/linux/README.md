@@ -71,6 +71,24 @@ layout matches `DistributionLayout.LinuxExpectedRelativePaths`:
 Run the packaged build with `/path/to/3ds2apple-launcher --self-test`, then start
 the GUI. On a headless machine use `xvfb-run -a ./3ds2apple-launcher`.
 
+### `--skip-publish` and the stale-publish guard
+
+`--skip-publish` reuses the launcher already published in `--output` instead of
+running `dotnet publish` (used to stage the payload on a host without .NET), but
+it never rebuilds that launcher: pointing it at an old publish folder silently
+packages the old version. The published v0.3.0 Linux tar was built that way and
+reported `0.2.2-beta6` while the Windows/macOS assets reported `0.3.0`.
+
+`build-linux.sh` therefore runs a stale-publish guard right after the
+publish/reuse step: it reads `<Version>` from
+`launcher/windows/Directory.Build.props` and compares it with the
+`3ds2apple-launcher/<ver>` deps.json project key embedded in the staged .NET
+single-file launcher bundle (plain UTF-8; nothing is extracted or executed). A
+mismatch, or a bundle without the key, exits 2 — rebuild without
+`--skip-publish` or point `--output` at a fresh publish folder.
+`scripts/release/verify-release.sh` performs the same cross-check on the release
+Linux tar, so a stale launcher also fails the release gate.
+
 ## Signing dependency and licences
 
 `launcher/linux/vendor/plumesign-linux-x86_64` is the unmodified official Impactor

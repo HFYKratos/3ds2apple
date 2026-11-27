@@ -18,7 +18,10 @@
 # With --local-aot it also stages the Linux local-AOT toolchain used by the
 # launcher's Deploy/Build button (3dsrecomp + LLVM clang/llvm-ar/ld64.lld subset +
 # Darwin stubs/shim/include). --skip-publish reuses an already-published $OUTPUT
-# folder (used when assembling the payload on a machine without .NET).
+# folder (used when assembling the payload on a machine without .NET); a
+# stale-publish guard then compares the version embedded in the staged launcher
+# bundle with launcher/windows/Directory.Build.props and fails when they differ
+# (the published 0.3.0 Linux tar carried a 0.2.2-beta6 launcher this way).
 # It never embeds ROMs, IPAs, keys or game data in the git tree; binaries stay in
 # the git-ignored output folder.
 set -euo pipefail
@@ -49,10 +52,26 @@ while [ "$#" -gt 0 ]; do
     --plumesign) PLUMESIGN="$2"; shift 2 ;;
     --llvm-dir) LLVM_DIR="$2"; shift 2 ;;
     --recompiler-bin) RECOMPILER_BIN="$2"; shift 2 ;;
-    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+
+# launcher_bundle_versions FILE - print the "3ds2apple-launcher/<ver>" deps.json
+# project keys embedded in the .NET single-file launcher bundle (plain UTF-8;
+# read-only, nothing is extracted or executed). A version mismatch here is what
+# the stale-publish guard below rejects.
+launcher_bundle_versions() {
+  LC_ALL=C grep -a -o '"3ds2apple-launcher/[^"]*"' "$1" 2>/dev/null | LC_ALL=C sort -u || true
+}
+
+# expected_launcher_version - Version property shared by every launcher package
+# (launcher/windows/Directory.Build.props is the single source of truth).
+expected_launcher_version() {
+  local props="$REPO/launcher/windows/Directory.Build.props"
+  [ -f "$props" ] || return 1
+  sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' "$props" | head -n 1
+}
 
 if [ "$SKIP_PUBLISH" != "1" ]; then
   DOTNET="${DOTNET:-dotnet}"
@@ -81,6 +100,28 @@ else
     -p:EmbedDistributionPayload=false \
     -o "$OUTPUT"
 fi
+
+# Stale-publish guard: --skip-publish reuses an existing published folder, so a
+# launcher built for an older version can silently end up in the release payload
+# (the published v0.3.0 Linux tar carried a 0.2.2-beta6 launcher while the
+# Windows/macOS assets reported 0.3.0). The .NET single-file bundle keeps
+# deps.json as plain UTF-8, so the embedded project key is the launcher version.
+EXPECTED_LAUNCHER_VERSION="$(expected_launcher_version || true)"
+if [ -z "$EXPECTED_LAUNCHER_VERSION" ]; then
+  echo "error: cannot read the expected launcher version from $REPO/launcher/windows/Directory.Build.props" >&2
+  exit 2
+fi
+LAUNCHER_BUNDLE_VERSIONS="$(launcher_bundle_versions "$OUTPUT/3ds2apple-launcher")"
+if [ -z "$LAUNCHER_BUNDLE_VERSIONS" ]; then
+  echo "error: the staged launcher $OUTPUT/3ds2apple-launcher does not embed a 3ds2apple-launcher/<ver> deps.json key; cannot verify launcher version $EXPECTED_LAUNCHER_VERSION (stale publish folder?)" >&2
+  exit 2
+fi
+if ! printf '%s\n' "$LAUNCHER_BUNDLE_VERSIONS" | grep -Fxq "\"3ds2apple-launcher/$EXPECTED_LAUNCHER_VERSION\""; then
+  echo "error: stale launcher at $OUTPUT: expected launcher version $EXPECTED_LAUNCHER_VERSION, found $(printf '%s' "$LAUNCHER_BUNDLE_VERSIONS" | tr '\n' ' ')" >&2
+  echo "       rebuild the launcher without --skip-publish, or point --output at a fresh publish folder." >&2
+  exit 2
+fi
+echo "[linux] launcher version: $EXPECTED_LAUNCHER_VERSION (stale-publish guard)"
 
 for text in LICENSE NOTICE THIRD_PARTY.md; do
   if [ ! -f "$REPO/$text" ]; then
