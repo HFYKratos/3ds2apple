@@ -62,6 +62,16 @@ target/debug/3ds2apple-pack packages add --roms "../ROM/Game.cci" --include-rom
 target/debug/3ds2apple-pack packages verify
 ```
 
+A launcher-first shell must not carry that provenance into its
+`GameCatalog.json`: the game data is pushed to the phone's Documents/Games, not
+bundled inside the app. The launchers therefore drop `romFile`/`romSha256`/
+`romBytes` from every entry when they compose the multi-game shell catalogue
+(`IpaComposer.NormalizeCatalog`); an entry with a catalogue `romFile` makes the
+iOS AOT loader require `Roms/<TITLE_ID>.<ext>` inside the app bundle and refuse
+to launch the game. The legacy self-contained paths (the single-game IPA export
+and `scripts/build-multi-game-ipa.sh --include-rom`) add the field back because
+they really do embed the ROM.
+
 Import also reads the game metadata from the NCCH ExeFS: the SMDH title table
 gives localized names (BCP-47 keys `ja`/`en`/`fr`/`de`/`it`/`es`/`zh-Hans`/
 `ko`/`nl`/`pt`/`ru`/`zh-Hant`), the publisher, the region-lockout bits

@@ -959,6 +959,27 @@ fn builds_export_list_and_import_round_trip() {
     assert_eq!(imported_json["imported"]["titleID"], title.as_str());
     assert_eq!(imported_json["imported"]["romIncluded"], true);
 
+    // The imported .32a keeps the embedded GameRom provenance in GameInfo.json
+    // (the pack CLI then derives a catalogue romFile from it). The launcher-first
+    // compose step must drop that romFile from the shell GameCatalog: the data is
+    // pushed to Documents/Games, and iOS would treat a catalogue romFile as a
+    // bundled Roms/<TITLE_ID>.<ext> and refuse to launch the game.
+    let imported_info: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(root2.join("packages").join(&title).join("GameInfo.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(imported_info["romFile"], "GameRom.cci", "{imported_info}");
+    assert!(
+        imported_info["romSha256"]
+            .as_str()
+            .is_some_and(|sha| sha.len() == 64),
+        "{imported_info}"
+    );
+    assert!(
+        imported_info["romBytes"].as_u64().is_some_and(|bytes| bytes > 0),
+        "{imported_info}"
+    );
+
     let verify = run(&[
         "--out".to_string(),
         root2.display().to_string(),
