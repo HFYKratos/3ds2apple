@@ -134,6 +134,7 @@ App 的 **Settings** 页采用 iOS 26/27 inset-grouped 分组语言——General
 - **按游戏设置（Per-Application Settings）**——按 title ID 覆盖屏幕旋转、上下屏交换、Integer scaling、Screen aspect、死区、按键外观与按键映射。
 - **图形**——Settings → Graphics 下有 Integer scaling 与 Screen aspect（Fit / 4:3 / Stretch），旁边是六项实验性渲染器优化；渲染器本身自动选择。
 - **存档管理器与存储**——Save Manager 覆盖游戏库中的每款游戏：把所选游戏的电池存档导出为 ZIP、导入 ZIP 或单个存档文件、删除单个文件（游戏运行期间禁用导入与删除）。Storage 页显示存档数据、旧版游戏文件、日志与管线缓存占用，并可在没有游戏运行时清空图形管线缓存。
+- **AOT 验证**——设置 → 调试页显示 AOT 状态、代码覆盖率与解释执行/回退计数，诊断导出也包含同样内容；运行时若只能解释某款游戏，会以红色错误拒绝启动，而不是进入解释器。
 
 ## 金手指
 
@@ -159,12 +160,17 @@ App 的 **Settings** 页采用 iOS 26/27 inset-grouped 分组语言——General
 
 ## 截图
 
-**桌面启动器**——Windows/macOS 为 0.2.1 真实界面截图，Linux 为 0.3.1 无头截图；游戏库条目为合成演示条目，不含任何游戏画面。
+**桌面启动器**——当前 0.3.1 启动器截图：Windows 为官方包在浅色主题下的截图（合成演示条目），macOS 为启动器无头快照渲染的空游戏库；不含任何游戏画面。
 
-| Windows 启动器 | Windows 启动器（简体中文） | macOS 启动器 |
+| Windows launcher | Windows launcher (简体中文) | macOS launcher |
 |:---:|:---:|:---:|
-| <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> |
-| 游戏库（English） | 游戏库（中文） | 空游戏库（深色） |
+| <img src="docs/assets/screenshots/windows-launcher-library-empty-en.png" width="330" alt="Windows launcher 0.3.1 with an empty synthetic library"> | <img src="docs/assets/screenshots/windows-launcher-library-empty-zh.png" width="330" alt="Windows launcher 0.3.1 with an empty synthetic library (Simplified Chinese UI)"> | <img src="docs/assets/screenshots/macos-launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.3.1 with an empty library, dark theme"> |
+| 空游戏库（English） | 空游戏库（中文） | 空游戏库（深色） |
+
+| Windows launcher · synthetic demo library | macOS launcher · light theme | macOS launcher · Settings (headless mock capture) |
+|:---:|:---:|:---:|
+| <img src="docs/assets/screenshots/windows-launcher-library-en.png" width="330" alt="Windows launcher 0.3.1 Library with the built-in synthetic demo entries"> | <img src="docs/assets/screenshots/macos-launcher-library-empty-light-en.png" width="330" alt="macOS launcher 0.3.1 with an empty library, light theme"> | <img src="docs/assets/screenshots/macos-launcher-settings-dark-en.png" width="330" alt="macOS launcher 0.3.1 Settings in the headless mock mode"> |
+| 合成演示条目 | 空游戏库（浅色） | 设置（mock 截图） |
 
 **Linux 启动器**——0.3.1 Linux 包的无头截图，游戏库为内置合成演示条目；不含游戏数据。
 
@@ -173,12 +179,19 @@ App 的 **Settings** 页采用 iOS 26/27 inset-grouped 分组语言——General
 | <img src="docs/assets/screenshots/launcher-linux-library-en.png" width="430" alt="Linux launcher 0.3.1 Library with the built-in synthetic demo entries"> | <img src="docs/assets/screenshots/launcher-linux-library-zh.png" width="430" alt="Linux 启动器 0.3.1 游戏库（中文界面，内置合成演示条目）"> |
 | 游戏库（English） | 游戏库（中文） |
 
-**iOS App**——虚拟按键的合成预览；不含游戏数据。
+**iOS App**——虚拟按键与性能覆盖层的 0.2.1 合成预览，以及 0.3.1 设置页真机截图；不含游戏数据。
 
-| 竖屏 | 横屏 |
+| Portrait | Landscape |
 |:---:|:---:|
 | <img src="docs/assets/portrait.png" width="280" alt="0.2.1 合成横向预览：贴顶的屏幕虚拟按键"> | <img src="docs/assets/landscape.png" width="520" alt="0.2.1 合成横向预览：贴顶的屏幕虚拟按键"> |
 | 竖屏按键 | 横屏按键 |
+
+**设置页（0.3.1 真机截图）**——App 设置页的真实 iPhone 截图（简体中文系统界面）；不含游戏数据。
+
+| Settings | System | Layout |
+|:---:|:---:|:---:|
+| <img src="docs/assets/screenshots/ios-settings-root.png" width="220" alt="3ds2apple 0.3.1 Settings root on iPhone (Simplified Chinese system UI)"> | <img src="docs/assets/screenshots/ios-settings-system.png" width="220" alt="3ds2apple 0.3.1 System settings page on iPhone"> | <img src="docs/assets/screenshots/ios-settings-layout.png" width="220" alt="3ds2apple 0.3.1 Layout settings page on iPhone"> |
+| 全局设置 | 系统 | 布局 |
 
 ## 快速开始
 

@@ -76,8 +76,8 @@
       <aside class="sidebar" aria-label="Press kit resources">
         <div class="card">
           <h3>Download media kit</h3>
-          <p>All text, logos, the hero/OG images, the demo GIF and 18 screenshots in one zip.</p>
-          <p class="mono dim" style="font-size:11.5px">media-kit.zip · 2,521,167 B (2.52 MB)</p>
+          <p>All text, logos, the hero/OG images, the demo GIF and 20 screenshots in one zip.</p>
+          <p class="mono dim" style="font-size:11.5px">media-kit.zip · 2,186,091 B (2.19 MB)</p>
           <a class="btn btn-primary" href="media-kit.zip">Download ZIP</a>
         </div>
         <div class="card">
@@ -125,7 +125,7 @@
               <tr><th>Components</th><td>Windows launcher (C#/Avalonia, single executable) · macOS launcher (SwiftUI, Xcode signing) · Linux launcher (shared Avalonia/Core) · iOS app</td></tr>
               <tr><th>Rendering</th><td>Static recompilation to native ARM64; Metal through MoltenVK; the GPU presenter draws every screen layout — presets and custom rectangles — with zero per-frame readback</td></tr>
               <tr><th>Highlights</th><td>iOS 26/27 grouped Settings; a default virtual-control layout from two Delta reference skins with the Settings button in the HOME slot; the Settings button can never be hidden; an Azahar-style performance overlay at the top edge of the picture; an in-game menu in the same iOS grouped language with a slide-up animation and native push/pop sub-pages; landscape Large / Side by side / Hybrid layouts flush to the top edge, with SAVE/LOAD beside the notch</td></tr>
-              <tr><th>No JIT</th><td>No CPU JIT and no interpreter fallback on the phone — AOT only</td></tr>
+              <tr><th>No JIT</th><td>No CPU JIT and no interpreter fallback on the phone — AOT only. AOT state, coverage and interpreted/fallback counts are visible in Settings → Debug and the diagnostics export</td></tr>
               <tr><th>Cheat codes</th><td>User-supplied Citra/Azahar text files per title, managed in Settings → Cheats and the in-game menu; no cheat database is bundled or downloaded, data patches only</td></tr>
               <tr><th>Portable builds</th><td>Export a portable <code>.32a</code> build package or an unsigned, self-contained single-game IPA; import ROMs and <code>.32a</code> packages with build-cache reuse; advanced AOT options live in the launcher Settings page, and Refresh signing renews the 7-day signature in place</td></tr>
               <tr><th>Licence / price</th><td>Apache-2.0 · free and open source</td></tr>
@@ -169,7 +169,7 @@
         <section id="features">
           <h2>Key features</h2>
           <ul>
-            <li><strong>Native AOT, not emulation:</strong> each game is statically recompiled to C, built into an ARM64 GamePack and run natively; no CPU JIT, no interpreter fallback.</li>
+            <li><strong>Native AOT, not emulation:</strong> each game is statically recompiled to C, built into an ARM64 GamePack and run natively; no CPU JIT, no interpreter fallback. Settings → Debug shows the AOT state, coverage and interpreted/fallback counts, and the diagnostics export carries the same.</li>
             <li><strong>Metal via MoltenVK:</strong> the PICA200 GPU path is translated to Metal; the GPU presenter draws every screen layout — presets and custom rectangles — with zero per-frame screen readback.</li>
             <li><strong>One app, whole library:</strong> one signed app holds every selected game and catalog; only <code>GameRom.cci</code> + <code>GameInfo.json</code> are pushed into Documents.</li>
             <li><strong>Three platform launchers with local AOT on Linux:</strong> Windows (self-contained single executable), macOS (SwiftUI + Xcode signing) and Linux (shared Avalonia engine) launchers share the import and build-package formats. The Linux payload bundles 3dsrecomp + LLVM/LLD 23.1.6, so it compiles GamePacks from the user's ROM; it also imports <code>.32a</code> packages and reuses their build cache, signs/overwrite-installs with the bundled plumesign-linux over USB/usbmuxd, and renews the 7-day signature with Refresh signing.</li>
@@ -251,15 +251,19 @@
             <figure><img src="../assets/screenshots/controls-visibility.png" width="800" height="1734" loading="lazy" alt="0.2.1 synthetic Toggle controls sheet with no Settings row."><figcaption>Toggle controls · Settings excluded</figcaption></figure>
             <figure><img src="../assets/screenshots/controls-hidden.png" width="800" height="1734" loading="lazy" alt="0.2.1 synthetic portrait view with show virtual controls off; only the Settings button remains."><figcaption>Pad off · Settings only</figcaption></figure>
             <figure><img src="../assets/screenshots/performance-overlay.png" width="800" height="1734" loading="lazy" alt="0.2.1 synthetic Performance overlay settings page with five line switches."><figcaption>Performance overlay settings</figcaption></figure>
-            <figure><img src="../assets/screenshots/display-settings.png" width="800" height="1734" loading="lazy" alt="0.2.1 synthetic Layout settings page with the screen layout entry and Performance monitoring group."><figcaption>Layout settings · 0.2.1</figcaption></figure>
-            <figure><img src="../assets/screenshots/launcher-windows-en.png" width="1120" height="820" loading="lazy" alt="Windows launcher 0.2.1 Library screen with an empty synthetic library."><figcaption>Windows launcher · Library (0.2.1)</figcaption></figure>
-            <figure><img src="../assets/screenshots/launcher-windows-zh.png" width="1120" height="820" loading="lazy" alt="Windows launcher 0.2.1 Library screen, Chinese UI, empty synthetic library."><figcaption>Windows launcher · 游戏库（0.2.1）</figcaption></figure>
-            <figure><img src="../assets/screenshots/launcher-macos-empty.png" width="1240" height="693" loading="lazy" alt="macOS launcher 0.2.1 with an empty dark library."><figcaption>macOS launcher · empty library</figcaption></figure>
-            <figure><img src="../assets/screenshots/launcher-macos-settings.png" width="1240" height="1114" loading="lazy" alt="macOS launcher 0.2.1 Settings page in dark mode."><figcaption>macOS launcher · Settings</figcaption></figure>
+<figure><img src="../assets/screenshots/ios-settings-root.png" width="800" height="1732" loading="lazy" alt="3ds2apple 0.3.1 Settings root on iPhone, Simplified Chinese UI."><figcaption>iOS Settings · 0.3.1 device</figcaption></figure>
+<figure><img src="../assets/screenshots/ios-settings-system.png" width="800" height="1732" loading="lazy" alt="3ds2apple 0.3.1 System settings page on iPhone."><figcaption>iOS System settings · 0.3.1 device</figcaption></figure>
+<figure><img src="../assets/screenshots/ios-settings-layout.png" width="800" height="1732" loading="lazy" alt="3ds2apple 0.3.1 Layout settings page on iPhone."><figcaption>iOS Layout settings · 0.3.1 device</figcaption></figure>
+<figure><img src="../assets/screenshots/windows-launcher-library-empty-en.png" width="1180" height="820" loading="lazy" alt="Windows launcher 0.3.1 with an empty synthetic library."><figcaption>Windows launcher · empty library (0.3.1)</figcaption></figure>
+<figure><img src="../assets/screenshots/windows-launcher-library-empty-zh.png" width="1180" height="820" loading="lazy" alt="Windows launcher 0.3.1 with an empty synthetic library, Chinese UI."><figcaption>Windows launcher · 游戏库（0.3.1）</figcaption></figure>
+<figure><img src="../assets/screenshots/windows-launcher-library-en.png" width="1180" height="820" loading="lazy" alt="Windows launcher 0.3.1 with the synthetic demo entries."><figcaption>Windows launcher · synthetic demo entries</figcaption></figure>
+<figure><img src="../assets/screenshots/macos-launcher-library-empty-dark-en.png" width="1180" height="660" loading="lazy" alt="macOS launcher 0.3.1 empty library, dark mode, headless mock capture."><figcaption>macOS launcher · empty library (dark)</figcaption></figure>
+<figure><img src="../assets/screenshots/macos-launcher-library-empty-light-en.png" width="1180" height="660" loading="lazy" alt="macOS launcher 0.3.1 empty library, light mode, headless mock capture."><figcaption>macOS launcher · empty library (light)</figcaption></figure>
+<figure><img src="../assets/screenshots/macos-launcher-settings-dark-en.png" width="1180" height="1060" loading="lazy" alt="macOS launcher 0.3.1 Settings page in headless mock mode."><figcaption>macOS launcher · Settings (mock capture)</figcaption></figure>
             <figure><img src="../assets/screenshots/launcher-linux-library-en.png" width="1240" height="776" loading="lazy" alt="Linux launcher 0.3.1 Library screen with the built-in synthetic demo entries."><figcaption>Linux launcher · Library (0.3.1)</figcaption></figure>
             <figure><img src="../assets/screenshots/launcher-linux-library-zh.png" width="1240" height="776" loading="lazy" alt="Linux launcher 0.3.1 Library screen, Chinese UI, built-in synthetic demo entries."><figcaption>Linux launcher · 游戏库（0.3.1）</figcaption></figure>
           </div>
-          <p class="fine">All images are project-owned synthetic media: the app previews are a Simulator test harness (blue/purple grids labelled TOP 400×240 and BOTTOM 320×240), and the launcher screenshots use the built-in synthetic demo entries (the Linux launcher captures are headless 0.3.1 UI captures). No commercial game art, names or logos. Provenance of every file: <a href="../assets/CREDITS.md">CREDITS.md</a> (also inside the media kit).</p>
+          <p class="fine">All images are project-owned synthetic media: the app previews are a Simulator test harness (blue/purple grids labelled TOP 400×240 and BOTTOM 320×240), and the launcher screenshots use the built-in synthetic demo entries or empty libraries (Windows/macOS/Linux launcher captures are 0.3.1 headless mock captures; the MOCK / DRY RUN badge in macOS frames is part of the headless fixture). No commercial game art, names or logos. Provenance of every file: <a href="../assets/CREDITS.md">CREDITS.md</a> (also inside the media kit).</p>
         </section>
 
         <section id="video">
@@ -315,7 +319,7 @@
             </details>
             <details>
               <summary>Where do I get the media assets?</summary>
-              <div class="a"><p><a href="media-kit.zip">media-kit.zip</a> (2.52 MB) contains all text, logos, hero/OG images, the demo GIF and 18 screenshots. Every image is synthetic and project-owned; see <a href="../assets/CREDITS.md">CREDITS.md</a>.</p></div>
+              <div class="a"><p><a href="media-kit.zip">media-kit.zip</a> (2.19 MB) contains all text, logos, hero/OG images, the demo GIF and 20 screenshots. Every image is synthetic and project-owned; see <a href="../assets/CREDITS.md">CREDITS.md</a>.</p></div>
             </details>
           </div>
         </section>

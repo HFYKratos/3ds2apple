@@ -369,16 +369,18 @@ sha256sum 3ds2apple-0.3.1-linux-x86_64.tar.gz</code></pre>
       <div class="section-head">
         <p class="eyebrow">Screens</p>
         <h2>Launchers and settings.</h2>
-        <p>The Windows, macOS and Linux launchers, plus the app's own settings screens. Launcher screenshots show the built-in synthetic demo entries; app screenshots are synthetic previews — no game data is depicted.</p>
+        <p>The 0.3.1 Windows, macOS and Linux launchers, plus the app's own Settings screens. Launcher captures use the built-in synthetic demo entries or empty libraries (headless mock/harness states are captioned); app screenshots are synthetic previews or Settings-only device captures — no game data is depicted.</p>
       </div>
       <div class="gallery">
-        <figure><img src="assets/screenshots/launcher-windows-en.png" width="1120" height="820" loading="lazy" decoding="async" alt="Windows launcher 0.2.1 Library screen with an empty synthetic library."><figcaption>Windows launcher · Library (0.2.1, empty synthetic library)</figcaption></figure>
-        <figure><img src="assets/screenshots/launcher-windows-zh.png" width="1120" height="820" loading="lazy" decoding="async" alt="Windows launcher 0.2.1 Library screen with the Simplified Chinese interface and an empty synthetic library."><figcaption>Windows launcher · 游戏库（0.2.1，合成空库）</figcaption></figure>
-        <figure><img src="assets/screenshots/launcher-windows-deploy-en.png" width="1120" height="820" loading="lazy" decoding="async" alt="Windows launcher 0.2.1 Deploy screen with the synthetic demo library."><figcaption>Windows launcher · Deploy</figcaption></figure>
-        <figure><img src="assets/screenshots/launcher-macos-empty.png" width="1240" height="693" loading="lazy" decoding="async" alt="macOS launcher 0.2.1 with an empty library in dark mode."><figcaption>macOS launcher · empty library (dark)</figcaption></figure>
-        <figure><img src="assets/screenshots/launcher-macos-settings.png" width="1240" height="1114" loading="lazy" decoding="async" alt="macOS launcher 0.2.1 Settings page in dark mode."><figcaption>macOS launcher · Settings (dark)</figcaption></figure>
-        <figure><img src="assets/screenshots/settings.png" width="800" height="1734" loading="lazy" decoding="async" alt="iOS Settings main page in 0.2.1: iOS-style grouped cards and coloured icons."><figcaption>iOS Settings · 0.2.1</figcaption></figure>
-        <figure><img src="assets/screenshots/display-settings.png" width="800" height="1734" loading="lazy" decoding="async" alt="Layout settings in 0.2.1 with the screen layout entry and the Performance monitoring group."><figcaption>Layout settings · screen layout + performance monitoring</figcaption></figure>
+<figure><img src="assets/screenshots/windows-launcher-library-empty-en.png" width="1180" height="820" loading="lazy" decoding="async" alt="Windows launcher 0.3.1 with an empty synthetic library."><figcaption>Windows launcher · empty library (0.3.1)</figcaption></figure>
+<figure><img src="assets/screenshots/windows-launcher-library-empty-zh.png" width="1180" height="820" loading="lazy" decoding="async" alt="Windows launcher 0.3.1 with an empty synthetic library, Chinese UI."><figcaption>Windows 启动器 · 游戏库（0.3.1，空库）</figcaption></figure>
+<figure><img src="assets/screenshots/windows-launcher-library-en.png" width="1180" height="820" loading="lazy" decoding="async" alt="Windows launcher 0.3.1 Library with the built-in synthetic demo entries."><figcaption>Windows launcher · synthetic demo entries</figcaption></figure>
+<figure><img src="assets/screenshots/macos-launcher-library-empty-dark-en.png" width="1180" height="660" loading="lazy" decoding="async" alt="macOS launcher 0.3.1 empty library in dark mode (headless mock capture)."><figcaption>macOS launcher · empty library (dark)</figcaption></figure>
+<figure><img src="assets/screenshots/macos-launcher-library-empty-light-en.png" width="1180" height="660" loading="lazy" decoding="async" alt="macOS launcher 0.3.1 empty library in light mode (headless mock capture)."><figcaption>macOS launcher · empty library (light)</figcaption></figure>
+<figure><img src="assets/screenshots/macos-launcher-settings-dark-en.png" width="1180" height="1060" loading="lazy" decoding="async" alt="macOS launcher 0.3.1 Settings page in the headless mock mode."><figcaption>macOS launcher · Settings (mock capture)</figcaption></figure>
+<figure><img src="assets/screenshots/ios-settings-root.png" width="800" height="1732" loading="lazy" decoding="async" alt="iPhone Settings root of 3ds2apple 0.3.1 (Simplified Chinese system UI)."><figcaption>iOS Settings · 0.3.1 device</figcaption></figure>
+<figure><img src="assets/screenshots/ios-settings-system.png" width="800" height="1732" loading="lazy" decoding="async" alt="iPhone System settings page of 3ds2apple 0.3.1."><figcaption>iOS System settings · 0.3.1 device</figcaption></figure>
+<figure><img src="assets/screenshots/ios-settings-layout.png" width="800" height="1732" loading="lazy" decoding="async" alt="iPhone Layout settings page of 3ds2apple 0.3.1."><figcaption>iOS Layout settings · 0.3.1 device</figcaption></figure>
         <figure><img src="assets/screenshots/performance-overlay.png" width="800" height="1734" loading="lazy" decoding="async" alt="Performance overlay settings in 0.2.1: the master switch, background, six positions and five line switches."><figcaption>Performance overlay settings</figcaption></figure>
         <figure><img src="assets/screenshots/overlay-position.png" width="800" height="1734" loading="lazy" decoding="async" alt="Overlay position picker in 0.2.1 with the six corner positions."><figcaption>Overlay position · six places</figcaption></figure>
         <figure><img src="assets/screenshots/launcher-linux-library-en.png" width="1240" height="776" loading="lazy" decoding="async" alt="Linux launcher 0.3.1 Library screen with the built-in synthetic demo entries."><figcaption>Linux launcher · Library (0.3.1)</figcaption></figure>
@@ -477,7 +479,7 @@ sha256sum 3ds2apple-0.3.1-linux-x86_64.tar.gz</code></pre>
         </details>
         <details>
           <summary>Why is there no CPU JIT?</summary>
-          <div class="a"><p>iOS does not allow JIT-compiled executable memory, and the project intentionally keeps the shipping path AOT: native ARM64 code produced on the host, then Metal for graphics. If an interpreter is detected the app refuses to start.</p></div>
+          <div class="a"><p>iOS does not allow JIT-compiled executable memory, and the project intentionally keeps the shipping path AOT: native ARM64 code produced on the host, then Metal for graphics. If an interpreter is detected the app refuses to start. Settings → Debug shows the AOT state, coverage and interpreted/fallback counts, and the diagnostics export carries the same.</p></div>
         </details>
         <details>
           <summary>What exactly does the launcher do?</summary>

@@ -137,6 +137,7 @@
 - **アプリ別設定** — タイトル ID ごとに画面回転、画面入れ替え、Integer scaling、Screen aspect、デッドゾーン、コントロール外観、ボタン割り当てを上書き。
 - **グラフィックス** — Integer scaling と Screen aspect（Fit / 4:3 / Stretch）は Settings → Graphics にあり、6 つの実験的レンダラー最適化も同じ場所です。レンダラーは自動選択されます。
 - **セーブマネージャーとストレージ** — Save Manager はライブラリの全ゲームを対象に、選択ゲームのバッテリーセーブを ZIP に書き出し、ZIP または単体セーブファイルを読み込み、個別ファイルを削除できます（そのゲーム実行中は読み込み・削除が無効）。Storage ページはセーブデータ・旧ゲームファイル・ログ・パイプラインキャッシュの使用量を表示し、ゲーム未実行時にグラフィックスパイプラインキャッシュを消去できます。
+- **AOT 検証** — Settings → Debug に AOT の状態、コードカバレッジ、インタープリタ/フォールバック回数が表示され、診断エクスポートにも同じ内容が含まれます。インタープリタでしか動かないタイトルは赤いエラーで起動を拒否します。
 
 ## チートコード
 
@@ -162,26 +163,38 @@
 
 ## スクリーンショット
 
-**デスクトップランチャー**——Windows/macOS は 0.2.1 の実際の UI キャプチャ、Linux は 0.3.1 のヘッドレスキャプチャです。ライブラリの項目は合成のデモ項目で、ゲームの画像は含まれません。
+**デスクトップランチャー**——現行 0.3.1 ランチャーのスクリーンショット：Windows は公式パッケージのライトテーマ（合成デモ項目）、macOS はランチャーのヘッドレススナップショットレンダラーによる空ライブラリです。ゲーム画像は含まれません。
 
-| Windows ランチャー | Windows ランチャー（简体中文） | macOS ランチャー |
+| Windows launcher | Windows launcher (简体中文) | macOS launcher |
 |:---:|:---:|:---:|
-| <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> |
+| <img src="docs/assets/screenshots/windows-launcher-library-empty-en.png" width="330" alt="Windows launcher 0.3.1 with an empty synthetic library"> | <img src="docs/assets/screenshots/windows-launcher-library-empty-zh.png" width="330" alt="Windows launcher 0.3.1 with an empty synthetic library (Simplified Chinese UI)"> | <img src="docs/assets/screenshots/macos-launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.3.1 with an empty library, dark theme"> |
 | ライブラリ（English） | ライブラリ（中文） | 空のライブラリ（ダーク） |
+
+| Windows launcher · synthetic demo library | macOS launcher · light theme | macOS launcher · Settings (headless mock capture) |
+|:---:|:---:|:---:|
+| <img src="docs/assets/screenshots/windows-launcher-library-en.png" width="330" alt="Windows launcher 0.3.1 Library with the built-in synthetic demo entries"> | <img src="docs/assets/screenshots/macos-launcher-library-empty-light-en.png" width="330" alt="macOS launcher 0.3.1 with an empty library, light theme"> | <img src="docs/assets/screenshots/macos-launcher-settings-dark-en.png" width="330" alt="macOS launcher 0.3.1 Settings in the headless mock mode"> |
+| 合成デモ項目 | 空のライブラリ（ライト） | 設定（mock キャプチャ） |
 
 **Linux ランチャー**——0.3.1 Linux パッケージのヘッドレスキャプチャ。ライブラリは内蔵の合成デモ項目で、ゲームデータは含まれません。
 
 | English | 简体中文 |
 |:---:|:---:|
-| <img src="docs/assets/screenshots/launcher-linux-library-en.png" width="430" alt="Linux launcher 0.3.1 Library with the built-in synthetic demo entries"> | <img src="docs/assets/screenshots/launcher-linux-library-zh.png" width="430" alt="Linux ランチャー 0.3.1 のライブラリ（中国語 UI、内蔵の合成デモ項目）"> |
+| <img src="docs/assets/screenshots/launcher-linux-library-en.png" width="430" alt="Linux launcher 0.3.1 Library with the built-in synthetic demo entries"> | <img src="docs/assets/screenshots/launcher-linux-library-zh.png" width="430" alt="Linux 启动器 0.3.1 游戏库（中文界面，内置合成演示条目）"> |
 | ライブラリ（English） | ライブラリ（中文） |
 
-**iOS アプリ**——オンスクリーンコントロールの合成プレビューです。ゲームデータは含まれません。
+**iOS アプリ**——オンスクリーンコントロールとパフォーマンスオーバーレイの 0.2.1 合成プレビューに加え、設定ページの 0.3.1 実機キャプチャです。ゲームデータは含まれません。
 
-| 縦画面 | 横画面 |
+| Portrait | Landscape |
 |:---:|:---:|
 | <img src="docs/assets/portrait.png" width="280" alt="0.2.1 合成横画面プレビュー：上端に貼り付くオンスクリーンコントロール"> | <img src="docs/assets/landscape.png" width="520" alt="0.2.1 合成横画面プレビュー：上端に貼り付くオンスクリーンコントロール"> |
 | 縦画面コントロール | 横画面コントロール |
+
+**設定（0.3.1 実機キャプチャ）**——アプリの設定ページの実機 iPhone キャプチャ（簡体字中国語のシステム UI）です。ゲームデータは含まれません。
+
+| Settings | System | Layout |
+|:---:|:---:|:---:|
+| <img src="docs/assets/screenshots/ios-settings-root.png" width="220" alt="3ds2apple 0.3.1 Settings root on iPhone (Simplified Chinese system UI)"> | <img src="docs/assets/screenshots/ios-settings-system.png" width="220" alt="3ds2apple 0.3.1 System settings page on iPhone"> | <img src="docs/assets/screenshots/ios-settings-layout.png" width="220" alt="3ds2apple 0.3.1 Layout settings page on iPhone"> |
+| グローバル設定 | システム | レイアウト |
 
 ## クイックスタート
 

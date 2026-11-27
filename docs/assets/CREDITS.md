@@ -1,13 +1,14 @@
 # Media credits and provenance
 
 All images on this site, in the press kit and in the READMEs are **project-owned synthetic
-media**. No commercial game screenshots, logos, box art, ROM data, save data or game assets
-appear anywhere, and no commercial game name is used in any filename, caption or alt text.
+media or headless captures of the project's own launchers**. No commercial game screenshots,
+logos, box art, ROM data, save data or game assets appear anywhere, and no commercial game name
+is used in any filename, caption or alt text.
 
-Most assets are the 0.2.1 refresh: the app screenshots and the Windows/macOS launcher screenshots
-were captured from the 0.2.1 build, and the hero, Open Graph card, social preview and demo GIF were
-rebuilt from those captures. Old 0.1.5/0.2.0 screenshots were removed. The two Linux launcher
-screenshots are a 0.3.1 capture (2026-11-28), added below.
+The app-preview artwork (hero, Open Graph card, social preview, demo GIF, portrait/landscape
+previews and the in-game/layout/overlay screenshots) is the 0.2.1 synthetic refresh. The launcher
+screenshots and the iOS Settings captures were refreshed for 0.3.1 (2026-11-28) and are listed
+below.
 
 ## Sources
 
@@ -20,44 +21,36 @@ screenshots are a 0.3.1 capture (2026-11-28), added below.
 | docs/assets/social-preview.png | generated repository social preview (1280x640) |
 | docs/assets/demo-poster.png | first demo slide composite (960x640) |
 | docs/assets/demo.gif | 4-slide 0.2.1 slideshow: portrait controls -> landscape controls -> in-game menu -> performance overlay settings (960x640) |
-| docs/assets/screenshots/*.png | 0.2.1 app screenshots from out/sim-shots/20261125-0.2.1-final/ and launcher screenshots from the Windows (1120x820) and macOS (2360x...) 0.2.1 UI smoke runs |
+| docs/assets/screenshots/controls-*.png, layout-*.png, overlay-position.png, pause-virtual-controls.png, performance-overlay.png | 0.2.1 synthetic in-game / layout / overlay screenshots from out/sim-shots/20261125-0.2.1-final/ |
+| docs/assets/screenshots/ios-settings-root.png, ios-settings-system.png, ios-settings-layout.png | 0.3.1 device captures (iPhone10,3, iOS 16.7.16, 3ds2apple 0.3.1 shell): the app's Settings pages only, Simplified Chinese system UI. Downscaled to 800 px wide and palette-quantised. No game data. |
+| docs/assets/screenshots/windows-launcher-library-empty-en.png, -zh.png, windows-launcher-library-en.png | 0.3.1 Windows launcher (official `3ds2apple-0.3.1-windows-x64.zip`) under Wine + Xvfb with the developer `--ui-smoke` mode, light theme, deterministic synthetic fixtures (Example Game / Second Example). Downscaled/quantised; no ROM or game data. |
+| docs/assets/screenshots/macos-launcher-library-empty-dark-en.png, -light-en.png, macos-launcher-settings-dark-en.png | 0.3.1 macOS launcher (official `3ds2apple-0.3.1-macos-universal.zip`) headless SwiftUI SnapshotRenderer (`--screenshot-dir ... --mock`), downscaled to 1180 px and palette-quantised. The amber MOCK / DRY RUN badge is part of the headless fixture. Library/Deploy mock frames that embed commercial titles were excluded. |
+| docs/assets/screenshots/launcher-linux-library-en.png, -zh.png | 0.3.1 Linux launcher (published Linux `tar.gz`) headless `--ui-smoke` capture under Xvfb, isolated HOME and relative workspace; the bottom 44 px status strip was cropped (headless run has no device/sign-in). Synthetic demo entries only. |
 | docs/assets/readme-icon.png | original 3ds2apple app icon (project-owned, 1024x1024) |
 | docs/assets/logo-*.png, favicon*, apple-touch-icon.png | project-owned app icon variants |
 
-App screenshots in docs/assets/screenshots/ come from the 20261125-0.2.1-final run:
+Captions and alt text state the capture generation (0.2.1 synthetic or 0.3.1 current) and mark
+headless mock captures as such.
 
-- 03-settings-main -> settings.png
-- 04-settings-performance-overlay -> performance-overlay.png
-- 05-settings-layout -> display-settings.png
-- 06-settings-overlay-position -> overlay-position.png
-- 07-menu-portrait -> pause-virtual-controls.png
-- 09-preview-portrait-controls-hidden -> controls-hidden.png
-- 14b-menu-toggle-controls-scrolled -> controls-visibility.png
-- 15b-menu-adjust-size-scrolled -> controls-size.png
-- 11-landscape-large, 12-landscape-side, 13-landscape-hybrid -> layout-large/side/hybrid.png
+## Why the images are synthetic
 
-Launcher screenshots:
-
-- Windows 0.2.1 UI smoke (/tmp/win201): library-en/zh, deploy-en, settings-en (1120x820), copied to docs/assets/screenshots/launcher-windows-*.png and launcher/windows/docs/ui/v4-*.png;
-- macOS 0.2.1 UI smoke (/tmp/mac201/screenshots): launcher-library-empty-dark-en and launcher-settings-dark-en -> launcher-macos-empty/settings.png; the full 18-shot set overwrote launcher/macos/screenshots/.
-- Linux 0.3.1 launcher (2026-11-28, headless): captured from the published 0.3.1 Linux package with the launcher's developer `--ui-smoke` mode under Xvfb (isolated HOME, built-in synthetic demo entries, relative workspace paths, the window's bottom status strip cropped by 44 px) -> launcher-linux-library-en.png and launcher-linux-library-zh.png (1240x776). No game data, no local user path and no device identifier appears in the frame.
-
-## Why the screenshots are synthetic
-
-The iOS screenshots are Simulator captures of the app's preview test harness, not a game: the two
-"screens" are flat blue and purple grids labelled **TOP 400x240** and **BOTTOM 320x240**, with the
-real 0.2.1 control overlay, in-game menu and Settings UI. No ROM is loaded and no game data is
-rendered. The Windows/macOS/Linux launcher screenshots show the launchers' built-in synthetic demo
+The iOS in-game screenshots are Simulator captures of the app's preview test harness, not a game:
+the two "screens" are flat blue and purple grids labelled **TOP 400x240** and **BOTTOM 320x240**,
+with the control overlay, in-game menu and Settings UI. No ROM is loaded and no game data is
+rendered. The Settings captures are real device screenshots of the Settings pages; the game
+library and in-game screens were deliberately not published because they would show the test
+game's cover art or picture. The launcher screenshots show the launchers' built-in synthetic demo
 entries or an empty library, never a real game.
 
 ## How the media was produced
 
 - Pillow (Python) composition, Lanczos resizing, rounded cards, shadows, captions and Open
-  Graph artwork.
+  Graph artwork for the 0.2.1 media set.
 - demo.gif: 960x640, 4 slides, per-slide captions, adaptive 96-colour palette, ~5 s loop,
   under 200 KB.
-- PNG screenshots are palette-quantised to keep the committed media set small; hero, OG,
-  social preview and the two large previews stay full RGB.
+- New 0.3.1 captures: Windows launcher via Wine/Xvfb `--ui-smoke`; macOS launcher via the
+  headless SnapshotRenderer; iOS Settings via device screenshots; Linux launcher via Xvfb
+  `--ui-smoke`. They are downscaled and palette-quantised to keep the committed media set small.
 - No CDN, no external font, no tracker: system fonts only for the site.
 
 ## Licence and press use

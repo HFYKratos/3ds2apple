@@ -137,6 +137,7 @@
 - **앱별 설정** — 타이틀 ID별로 화면 회전, 화면 교체, Integer scaling, Screen aspect, 데드존, 컨트롤 모양, 버튼 매핑을 재정의합니다.
 - **그래픽** — Integer scaling과 Screen aspect(Fit / 4:3 / Stretch)는 Settings → Graphics에 있고, 여섯 가지 실험적 렌더러 최적화도 같은 곳에 있습니다. 렌더러는 자동으로 선택됩니다.
 - **세이브 매니저와 저장 공간** — Save Manager는 라이브러리의 모든 게임을 다룹니다: 선택한 게임의 배터리 세이브를 ZIP으로 내보내고, ZIP 또는 단일 세이브 파일을 다시 가져오고, 개별 파일을 삭제합니다(해당 게임 실행 중에는 가져오기/삭제 비활성). Storage 페이지는 세이브 데이터, 레거시 게임 파일, 로그, 파이프라인 캐시 사용량을 보여 주고 게임이 실행 중이 아닐 때 그래픽 파이프라인 캐시를 지울 수 있습니다.
+- **AOT 검증** — Settings → Debug에 AOT 상태, 코드 커버리지, 인터프리터/폴백 횟수가 표시되며 진단 내보내기에도 동일한 내용이 포함됩니다. 인터프리터로만 동작하는 타이틀은 빨간 오류로 실행을 거부합니다.
 
 ## 치트 코드
 
@@ -162,26 +163,38 @@
 
 ## 스크린샷
 
-**데스크톱 런처** — Windows/macOS는 0.2.1 실제 UI 캡처, Linux는 0.3.1 헤드리스 캡처입니다. 라이브러리 항목은 합성 데모 항목이며 게임 아트는 포함되지 않습니다.
+**데스크톱 런처** — 현재 0.3.1 런처 스크린샷입니다: Windows는 공식 패키지의 라이트 테마 캡처(합성 데모 항목), macOS는 런처의 헤드리스 스냅샷 렌더러로 만든 빈 라이브러리입니다. 게임 아트는 포함되지 않습니다.
 
-| Windows 런처 | Windows 런처(简体中文) | macOS 런처 |
+| Windows launcher | Windows launcher (简体中文) | macOS launcher |
 |:---:|:---:|:---:|
-| <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> |
-| 라이브러리(English) | 라이브러리(中文) | 빈 라이브러리(다크) |
+| <img src="docs/assets/screenshots/windows-launcher-library-empty-en.png" width="330" alt="Windows launcher 0.3.1 with an empty synthetic library"> | <img src="docs/assets/screenshots/windows-launcher-library-empty-zh.png" width="330" alt="Windows launcher 0.3.1 with an empty synthetic library (Simplified Chinese UI)"> | <img src="docs/assets/screenshots/macos-launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.3.1 with an empty library, dark theme"> |
+| 빈 라이브러리(English) | 빈 라이브러리(中文) | 빈 라이브러리(다크) |
+
+| Windows launcher · synthetic demo library | macOS launcher · light theme | macOS launcher · Settings (headless mock capture) |
+|:---:|:---:|:---:|
+| <img src="docs/assets/screenshots/windows-launcher-library-en.png" width="330" alt="Windows launcher 0.3.1 Library with the built-in synthetic demo entries"> | <img src="docs/assets/screenshots/macos-launcher-library-empty-light-en.png" width="330" alt="macOS launcher 0.3.1 with an empty library, light theme"> | <img src="docs/assets/screenshots/macos-launcher-settings-dark-en.png" width="330" alt="macOS launcher 0.3.1 Settings in the headless mock mode"> |
+| 합성 데모 항목 | 빈 라이브러리(라이트) | 설정(mock 캡처) |
 
 **Linux 런처** — 0.3.1 Linux 패키지의 헤드리스 캡처입니다. 라이브러리는 내장 합성 데모 항목이며 게임 데이터는 없습니다.
 
 | English | 简体中文 |
 |:---:|:---:|
-| <img src="docs/assets/screenshots/launcher-linux-library-en.png" width="430" alt="Linux launcher 0.3.1 Library with the built-in synthetic demo entries"> | <img src="docs/assets/screenshots/launcher-linux-library-zh.png" width="430" alt="Linux 런처 0.3.1 라이브러리(중국어 UI, 내장 합성 데모 항목)"> |
+| <img src="docs/assets/screenshots/launcher-linux-library-en.png" width="430" alt="Linux launcher 0.3.1 Library with the built-in synthetic demo entries"> | <img src="docs/assets/screenshots/launcher-linux-library-zh.png" width="430" alt="Linux 启动器 0.3.1 游戏库（中文界面，内置合成演示条目）"> |
 | 라이브러리(English) | 라이브러리(中文) |
 
-**iOS 앱** — 화면 컨트롤의 합성 프리뷰입니다. 게임 데이터는 없습니다.
+**iOS 앱** — 화면 컨트롤과 성능 오버레이의 0.2.1 합성 프리뷰에 더해, 설정 페이지의 0.3.1 실기기 캡처입니다. 게임 데이터는 없습니다.
 
-| 세로 | 가로 |
+| Portrait | Landscape |
 |:---:|:---:|
 | <img src="docs/assets/portrait.png" width="280" alt="0.2.1 합성 가로 프리뷰: 위쪽 가장자리에 붙은 화면 컨트롤"> | <img src="docs/assets/landscape.png" width="520" alt="0.2.1 합성 가로 프리뷰: 위쪽 가장자리에 붙은 화면 컨트롤"> |
 | 세로 컨트롤 | 가로 컨트롤 |
+
+**설정(0.3.1 실기기 캡처)** — 앱 설정 페이지의 실제 iPhone 캡처입니다(중국어 간체 시스템 UI). 게임 데이터는 없습니다.
+
+| Settings | System | Layout |
+|:---:|:---:|:---:|
+| <img src="docs/assets/screenshots/ios-settings-root.png" width="220" alt="3ds2apple 0.3.1 Settings root on iPhone (Simplified Chinese system UI)"> | <img src="docs/assets/screenshots/ios-settings-system.png" width="220" alt="3ds2apple 0.3.1 System settings page on iPhone"> | <img src="docs/assets/screenshots/ios-settings-layout.png" width="220" alt="3ds2apple 0.3.1 Layout settings page on iPhone"> |
+| 전역 설정 | 시스템 | 레이아웃 |
 
 ## 빠른 시작
 

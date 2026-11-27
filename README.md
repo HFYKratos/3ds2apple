@@ -134,6 +134,7 @@ The app's **Settings** page uses the iOS 26/27 inset-grouped language — Genera
 - **Per-Application Settings** — per-title-ID overrides for screen rotation, screen swap, Integer scaling, Screen aspect, deadzone, control appearance and button mapping.
 - **Graphics** — Integer scaling and Screen aspect (Fit / 4:3 / Stretch) sit under Graphics next to the six experimental renderer optimisations; the renderer itself is chosen automatically.
 - **Save Manager and Storage** — the Save Manager covers every game in the library: export the selected game's battery saves as a ZIP, import a ZIP or single save files back, and delete individual files (import and delete are disabled while that game runs). The Storage page shows save-data, legacy game-file, log and pipeline-cache usage and can clear the graphics pipeline cache while no game is running.
+- **AOT verification** — Settings → Debug shows the AOT state, code coverage and interpreted/fallback counts, and the diagnostics export carries the same; a title the runtime would interpret is stopped with a red error instead of starting.
 
 ## Cheat codes
 
@@ -159,12 +160,17 @@ A built game has one **Export** action in the Library (disabled until a real AOT
 
 ## Screenshots
 
-**Desktop launchers** — real Windows/macOS 0.2.1 UI captures plus a 0.3.1 Linux launcher capture; the library is the built-in synthetic fixture (empty or demo entries) and no game art appears.
+**Desktop launchers** — screenshots of the current 0.3.1 launchers: Windows light-theme captures from the official package (synthetic demo entries) and macOS captures from the launcher's headless snapshot renderer; no game art appears.
 
 | Windows launcher | Windows launcher (简体中文) | macOS launcher |
 |:---:|:---:|:---:|
-| <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> |
-| Library (EN) | Library (中文) | Empty library (dark) |
+| <img src="docs/assets/screenshots/windows-launcher-library-empty-en.png" width="330" alt="Windows launcher 0.3.1 with an empty synthetic library"> | <img src="docs/assets/screenshots/windows-launcher-library-empty-zh.png" width="330" alt="Windows launcher 0.3.1 with an empty synthetic library (Simplified Chinese UI)"> | <img src="docs/assets/screenshots/macos-launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.3.1 with an empty library, dark theme"> |
+| Empty library (EN) | 空游戏库（中文） | Empty library (dark) |
+
+| Windows launcher · synthetic demo library | macOS launcher · light theme | macOS launcher · Settings (headless mock capture) |
+|:---:|:---:|:---:|
+| <img src="docs/assets/screenshots/windows-launcher-library-en.png" width="330" alt="Windows launcher 0.3.1 Library with the built-in synthetic demo entries"> | <img src="docs/assets/screenshots/macos-launcher-library-empty-light-en.png" width="330" alt="macOS launcher 0.3.1 with an empty library, light theme"> | <img src="docs/assets/screenshots/macos-launcher-settings-dark-en.png" width="330" alt="macOS launcher 0.3.1 Settings in the headless mock mode"> |
+| Synthetic demo entries | Empty library (light) | Settings (mock capture) |
 
 **Linux launcher** — headless capture of the 0.3.1 Linux package with the built-in synthetic demo entries; no game data.
 
@@ -173,12 +179,19 @@ A built game has one **Export** action in the Library (disabled until a real AOT
 | <img src="docs/assets/screenshots/launcher-linux-library-en.png" width="430" alt="Linux launcher 0.3.1 Library with the built-in synthetic demo entries"> | <img src="docs/assets/screenshots/launcher-linux-library-zh.png" width="430" alt="Linux 启动器 0.3.1 游戏库（中文界面，内置合成演示条目）"> |
 | Library (EN) | 游戏库（中文） |
 
-**iOS app** — 0.2.1 synthetic previews of the game view and performance overlay; no game data.
+**iOS app** — 0.2.1 synthetic previews of the game view and performance overlay, plus 0.3.1 device captures of the Settings pages; no game data.
 
 | Portrait | Landscape |
 |:---:|:---:|
-| <img src="docs/assets/portrait.png" width="280" alt="0.2.1 synthetic landscape preview with on-screen controls flush to the top edge"> | <img src="docs/assets/landscape.png" width="520" alt="0.2.1 synthetic landscape preview with on-screen controls flush to the top edge"> |
+| <img src="docs/assets/portrait.png" width="280" alt="0.2.1 synthetic portrait preview with on-screen controls flush to the top edge"> | <img src="docs/assets/landscape.png" width="520" alt="0.2.1 synthetic landscape preview with on-screen controls flush to the top edge"> |
 | Portrait controls | Landscape controls |
+
+**Settings (0.3.1 device captures)** — real iPhone screenshots of the app's Settings pages (Simplified Chinese system UI); no game data.
+
+| Settings | System | Layout |
+|:---:|:---:|:---:|
+| <img src="docs/assets/screenshots/ios-settings-root.png" width="220" alt="3ds2apple 0.3.1 Settings root on iPhone (Simplified Chinese system UI)"> | <img src="docs/assets/screenshots/ios-settings-system.png" width="220" alt="3ds2apple 0.3.1 System settings page on iPhone"> | <img src="docs/assets/screenshots/ios-settings-layout.png" width="220" alt="3ds2apple 0.3.1 Layout settings page on iPhone"> |
+| Global Settings | System | Layout |
 
 ## Quick start
 
