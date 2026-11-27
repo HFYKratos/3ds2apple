@@ -293,25 +293,81 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
             }
         }
 
-        log?.Invoke($"Local build: {request.RomPath} -> {buildName} (3dsrecomp, then LLVM/LLD)");
-        progress?.Report(new BuildProgress("recomp", 0, "Running 3dsrecomp (ROM -> C -> arm64 objects)…"));
-        var recompArguments = new[] { "port", request.RomPath, recompDir, "--name", buildName };
-        var recomp = await _runner.RunAsync(
-            new ProcessRequest(_tools.RecompilerPath!, recompArguments, request.WorkDirectory, env, TimeSpan.FromMinutes(120)),
-            onStdOutLine: line => OnRecompLine(line, progress, log),
-            onStdErrLine: line => log?.Invoke("[recomp] " + line),
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-        if (!recomp.Ok)
+        // Build-cache / retry support: the generated-C archive is the expensive
+        // product of 3dsrecomp. If the previous attempt reached the archive and then
+        // failed at shim/link/record (or the recorded GamePack disappeared), reuse that
+        // archive instead of recompiling the ROM again. Every identity component in
+        // RecompArchiveKey must match and the archive itself is re-hashed before use.
+        var (romSha256, romBytes) = await FileHashes.Sha256WithSizeAsync(request.RomPath, cancellationToken).ConfigureAwait(false);
+        var compatibility = _compatibility is null
+            ? null
+            : await _compatibility.ResolveAsync(cancellationToken).ConfigureAwait(false);
+        RecompArchiveKey? archiveCacheKey = null;
+        string? cachedArchive = null;
+        if (compatibility is not null)
         {
-            return PackBuildOutcome.Failure(RecompFailedCode,
-                "3dsrecomp failed (exit " + recomp.ExitCode + "): " + FirstMeaningfulLine(recomp) + ". Run it once from a terminal to see the full log; a missing C compiler is the usual Windows cause.");
+            var recompilerPath = _tools.RecompilerPath!;
+            var (recompilerSha256, recompilerBytes) = await FileHashes.Sha256WithSizeAsync(recompilerPath, cancellationToken).ConfigureAwait(false);
+            archiveCacheKey = new RecompArchiveKey(
+                request.TitleID,
+                romSha256,
+                romBytes,
+                compatibility.BuildCompatVersion,
+                compatibility.RecompilerVersion,
+                recompilerSha256,
+                recompilerBytes,
+                compatibility.BuildOptions,
+                Path.Combine("recomp", "code", "librecomp.a"));
+            var probe = await RecompArchiveCache.TryReuseAsync(root, archiveCacheKey, cancellationToken).ConfigureAwait(false);
+            if (probe.Reused)
+            {
+                cachedArchive = probe.ArchivePath;
+                log?.Invoke("Local build: reusing the cached generated-C archive ("
+                            + probe.Detail + "). Skipping 3dsrecomp.");
+                progress?.Report(new BuildProgress("recomp", 80, "Reusing cached generated C (no recompile)…"));
+            }
+            else
+            {
+                log?.Invoke("Local build: recomp cache miss: " + probe.Detail + ". Running 3dsrecomp.");
+            }
         }
 
-        var archive = Path.Combine(recompDir, "code", "librecomp.a");
-        if (!_fileExists(archive))
+        string archive;
+        if (cachedArchive is not null)
         {
-            return PackBuildOutcome.Failure(RecompFailedCode,
-                "3dsrecomp finished but produced no code/librecomp.a. Check that the ROM is a decrypted .3ds/.cci and that the LLVM clang wrapper works.");
+            archive = cachedArchive;
+        }
+        else
+        {
+            log?.Invoke($"Local build: {request.RomPath} -> {buildName} (3dsrecomp, then LLVM/LLD)");
+            progress?.Report(new BuildProgress("recomp", 0, "Running 3dsrecomp (ROM -> C -> arm64 objects)…"));
+            var recompArguments = new[] { "port", request.RomPath, recompDir, "--name", buildName };
+            var recomp = await _runner.RunAsync(
+                new ProcessRequest(_tools.RecompilerPath!, recompArguments, request.WorkDirectory, env, TimeSpan.FromMinutes(120)),
+                onStdOutLine: line => OnRecompLine(line, progress, log),
+                onStdErrLine: line => log?.Invoke("[recomp] " + line),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (!recomp.Ok)
+            {
+                return PackBuildOutcome.Failure(RecompFailedCode,
+                    "3dsrecomp failed (exit " + recomp.ExitCode + "): " + FirstMeaningfulLine(recomp) + ". Run it once from a terminal to see the full log; a missing C compiler is the usual Windows cause.");
+            }
+
+            archive = Path.Combine(recompDir, "code", "librecomp.a");
+            if (!_fileExists(archive))
+            {
+                return PackBuildOutcome.Failure(RecompFailedCode,
+                    "3dsrecomp finished but produced no code/librecomp.a. Check that the ROM is a decrypted .3ds/.cci and that the LLVM clang wrapper works.");
+            }
+
+            if (archiveCacheKey is not null)
+            {
+                var saved = await RecompArchiveCache.SaveAsync(root, archiveCacheKey, archive, cancellationToken).ConfigureAwait(false);
+                if (!saved)
+                {
+                    log?.Invoke("warning: the generated-C archive was built but its retry cache marker could not be written; the next attempt will recompile.");
+                }
+            }
         }
 
         progress?.Report(new BuildProgress("link", 90, "Linking the GamePack Mach-O with ld64.lld…"));
@@ -377,10 +433,6 @@ public sealed class LocalWinbuildPackProvider : IPackBuildProvider
             return PackBuildOutcome.Failure(RecordFailedCode, "The recorded pack cannot be read back: " + error.Message);
         }
         var packRecord = new PackRecord(Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(), bytes.LongLength, "gamepack-macho");
-        var (romSha256, romBytes) = await FileHashes.Sha256WithSizeAsync(request.RomPath, cancellationToken).ConfigureAwait(false);
-        var compatibility = _compatibility is null
-            ? null
-            : await _compatibility.ResolveAsync(cancellationToken).ConfigureAwait(false);
         progress?.Report(new BuildProgress("done", 100, "Real GamePack built locally"));
         log?.Invoke($"Local build done: {dylibPath} ({packRecord.Bytes} bytes, sha256 {packRecord.Sha256}, compat {(compatibility?.ShortVersion ?? "?")}, rom sha256 {BuildCachePolicy.ShortHash(romSha256)})");
         return new PackBuildOutcome(true, true, dylibPath, packRecord, null, null, buildName, compatibility, romSha256, romBytes);

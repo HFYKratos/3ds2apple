@@ -288,6 +288,102 @@ public sealed class LocalWinbuildPackProviderTests
         Assert.Contains("-O3 -flto -ffast-math", File.ReadAllText(wrapper), StringComparison.Ordinal);
     }
 
+    private static (LocalWinbuildPackProvider Provider, FakeProcessRunner Runner, System.Collections.Generic.List<int> RecompilerCalls) CreateCachingProvider(
+        TempDir temp,
+        LocalToolchain toolchain,
+        string rom)
+    {
+        var recompilerCalls = new System.Collections.Generic.List<int>();
+        var runner = new FakeProcessRunner(request =>
+        {
+            if (request.FileName == toolchain.RecompilerPath)
+            {
+                recompilerCalls.Add(1);
+                var recompDir = request.Arguments[2];
+                Directory.CreateDirectory(Path.Combine(recompDir, "code"));
+                File.WriteAllText(Path.Combine(recompDir, "code", "librecomp.a"), "archive");
+                return new ProcessResult(0, "wrote 1 files, 1 MiB of C", string.Empty, false, true);
+            }
+            if (request.FileName == toolchain.ClangPath)
+            {
+                return new ProcessResult(0, string.Empty, string.Empty, false, true);
+            }
+            if (request.FileName == toolchain.Ld64LldPath)
+            {
+                var arguments = request.Arguments.ToList();
+                var output = arguments[arguments.IndexOf("-o") + 1];
+                File.WriteAllBytes(output, Arm64MachODylib());
+                return new ProcessResult(0, string.Empty, string.Empty, false, true);
+            }
+            if (request.FileName == toolchain.PackCliPath)
+            {
+                return new ProcessResult(0, "{\"ok\":true}", string.Empty, false, true);
+            }
+            return new ProcessResult(1, string.Empty, "unexpected tool " + request.FileName, false, true);
+        });
+        var packCli = new PackCli(runner, toolchain.PackCliPath!, Path.Combine(temp.Path, "out"));
+        var provider = new LocalWinbuildPackProvider(
+            toolchain, packCli, runner,
+            compatibility: new StaticBuildCompatibilityProvider());
+        return (provider, runner, recompilerCalls);
+    }
+
+    [Fact]
+    public async Task RetryReusesGeneratedArchiveAndSkipsRecompiler()
+    {
+        using var temp = new TempDir();
+        var toolchain = CreateToolchain(temp);
+        var rom = temp.Bytes("game.cci", new byte[] { 1, 2, 3 });
+        var (provider, runner, recompilerCalls) = CreateCachingProvider(temp, toolchain, rom);
+        var request = Request(temp, rom);
+
+        var first = await provider.BuildAsync(request, null, null);
+        Assert.True(first.Success, first.ErrorMessage);
+        Assert.Single(recompilerCalls);
+        Assert.Equal(4, runner.Requests.Count); // recompiler, shim, link, record
+
+        var marker = Path.Combine(
+            request.WorkDirectory, "local-build", BuildSlug.From("Pokemon Y", TitleId), RecompArchiveCache.MarkerFileName);
+        Assert.True(File.Exists(marker), marker);
+
+        var second = await provider.BuildAsync(request, null, null);
+        Assert.True(second.Success, second.ErrorMessage);
+        Assert.Single(recompilerCalls); // 3dsrecomp is NOT called again
+        Assert.Equal(7, runner.Requests.Count); // shim, link, record only
+    }
+
+    [Fact]
+    public async Task ChangedRomInvalidatesTheGeneratedArchiveCache()
+    {
+        using var temp = new TempDir();
+        var toolchain = CreateToolchain(temp);
+        var rom = temp.Bytes("game.cci", new byte[] { 1, 2, 3 });
+        var (provider, _, recompilerCalls) = CreateCachingProvider(temp, toolchain, rom);
+        var request = Request(temp, rom);
+
+        Assert.True((await provider.BuildAsync(request, null, null)).Success);
+        File.AppendAllText(rom, "changed");
+        Assert.True((await provider.BuildAsync(request, null, null)).Success);
+        Assert.Equal(2, recompilerCalls.Count);
+    }
+
+    [Fact]
+    public async Task CorruptGeneratedArchiveInvalidatesTheCache()
+    {
+        using var temp = new TempDir();
+        var toolchain = CreateToolchain(temp);
+        var rom = temp.Bytes("game.cci", new byte[] { 1, 2, 3 });
+        var (provider, _, recompilerCalls) = CreateCachingProvider(temp, toolchain, rom);
+        var request = Request(temp, rom);
+
+        Assert.True((await provider.BuildAsync(request, null, null)).Success);
+        var archive = Path.Combine(
+            request.WorkDirectory, "local-build", BuildSlug.From("Pokemon Y", TitleId), "recomp", "code", "librecomp.a");
+        File.WriteAllText(archive, "tampered");
+        Assert.True((await provider.BuildAsync(request, null, null)).Success);
+        Assert.Equal(2, recompilerCalls.Count);
+    }
+
     [Fact]
     public void LocalBuildIsTheDefaultDeployProvider_NoFeatureFlag()
     {
