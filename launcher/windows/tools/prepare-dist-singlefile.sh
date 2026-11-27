@@ -145,7 +145,12 @@ if [ -d "$LLVM_SOURCE/lib/clang" ] && [ -f "$LLVM_SOURCE/bin/clang.exe" ]; then
   LLVM_STAGE="$WINDOWS_ROOT/Bin/llvm"
   rm -rf "$LLVM_STAGE"
   mkdir -p "$LLVM_STAGE/bin" "$LLVM_STAGE/lib/clang"
-  for tool in clang.exe llvm-ar.exe ld64.lld.exe llvm-nm.exe llvm-objdump.exe; do
+  # Only the tools the launcher's local build actually invokes: clang,
+  # llvm-ar and ld64.lld. llvm-nm/llvm-objdump were only used by the Bash
+  # dev-time validation fallback (tools/winbuild/build-gamepack.sh); the
+  # packaged launcher validates Mach-O in C# (GamePackInspector), so they are
+  # no longer embedded (saves ~43 MB of payload).
+  for tool in clang.exe llvm-ar.exe ld64.lld.exe; do
     if [ -f "$LLVM_SOURCE/bin/$tool" ]; then cp "$LLVM_SOURCE/bin/$tool" "$LLVM_STAGE/bin/"; fi
   done
   # The official Windows tools link only against system DLLs (verified with objdump
@@ -165,6 +170,31 @@ if [ -d "$LLVM_SOURCE/lib/clang" ] && [ -f "$LLVM_SOURCE/bin/clang.exe" ]; then
   echo "[single] LLVM staged under Bin/llvm ($(du -sh "$LLVM_STAGE" | cut -f1))"
 else
   echo "[single] WARN: official LLVM 23.1.6 not found at $LLVM_SOURCE; packaging without it (Deploy shows one actionable local-toolchain error; set THREEDS2APPLE_LLVM_DIR to stage it)"
+fi
+
+# Strip debug symbols from the project-built PE tools before embedding. The
+# pinned 3dsrecomp release profile keeps debug = 1 (~12 MB of DWARF); the
+# launcher never uses it. Official LLVM (already stripped) and Impactor binaries
+# are left byte-identical to their upstream releases.
+strip_pe_debug() {
+  local file=$1 strip=""
+  if command -v llvm-strip >/dev/null 2>&1; then
+    strip="$(command -v llvm-strip)"
+  elif command -v llvm-strip-23 >/dev/null 2>&1; then
+    strip="$(command -v llvm-strip-23)"
+  fi
+  if [ -z "$strip" ]; then
+    echo "[single] WARN: llvm-strip not found; keeping debug symbols in $(basename "$file")" >&2
+    return 0
+  fi
+  if "$strip" --strip-all "$file" 2>/dev/null; then
+    echo "[single] stripped debug symbols from $(basename "$file") ($(stat -c%s "$file" 2>/dev/null || stat -f%z "$file") bytes)"
+  else
+    echo "[single] WARN: llvm-strip failed on $(basename "$file"); keeping it unchanged" >&2
+  fi
+}
+if [ -f "$WINDOWS_ROOT/Bin/3dsrecomp.exe" ]; then
+  strip_pe_debug "$WINDOWS_ROOT/Bin/3dsrecomp.exe"
 fi
 
 echo "[single] Bin tools: $(ls "$WINDOWS_ROOT/Bin" | tr '\n' ' ')"

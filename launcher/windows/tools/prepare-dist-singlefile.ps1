@@ -156,7 +156,9 @@ $llvmStage = Join-Path $windowsRoot 'Bin/llvm'
 if ((Test-Path -LiteralPath (Join-Path $llvmSource 'bin/clang.exe')) -and (Test-Path -LiteralPath (Join-Path $llvmSource 'lib/clang'))) {
     if (Test-Path -LiteralPath $llvmStage) { Remove-Item -Recurse -Force -LiteralPath $llvmStage }
     New-Item -ItemType Directory -Force -Path (Join-Path $llvmStage 'bin') | Out-Null
-    foreach ($tool in @('clang.exe', 'llvm-ar.exe', 'ld64.lld.exe', 'llvm-nm.exe', 'llvm-objdump.exe')) {
+    # Only the tools the packaged launcher actually invokes (Mach-O validation is
+    # C#); llvm-nm/llvm-objdump are not embedded (saves ~43 MB of payload).
+    foreach ($tool in @('clang.exe', 'llvm-ar.exe', 'ld64.lld.exe')) {
         $from = Join-Path $llvmSource "bin/$tool"
         if (Test-Path -LiteralPath $from) { Copy-Item -LiteralPath $from -Destination (Join-Path $llvmStage 'bin/') }
     }
@@ -177,6 +179,16 @@ if ((Test-Path -LiteralPath (Join-Path $llvmSource 'bin/clang.exe')) -and (Test-
     Write-Host "[single] LLVM staged under Bin/llvm"
 } else {
     Write-Warning "official LLVM 23.1.6 not found at $llvmSource; packaging without it (Deploy shows one actionable local-toolchain error)"
+}
+
+# 3d. Strip debug symbols from the project-built PE tools. The pinned
+# 3dsrecomp release profile keeps debug = 1 (~12 MB of DWARF) and the launcher
+# never uses it; official LLVM and Impactor binaries stay unmodified.
+$stripTool = Join-Path $llvmSource 'bin/llvm-strip.exe'
+if ((Test-Path -LiteralPath $stripTool) -and (Test-Path -LiteralPath $recomp)) {
+    & $stripTool --strip-all $recomp | Out-Null
+    if ($LASTEXITCODE -eq 0) { Write-Host "[single] stripped debug symbols from 3dsrecomp.exe" }
+    else { Write-Warning 'llvm-strip failed on 3dsrecomp.exe; keeping it unchanged' }
 }
 
 # 4. Single-file self-contained publish (Release embeds the payload).

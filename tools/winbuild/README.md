@@ -17,7 +17,8 @@ headers and `-undefined dynamic_lookup`, and Apple's `ld64` with LLVM's
 ## Result at a glance (0.1.x prototype pin, measured on the prototype host, 2026-11-14)
 
 Host: WSL2 Ubuntu 26.04 x86_64, 16 logical CPUs, LLVM 21.1.8 from Ubuntu debs
-(clang + ld64.lld + llvm-ar + llvm-nm + llvm-objdump), no Apple SDK, no Xcode.
+(clang + ld64.lld + llvm-ar; llvm-nm/llvm-objdump are optional dev-time
+validation fallbacks, not part of the packaged launchers), no Apple SDK, no Xcode.
 Input: the real 3dsrecomp output of a retail title (`build/game/retail-title`, 637 MB,
 489 `.c` + 136 `.h`, gitignored).
 
@@ -77,10 +78,15 @@ code generation quality, not the Mach-O format or ABI.
 
 ## Why this is legal and shippable (with the right packaging)
 
-* **LLVM/Clang/lld** are open source under **Apache-2.0 WITH LLVM-exception**,
-  i.e. redistributable in a Windows launcher when the official binaries are
-  kept unmodified and the licence text + copyright notices are shipped (the
-  same policy this repo already uses for official Impactor, MIT/MPL-2.0).
+* **LLVM/Clang/lld** are open source under **Apache-2.0 WITH LLVM-exception**.
+  The pinned upstream release SHA-256 in `llvm-manifest.json` stays
+  authoritative. The Windows launcher ships clang/llvm-ar/ld64.lld from the
+  official Windows release unmodified (that release is already stripped); the
+  Linux launcher may strip debug symbols from the official Linux binaries to
+  cut the payload, which the LLVM licence permits, and always ships the licence
+  text + copyright notices. The `THREEDS2APPLE_KEEP_LLVM_UNMODIFIED=1` build
+  switch keeps the official Linux LLVM files byte-identical. Official Impactor
+  (MIT/MPL-2.0) binaries are never modified.
 * **No Apple SDK** is used: `-nostdinc` + `tools/winbuild/darwin-stubs/include`
   (hand-written ISO C declarations) replace every SDK header; there is no
   `.tbd`, no stub library, no Xcode component on the build machine.
@@ -94,6 +100,24 @@ code generation quality, not the Mach-O format or ABI.
 
 Not redistributable, still required on the user side: Xcode/iOS SDK only if the
 user chooses the macOS path, and the user's own ROM.
+
+## Packaging subset and size policy (0.3.x)
+
+The launchers embed only what their local GamePack build actually invokes:
+
+* Windows `Bin/llvm/bin/`: `clang.exe`, `llvm-ar.exe`, `ld64.lld.exe`, plus
+  `lib/clang/23/include` and `LICENSE.TXT` (copied unmodified from the official
+  Windows MSI, which is already stripped).
+* Linux `Bin/llvm/bin/`: `clang`, `llvm-ar`, `ld64.lld`, plus resource headers,
+  required shared libraries and `LICENSE.TXT`. `build-linux.sh` strips debug
+  symbols from these official Linux tools (the largest size win); set
+  `THREEDS2APPLE_KEEP_LLVM_UNMODIFIED=1` to keep them byte-identical.
+* Project-built `3dsrecomp` (and the Windows `3dsrecomp.exe`) is stripped of
+  debug symbols before embedding; the packaged launchers validate the Mach-O in
+  C#, so `llvm-nm`/`llvm-objdump`/`llvm-readobj` are **not packaged**. They remain
+  dev-time fallback tools for `build-gamepack.sh` when Python is unavailable.
+* Official Impactor + plumesign binaries are never modified; their pinned
+  SHA-256 and licences are enforced by the launcher and the release gate.
 
 ## Quick start
 
@@ -149,7 +173,9 @@ for `--out`, `--jobs`, `--target`, `--llvm-dir`, `--pack-bin`, `--dry-run`,
    The launcher can instead run the same tools directly (no POSIX shell), see
    **Native Windows command lines** below.
 3. `python3`/`py` is optional: `check-gamepack.py` gives the full Mach-O report;
-   without Python the script falls back to `llvm-nm`/`llvm-objdump` checks.
+   without Python the script falls back to `llvm-nm`/`llvm-objdump` checks. This
+   fallback is dev-only; the packaged launcher validates in C# and does not ship
+   those tools.
 
 ## 3dsrecomp on the same PC (ROM -> generated C, no Mac)
 
@@ -246,6 +272,8 @@ rem 3. link the Mach-O dylib with lld's ld64 (Apple ld64 is not needed)
   -o "<out>\GamePack-0004000000055E00.dylib" "<work>\zk_gamepack_shim.o" "<obj-dir>\librecomp.a"
 
 rem 4. validate (or: py -3 tools\winbuild\check-gamepack.py <dylib> --target device)
+rem    dev-only fallback: the packaged launcher validates in C# and does not embed
+rem    llvm-nm/llvm-objdump; use the installed LLVM if you want the raw report.
 %LLVM%\llvm-nm.exe -gU "<out>\GamePack-0004000000055E00.dylib"
 %LLVM%\llvm-objdump.exe --macho --private-headers "<out>\GamePack-0004000000055E00.dylib"
 ```
@@ -263,7 +291,8 @@ tools): thin 64-bit dylib, expected arch, `LC_BUILD_VERSION` platform
 the 10 required GamePack ABI exports, `zk_register_gamepack` still undefined,
 no Zakuro runtime symbol defined in the pack, and a JSON report that also lists
 every other undefined import. The build script runs it automatically (or falls
-back to llvm-nm/llvm-objdump checks). A failing check fails the build.
+back to llvm-nm/llvm-objdump checks, dev-only). A failing check fails the build;
+the packaged launchers do the equivalent Mach-O check in C# without those tools.
 
 ## Limits / open questions
 
@@ -297,12 +326,17 @@ back to llvm-nm/llvm-objdump checks). A failing check fails the build.
 
 ## Licensing / redistribution checklist
 
-* Bundle the **official unmodified LLVM release** (or install it on the user's
-  machine); pin SHA-256 from `llvm-manifest.json` and verify before use.
+* Use the **pinned official LLVM 23.1.6 release** (`llvm-manifest.json`); the
+  upstream tarball/MSI SHA-256 is the source of truth and must be verified
+  before use.
+* The Windows payload copies clang/llvm-ar/ld64.lld unmodified from the official
+  Windows release (already stripped upstream); the Linux payload embeds the same
+  three official Linux tools and strips their debug symbols by default
+  (permitted by Apache-2.0 WITH LLVM-exception), with
+  `THREEDS2APPLE_KEEP_LLVM_UNMODIFIED=1` as the byte-identical opt-out.
 * Ship `https://llvm.org/LICENSE.txt` (Apache-2.0 WITH LLVM-exception) and the
-  LLVM copyright notice; the component is listed in `THIRD_PARTY.md`/`NOTICE`,
-  and the Windows launcher bundles the official binaries unmodified with the
-  licence text and notices.
+  LLVM copyright notice in both cases; the component is listed in
+  `THIRD_PARTY.md`/`NOTICE`, and `Bin/llvm/LICENSE.TXT` is staged in each payload.
 * Never ship ROMs, generated C, GamePacks or IPAs; never ship Apple SDK files,
   `.tbd` stubs or Xcode components.
 * `3dsrecomp` is run as a build tool only (no LICENSE upstream, do not vendor);

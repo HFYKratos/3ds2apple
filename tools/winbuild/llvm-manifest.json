@@ -10,7 +10,7 @@
     "license": {
       "spdx": "Apache-2.0 WITH LLVM-exception",
       "license_url": "https://llvm.org/LICENSE.txt",
-      "notes": "LLVM release binaries, clang, ld64.lld, llvm-ar, llvm-nm and llvm-objdump are redistributable under the LLVM licence with the licence text and copyright notices; keep the official files unmodified and pin SHA-256 (same policy as third_party/impactor)."
+      "notes": "LLVM release binaries are redistributable under the LLVM licence (Apache-2.0 WITH LLVM-exception) with the licence text and copyright notices; the pinned upstream tarball/MSI SHA-256 above stays authoritative. The Windows launcher embeds clang/llvm-ar/ld64.lld from the official Windows release (already stripped upstream) unmodified; the Linux launcher may ship the same three official Linux tools with debug symbols stripped (permitted modified redistribution) and always ships the LLVM licence text/notices. THREEDS2APPLE_KEEP_LLVM_UNMODIFIED=1 keeps the Linux LLVM files byte-identical. Official Impactor/plumesign binaries remain unmodified."
     },
     "verification": {
       "verified_on": "2026-11-19",
@@ -67,7 +67,13 @@
       "llvm-nm",
       "llvm-objdump",
       "llvm-readobj"
-    ]
+    ],
+    "packaged_tools": {
+      "windows_payload": ["clang.exe", "llvm-ar.exe", "ld64.lld.exe"],
+      "linux_payload": ["clang", "llvm-ar", "ld64.lld"],
+      "not_packaged": ["llvm-nm", "llvm-objdump", "llvm-readobj"],
+      "note": "The packaged launchers embed only the tools their local GamePack build actually invokes (C# pipeline / Linux launcher). llvm-nm, llvm-objdump and llvm-readobj are only needed by tools/winbuild/build-gamepack.sh's dev-time Python-free validation fallback; they are not in the release payloads, not required by the release gate, and not used by the packaged self-test."
+    }
   },
   "previous_pin": {
     "version": "21.1.8",
@@ -142,7 +148,7 @@
     "windows": "Windows 10/11 x64; no Visual Studio, no Windows SDK, no Xcode, no Apple files",
     "linux": "Ubuntu 22.04+/WSL2 or any glibc distro that runs the official LLVM tarball",
     "windows_posix_shell": "Git for Windows (bundled MinGit is enough) for tools/winbuild/build-gamepack.sh; the build also works with a native C#/PowerShell invocation using the exact clang.exe/ld64.lld.exe command lines documented in tools/winbuild/README.md",
-    "python": "Python 3.8+ for tools/winbuild/check-gamepack.py (the Windows launcher already bundles a Python runtime for its build pipeline; without Python the script falls back to llvm-nm/llvm-objdump checks)"
+    "python": "Python 3.8+ for tools/winbuild/check-gamepack.py (development/CLI path; without Python build-gamepack.sh falls back to llvm-nm/llvm-objdump checks). Packaged launchers validate Mach-O in C# and do not need Python or those fallback tools."
   },
   "apple_sdk": {
     "required": false,
@@ -152,5 +158,13 @@
     "script": "tools/winbuild/check-gamepack.py",
     "checks": "thin 64-bit Mach-O dylib; arch matches target; LC_BUILD_VERSION platform ios/iossimulator minos >= 16.0; install name @rpath/GamePack-<TITLE>.dylib; exports zk_gamepack_title_id/abi_version/register + the seven recomp tables; keeps zk_register_gamepack undefined; defines no Zakuro runtime symbol; reports unexpected undefined imports",
     "evidence": "see tools/winbuild/README.md (Phase-2 prototype evidence and the 0.1.4 LLVM 23.1.6 re-verification)"
+  },
+  "packaging_policy": {
+    "documented": "2026-11-28",
+    "upstream_pins": "The official LLVM 23.1.6 tarball/MSI URLs + SHA-256 above are authoritative and must be verified before use; this does not change when a packaged copy is stripped.",
+    "windows_payload": "Bin/llvm/bin contains only clang.exe, llvm-ar.exe and ld64.lld.exe plus lib/clang/23/include and LICENSE.TXT from the official Windows MSI. The Windows release is already stripped; the launcher copies those files unmodified. Project-built 3dsrecomp.exe is stripped of debug symbols before embedding. Official Impactor/plumesign are never modified.",
+    "linux_payload": "Bin/llvm/bin contains only clang, llvm-ar and ld64.lld plus lib/clang/23/include, required shared libraries and LICENSE.TXT from the official Linux tarball. build-linux.sh strips debug symbols from those official tools (largest size win) and from the project-built 3dsrecomp; set THREEDS2APPLE_KEEP_LLVM_UNMODIFIED=1 to keep the official LLVM files byte-identical (3dsrecomp is still stripped).",
+    "licence_notices": "The LLVM licence text (https://llvm.org/LICENSE.txt, Apache-2.0 WITH LLVM-exception) and repository THIRD_PARTY.md/NOTICE ship with each launcher payload whether the bundled binaries are stripped or unmodified.",
+    "tool_subset": "llvm-nm/llvm-objdump/llvm-readobj are dev-time fallback tools for tools/winbuild/build-gamepack.sh only and are not packaged; the packaged C# local build validates the Mach-O itself."
   }
 }

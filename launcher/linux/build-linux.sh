@@ -123,6 +123,10 @@ if ! printf '%s\n' "$LAUNCHER_BUNDLE_VERSIONS" | grep -Fxq "\"3ds2apple-launcher
 fi
 echo "[linux] launcher version: $EXPECTED_LAUNCHER_VERSION (stale-publish guard)"
 
+# The publish output can contain a portable debug-symbol file; it is not a
+# runtime dependency of the self-contained launcher and must not ship.
+find "$OUTPUT" -maxdepth 1 -name '*.pdb' -delete 2>/dev/null || true
+
 for text in LICENSE NOTICE THIRD_PARTY.md; do
   if [ ! -f "$REPO/$text" ]; then
     echo "error: $text is missing from the repository root." >&2
@@ -170,11 +174,15 @@ if [ "$MAKE_LOCAL_AOT" = "1" ]; then
   for tool in clang llvm-ar ld64.lld; do
     [ -x "$LLVM_DIR/$tool" ] || { echo "error: missing LLVM tool: $LLVM_DIR/$tool" >&2; exit 2; }
   done
+  # Deterministic staging: rebuild Bin/llvm from scratch so a reused output
+  # directory (--skip-publish) cannot accumulate stale nested copies. 0.3.1
+  # shipped a duplicated lib/clang/23/include/include tree (~16.5 MB) this way.
+  rm -rf "$OUTPUT/Bin/llvm"
   mkdir -p "$OUTPUT/Bin/llvm/bin" "$OUTPUT/Bin/llvm/lib" "$OUTPUT/tools/winbuild" "$OUTPUT/licenses"
+  # Only the tools the launcher's local build invokes; llvm-nm/llvm-objdump were
+  # only used by the Bash dev-time validation fallback and are not embedded
+  # (Mach-O validation in the packaged launcher is done in C#).
   cp -L "$LLVM_DIR/clang" "$LLVM_DIR/llvm-ar" "$LLVM_DIR/ld64.lld" "$OUTPUT/Bin/llvm/bin/"
-  for optional in llvm-nm llvm-objdump; do
-    [ -x "$LLVM_DIR/$optional" ] && cp -L "$LLVM_DIR/$optional" "$OUTPUT/Bin/llvm/bin/"
-  done
   RESOURCE_DIR="$("$LLVM_DIR/clang" -print-resource-dir 2>/dev/null || true)"
   if [ -n "$RESOURCE_DIR" ] && [ -d "$RESOURCE_DIR/include" ]; then
     RESOURCE_VERSION="$(basename "$RESOURCE_DIR")"
@@ -201,6 +209,25 @@ if [ "$MAKE_LOCAL_AOT" = "1" ]; then
   cp -a "$REPO/ios/zakuro-ios/include" "$OUTPUT/tools/winbuild/include"
   cp "$RECOMPILER_BIN" "$OUTPUT/Bin/3dsrecomp"
   chmod +x "$OUTPUT/Bin/3dsrecomp" "$OUTPUT/Bin/llvm/bin/"* "$OUTPUT/Bin/llvm/lib/"*.so* 2>/dev/null || true
+  # Strip debug symbols from the project-built and Linux LLVM tools. The
+  # official Linux LLVM tarball is not stripped (clang/ld64.lld are ~280/210 MB
+  # with symtab/strtab); the launcher only executes the code. The LLVM licence
+  # (Apache-2.0 WITH LLVM-exception) allows redistributing modified binaries;
+  # official Impactor/plumesign binaries are never modified. If no strip tool is
+  # available the payload is still correct, just larger.
+  if command -v strip >/dev/null 2>&1; then
+    if [ "${THREEDS2APPLE_KEEP_LLVM_UNMODIFIED:-0}" = "1" ]; then
+      # Policy opt-out: keep the official LLVM binaries byte-identical to the
+      # pinned upstream tarball; only the project-built 3dsrecomp is stripped.
+      strip --strip-all "$OUTPUT/Bin/3dsrecomp" 2>/dev/null || true
+      echo "[linux] stripped 3dsrecomp; official LLVM tools left unmodified"
+    else
+      strip --strip-all "$OUTPUT/Bin/3dsrecomp" "$OUTPUT/Bin/llvm/bin/"* 2>/dev/null || true
+      echo "[linux] stripped debug symbols from the local-AOT tools"
+    fi
+  else
+    echo "[linux] WARN: strip not found; local-AOT tools keep debug symbols" >&2
+  fi
   # Toolchain licence texts are additional evidence: stage them under distinct
   # names so the upstream files (both named LICENSE) can never overwrite the
   # repository licence texts staged in the payload step above. 0.3.0 shipped a
@@ -249,6 +276,8 @@ echo "[linux] self-test: $BIN --self-test"
 if [ "$MAKE_TAR" = "1" ]; then
   TAR="${THREEDS2APPLE_TAR:-$(dirname "$OUTPUT")/$(basename "$OUTPUT").tar.gz}"
   mkdir -p "$(dirname "$TAR")"
-  tar -czf "$TAR" -C "$(dirname "$OUTPUT")" "$(basename "$OUTPUT")"
+  # gzip -9 (tar's built-in gzip level is the default 6) squeezes another
+  # ~1-2% out of the ~250 MB archive at negligible build-time cost.
+  tar -cf - -C "$(dirname "$OUTPUT")" "$(basename "$OUTPUT")" | gzip -9 > "$TAR"
   echo "[linux] archive: $TAR"
 fi
