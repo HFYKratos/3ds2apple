@@ -272,8 +272,10 @@ enum DiagnosticsExporter {
         screen=\(Int(screen.bounds.width * screen.scale))x\(Int(screen.bounds.height * screen.scale)) @\(screen.scale)x
         phase=\(phaseDescription(model.phase))
         game=\(model.currentGame.map { "\($0.title) (\($0.titleID))" } ?? "none")
+        single_game_build=\(GameCatalog.bundled.autoLaunch ? 1 : 0)
+        single_game_build_definition=1 when the bundled GameCatalog.json asks for autoLaunch (a single-game IPA export): ContentView shows the launch/error screen instead of the home page, the game is started automatically and the in-game menu omits Per-Application Settings and Close game. 0 for a normal multi-game shell
         auto_launch=\(AutoLaunch.diagnosticsLine)
-        auto_launch_definition=the optional "autoLaunch" flag in the bundle GameCatalog.json is honoured once per process: a single-game IPA starts its one game after the Documents scan and the ROM SHA-256 check; a game whose data is missing or fails the check stays on the home page and this line says why. not requested for a normal multi-game shell
+        auto_launch_definition=the optional "autoLaunch" flag in the bundle GameCatalog.json marks a single-game IPA: single_game_build=1, the app starts its one game after the Documents scan and the ROM SHA-256 check and there is no home page (a failed game-data check or AOT gate stays on the single-game launch/error screen and this line says why). A normal multi-game shell has single_game_build=0 and keeps its home page, where auto_launch is "not requested"
         cheats_file=\(CheatManager.diagnosticsLine(titleID: model.currentGame?.titleID))
         cheats_runtime=\(CheatRuntime.shared.snapshot.diagnosticsLine)
         cheats_definition=cheat codes are the player's own Citra/Azahar text file at Documents/Cheats/<TITLEID>.txt, loaded through zk_cheats_load() at game start; the file is the authority (no code database ships in the app). cheats_file is the file on disk (entries, enabled, lines the runtime keeps but does not run), cheats_runtime is the loaded runtime list (loaded/enabled counts), both absent when no game is loaded. cheats_runtime is published by the game load and by an in-game toggle, which also calls zk_cheats_save()

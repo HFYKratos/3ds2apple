@@ -2,12 +2,15 @@
 //  ContentView.swift
 //  3ds2apple
 //
-//  Root of the app: shows the home page or the running game for the current
-//  session phase, and keeps the runtime in step with the persisted settings.
+//  Root of the app: shows the home page (or, in a single-game IPA, the
+//  launch/error screen) or the running game for the current session phase, and
+//  keeps the runtime in step with the persisted settings.
 //
 //  Phase-driven navigation: the home page is shown while nothing is loaded;
 //  from the moment a game starts loading, the game view owns the screen. Unload /
-//  exit returns to the home page.
+//  exit returns to the home page. A single-game IPA (GameCatalog.json
+//  "autoLaunch": true) has no home page: it shows SingleGameLaunchView instead
+//  of the library and AutoLaunch starts its one game.
 //
 //  The persisted settings are pushed into the session here (a settings change
 //  while a game is running is safe: the session applies what can apply live and
@@ -38,6 +41,8 @@ struct ContentView: View {
     /// Rebuilds the view tree when iOS reports a locale change, so the
     /// localized texts and formatters are read again.
     @StateObject private var localization = LocalizationStore.shared
+    /// The single-game auto launch's one-shot state (single-game IPA builds).
+    @ObservedObject private var autoLaunchState = AutoLaunchState.shared
     @Environment(\.scenePhase) private var scenePhase
     /// Headless screenshot hooks for the layout pages; never set in normal use.
     @State private var layoutSheet: LayoutSheet?
@@ -79,6 +84,13 @@ struct ContentView: View {
         ZStack {
             if showsGame {
                 GameView(model: model, settings: settings)
+            } else if isSingleGameBuild {
+                // A single-game IPA has no home page: the launch/error screen
+                // stands in and the library is never rendered there.
+                SingleGameLaunchView(model: model,
+                                     settings: settings,
+                                     library: library,
+                                     autoLaunch: autoLaunchState)
             } else {
                 HomeView(model: model, settings: settings, library: library)
             }
@@ -282,6 +294,11 @@ struct ContentView: View {
     }
 
     // MARK: - State
+
+    /// A single-game IPA marks its bundled GameCatalog.json with autoLaunch:
+    /// the launcher expects the app to open its one game and there is no library
+    /// to show. A normal multi-game shell never sets the flag.
+    private var isSingleGameBuild: Bool { GameCatalog.bundled.autoLaunch }
 
     private var showsGame: Bool {
         // The debug preview shows the running-game view without a session
