@@ -453,7 +453,10 @@ that project's GPL code/text is not used (reference only).
   "Editable layouts"). Per-application Gamepad profiles (deadzone, appearance,
   a copied button mapping) live in the in-game menu's Per-Application Settings
   page; anything set to Use global follows the Gamepad page.
-- **Graphics**: render resolution 1×–4× with the exact pixel caption,
+- **Graphics**: render resolution 1×–4× with the exact pixel caption and a
+  **Restart required** badge plus **Takes effect after restarting the game.** (the
+  presented drawable changes at once; the guest 3D renderer's internal scale is read
+  when a system loads),
   **Screen aspect** (Fit / 4:3 / Stretch, `settings.screenAspect`) and
   **Integer scaling** (`settings.integerScale`, whole-console-pixel nearest
   magnification for Fit/4:3) — both are real settings applied immediately to the
@@ -521,14 +524,16 @@ running game.
 | Portrait screen layout | Default (default) / Original / Custom layout | The separate **portrait** choice, selected from its own radio picker. **Default** is the top-full-width presenter arrangement (upper 400x240 above the lower screen scaled to 400x300, ABI 7); **Original** uses the presenter's native stack; both apply immediately. **Custom layout** uses the numeric custom rectangles on the readback path and applies from the next game load. |
 | Custom layouts | Landscape custom layout / Portrait custom layout | Each row opens a numeric page for that direction: sections **Upper screen** and **Lower screen**, each with **X position**, **Y position**, **Width** and **Height** as integer percentages of the game view (0–100). The page edits the existing `CustomScreenLayout` archive (archive version 3; older archives migrate on read) and applies from the next game load; **Edit by dragging** opens the full-screen drag editor for the same direction. The shipped defaults are the placements measured from the reference screenshots. |
 | Screen rotation | Upright, 90° clockwise, upside down, 90° counter-clockwise | Immediately. Turns the screens inside their area, e.g. the stacked console becomes two columns (480×400) a quarter turn clockwise. The touchscreen is mapped back into the screen's own pixels. |
-| Resolution | 1× / 2× / 3× / 4× | The presenter's drawable is the arrangement's own pixels times the factor and CoreAnimation scales it to the screen; the swapchain is resized through `zk_presenter_resize` at once. The internal resolution the host-GPU 3D renderer draws at is set with `zk_set_render_scale` and read when a system loads, so a running game keeps its old internal scale until it is reloaded or restarted. The software renderer always draws at 1×; higher factors cost GPU time and memory. The caption under the picker follows the selection and states its pixel size. |
+| Resolution | 1× / 2× / 3× / 4× | The presenter's drawable is the arrangement's own pixels times the factor and CoreAnimation scales it to the screen; the swapchain is resized through `zk_presenter_resize` at once. The internal resolution the host-GPU 3D renderer draws at is set with `zk_set_render_scale` and read when a system loads, so a running game keeps its old internal scale until it is reloaded or restarted. The software renderer always draws at 1×; higher factors cost GPU time and memory. The caption under the picker follows the selection and states its pixel size. The row carries a **Restart required** badge and **Takes effect after restarting the game.** — the drawable resizes at once, but the guest 3D renderer's internal scale is read when a system loads. |
 | Orientation | Automatic / portrait / landscape | Immediately: the app restricts the supported orientations and asks the window scene to rotate. The in-game layout reflows for portrait/landscape. iOS still decides in some situations (for example during a phone call). |
 
 **Round-4 display cleanup.** The **Aspect ratio** (画面比例) and **Integer
 scaling** rows are gone: the layout presets are GPU presenter arrangements that
 do not use those readback knobs, and only the Custom layouts still place each
-screen natively inside its rectangle. The **Resolution** setting remains and,
-like before, the runtime's internal 3D scale applies from the next game load.
+screen natively inside its rectangle. The **Resolution** setting remains; its row
+carries a **Restart required** badge and **Takes effect after restarting the game.** —
+the presented drawable changes at once, while the runtime's internal 3D scale is read
+when a system loads.
 The old stored aspect/integer keys are kept but ignored.
 
 The 3DS screens stay upright in the app's interface, which iOS rotates with the
@@ -982,6 +987,10 @@ localized.
   off, and there is no floating pause fallback since 0.2.1 because the
   button can never be hidden). The in-game menu keeps the
   same z-order above the picture, the controls and the HUD.
+- The in-game menu's **Screen layout** page and **Settings → Graphics** both show the
+  **Resolution** row with a **Restart required** badge and the note **Takes effect
+  after restarting the game.**: the presented drawable resizes at once, while the
+  guest 3D renderer's internal scale is read when a system loads.
 - The picture box is top-aligned in the game view: portrait shows the console
   stack from the top and landscape removes the black band above **Large screen** /
   **Side by side** / **Hybrid**; the arrangements stay horizontally centred and

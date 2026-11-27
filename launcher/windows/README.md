@@ -19,7 +19,7 @@ UI, log and diagnostics export. The current development checkout adds a Deploy
 window-close cleanup (a running deploy is stopped and its 3dsrecomp/clang/lld/
 devpush/plumesign processes are terminated before the launcher exits), and merges the
 two duplicate "not built yet" Library strings into one status line. This checkout compiles cleanly (0 errors, warnings as
-errors) and its **278 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
+errors) and its **288 unit/integration tests pass**. The packaged single-file exe runs its clean-folder
 `--self-test` on Linux/WSL with the embedded payload (33 PASS / 0 FAIL / 0 WARN), and on a
 Windows host natively through `scripts/release/win-selftest.sh` (33 PASS / 0 FAIL / 0 WARN).
 The UI has exactly two sections (Library, Deploy) plus a Settings page; it is
@@ -120,6 +120,15 @@ travels as an internal devpush/plumesign command argument.
      "Cancelled" and the page returns to a deployable state; compiled packs are kept
      for the next attempt. Closing the launcher window during a deploy runs the same
      cleanup before the window closes, so no background compiler/signer survives.
+   - **Refresh signing** (Windows; the macOS launcher does not have it this round) —
+     the Deploy prerequisites header has a **Refresh signing** button. It re-signs and
+     overwrite-installs the last IPA recorded in the portable state — the most recent
+     Deploy-composed app IPA or single-game export — through the existing
+     Impactor/plumesign install service, using the installed bundle id so the existing
+     app is updated in place. It never recompiles, recomposes, deletes the app or adds
+     games/GamePacks; Documents data and saves stay. It exists to renew the 7-day free
+     Apple ID signature without a rebuild. The button is disabled until an IPA exists
+     and its hint says so; pressing it without one reports "deploy/export first".
 3. **Settings** (gear): language, Apple ID / Open Impactor, device status/refresh, logs
    (show/export/open/self-test), about, and the **Advanced build settings** card (AOT
    optimization level, LTO, fast-math) that used to be on Deploy. The language picker keeps showing the current
@@ -193,18 +202,20 @@ the card explains that Export becomes available after the GamePack exists) and o
 header **Import** whose picker accepts decrypted ROMs and `.32a` build packages.
 **Export** opens an in-window dialog:
 
-- **Format**: **.32a build package** or **Unsigned single-game IPA**.
-- **Destination**: a folder for the .32a (default `workspace/builds`) or a save-file
-  path for the IPA (default `workspace/exports`).
+- **Format**: **Finished build package** (`.32a`) or **Ready-to-sign package**
+  (unsigned single-game IPA). The dialog shows only these labels and the warnings;
+  the old long per-format descriptions were removed.
+- **Destination**: a folder for the `.32a` (default `workspace/export/32a`) or a
+  save-file path for the IPA (default `workspace/export/ipa`); the folder is created
+  before exporting.
 - **File name**: both formats are written as `<TITLEID>-<English SMDH name><ext>`
   (illegal file-name characters become `_`); there is no build slug, launcher
   version or `unsigned` suffix.
-- **Description and warnings** for the chosen format, including that the file can
-  contain the user's own game data and must stay local, and that the IPA is unsigned
-  and needs Sideloadly or AltStore.
+- **Warnings**: the chosen file can contain the user's own game data and must stay
+  local, and the IPA is unsigned and needs Sideloadly or AltStore.
 - **Result**: a successful export shows just `Exported: <path>`.
 
-For the `.32a` format the pack CLI writes `<portable data root>/workspace/builds/<TITLEID>-<English SMDH name>.32a`,
+For the `.32a` format the pack CLI writes `<portable data root>/workspace/export/32a/<TITLEID>-<English SMDH name>.32a`,
 a ZIP with `manifest.json` (schema v1), `GamePack-<TITLEID>.dylib`, `GameInfo.json`,
 optional `cover.png` and the user's `GameRom.<ext>` when the CLI can find it (the
 package copy, the queued ROM path or `workspace/launcher-roms`). Without a ROM the
@@ -227,7 +238,10 @@ local** (never upload or commit it). Nothing is signed, installed or uploaded. T
 missing CLI, workspace state), `ExportNamingAndRomPathTests.cs` (both export names
 with sanitizing, imported-package `RomPath`, embedded GameRom resolution),
 `SingleGameIpaExportTests.cs` (localized IPA app label + `InfoPlist.strings`, path-only
-success copy) and the Rust `builder/pack` tests (`builds::tests` + the CLI round trip
+success copy), `ExportAndSigningRefreshTests.cs` (default export folders and folder
+creation, the new format labels with the descriptions gone, refresh-success copy,
+no-IPA/no-installer paths, refresh install with the installed bundle id, state
+persistence) and the Rust `builder/pack` tests (`builds::tests` + the CLI round trip
 in `tests/cli_local.rs`, 16/16).
 
 ### Advanced build settings (Settings page)
@@ -260,11 +274,11 @@ keep the default build command unchanged.
 - Unverified on Windows hardware: the wrapper path is unit-tested but a real
   native build with non-default options still needs a Windows/QA pass.
 
-### Unsigned single-game IPA export with embedded game data (Library Export dialog)
+### Ready-to-sign package (unsigned single-game IPA) export with embedded game data (Library Export dialog)
 
-In the Library card's **Export** dialog, the **Unsigned single-game IPA** format
+In the Library card's **Export** dialog, the **Ready-to-sign package** format
 composes one **unsigned, self-contained** single-game IPA from the pinned shell
-template with the destination chosen by the user (default `workspace/exports`). The
+template with the destination chosen by the user (default `workspace/export/ipa`). The
 file is named `<TITLEID>-<English SMDH name>.ipa`. After the user signs and installs
 it, the home screen shows the game's own name, the app has no library/home page and
 opens directly into the game, and a data-validation failure shows a dedicated error
@@ -290,7 +304,7 @@ screen instead of a library:
 5. the result is verified (Payload/*.app, exactly one non-empty `Roms/` entry
    matching the catalogue `romFile`, no extra `Roms/` entries, schema-2 catalogue
    with one title + autoLaunch + romFile, GamePack present, SHA-256) and written to
-   `<portable data root>/workspace/exports/<TITLEID>-<English SMDH name>.ipa`.
+   `<portable data root>/workspace/export/ipa/<TITLEID>-<English SMDH name>.ipa`.
 
 The output is roughly the GamePack plus the ROM in size (logged with the byte
 counts). A successful export shows just `Exported: <path>`; the export dialog's
@@ -309,7 +323,7 @@ generator, missing cover fallback, template/pack/catalog failures).
   Deploy pipeline + device-aware deploy planner + composed-IPA verifier, IPA composition,
   signing, push, localization catalog, embedded single-file payload, build-compatibility
   cache) / ThreeDsTwoApple.Launcher.Desktop (Avalonia shell) /
-  ThreeDsTwoApple.Launcher.Core.Tests (278 xUnit tests).
+  ThreeDsTwoApple.Launcher.Core.Tests (288 xUnit tests).
 - All external work goes through CLI tools passed as argument arrays (never a
   shell string): 3ds2apple-pack, devpush, the official plumesign.
   The launcher never re-implements ROM parsing, the AOT compile/link,
@@ -347,10 +361,10 @@ generator, missing cover fallback, template/pack/catalog failures).
       Hardware/                           logical/physical cores + RAM probe for the compile line
       src/Launcher.Desktop/             Avalonia UI (Program, App, MainWindow, view model,
                                         Localization/LocalizedText, Assets/app.ico + placeholder)
-      tests/ThreeDsTwoApple.Launcher.Core.Tests/   278 xUnit tests (incl. ExportNamingAndRomPathTests +
-                                                  SingleGameIpaExportTests + DeployFlowTests + DeviceDeployTests +
-                                                  DeployCancellationTests + ProcessRunnerTests + BuildCacheTests +
-                                                  ComposedIpaVerifierTests)
+      tests/ThreeDsTwoApple.Launcher.Core.Tests/   288 xUnit tests (incl. ExportAndSigningRefreshTests +
+                                                  ExportNamingAndRomPathTests + SingleGameIpaExportTests +
+                                                  DeployFlowTests + DeviceDeployTests + DeployCancellationTests +
+                                                  ProcessRunnerTests + BuildCacheTests + ComposedIpaVerifierTests)
       vendor/impactor/             PINS.json + MIT / MPL-2.0 licence texts + source note
       shell/                            shell template IPA placement + manifest example (unchanged):
                                         the template is ROM-free and pinned; packs are injected at install time
