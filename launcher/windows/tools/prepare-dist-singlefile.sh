@@ -183,7 +183,7 @@ find "$PUBLISH_DIR" -mindepth 1 -maxdepth 1 ! -name "$EXE_NAME" -exec rm -rf {} 
 
 # 5. ZIP = the exe + the repository licence texts at the ZIP root. Both shipped
 #    packages carry LICENSE/NOTICE/THIRD_PARTY.md inside the archive (the GitHub
-#    Release still has exactly two assets; the texts are never separate uploads),
+#    Release carries three platform packages; the texts are never separate uploads),
 #    and each text inside the archive must be byte-identical to the repository
 #    file. scripts/release/verify-release.sh enforces the same rules.
 LICENSE_TEXTS=(LICENSE NOTICE THIRD_PARTY.md)

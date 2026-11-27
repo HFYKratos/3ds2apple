@@ -248,11 +248,11 @@ Large generated files can exhaust memory on an 8 GB build VM:
 
 | Script | Purpose |
 |---|---|
-| `release/assemble-release.sh` | Collect the two platform launcher zips (Windows + macOS), rename them to the canonical `3ds2apple-<ver>-{windows-x64,macos-universal}.zip` names and run the verifier; the licence texts travel inside the zips, so no `SHA256SUMS`/separate license/shell assets are collected |
-| `release/verify-release.sh` | Read-only release gate: exactly the two platform zips; each archive is exactly launcher (`.exe` / `.app`) + `LICENSE`/`NOTICE`/`THIRD_PARTY.md` with digests equal to the repository files; no ROM/pack/IPA data; optional Windows exe version-string check and `--win-selftest-log` evidence check |
+| `release/assemble-release.sh` | Collect the Windows/macOS platform launcher zips, rename them to canonical `3ds2apple-<ver>-{windows-x64,macos-universal}.zip` names and run the Windows/macOS verifier; the Linux tar is produced by `launcher/linux/build-linux.sh --payload --tar` and staged/checked alongside it until the three-asset wrapper lands |
+| `release/verify-release.sh` | Windows/macOS release gate: exact package entries + licence texts with repository digests; no ROM/pack/IPA/game data; optional Windows exe version and `--win-selftest-log` checks. Linux tar has structural/licence/shell/AOT-pin/self-test checks recorded in the release verification archive |
 | `release/win-selftest.sh` | Runs a release Windows zip's exe `--self-test` natively on a Windows host through WSL interop and validates the exit code, `SELF-TEST OK`, 32 PASS / 0 FAIL / 0 WARN and the launcher version line (`--keep` keeps the log) |
 
-The full release policy (two assets only, bilingual release notes,
+The full release policy (Windows/macOS/Linux packages, bilingual release notes,
 immutable tags) is in [CONTRIBUTING.md](../CONTRIBUTING.md#release-policy).
 
 ## Quick start (shell)
@@ -352,21 +352,10 @@ bash ~/project/3ds2apple/scripts/vm-restart-8cpu.sh
 
 Direct GitHub release downloads from the build host can crawl or hang. Do **not**
 downgrade a pinned tool to work around it. Try a public GitHub release mirror
-first (the exact upstream asset path is appended after the mirror prefix), keep
-the expected SHA-256, and verify it before extracting:
-
-```bash
-# exact asset, downloaded through a mirror prefix:
-curl -fL --retry 2 --max-time 600 \
-  -o /tmp/LLVM-23.1.6-Linux-X64.tar.xz \
-  https://gh-proxy.com/https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.6/LLVM-23.1.6-Linux-X64.tar.xz
-sha256sum /tmp/LLVM-23.1.6-Linux-X64.tar.xz
-# mirrors seen working: https://gh-proxy.com/ , https://ghfast.top/ , https://ghproxy.net/
-```
-
+prefix around the normal upstream asset path, then verify the artifact against
+the version/SHA-256 recorded in the relevant manifest or PINS before extracting.
 If the host has a Clash/HTTP proxy, export `HTTPS_PROXY` (and usually
-`HTTP_PROXY`) for the download command or its shell instead of changing tool
-versions. A local Clash port is not reachable from the remote build host unless
-a tunnel/port-forward is opened; mirrors are the fallback when it is not.
-Pin the downloaded version in the relevant manifest/PINS and record its SHA-256
-and the mirror URL in the task handoff, so later builds do not silently drift.
+`HTTP_PROXY`) instead of changing tool versions; a local Clash port is not
+reachable from the remote build host unless a tunnel/port-forward is opened.
+Record the mirror and verification result in the task handoff so later builds do
+not silently drift.

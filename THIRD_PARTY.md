@@ -45,7 +45,7 @@ vendored or redistributed.
 
 ## License texts in the release packages
 
-Every release publishes exactly two assets: the Windows and macOS launcher zips.
+Every release publishes three platform packages: the Windows x64 zip, the macOS universal zip and the Linux x86_64 tar.gz.
 From 0.1.1 on, each zip contains `LICENSE`, `NOTICE` and `THIRD_PARTY.md` at its
 archive root, byte-identical to the files in this repository; they are not
 published as separate release assets. The Windows launcher additionally embeds

@@ -121,13 +121,13 @@
               <tr><th>Product</th><td>3ds2apple</td></tr>
               <tr><th>One-liner</th><td>Your own Nintendo 3DS games, running natively on iPhone and iPad.</td></tr>
               <tr><th>Version</th><td>0.2.1 — released 2026-11-25</td></tr>
-              <tr><th>Platforms</th><td>iPhone / iPad on iOS 16+ · Windows 10/11 launcher · macOS 13+ launcher (Intel + Apple silicon)</td></tr>
-              <tr><th>Components</th><td>Windows launcher (C#/Avalonia, single executable) · macOS launcher (SwiftUI, Xcode signing) · iOS app</td></tr>
+              <tr><th>Platforms</th><td>iPhone / iPad on iOS 16+ · Windows 10/11 launcher · macOS 13+ launcher (Intel + Apple silicon) · Linux x86_64 launcher</td></tr>
+              <tr><th>Components</th><td>Windows launcher (C#/Avalonia, single executable) · macOS launcher (SwiftUI, Xcode signing) · Linux launcher (shared Avalonia/Core) · iOS app</td></tr>
               <tr><th>Rendering</th><td>Static recompilation to native ARM64; Metal through MoltenVK; the GPU presenter draws every screen layout — presets and custom rectangles — with zero per-frame readback</td></tr>
               <tr><th>Highlights</th><td>iOS 26/27 grouped Settings; a default virtual-control layout from two Delta reference skins with the Settings button in the HOME slot; the Settings button can never be hidden; an Azahar-style performance overlay at the top edge of the picture; an in-game menu in the same iOS grouped language with a slide-up animation and native push/pop sub-pages; landscape Large / Side by side / Hybrid layouts flush to the top edge, with SAVE/LOAD beside the notch</td></tr>
               <tr><th>No JIT</th><td>No CPU JIT and no interpreter fallback on the phone — AOT only</td></tr>
               <tr><th>Licence / price</th><td>Apache-2.0 · free and open source</td></tr>
-              <tr><th>Downloads</th><td><a href="https://github.com/HFYKratos/3ds2apple/releases" rel="noopener">GitHub Releases</a> (two platform zips, no game data)</td></tr>
+              <tr><th>Downloads</th><td><a href="https://github.com/HFYKratos/3ds2apple/releases" rel="noopener">GitHub Releases</a> (three platform packages, no game data)</td></tr>
               <tr><th>Website</th><td><a href="https://hfykratos.github.io/3ds2apple/">hfykratos.github.io/3ds2apple</a></td></tr>
               <tr><th>Requirements</th><td>A decrypted 3DS ROM the user legally owns and dumped; Developer Mode; USB cable; the user's own Apple ID for signing</td></tr>
               <tr><th>Not included</th><td>No games, ROMs, decryption keys, BIOS, system files or game assets. Delta-style skin import, cheats, a manual viewer, amiibo, microphone, camera and network/online features are not part of the app; CPU JIT / shader JIT / RPC / LLE settings do not apply to the AOT-only architecture</td></tr>

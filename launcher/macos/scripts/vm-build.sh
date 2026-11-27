@@ -168,7 +168,7 @@ rm -f "$OUT_DIR/$PACKAGE_NAME.zip"
 # ditto keeps the .app bundle structure byte-for-byte (symlinks, resource forks,
 # extended attributes); the three repository licence texts are then appended at
 # the ZIP root. Both shipped packages carry them inside the archive and the
-# GitHub Release still has exactly two assets (the texts are never separate
+# GitHub Release carries three platform packages (the texts are never separate
 # uploads), matching CONTRIBUTING.md#release-policy.
 ditto -c -k --sequesterRsrc --keepParent "/tmp/zl-macos-package/3ds2apple-launcher.app" "$OUT_DIR/$PACKAGE_NAME.zip"
 (cd "$ROOT" && zip -q "$OUT_DIR/$PACKAGE_NAME.zip" "${LICENSE_TEXTS[@]}")
