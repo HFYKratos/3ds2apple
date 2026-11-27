@@ -41,6 +41,11 @@
 #   linux tar     PINS-local-aot.json is valid JSON, its recompiler sha256 equals
 #                 the actual Bin/3dsrecomp digest and its llvm field carries the
 #                 pinned LLVM version 23.1.6
+#   linux tar     the launcher binary embeds the expected release version: like the
+#                 Windows single-file exe, the Linux .NET single-file bundle keeps
+#                 deps.json as plain UTF-8 and its entry project key is
+#                 "3ds2apple-launcher/<ver>"; a stale --skip-publish bundle (the
+#                 0.3.0 Linux tar carried 0.2.2-beta6) is a FAIL
 #   all assets    no ROM (.3ds/.cci/.cia/.cxi/.3dsx/.nsp/.xci/.keys), no
 #                 GamePack-*.dylib, no Roms/ entries; the only .ipa is the
 #                 ROM-free shell template at
@@ -411,6 +416,7 @@ check_linux_tar() {
 import hashlib
 import json
 import os
+import re
 import sys
 import tarfile
 
@@ -656,6 +662,53 @@ if isinstance(pins_data, dict):
         emit("PASS", "PINS-local-aot.json llvm reports the pinned LLVM " + expected_llvm + " (" + llvm_reported + ")")
     else:
         emit("FAIL", "PINS-local-aot.json llvm " + repr(llvm_reported) + " does not carry the pinned LLVM " + expected_llvm)
+
+# The Linux launcher is a .NET single-file bundle, so the same plain-UTF-8
+# deps.json project key the Windows exe carries ("3ds2apple-launcher/<ver>") is
+# embedded in the launcher binary. 0.3.0 was packaged with --skip-publish against
+# the old 0.2.2-beta6 publish folder, so its launcher reported the wrong version;
+# this cross-check makes that a release-gate failure. The launcher is streamed in
+# chunks with a small overlap so a key crossing a chunk boundary is still found;
+# nothing is extracted to disk.
+def deps_versions(rel):
+    member = files.get(rel)
+    if member is None:
+        return None
+    try:
+        handle = archive.extractfile(member)
+    except (KeyError, OSError, tarfile.TarError):
+        return None
+    if handle is None:
+        return None
+    found = set()
+    overlap = b""
+    try:
+        while True:
+            chunk = handle.read(1 << 20)
+            if not chunk:
+                break
+            data = overlap + chunk
+            for match in re.finditer(rb'"3ds2apple-launcher/[^"]*"', data):
+                found.add(match.group(0).decode("ascii", "replace"))
+            overlap = data[-256:]
+    finally:
+        handle.close()
+    return found
+
+
+launcher_versions = deps_versions("3ds2apple-launcher")
+if launcher_versions is not None:
+    rows = sorted(launcher_versions)
+    if not rows:
+        emit("FAIL", "the launcher binary does not embed a 3ds2apple-launcher/<ver> deps.json key")
+    elif expected_version:
+        wanted = '"3ds2apple-launcher/' + expected_version + '"'
+        if wanted in launcher_versions:
+            emit("PASS", "the launcher binary embeds launcher version " + expected_version + " (deps.json)")
+        else:
+            emit("FAIL", "the launcher binary does not embed launcher version " + expected_version + " (found: " + ", ".join(rows) + ")")
+    else:
+        emit("SKIP", "the launcher binary embeds " + ", ".join(rows) + "; version not cross-checked (no expected release version)")
 
 hits = []
 for rel in sorted(files):

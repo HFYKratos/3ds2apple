@@ -20,15 +20,18 @@
 #   PASS  a complete Linux tar.gz: single top-level launcher directory, every
 #         required payload/local-AOT file, repository-identical licence texts
 #         both at the folder root and under licenses/, a shell manifest that
-#         matches the shell template IPA's bytes and sha256, and
-#         PINS-local-aot.json whose recompiler sha256 matches Bin/3dsrecomp and
-#         whose llvm field carries the pinned LLVM version
+#         matches the shell template IPA's bytes and sha256, a launcher binary
+#         whose embedded single-file deps.json key matches the expected release
+#         version, and PINS-local-aot.json whose recompiler sha256 matches
+#         Bin/3dsrecomp and whose llvm field carries the pinned LLVM version
 #   FAIL  Linux tar deviations: missing/tampered licence, missing launcher,
 #         missing shell manifest, shell manifest sha256/bytes mismatch, missing
 #         PINS-local-aot.json, PINS recompiler sha mismatch, an extra top-level
 #         directory, an illegal top-level subdirectory, a ROM payload, a
 #         non-whitelisted second .ipa, a manifest version different from the
-#         expected release version, and a file that is not a readable gzip tar
+#         expected release version, a stale launcher binary version (the v0.3.0
+#         tar carried 0.2.2-beta6) or no embedded launcher version, and a file
+#         that is not a readable gzip tar
 #   PASS  a release directory with exactly the three canonical platform packages
 #   FAIL  a release directory with an extra asset (separate licence text or
 #         SHA256SUMS.txt), a missing platform package or mixed versions
@@ -296,20 +299,21 @@ make_macos_zip() {
   py_zip "$zip" "$stage" "${names[@]}"
 }
 
-# make_linux_stage STAGE [shell-version] - a complete synthetic Linux launcher
-# folder matching launcher/linux/build-linux.sh --payload --local-aot: the
-# DistributionLayout payload, the local-AOT toolchain, the repository licence
-# texts at the folder root and under licenses/, a shell manifest consistent with
-# the synthetic shell template IPA and PINS-local-aot.json consistent with
-# Bin/3dsrecomp.
+# make_linux_stage STAGE [shell-version] [launcher-version] - a complete synthetic
+# Linux launcher folder matching launcher/linux/build-linux.sh --payload
+# --local-aot: the DistributionLayout payload, the local-AOT toolchain, the
+# repository licence texts at the folder root and under licenses/, a shell
+# manifest consistent with the synthetic shell template IPA, PINS-local-aot.json
+# consistent with Bin/3dsrecomp, and a launcher stub carrying the embedded
+# single-file deps.json key "3ds2apple-launcher/<launcher-version>".
 make_linux_stage() {
-  local stage="$1" shell_version="${2:-$VERSION}" ipa_sha ipa_bytes recomp_sha
+  local stage="$1" shell_version="${2:-$VERSION}" launcher_version="${3:-$VERSION}" ipa_sha ipa_bytes recomp_sha
   local root="$stage/$LINUX_TOP_DIR"
   rm -rf "$stage"
   mkdir -p "$root/Shell" "$root/Bin/llvm/bin" "$root/Bin/llvm/lib/clang/23.1.6/include" \
     "$root/ThirdParty/Impactor" "$root/tools/winbuild/darwin-stubs" \
     "$root/tools/winbuild/include" "$root/licenses"
-  printf '#!/bin/sh\n# synthetic 3ds2apple Linux launcher for release-selfcheck\nexit 0\n' > "$root/3ds2apple-launcher"
+  printf '#!/bin/sh\n# synthetic 3ds2apple Linux launcher for release-selfcheck\n# single-file deps.json key: "3ds2apple-launcher/%s"\nexit 0\n' "$launcher_version" > "$root/3ds2apple-launcher"
   chmod +x "$root/3ds2apple-launcher"
   cp "$ROOT/LICENSE" "$root/LICENSE"
   cp "$ROOT/NOTICE" "$root/NOTICE"
@@ -344,11 +348,11 @@ EOF
   printf '#pragma once\n/* synthetic zakuro_gamepack.h for release-selfcheck */\n' > "$root/tools/winbuild/include/zakuro_gamepack.h"
 }
 
-# make_linux_tar TAR [shell-version] - fresh complete stage + tar.gz.
+# make_linux_tar TAR [shell-version] [launcher-version] - fresh complete stage + tar.gz.
 make_linux_tar() {
-  local tar="$1" shell_version="${2:-$VERSION}"
+  local tar="$1" shell_version="${2:-$VERSION}" launcher_version="${3:-$VERSION}"
   local stage="$CASE_DIR/$(basename "$tar" .tar.gz)-stage"
-  make_linux_stage "$stage" "$shell_version"
+  make_linux_stage "$stage" "$shell_version" "$launcher_version"
   py_tar "$tar" "$stage"
 }
 
@@ -468,6 +472,24 @@ make_linux_tar "$L_COMPLETE"
 run_verify_case "linux tar complete -> PASS" pass "all 23 required payload files are present" --linux-tar "$L_COMPLETE"
 run_verify_case "linux tar complete with the expected release version -> PASS" pass "shell manifest version is the release version 0.1.0" \
   --linux-tar "$L_COMPLETE" --expect-package-version 0.1.0
+run_verify_case "linux launcher embeds the expected version -> PASS" pass "the launcher binary embeds launcher version 0.1.0" \
+  --linux-tar "$L_COMPLETE" --expect-package-version 0.1.0
+
+L_STALE="$CASE_DIR/linux-launcher-version-mismatch.tar.gz"
+make_linux_tar "$L_STALE" 0.1.0 0.2.2-beta6
+run_verify_case "linux stale launcher version (0.2.2-beta6) -> FAIL" fail "the launcher binary does not embed launcher version 0.1.0" \
+  --linux-tar "$L_STALE" --expect-package-version 0.1.0
+
+L_NOKEY_STAGE="$(new_linux_stage linux-launcher-without-version)"
+printf '#!/bin/sh\n# synthetic launcher with no embedded deps.json key\nexit 0\n' > "$L_NOKEY_STAGE/$LINUX_TOP_DIR/3ds2apple-launcher"
+py_tar "$CASE_DIR/linux-launcher-without-version.tar.gz" "$L_NOKEY_STAGE"
+run_verify_case "linux launcher without embedded version -> FAIL" fail "does not embed a 3ds2apple-launcher/<ver> deps.json key" \
+  --linux-tar "$CASE_DIR/linux-launcher-without-version.tar.gz" --expect-package-version 0.1.0
+
+L_NOEXPECT="$CASE_DIR/linux-complete-unversioned-name.tar.gz"
+cp "$L_COMPLETE" "$L_NOEXPECT"
+run_verify_case "linux launcher version without an expected version -> SKIP" pass "launcher binary embeds .*version not cross-checked" \
+  --linux-tar "$L_NOEXPECT"
 
 echo
 echo "[5/7] Linux tar.gz: every contract deviation is rejected"
