@@ -12,11 +12,14 @@ launches the game data — pushed into Documents for a multi-game shell, embedde
 in the app bundle for a self-contained single-game export — and never downloads
 or imports anything itself. A self-contained single-game IPA exported by the
 launcher is the exception to the two-step flow: the launcher embeds the one
-game's data in the signed app, so installing it is enough — opening it goes
-straight into that game.
+game's data in the signed app and names the app after the game, so installing it
+is enough — the app has no library or home page and opens straight into that game
+(a dedicated single-game launch/error screen stands in while it loads or when the
+data cannot be used).
 It displays the two 3DS screens, drives the Zakuro runtime and exposes input,
 audio, fast-forward, save data, diagnostics and settings. The app is organised
-as a home page, the running game, a settings page and a few supporting pages.
+as a home page, the running game, a settings page and a few supporting pages;
+a single-game IPA replaces the home page with the single-game launch screen.
 
 The shell ships as part of **3ds2apple 0.2.1**, the latest stable release.
 
@@ -29,12 +32,13 @@ views do not carry duplicated strings.
 
 | Page | Contents |
 |---|---|
+| **Single-game launch** | Only in a single-game IPA (`autoLaunch`): this screen replaces Home. It runs the launch scan and starts its one game automatically; on a data problem it shows the error with **Try again** and **Export logs**. There is no library and no import. |
 | **Home** | The library from the build's `GameCatalog.json`, joined with the game data pushed into `Documents/Games` (or the ROM embedded in a self-contained single-game IPA). Each card has a square art area at the icon's native 1:1 aspect: the game's own SMDH cover art (launcher-pushed `cover.png`, else the build's bundled cover, else the gradient placeholder) fills the square edge to edge with no inset frame (the gradient is only the placeholder when no cover is available), and a corner badge appears only when a game needs attention (**Checking** / **Data missing** / **Error**; a ready game has no AOT badge, since the app only runs AOT code and the AOT state stays in the log and the diagnostics export). Under the art the card is deliberately compact: the title for the app language (up to two lines, truncated), the publisher, then the pushed game size · last-played state. There is **no explanatory paragraph under the grid**. iPhone shows two columns, iPad three. Tapping a game starts it; a game without pushed data explains that the launcher must push it, a broken push lists the exact validation error. Pull-to-refresh rescans Documents, and the library also rescans at launch and when the app returns to the foreground; there is no refresh button. Long-pressing a card opens its context menu; **Delete Game** asks a second confirmation and then deletes the game (see "Deleting a game" below). The empty state explains the desktop launcher. No on-phone import. Settings entry. |
 | **Game** | The two screens on a `CAMetalLayer` (or the screen-readback fallback) arranged by the split landscape / portrait screen layout choices, filling the whole screen, with the on-screen controls floating over the picture, the performance overlay (off by default; when enabled it sits at the very top edge of the picture, top left, with only the frame-rate line on — frame time, speed, app memory and available memory are opt-in) and the in-game menu. The on-screen Settings button is always visible and is the only in-game menu entry; with **Show virtual controls** off, only that button stays on screen (at its normal HOME-slot place). The game view hides the system status bar. There is no title bar or reserved control pad any more. When a title starts the 3DS software keyboard, a full-screen keyboard overlay collects the text and the applet's buttons while the frame loop is stopped; answering resumes the game. |
-| **Settings** | A system-Settings-app style page (0.2.1): a large title, one inset-grouped card of nine category rows with coloured rounded-square SF Symbol tiles (General, System, Gamepad, Cheats, Graphics, Layout, Sound, Debug and Other) and a separate card with a real **Reset All Settings** action. Each category is a large-titled page of inset-grouped cards with regular-weight row titles, secondary explanations and a trailing switch, slider, value or disclosure chevron; choice rows push a radio selection page. It opens from the home page and, while a game runs, from the in-game menu's Global Settings row (the on-screen Settings button opens that menu). See "Settings screens (0.2.1)" below. |
+| **Settings** | A system-Settings-app style page (0.2.1): a large title, one inset-grouped card of nine category rows with coloured rounded-square SF Symbol tiles (General, System, Gamepad, Cheats, Graphics, Layout, Sound, Debug and Other) and a separate card with a real **Reset All Settings** action. Each category is a large-titled page of inset-grouped cards with regular-weight row titles, secondary explanations and a trailing switch, slider, value or disclosure chevron; choice rows push a radio selection page. It opens from the home page (multi-game shell) and, while a game runs, from the in-game menu's Global Settings row (the on-screen Settings button opens that menu); in a single-game build only the in-game route exists. See "Settings screens (0.2.1)" below. |
 | **Save Manager** | A game picker over the whole library (the selection is remembered; opened from the in-game menu it starts on the running game): the selected game's battery save files (size, date, export as ZIP, import, delete), its three instant save-state slots (delete without the game, save/load only while that game runs) and the container usage. The page re-reads the selected game's files when it opens, when the library changes and after every action; there is no refresh button. |
 | **About** | Product page: app icon, name, version and build, one-line positioning, links (repository, releases, issues, README, licence, third-party notices), acknowledgements and the legal notice. A compact runtime card with the AOT state, the presentation path and the performance overlay appears only while a game is loaded; everything else stays in the log and the diagnostics. |
-| **In-game menu** | Opened from the on-screen **Settings** button (the skins' HOME slot; since 0.2.1-beta3 it is the only app-menu button, and since 0.2.1-beta5 it can never be hidden, so there is no floating pause fallback). It uses the same iOS-native grouped language as the Settings app: inset-grouped cards with a 29 pt coloured rounded-square SF Symbol tile per row, regular-weight titles, footnote secondary explanations and the system Toggle / segmented control instead of hand-drawn rows, and light/dark follow the system. Since 0.2.1-beta3 the presentation is one slide-up: the whole menu moves up from the bottom edge and fades in as a single container animation (the card and the backdrop keep no transition of their own), and the runtime pause is deferred until that animation has started, so opening the menu does not hitch. The header keeps the running game's name (no cover art) with only the power (exit), restart (reset) and **X** (resume) buttons; quick save/load live in the Save state sub-page. The rows follow the reference emulator's in-game menu: **Save state**, **Virtual controls**, **Screen layout**, **Swap screens** (toggle), **Rotate screen clockwise**, **Cheats**, **Global Settings**, **Per-Application Settings** (per-game overrides stored by title ID) and **Close game**. Sub-pages open inside the sheet through a native NavigationStack(path:) push/pop (Save state, Virtual controls, Screen layout, Per-Application Settings, Cheats): content slides in from the right and the back button slides it out to the left while the card header stays put. Save Manager / Export logs / Fast-forward / Sound are intentionally not in this menu (they stay in Settings/Debug). Tapping the dimmed area above (portrait) or outside (landscape) the card resumes the game. |
+| **In-game menu** | Opened from the on-screen **Settings** button (the skins' HOME slot; since 0.2.1-beta3 it is the only app-menu button, and since 0.2.1-beta5 it can never be hidden, so there is no floating pause fallback). It uses the same iOS-native grouped language as the Settings app: inset-grouped cards with a 29 pt coloured rounded-square SF Symbol tile per row, regular-weight titles, footnote secondary explanations and the system Toggle / segmented control instead of hand-drawn rows, and light/dark follow the system. Since 0.2.1-beta3 the presentation is one slide-up: the whole menu moves up from the bottom edge and fades in as a single container animation (the card and the backdrop keep no transition of their own), and the runtime pause is deferred until that animation has started, so opening the menu does not hitch. The header keeps the running game's name (no cover art) with only the power (exit), restart (reset) and **X** (resume) buttons; quick save/load live in the Save state sub-page. The rows follow the reference emulator's in-game menu: **Save state**, **Virtual controls**, **Screen layout**, **Swap screens** (toggle), **Rotate screen clockwise**, **Cheats**, **Global Settings**, **Per-Application Settings** (per-game overrides stored by title ID) and **Close game**; a single-game build (`autoLaunch`) drops Per-Application Settings and Close game because there is no second game to override and no library to return to. Sub-pages open inside the sheet through a native NavigationStack(path:) push/pop (Save state, Virtual controls, Screen layout, Per-Application Settings, Cheats): content slides in from the right and the back button slides it out to the left while the card header stays put. Save Manager / Export logs / Fast-forward / Sound are intentionally not in this menu (they stay in Settings/Debug). Tapping the dimmed area above (portrait) or outside (landscape) the card resumes the game. |
 
 Opening the in-game menu pauses emulation: the frame loop and the audio engine
 are stopped, the runtime handle and the last frame stay, and Resume continues the
@@ -165,14 +169,15 @@ audio advances behind it.
   and save data should be backed up first.
 - **Single-game auto-launch**: a self-contained single-game IPA exported from the
   launcher's Library **Export** action carries one GamePack, the additive root flag
-  `autoLaunch: true` and the
-  game's `romFile` in its bundle `GameCatalog.json`, and the user's own game data
-  (the ROM) at `Roms/<TITLEID>.<ext>` inside the app bundle. After the launch scan
-  finds that bundled file and the AOT pack resolves, the one game starts by itself —
-  at most once per process — instead of stopping on the home page; a missing or
-  invalid bundled file stays on the home page and the diagnostics report the
-  reason. A normal multi-game shell never sets the flag and receives its game data
-  through the launcher's push.
+  `autoLaunch: true` and the game's `romFile` in its bundle `GameCatalog.json`, and
+  the user's own game data (the ROM) at `Roms/<TITLEID>.<ext>` inside the app bundle.
+  The launcher also names the installed app after the game (localized from the SMDH
+  titles, English fallback). Such a build has no home page or library: `ContentView`
+  renders a single-game launch screen and the one game starts by itself after the
+  launch scan and the AOT check — at most once per process. A missing or invalid
+  bundled file stops on that screen with the error plus **Try again** and **Export
+  logs** instead of falling back to a library. A normal multi-game shell never sets
+  the flag and receives its game data through the launcher's push.
 - Diagnostics export from the home page and the in-game menu.
 
 ## Game library: AOT packs in the app, game data in Documents
@@ -190,14 +195,17 @@ per-user game data stays in Documents and can be pushed or replaced without
 rebuilding the app.
 
 A self-contained single-game IPA exported from the launcher's Library **Export**
-action is the exception to the two-halves flow: the signed app carries exactly one GamePack, the additive root
-flag `autoLaunch: true` and the game's `romFile` in `GameCatalog.json`, and the
-user's own game data (the ROM) at `Roms/<TITLEID>.<ext>` in the bundle. The shell
-validates that bundle-relative path, opens the bundled file in place and starts
-the one game automatically — at most once per process — instead of stopping on the
-home page; there is no separate Documents push. A game whose bundled data is
-missing or unsafe stays on the home page and the diagnostics report says why. The
-multi-game flow keeps the pushed-data flow described above.
+action is the exception to the two-halves flow: the signed app carries exactly one
+GamePack, the additive root flag `autoLaunch: true` and the game's `romFile` in
+`GameCatalog.json`, and the user's own game data (the ROM) at `Roms/<TITLEID>.<ext>`
+in the bundle. The launcher also rewrites the app display name to the game's own
+localized SMDH name. There is no home page or library in this build: the shell
+validates that bundle-relative path, opens the bundled file in place and starts the
+one game automatically — at most once per process — from a dedicated single-game
+launch screen; there is no separate Documents push. A game whose bundled data is
+missing or unsafe stops on that launch screen with the error (and the diagnostics
+report says why) rather than a library. The multi-game flow keeps the pushed-data
+flow described above.
 
 ```text
 App bundle (signed)
@@ -685,6 +693,8 @@ hint sits above it and the empty area stays inert) saves the current direction's
   the reference emulator's in-game option set: Save state, Virtual controls,
   Screen layout, Swap screens, Rotate screen clockwise, Global Settings,
   Per-Application Settings and Close game, with the top icon actions unchanged.
+  A single-game build (`autoLaunch`) omits Per-Application Settings and Close game
+  (there is no second game and no library to return to).
   0.2.1-beta2 restyles the rows with the same system-Settings-app language
   (inset-grouped cards, 29 pt coloured icon tiles, footnote secondary text and
   the system Toggle / segmented / picker controls). 0.2.1-beta3 returns to the
@@ -693,7 +703,8 @@ hint sits above it and the empty area stays inert) saves the current direction's
   of their own), and the runtime pause waits until that animation has started.
   Save Manager, Export logs, Fast-forward and Sound are not duplicated here:
   they remain in Settings (General/Sound) and Debug (Save Manager, export).
-  **Per-Application Settings** stores a small override record per title ID
+  **Per-Application Settings** (multi-game shells only) stores a small override
+  record per title ID
   (`UI.perGameOverrides`) for Screen rotation, Swap screens, Integer scaling and
   Screen aspect; a row left on "Use global" falls back to the global setting,
   and a Clear action removes the record. Amiibo, cheats and multiplayer are
@@ -1146,11 +1157,12 @@ MOLTENVK_FRAMEWORK="$MVK/MoltenVK.framework" scripts/package-ipa.sh \
 |---|---|
 | `App.swift` | SwiftUI entry point; cache directory, logging and the app delegate. |
 | `ApplicationDelegate.swift` | UIKit delegate used for the orientation preference. |
-| `ContentView.swift` | Root router: home page or game for the current session phase; applies settings to the session. |
+| `ContentView.swift` | Root router: home page or game for the current session phase; applies settings to the session. A single-game build (`autoLaunch`) routes to `SingleGameLaunchView` instead of the home page. |
+| `SingleGameLaunchView.swift` | Root screen of a single-game IPA: runs the launch scan, starts the one game automatically, and shows the error with **Try again** and **Export logs** when the bundled data or pack cannot be used; there is no home page or library. |
 | `HomeView.swift` | Home page: the Documents/Games library grid (two columns on iPhone, three on iPad; square 1:1 SMDH cover art that fills the card edge to edge with no icon frame, an attention-state badge in the corner (no AOT badge on a ready game); compact title/publisher/size/last-played text; no explanatory paragraph under the grid), last-played dates, the exact per-game validation error on tap, the launcher empty state, a long-press context menu with the Delete Game action, its second confirmation and result banner, pull-to-refresh, settings entry. |
 | `GameView.swift` | Running game: full-bleed picture from the split landscape / portrait screen layout choices, the floating full-screen on-screen controls (per-row visibility and size scale), the optional in-game performance overlay (at the top edge, six places), the always-visible Settings button as the only in-game menu entry (with Show virtual controls off the overlay renders only that button, in place), the slide-up in-game menu (its runtime pause waits for the animation), the status-bar-hidden full-bleed picture (top-aligned in both orientations), round-4 in-game control edit mode and the 3DS software-keyboard overlay; also the ROM-free `-previewGameView` path. |
 | `GameViewPreview.swift` | Synthetic TOP / BOTTOM test images (gradient, 1 px grid, 400×240 and 320×240) for the ROM-free `-previewGameView` screenshots. |
-| `InGameMenuView.swift` | The 0.2.1 in-game menu: system-Settings-app styled inset-grouped cards (29 pt coloured rounded-square SF Symbol tiles, regular-weight titles, footnote secondary explanations, the system Toggle / menu picker / segmented control and semantic colours), in a bottom sheet in portrait / centred card in landscape, with the running game's name and only power (exit) / restart (reset) / X (resume) buttons, tap-outside-to-resume, and the reference emulator's rows — Save state, Virtual controls, Screen layout, Swap screens, Rotate screen clockwise, Global Settings, Per-Application Settings (per-title-ID overrides) and Close game; secondary pages (Save state, Virtual controls, Screen layout, Per-Application Settings) use a native NavigationStack(path:) push/pop. The card has no transition of its own: GameView owns the single slide-up (move from the bottom edge + opacity) container animation and the runtime pause is deferred until it has started; the backdrop and the onAppear row refresh add no parallel animation. |
+| `InGameMenuView.swift` | The 0.2.1 in-game menu: system-Settings-app styled inset-grouped cards (29 pt coloured rounded-square SF Symbol tiles, regular-weight titles, footnote secondary explanations, the system Toggle / menu picker / segmented control and semantic colours), in a bottom sheet in portrait / centred card in landscape, with the running game's name and only power (exit) / restart (reset) / X (resume) buttons, tap-outside-to-resume, and the reference emulator's rows — Save state, Virtual controls, Screen layout, Swap screens, Rotate screen clockwise, Global Settings, Per-Application Settings (per-title-ID overrides) and Close game; a single-game build (`autoLaunch`) drops Per-Application Settings and Close game; secondary pages (Save state, Virtual controls, Screen layout, Per-Application Settings) use a native NavigationStack(path:) push/pop. The card has no transition of its own: GameView owns the single slide-up (move from the bottom edge + opacity) container animation and the runtime pause is deferred until it has started; the backdrop and the onAppear row refresh add no parallel animation. |
 | `SettingsView.swift` | Settings main page in the 0.2.1 system-Settings-app style: a large title, one inset-grouped card of the eight category rows with a coloured rounded-square SF Symbol tile (29 pt, white glyph) and a separate card with the destructive **Reset All Settings** action, with the real reset (confirmation, `removePersistentDomain` for the app bundle and a relaunch prompt), the persisted-setting binding and the in-game quick display sheet. The category pages themselves live in `SettingsPages.swift`. |
 | `SettingsPages.swift` | The eight 0.2.1 settings category pages and their shared system-Settings-app rows (`SettingsChoiceRow` pushes a radio selection page with the system blue checkmark; switches and sliders keep the system style; the resolution choices stay an inline segmented picker), with semantic colours so light/dark follow the system. General page order: the Speed card (Run speed limit, Default speed, Turbo limit, Turbo speed) then the Updates card (Check for updates, Update channel, Update status; the option set is unchanged), then Layout (screen layout entry, rotation, orientation lock, swap screens and the Performance monitoring group), Gamepad, Graphics (resolution, Screen aspect, Integer scaling, the two experimental GPU switches; no Renderer row), System (Appearance + device/app info), Sound, Debug and Other (storage/version/language and the About page, moved from System). |
 | `CPUProfilerView.swift` | The debug CPU profiler page: starts guest-PC sampling while a game runs and lists hot spots. Diagnosis only. |
@@ -1478,6 +1490,10 @@ Instant save states:
   instead of Documents: it is roughly ROM + code in size, it is user data that must
   never be uploaded or committed, and changing the embedded data means exporting
   and installing a new IPA.
+- A single-game IPA also changes the shell's navigation: the launcher names the app
+  after the game, there is no home page or library (the single-game launch screen
+  starts the game or shows the data error with **Try again** and **Export logs**),
+  and the in-game menu has no Close game or Per-Application Settings row.
 - The first scan after a large push reads the game data once to verify the
   SHA-256 the launcher recorded. That check runs in the background and the card
   shows **Checking** until it finishes; a push without recorded hashes skips the

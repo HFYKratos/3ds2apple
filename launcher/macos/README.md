@@ -65,7 +65,7 @@ tooltip and the log — there is no manual "check" button).
   Remove** with its confirmation alert; the buttons sit in a wrapping row so the
   card stays inside the minimum window width. **Export** opens a sheet where the
   user picks the format and destination:
-  - **`.32a` 构建包 / `.32a` build package** — writes `workspace/builds/<build-slug>.32a`
+  - **`.32a` 构建包 / `.32a` build package** — writes `workspace/builds/<TITLEID>-<English SMDH name>.32a`
     (or the chosen folder): the GamePack, GameInfo, optional cover and the user's ROM
     when the CLI can find one (package copy, queued ROM path or
     `workspace/launcher-roms`).
@@ -75,18 +75,30 @@ tooltip and the log — there is no manual "check" button).
     with `autoLaunch: true` and the matching `romFile` (the pack CLI writes the
     catalogue with `--auto-launch`; the launcher injects the embedded-data path) +
     the SMDH cover replacing every template `AppIcon*.png` (NSImage), zipped with
-    `ditto` into `workspace/exports/<build-slug>-<version>-unsigned.ipa` (or the
+    `ditto` into `workspace/exports/<TITLEID>-<English SMDH name>.ipa` (or the
     chosen save path). A missing ROM or an unsupported extension fails with a clear
     error; the staged bundle is checked to contain exactly one non-empty `Roms/` file
     named by the catalogue before zipping. The output is roughly GamePack + ROM in
     size.
+  Both files are named `<TITLEID>-<English SMDH name><ext>` (no build slug, version
+  or `unsigned` suffix) and the success message is just `Exported: <path>`.
+  After signing and installing the single-game IPA, the home screen shows the game's
+  own localized name (the launcher rewrites `CFBundleDisplayName`/`CFBundleName` and
+  adds `InfoPlist.strings` files for every SMDH `displayNames` language, English
+  always present), the app opens
+  straight into the game with no library or home page, a data-validation failure
+  shows a dedicated error screen with Try again / Export logs, and the in-game menu
+  omits Per-Application Settings and Close game because there is nothing to return to
+  and no second game to override.
   In both cases the sheet states that the file can contain the user's own game data,
   so it stays in the local portable workspace and must never be uploaded or shared;
   the IPA is unsigned and the user must sign it with Sideloadly/AltStore. Nothing is
   signed, installed or uploaded by the launcher. Importing a `.32a` is validated by
   the Rust CLI (`3ds2apple-pack builds`) before anything is installed into
   `workspace/packages/<TITLEID>/`; an existing package asks for confirmation before
-  it is replaced.
+  it is replaced. The imported entry's ROM path is the imported `.32a` itself; later
+  builds, deploys and IPA exports resolve the ROM packed inside it, so the original
+  ROM file is no longer needed.
   The launcher **Settings** sheet also holds the **高级构建设置 / Advanced build
   settings** card (moved from Deploy): optimization level (O1/O2/O3/Oz, default O2),
   LTO (default off) and fast-math (default off; it changes guest floating-point
@@ -128,7 +140,7 @@ About panel. Regenerate it with `bash scripts/make-app-icon.sh`.
 Release builds are universal (arm64 + x86_64). Headless modes used on the build VM:
 
     BIN=build/Build/Products/Release/3ds2apple-launcher.app/Contents/MacOS/3ds2apple-launcher
-    "$BIN" --selfcheck                                    # 207 logic/flow/i18n/shell-runtime checks, exit 0/1
+    "$BIN" --selfcheck                                    # 212 logic/flow/i18n/shell-runtime checks, exit 0/1
     "$BIN" --screenshot-dir screenshots --mock --lang all  # offscreen non-game UI PNGs
 
 `scripts/vm-build.sh` does the whole Release build, the self-checks, the
