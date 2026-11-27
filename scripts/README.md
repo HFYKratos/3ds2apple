@@ -255,6 +255,96 @@ Large generated files can exhaust memory on an 8 GB build VM:
 The full release policy (Windows/macOS/Linux packages, bilingual release notes,
 immutable tags) is in [CONTRIBUTING.md](../CONTRIBUTING.md#release-policy).
 
+## Device automation (WDA)
+
+`scripts/device/` holds thin, documented wrappers around
+[pymobiledevice3](https://github.com/doronz88/pymobiledevice3) for touch/screenshot
+verification on the local test iPhone through WebDriverAgent (WDA). They are
+developer/QA tooling only: they never touch release assets, CI or the test
+fixtures, and they are not needed to build or release the product.
+
+### Prerequisites
+
+- A Linux build host with `usbmuxd` and exactly **one** USB-connected, unlocked
+  and trusted iPhone/iPad. pymobiledevice3 auto-selects it; no UDID is
+  configured, printed or committed by these scripts.
+- pymobiledevice3 11.x (tested with 11.65.0). If it is not in `PATH`, point
+  `PYMOBILEDEVICE3` at the command, including arguments and a virtualenv
+  interpreter if needed:
+  `export PYMOBILEDEVICE3="/home/kratos/pmd3/bin/python -m pymobiledevice3"`
+- The WDA XCTest runner is installed once by the task-6 setup as the app
+  `com.kratos.wda.xctrunner` (Appium **WebDriverAgent v16.15.3**, BSD-3-Clause,
+  Copyright (c) 2015-present Facebook, Inc.; WDA is a local test tool and is
+  never part of a release package or a commit).
+- Developer Mode and the DeveloperDiskImage are handled by pymobiledevice3;
+  the phone must stay connected and unlocked while a command runs.
+
+### Quick start
+
+```bash
+# Only when pymobiledevice3 is not on PATH:
+export PYMOBILEDEVICE3="/home/kratos/pmd3/bin/python -m pymobiledevice3"
+
+scripts/device/start-wda.sh          # background runner; waits until WDA answers
+scripts/device/wda-status.sh         # status JSON (ready=true, state=success)
+scripts/device/wda-launch.sh com.kratos.3ds2apple
+scripts/device/wda-list.sh --hittable-only   # selectors: accessibility ids/labels
+scripts/device/wda-tap.sh game-card
+scripts/device/wda-shot.sh /tmp/3ds2apple-wda/library.png
+scripts/device/wda-swipe.sh 200 600 200 320 --duration 0.3
+scripts/device/wda-swipe.sh 190 400 190 400 --duration 0.1   # same-point = coordinate tap
+scripts/device/stop-wda.sh
+```
+
+| Script | Purpose |
+|---|---|
+| `start-wda.sh` | Start the installed WDA XCTest runner in the background (`pymobiledevice3 developer dvt xcuitest <runner>`), wait until `wda status` answers, record the pid/log; rolls the runner back and fails when it does not become reachable |
+| `stop-wda.sh` | Stop that runner (SIGTERM, then SIGKILL after the timeout); only processes whose command line really is the configured runner are touched |
+| `wda-status.sh` | Print the WDA server status JSON |
+| `wda-shot.sh` | Screenshot to `<OUT.png>` or `<WDA_LOG_DIR>/shot-<timestamp>.png` |
+| `wda-tap.sh` | Tap an element by `accessibility id` (default), `name`, `label` or `xpath` (`--using`) |
+| `wda-swipe.sh` | Swipe between two screen points; a same-point short swipe is the coordinate-tap form |
+| `wda-list.sh` | List tappable WDA elements (`--hittable-only`, `--with-rect`, `--types`) |
+| `wda-launch.sh` | Launch an app by bundle id and print the WDA session id |
+
+Every script supports `-h`/`--help`; exit codes are 0 = success, 1 = device/WDA
+failure, 2 = usage/tooling error.
+
+### Environment
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PYMOBILEDEVICE3` | `pymobiledevice3` | pymobiledevice3 command; may include arguments (e.g. `"/path/venv/bin/python -m pymobiledevice3"`) |
+| `WDA_PORT` | `8100` | WDA server port on the device |
+| `WDA_RUNNER` | `com.kratos.wda.xctrunner` | installed WDA XCTest runner bundle id |
+| `WDA_LOG_DIR` | `/tmp/3ds2apple-wda` | runner log, pid file and default screenshot directory |
+| `WDA_HTTP_TIMEOUT` | `10` | default pymobiledevice3 `--timeout` seconds |
+| `WDA_START_TIMEOUT` | `90` | start-wda.sh readiness timeout seconds |
+| `WDA_STOP_TIMEOUT` | `10` | stop-wda.sh graceful-stop timeout seconds |
+
+All commands also accept `--port` (and the wrappers `--timeout`), which override
+the environment defaults.
+
+### Notes and safety
+
+- One WDA session at a time: coordinate with whoever else is driving the phone;
+  do not start a second runner while a session is active.
+- Logs, pid files and screenshots default to `/tmp/3ds2apple-wda`. The helpers
+  refuse output paths inside this repository, and screenshots/game data must
+  never be committed.
+- No Apple ID, password, 2FA code, UDID or signing key is handled, printed or
+  stored by these scripts.
+- **Free-Apple-ID 7-day re-sign:** the WDA runner installed with a free Apple ID
+  expires after 7 days (the app stops launching). Re-sign and overwrite-install
+  the same bundle id `com.kratos.wda.xctrunner` with the one-time task-6
+  pipeline (Xcode automatic signing, or the rcodesign-signed `.xctest` plus
+  `plumesign sign --custom-identifier com.kratos.wda.xctrunner`), then run
+  `start-wda.sh` again. Signing material and Apple credentials stay outside the
+  repository (see the task-6 handoff in `.internal/PROJECT_HANDOFF.md`).
+- These scripts are not exercised by `scripts/tests` or CI (no phone there); a
+  device smoke test is `start-wda.sh` → `wda-status.sh` → `wda-shot.sh` →
+  `wda-tap.sh` with the phone connected.
+
 ## Quick start (shell)
 
 ```bash
