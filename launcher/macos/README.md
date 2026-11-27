@@ -65,21 +65,23 @@ tooltip and the log — there is no manual "check" button).
   Remove** with its confirmation alert; the buttons sit in a wrapping row so the
   card stays inside the minimum window width. **Export** opens a sheet where the
   user picks the format and destination:
-  - **`.32a` 构建包 / `.32a` build package** — writes `workspace/builds/<TITLEID>-<English SMDH name>.32a`
-    (or the chosen folder): the GamePack, GameInfo, optional cover and the user's ROM
-    when the CLI can find one (package copy, queued ROM path or
-    `workspace/launcher-roms`).
-  - **未签名单游戏 IPA / Unsigned single-game IPA** — composes one unsigned,
-    self-contained single-game IPA from the pinned shell template: the GamePack + the
-    user's own ROM embedded as `Roms/<TITLEID>.<cci|3ds|ncch|cxi>` + a `GameCatalog.json`
-    with `autoLaunch: true` and the matching `romFile` (the pack CLI writes the
-    catalogue with `--auto-launch`; the launcher injects the embedded-data path) +
-    the SMDH cover replacing every template `AppIcon*.png` (NSImage), zipped with
-    `ditto` into `workspace/exports/<TITLEID>-<English SMDH name>.ipa` (or the
+  - **已完成构建包 / Finished build package** (`.32a`) — writes
+    `workspace/export/32a/<TITLEID>-<English SMDH name>.32a` (or the chosen folder):
+    the GamePack, GameInfo, optional cover and the user's ROM when the CLI can find one
+    (package copy, queued ROM path or `workspace/launcher-roms`).
+  - **可自签安装包 / Ready-to-sign package** (unsigned single-game IPA) — composes one
+    unsigned, self-contained single-game IPA from the pinned shell template: the
+    GamePack + the user's own ROM embedded as `Roms/<TITLEID>.<cci|3ds|ncch|cxi>` + a
+    `GameCatalog.json` with `autoLaunch: true` and the matching `romFile` (the pack CLI
+    writes the catalogue with `--auto-launch`; the launcher injects the embedded-data
+    path) + the SMDH cover replacing every template `AppIcon*.png` (NSImage), zipped
+    with `ditto` into `workspace/export/ipa/<TITLEID>-<English SMDH name>.ipa` (or the
     chosen save path). A missing ROM or an unsupported extension fails with a clear
     error; the staged bundle is checked to contain exactly one non-empty `Roms/` file
     named by the catalogue before zipping. The output is roughly GamePack + ROM in
     size.
+  The sheet shows only these format labels, the destination and the warnings; the
+  long per-format descriptions were removed.
   Both files are named `<TITLEID>-<English SMDH name><ext>` (no build slug, version
   or `unsigned` suffix) and the success message is just `Exported: <path>`.
   After signing and installing the single-game IPA, the home screen shows the game's
@@ -99,6 +101,9 @@ tooltip and the log — there is no manual "check" button).
   it is replaced. The imported entry's ROM path is the imported `.32a` itself; later
   builds, deploys and IPA exports resolve the ROM packed inside it, so the original
   ROM file is no longer needed.
+  The macOS launcher keeps the Export dialog and saved-state changes only in this
+  round: the Windows launcher's **Refresh signing** button is not implemented here
+  yet, so deploy again to renew a free Apple ID signature.
   The launcher **Settings** sheet also holds the **高级构建设置 / Advanced build
   settings** card (moved from Deploy): optimization level (O1/O2/O3/Oz, default O2),
   LTO (default off) and fast-math (default off; it changes guest floating-point
