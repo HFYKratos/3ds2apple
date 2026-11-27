@@ -26,7 +26,7 @@ export PATH=/usr/local/bin:$PATH
 CONFIG="${CONFIG:-Release}"
 LOG=/tmp/zl-launcher-build.log
 VERSION="$(sed -n 's/^        MARKETING_VERSION: "\(.*\)"/\1/p' project.yml | head -1)"
-[ -n "$VERSION" ] || VERSION="0.3.0"
+[ -n "$VERSION" ] || VERSION="0.3.1"
 # The bundle version stays numeric (CFBundleShortVersionString); the package file
 # name can carry a pre-release suffix (THREEDS2APPLE_PACKAGE_VERSION).
 PACKAGE_VERSION="${THREEDS2APPLE_PACKAGE_VERSION:-$VERSION}"
