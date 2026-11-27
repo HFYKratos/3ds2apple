@@ -334,3 +334,39 @@ does not include ROMs or keys.
 - Scripts never run `git add` and refuse to overwrite tracked files.
 - `ROM/`, `IPA/`, `out/`, `build/`, `third_party/` and `.worktrees/` are
   local-only and gitignored.
+
+## Build host maintenance
+
+The CachyOS build host and its macOS VM are shared state; recover them with the
+checked-in script instead of ad-hoc qemu commands:
+
+```bash
+# from the build host project checkout
+bash ~/project/3ds2apple/scripts/vm-restart-8cpu.sh
+# it powers the VM down (ACPI, then quit if needed), starts boot-macos26.sh,
+# waits for SSH on 127.0.0.1:2222 and runs caffeinate; check /tmp/vm-boot-new.log
+# and /home/kratos/macos-vm/serial-upgrade.log if it does not come up.
+```
+
+## When GitHub downloads stall
+
+Direct GitHub release downloads from the build host can crawl or hang. Do **not**
+downgrade a pinned tool to work around it. Try a public GitHub release mirror
+first (the exact upstream asset path is appended after the mirror prefix), keep
+the expected SHA-256, and verify it before extracting:
+
+```bash
+# exact asset, downloaded through a mirror prefix:
+curl -fL --retry 2 --max-time 600 \
+  -o /tmp/LLVM-23.1.6-Linux-X64.tar.xz \
+  https://gh-proxy.com/https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.6/LLVM-23.1.6-Linux-X64.tar.xz
+sha256sum /tmp/LLVM-23.1.6-Linux-X64.tar.xz
+# mirrors seen working: https://gh-proxy.com/ , https://ghfast.top/ , https://ghproxy.net/
+```
+
+If the host has a Clash/HTTP proxy, export `HTTPS_PROXY` (and usually
+`HTTP_PROXY`) for the download command or its shell instead of changing tool
+versions. A local Clash port is not reachable from the remote build host unless
+a tunnel/port-forward is opened; mirrors are the fallback when it is not.
+Pin the downloaded version in the relevant manifest/PINS and record its SHA-256
+and the mirror URL in the task handoff, so later builds do not silently drift.

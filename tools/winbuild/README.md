@@ -341,3 +341,25 @@ in `llvm-manifest.json`, and shown as a readiness row. Tests: command
 construction/environment, missing-tool errors, recompile/link failures, invalid
 Mach-O rejection (`LocalWinbuildPackProviderTests`; the full launcher suite is
 212 tests). See [launcher/windows/README.md](../../launcher/windows/README.md).
+
+## Downloading the pinned LLVM when GitHub stalls
+
+GitHub release downloads from the build host can crawl or time out. Keep the
+pinned version (do not downgrade) and use a mirror prefix around the same
+upstream asset URL:
+
+```bash
+curl -fL --retry 2 --max-time 600 \
+  -o /tmp/LLVM-23.1.6-Linux-X64.tar.xz \
+  https://gh-proxy.com/https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.6/LLVM-23.1.6-Linux-X64.tar.xz
+sha256sum /tmp/LLVM-23.1.6-Linux-X64.tar.xz
+# mirrors: https://gh-proxy.com/ , https://ghfast.top/ , https://ghproxy.net/
+```
+
+For the 0.3.0 Linux P2 work the exact Linux X64 tarball was downloaded through
+`gh-proxy.com`: 2,014,723,508 B,
+SHA-256 `bd4d1c434ff69ef06d19e7934c04708da677e5f2eb51f5bcf052ab91818f0094`.
+Extracted `bin/clang`, `bin/ld64.lld`, `bin/llvm-ar` and
+`lib/clang/23/include` report 23.1.6. If a Clash/HTTP proxy is available on the
+host, `HTTPS_PROXY`/`HTTP_PROXY` can be used; a local Clash on another machine
+needs a tunnel/port-forward. Always re-check the SHA-256 before extracting.
