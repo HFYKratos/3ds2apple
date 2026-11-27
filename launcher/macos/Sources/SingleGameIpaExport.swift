@@ -39,25 +39,10 @@ final class SingleGameIpaExporter {
         self.runner = runner
     }
 
-    /// "<build-slug>-<titleid last 8>-<version>-unsigned.ipa", all ASCII.
-    static func outputFileName(displayName: String, titleID: String, version: String) -> String {
-        let suffix = String(titleID.suffix(8)).lowercased()
-        var slug = ""
-        for character in displayName.lowercased() {
-            if character.isASCII && (character.isLetter || character.isNumber) {
-                slug.append(character)
-            } else if slug.last != "-" {
-                slug.append("-")
-            }
-        }
-        while slug.hasSuffix("-") {
-            slug.removeLast()
-        }
-        if slug.isEmpty {
-            slug = "game"
-        }
-        let safeVersion = version.filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || $0 == "_" }
-        return slug + "-" + suffix + "-" + (safeVersion.isEmpty ? "0.0.0" : safeVersion) + "-unsigned.ipa"
+    /// "TITLE_ID-English game name.ipa" (0.2.2-beta4; no slug/version/"unsigned").
+    /// A user-typed save file name is kept verbatim by the caller.
+    static func outputFileName(displayName: String, titleID: String) -> String {
+        GameFileNaming.ipaFileName(displayName: displayName, titleID: titleID)
     }
 
     /// ROM extensions the runtime boots and the builder catalogue accepts.
@@ -73,6 +58,7 @@ final class SingleGameIpaExporter {
         packPath: String,
         titleID: String,
         displayName: String,
+        displayNames: [String: String]? = nil,
         coverPath: String?,
         romPath: String,
         version: String,
@@ -161,6 +147,10 @@ final class SingleGameIpaExporter {
                 exitCode: nil
             )
         }
+
+        // 0.2.2-beta4: rename the home-screen app to the game and localize it from
+        // the SMDH displayNames (en.lproj + every language; base Info.plist = English).
+        try AppDisplayNameRewriter.rewrite(appRoot: appRoot, displayName: displayName, displayNames: displayNames)
 
         let frameworks = (appRoot as NSString).appendingPathComponent("Frameworks")
         try? fileManager.createDirectory(atPath: frameworks, withIntermediateDirectories: true)
@@ -276,7 +266,7 @@ final class SingleGameIpaExporter {
         warnings.append("This IPA contains your own game data (" + romRelative + ", "
             + FileProbe.formatBytes(romBytes) + "). Keep it local, never upload or share it, and sign it yourself (Sideloadly/AltStore).")
 
-        let defaultName = Self.outputFileName(displayName: displayName, titleID: titleID, version: version)
+        let defaultName = Self.outputFileName(displayName: displayName, titleID: titleID)
         let fileName = (outputFileName?.isEmpty == false) ? outputFileName! : defaultName
         if !fileName.lowercased().hasSuffix(".ipa") {
             throw LauncherFailure(

@@ -70,9 +70,12 @@ public sealed class LibraryBuildService
                     "The Windows local build toolchain is not available, so no game can be compiled."));
                 continue;
             }
-            if (!File.Exists(entry.RomPath))
+            // A game imported from a .32a stores the package in RomPath; the build needs
+            // the package's GameRom copy (the resolver also pulls it out of the archive).
+            var rom = GameRomResolver.Resolve(entry, RomCacheDirectory, out var romError);
+            if (rom is null)
             {
-                results.Add(Fail(entry, name, RomMissingCode, "The ROM for " + name + " is missing: " + entry.RomPath));
+                results.Add(Fail(entry, name, RomMissingCode, romError ?? ("The ROM for " + name + " is missing.")));
                 continue;
             }
 
@@ -97,7 +100,7 @@ public sealed class LibraryBuildService
             }
 
             var outcome = await _provider.BuildAsync(
-                new PackBuildRequest(entry.TitleID, name, entry.ProductCode, entry.RomPath, _workspace.WorkDirectory, _workspace.BuildOptions),
+                new PackBuildRequest(entry.TitleID, name, entry.ProductCode, rom.Path, _workspace.WorkDirectory, _workspace.BuildOptions),
                 new ScaledProgress(progress, index, total),
                 line => log?.Invoke("[build] " + line),
                 cancellationToken).ConfigureAwait(false);
@@ -133,7 +136,7 @@ public sealed class LibraryBuildService
             var compatibility = _compatibility is null
                 ? null
                 : await _compatibility.ResolveAsync(cancellationToken).ConfigureAwait(false);
-            entry.Build = await BuildArtifacts.CaptureAsync(outcome, compatibility, entry.RomPath, builtAt, cancellationToken).ConfigureAwait(false);
+            entry.Build = await BuildArtifacts.CaptureAsync(outcome, compatibility, rom.Path, builtAt, cancellationToken).ConfigureAwait(false);
             _workspace.SaveState();
             log?.Invoke("build: " + entry.TitleID + " ok -> " + entry.PackPath
                         + " (compat " + entry.Build.BuildCompatShort + ", ROM sha256 " + BuildCachePolicy.ShortHash(entry.Build.RomSha256)
@@ -161,14 +164,22 @@ public sealed class LibraryBuildService
                 : new CachedBuild(packPath, entry.Build, "the existing GamePack is reused");
         }
         var compatibility = await _compatibility.ResolveAsync(cancellationToken).ConfigureAwait(false);
-        var romSha256 = BuildFingerprint.MatchesUnchangedRom(entry.Build, entry.RomPath)
+        var rom = GameRomResolver.Resolve(entry, RomCacheDirectory, out _);
+        if (rom is null)
+        {
+            return new CachedBuild(null, null, "the game's ROM is missing");
+        }
+        var romSha256 = BuildFingerprint.MatchesUnchangedRom(entry.Build, rom.Path)
             ? entry.Build!.RomSha256
-            : await FileHashes.Sha256Async(entry.RomPath, cancellationToken).ConfigureAwait(false);
+            : await FileHashes.Sha256Async(rom.Path, cancellationToken).ConfigureAwait(false);
         var decision = BuildCachePolicy.Evaluate(entry.Build, compatibility.BuildCompatVersion, romSha256, packPath);
         return decision.Reuse
             ? new CachedBuild(packPath, entry.Build, decision.Detail)
             : new CachedBuild(null, null, decision.Detail);
     }
+
+    /// <summary>Launcher-owned cache for ROMs pulled out of imported .32a files.</summary>
+    private string RomCacheDirectory => Path.Combine(_workspace.WorkDirectory, "rom-cache");
 
     private LibraryBuildItemResult Fail(LibraryEntry entry, string name, string code, string message)
     {

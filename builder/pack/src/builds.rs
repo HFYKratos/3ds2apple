@@ -421,11 +421,40 @@ pub fn pack_file_name(title_id: &str) -> String {
     format!("{GAME_PACK_PREFIX}{title_id}.dylib")
 }
 
-/// File name of a .32a for one game: the build slug plus the .32a extension.
+/// File-name component for a game name: Windows/macOS-invalid characters become
+/// '_', trailing dots/spaces are trimmed (Windows refuses them) and an empty name
+/// falls back to "game". The component keeps readable non-ASCII names (CJK) and is
+/// capped at 120 UTF-8 bytes so TITLE_ID-name.ext stays under the 255-byte limit.
+pub fn sanitize_file_name(name: &str) -> String {
+    fn is_invalid(character: char) -> bool {
+        character.is_control() || matches!(character, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
+    }
+    let mut cleaned = String::new();
+    let mut bytes = 0usize;
+    for character in name.trim().chars() {
+        let mapped = if is_invalid(character) { '_' } else { character };
+        let added = mapped.len_utf8();
+        if bytes + added > 120 {
+            break;
+        }
+        bytes += added;
+        cleaned.push(mapped);
+    }
+    let cleaned = cleaned.trim_end_matches(['.', ' ']).to_string();
+    if cleaned.is_empty() {
+        "game".to_string()
+    } else {
+        cleaned
+    }
+}
+
+/// File name of a .32a for one game: TITLE_ID-English display name.32a
+/// (0.2.2-beta4; no build slug). The single-game IPA uses the same base name.
 pub fn build_package_file_name(display_name: &str, title_id: &str) -> String {
     format!(
-        "{}.{}",
-        plan::slug_for(display_name, title_id),
+        "{}-{}.{}",
+        title_id.trim().to_uppercase(),
+        sanitize_file_name(display_name),
         BUILD_PACKAGE_EXTENSION
     )
 }
@@ -1596,8 +1625,13 @@ mod tests {
         assert!(!is_iso8601_utc("2026-01-02T03:04:05"));
         assert_eq!(
             build_package_file_name("Example Game", TITLE_ID),
-            "example-game-00055e00.32a"
+            "0004000000055E00-Example Game.32a"
         );
+        assert_eq!(
+            sanitize_file_name("Example/Game: Demo?*"),
+            "Example_Game_ Demo__"
+        );
+        assert_eq!(sanitize_file_name("  "), "game");
         assert_eq!(
             pack_file_name(TITLE_ID),
             "GamePack-0004000000055E00.dylib"
@@ -1663,7 +1697,7 @@ mod tests {
         let build = &report.builds[0];
         assert!(build.rom_included);
         assert!(Path::new(&build.path).is_file());
-        assert!(build.path.ends_with("example-game-00055e00.32a"));
+        assert!(build.path.ends_with("0004000000055E00-Example Game.32a"));
         assert_eq!(build.title_id, TITLE_ID);
         assert!(report.output_dir.ends_with("builds"));
 

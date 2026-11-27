@@ -134,21 +134,26 @@ public sealed class LauncherGameDataPusher : IGameDataPusher
 
     public LauncherGameDataPusher(PushService pushService) => _pushService = pushService;
 
-    public Task<GamePushPlan> CreatePlanAsync(LibraryEntry entry, string stagingDirectory, Action<string>? log, CancellationToken cancellationToken) =>
-        GamePushPlan.CreateAsync(
+    public Task<GamePushPlan> CreatePlanAsync(LibraryEntry entry, string stagingDirectory, Action<string>? log, CancellationToken cancellationToken)
+    {
+        // A game imported from a .32a stores the package in RomPath; push the embedded
+        // GameRom copy instead of the archive itself.
+        var rom = GameRomResolver.Resolve(entry, Path.Combine(Path.GetTempPath(), "3ds2apple-rom-cache"), out _);
+        return GamePushPlan.CreateAsync(
             stagingDirectory,
             entry.TitleID,
             DisplayName(entry),
             entry.ProductCode,
             LauncherInfo.GamePackAbiVersion,
             entry.PackPath,
-            entry.RomPath,
+            rom?.Path ?? entry.RomPath,
             entry.DisplayNames,
             entry.Publisher,
             entry.Region,
             entry.CoverPath,
             log,
             cancellationToken);
+    }
 
     public Task<PushOutcome> PushAsync(
         GamePushPlan plan,
@@ -389,15 +394,16 @@ public sealed class DeployOrchestrator
                         "The Windows local build toolchain is not available, so no game can be compiled.",
                         LocalBuildFix, games);
                 }
-                if (!File.Exists(entry.RomPath))
+                var rom = GameRomResolver.Resolve(entry, RomCacheDirectory, out var romError);
+                if (rom is null)
                 {
                     return Fail(progress, DeployStepKind.Build, "rom_missing",
-                        "The ROM for " + displayName + " is gone: " + entry.RomPath + ".",
+                        romError ?? ("The ROM for " + displayName + " is missing."),
                         "Re-import the ROM, then press Retry.", games);
                 }
                 var buildProgress = new BuildProgressAdapter(progress, entry.TitleID, displayName, index, buildTargets.Count);
                 var outcome = await _buildProvider.BuildAsync(
-                    new PackBuildRequest(entry.TitleID, displayName, entry.ProductCode, entry.RomPath, _workspace.WorkDirectory, _workspace.BuildOptions),
+                    new PackBuildRequest(entry.TitleID, displayName, entry.ProductCode, rom.Path, _workspace.WorkDirectory, _workspace.BuildOptions),
                     buildProgress,
                     line => log?.Invoke("[build] " + line),
                     cancellationToken).ConfigureAwait(false);
@@ -835,20 +841,23 @@ public sealed class DeployOrchestrator
     private long? LocalRomBytes(string titleId)
     {
         var entry = _workspace.Find(titleId);
-        if (entry is null || string.IsNullOrWhiteSpace(entry.RomPath))
+        if (entry is null)
         {
             return null;
         }
         try
         {
-            var info = new FileInfo(entry.RomPath);
-            return info.Exists ? info.Length : null;
+            // For a .32a-imported game this is the embedded GameRom, not the archive.
+            return GameRomResolver.Resolve(entry, RomCacheDirectory, out _)?.Bytes;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             return null;
         }
     }
+
+    /// <summary>Launcher-owned cache for ROMs pulled out of imported .32a files.</summary>
+    private string RomCacheDirectory => Path.Combine(_workspace.WorkDirectory, "rom-cache");
 
     /// <summary>
     /// Resolve the GamePack of an installed game that must stay inside a recomposed app.
@@ -871,7 +880,8 @@ public sealed class DeployOrchestrator
             log?.Invoke("compose: keeping installed game " + entry.TitleID + " with its existing GamePack (not rebuilt: " + cached.Detail + ")");
             return new ComposedPack(entry.TitleID, displayName, entry.ProductCode, LauncherInfo.GamePackAbiVersion, entry.PackPath);
         }
-        if (_buildProvider is null || !File.Exists(entry.RomPath))
+        var rom = _buildProvider is null ? null : GameRomResolver.Resolve(entry, RomCacheDirectory, out _);
+        if (_buildProvider is null || rom is null)
         {
             log?.Invoke("compose: installed game " + entry.TitleID + " has no usable GamePack and no ROM to rebuild it");
             return null;
@@ -879,7 +889,7 @@ public sealed class DeployOrchestrator
         try
         {
             var outcome = await _buildProvider.BuildAsync(
-                new PackBuildRequest(entry.TitleID, displayName, entry.ProductCode, entry.RomPath, _workspace.WorkDirectory, _workspace.BuildOptions),
+                new PackBuildRequest(entry.TitleID, displayName, entry.ProductCode, rom.Path, _workspace.WorkDirectory, _workspace.BuildOptions),
                 progress: null,
                 line => log?.Invoke("[build] " + line),
                 cancellationToken).ConfigureAwait(false);
@@ -969,14 +979,15 @@ public sealed class DeployOrchestrator
                 ? new CachedBuild(null, null, null, "no built GamePack exists")
                 : new CachedBuild(packPath, entry.Build?.BuildCompatShort, entry.Build?.RomSha256, "the existing GamePack is reused");
         }
-        if (!File.Exists(entry.RomPath))
+        var rom = GameRomResolver.Resolve(entry, RomCacheDirectory, out _);
+        if (rom is null)
         {
             return new CachedBuild(null, null, null, "the ROM file is missing");
         }
         var compatibility = await _buildCompatibility.ResolveAsync(cancellationToken).ConfigureAwait(false);
-        var romSha256 = BuildFingerprint.MatchesUnchangedRom(entry.Build, entry.RomPath)
+        var romSha256 = BuildFingerprint.MatchesUnchangedRom(entry.Build, rom.Path)
             ? entry.Build!.RomSha256
-            : await FileHashes.Sha256Async(entry.RomPath, cancellationToken).ConfigureAwait(false);
+            : await FileHashes.Sha256Async(rom.Path, cancellationToken).ConfigureAwait(false);
         var decision = BuildCachePolicy.Evaluate(entry.Build, compatibility.BuildCompatVersion, romSha256, packPath);
         return decision.Reuse
             ? new CachedBuild(packPath, compatibility.ShortVersion, romSha256, decision.Detail)
@@ -989,7 +1000,8 @@ public sealed class DeployOrchestrator
         var compatibility = _buildCompatibility is null
             ? null
             : await _buildCompatibility.ResolveAsync(cancellationToken).ConfigureAwait(false);
-        return await BuildArtifacts.CaptureAsync(outcome, compatibility, entry.RomPath, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+        var rom = GameRomResolver.Resolve(entry, RomCacheDirectory, out _);
+        return await BuildArtifacts.CaptureAsync(outcome, compatibility, rom?.Path ?? entry.RomPath, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
     }
 
     private sealed record CachedBuild(string? PackPath, string? CompatibilityShort, string? RomSha256, string Detail);

@@ -216,7 +216,7 @@ public sealed class BuildPackageServiceTests
         });
         var service = new BuildPackageService(workspace, cli);
 
-        var packageFile = temp.Bytes("example-game-00055e00.32a", new byte[] { 1, 2, 3 });
+        var packageFile = temp.Bytes(TitleID + "-Example Game.32a", new byte[] { 1, 2, 3 });
         var outcome = await service.ImportAsync(packageFile, replace: false);
 
         Assert.True(outcome.Ok, outcome.Error);
@@ -236,6 +236,9 @@ public sealed class BuildPackageServiceTests
         Assert.Equal("built", entry!.State);
         Assert.Equal(Path.Combine(workspace.OutRoot, "packages", TitleID, "GamePack.dylib"), entry.PackPath);
         Assert.Equal("Example Game", entry.DisplayName);
+        // 0.2.2-beta4: the imported .32a is the entry's RomPath (persisted); the ROM
+        // consumers resolve its embedded GameRom instead.
+        Assert.Equal(Path.GetFullPath(packageFile), entry.RomPath);
         var reloaded = LauncherWorkspace.Open(temp.Path);
         Assert.NotNull(reloaded.Find(TitleID));
     }
@@ -251,7 +254,7 @@ public sealed class BuildPackageServiceTests
                 : new ProcessResult(0, PackageListJson(packageDir), string.Empty, false, true));
         var service = new BuildPackageService(workspace, cli);
 
-        var packageFile = temp.Bytes("example-game-00055e00.32a", new byte[] { 1, 2, 3 });
+        var packageFile = temp.Bytes(TitleID + "-Example Game.32a", new byte[] { 1, 2, 3 });
         var outcome = await service.ImportAsync(packageFile, replace: true);
 
         Assert.True(outcome.Ok, outcome.Error);
@@ -267,7 +270,7 @@ public sealed class BuildPackageServiceTests
         var (workspace, cli, _) = Create(temp, _ => new ProcessResult(1, string.Empty, conflict, false, true));
         var service = new BuildPackageService(workspace, cli);
 
-        var packageFile = temp.Bytes("example-game-00055e00.32a", new byte[] { 1, 2, 3 });
+        var packageFile = temp.Bytes(TitleID + "-Example Game.32a", new byte[] { 1, 2, 3 });
         var outcome = await service.ImportAsync(packageFile, replace: false);
 
         Assert.False(outcome.Ok);
