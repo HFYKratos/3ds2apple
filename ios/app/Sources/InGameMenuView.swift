@@ -60,6 +60,8 @@ struct InGameMenuView: View {
         case virtualControls
         case saveState
         case screenLayout
+        /// Multi-game shells only: a single-game IPA has no other game to
+        /// override, so this page is never pushed there (see rootContent).
         case perApplication
         case cheats
     }
@@ -109,6 +111,12 @@ struct InGameMenuView: View {
     private let rowHorizontalPadding: CGFloat = 16
     private let iconTitleSpacing: CGFloat = 12
     private let cardSpacing: CGFloat = 20
+
+    /// A single-game IPA (GameCatalog.json "autoLaunch") has no library to
+    /// return to and no second game whose settings could differ, so its in-game
+    /// menu drops "Per-Application Settings" and "Close game". A normal
+    /// multi-game shell keeps both.
+    private var isSingleGameBuild: Bool { GameCatalog.bundled.autoLaunch }
 
     var body: some View {
         GeometryReader { geometry in
@@ -251,7 +259,7 @@ struct InGameMenuView: View {
         case .virtualControls: return L10n.tr("Virtual controls")
         case .saveState: return L10n.tr("Save state")
         case .screenLayout: return L10n.tr("Screen layout")
-        case .perApplication: return L10n.tr("Per-Application Settings")
+        case .perApplication: return isSingleGameBuild ? "" : L10n.tr("Per-Application Settings")
         case .cheats: return L10n.tr("Cheats")
         }
     }
@@ -327,7 +335,8 @@ struct InGameMenuView: View {
         case .virtualControls: virtualControlsContent
         case .saveState: saveStateContent
         case .screenLayout: screenLayoutContent
-        case .perApplication: perApplicationContent
+        case .perApplication:
+            if !isSingleGameBuild { perApplicationContent }
         case .cheats: cheatsContent
         }
     }
@@ -383,21 +392,25 @@ struct InGameMenuView: View {
                           tint: tintGray,
                           identifier: "menu-global-settings",
                           action: onSettings)
-                rowDivider
-                actionRow(L10n.tr("Per-Application Settings"),
-                          systemImage: "app.badge",
-                          tint: tintGreen,
-                          identifier: "menu-per-application") {
-                    pushPage(.perApplication)
+                if !isSingleGameBuild {
+                    rowDivider
+                    actionRow(L10n.tr("Per-Application Settings"),
+                              systemImage: "app.badge",
+                              tint: tintGreen,
+                              identifier: "menu-per-application") {
+                        pushPage(.perApplication)
+                    }
                 }
             }
-            rowGroup {
-                actionRow(L10n.tr("Close game"),
-                          systemImage: "power",
-                          tint: accentRed,
-                          identifier: "menu-close-game",
-                          destructive: true,
-                          action: onExit)
+            if !isSingleGameBuild {
+                rowGroup {
+                    actionRow(L10n.tr("Close game"),
+                              systemImage: "power",
+                              tint: accentRed,
+                              identifier: "menu-close-game",
+                              destructive: true,
+                              action: onExit)
+                }
             }
         }
     }

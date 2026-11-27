@@ -249,6 +249,7 @@
 "Start Anyway" = "Start Anyway";
 "Starting %@…" = "Starting %@…";
 "Starting Zakuro…" = "Starting Zakuro…";
+"Starting the game…" = "Starting the game…";
 "Storage" = "Storage";
 "Stretch" = "Stretch";
 "Summary" = "Summary";
@@ -769,6 +770,7 @@
 "This build is the latest release." = "This build is the latest release.";
 "A newer release is available on GitHub." = "A newer release is available on GitHub.";
 "Could not reach GitHub. Try again later." = "Could not reach GitHub. Try again later.";
+"Try again" = "Try again";
 "Turbo limit" = "Turbo limit";
 "Turbo speed" = "Turbo speed";
 "Default speed" = "Default speed";
