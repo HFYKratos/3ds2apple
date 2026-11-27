@@ -5,7 +5,7 @@ namespace ThreeDsTwoApple.Launcher.Core.BuildPipeline;
 /// <summary>
 /// Portable file-name rules for both Library exports (0.2.2-beta4):
 ///   .32a  -> TITLE_ID-English name.32a (written by the Rust pack CLI)
-///   IPA   -> TITLE_ID-<current system language name>.ipa (written here)
+///   IPA   -> TITLE_ID-English name.ipa (same base name as .32a; written here)
 /// Illegal file-name characters become '_'; the title ID is upper-case.
 /// </summary>
 public static class ExportNaming
