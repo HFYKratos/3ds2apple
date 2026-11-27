@@ -33,10 +33,11 @@
 <p align="center">
   <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.1/3ds2apple-0.2.1-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows ランチャーをダウンロード"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.1/3ds2apple-0.2.1-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS ランチャーをダウンロード"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux ランチャーをダウンロード"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="GitHub で全リリースを見る"></a>
 </p>
 
-<p align="center"><sub><b>最新の安定版: v0.2.1</b> · Windows 10/11 ランチャー（検証済みの経路）· macOS 13+ ランチャー（開発者プレビュー、<a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a> を参照）· iOS アプリはランチャーがあなた自身の Apple ID で構成・署名・インストールするため、iOS 単体のダウンロードはありません。</sub></p>
+<p align="center"><sub><b>最新の安定版: v0.2.1</b> · Windows 10/11 ランチャー（検証済みの経路）· macOS 13+ ランチャー（開発者プレビュー、<a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a> を参照）· Linux x86_64 ランチャー（ベータ：.32a ビルドを署名・インストール可能。ローカル AOT コンパイルは未対応）· iOS アプリはランチャーがあなた自身の Apple ID で構成・署名・インストールするため、iOS 単体のダウンロードはありません。</sub></p>
 
 <p align="center">
   <img src="docs/assets/hero.png" width="880" alt="0.2.1 hero image: synthetic portrait and landscape previews with the wordmark.">
@@ -71,7 +72,7 @@
     <td align="center" width="25%">✏️<br><b>ゲーム内でコントロールを編集</b><br><sub>ポーズして画面の上でコントロールをドラッグし「完了」をタップ。ボタンごとの表示、10%〜200% のサイズ、透明度に対応。</sub></td>
     <td align="center" width="25%">💾<br><b>セーブとセーブステート</b><br><sub>バッテリーセーブはアプリのコンテナに保存、ゲームごとに 3 つのセーブステートスロット、セーブマネージャーでエクスポートとインポート、そしてコードごとに切り替えられる自分用の Citra/Azahar チートファイル。</sub></td>
     <td align="center" width="25%">⏩<br><b>早送り、パフォーマンスオーバーレイ、HUD</b><br><sub>2x 早送りトグル、編集可能なクイックセーブとクイックロード、任意のパフォーマンスオーバーレイ（画面の最上端に表示。FPS、フレーム時間、速度、アプリメモリ、空きメモリ。6 つの位置、行の切り替え、任意の背景）、システム Metal HUD（デフォルトはオフ）、ワンタップの診断エクスポート。</sub></td>
-    <td align="center" width="25%">🖥️<br><b>Windows と macOS のランチャー</b><br><sub>1 つのウィンドウでインポート → コンパイル → 署名 → インストール → プッシュ。Windows 経路なら Mac は不要で、ゲームデータを保つ増分デプロイに対応。ビルド済みゲームのエクスポートダイアログ 1 つで、完成済みビルドパッケージ（.32a）か署名可能パッケージ（未署名の自己完結型単体ゲーム IPA）を書き出せ、インポートで ROM を取り込み、.32a パッケージも取り込み直せます。高度な AOT ビルド設定は設定ページにあります。</sub></td>
+    <td align="center" width="25%">🖥️<br><b>Windows、macOS、Linux のランチャー</b><br><sub>1 つのウィンドウでインポート → ビルド → 署名 → インストール → プッシュ。Windows ランチャーは検証済みの経路で、ゲームデータを保つ増分デプロイに対応。Linux ランチャーは同じ UI を共有し、同梱の plumesign-linux で署名・インストールします（Linux はローカル AOT コンパイル未対応のため、Windows/macOS で作った .32a をデプロイ）。ビルド済みゲームのエクスポートダイアログ 1 つで、完成済みビルドパッケージ（.32a）か署名可能パッケージ（未署名の自己完結型単体ゲーム IPA）を書き出せ、インポートで ROM を取り込み、.32a パッケージも取り込み直せます。高度な AOT ビルド設定は設定ページにあります。</sub></td>
   </tr>
 </table>
 
@@ -190,11 +191,15 @@ macOS のセットアップと署名の制限を含む詳細な手順は[セッ�
 
 ### Mac は必要ですか？
 
-検証済みの Windows 経路では不要です。macOS ランチャーは**開発者プレビュー**です。macOS 13+、Apple ID でサインインした Xcode 15+、`xcodegen`、リポジトリのチェックアウト、ビルド済みツールが必要で、実機へのインストールはまだメンテナーによって検証されていません（issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)）。
+検証済みの Windows 経路では不要です。Linux でも Mac は不要です：Linux ランチャーは x86-64 Linux 上で動作し、用意した `.32a` ビルドを同梱の plumesign で署名・インストールします。ただし GamePack は Windows または macOS でビルドする必要があります（Linux はローカル AOT コンパイル未対応）。macOS ランチャーは**開発者プレビュー**です。macOS 13+、Apple ID でサインインした Xcode 15+、`xcodegen`、リポジトリのチェックアウト、ビルド済みツールが必要で、実機へのインストールはまだメンテナーによって検証されていません（issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)）。
+
+### Linux ランチャーはありますか？
+
+はい。Linux x86_64 の GUI ランチャーで、Windows ランチャーの Avalonia UI とエンジンを共有します。ROM と `.32a` パッケージのインポート、一致するパッケージのビルドキャッシュ再利用、同梱の公式 `plumesign-linux` による署名・上書きインストール（Apple ID と 2FA は端末と plumesign 自身のストアにのみ残ります）、同梱の Linux `devpush` と `usbmuxd` によるゲームデータのプッシュ、**署名の更新** による 7 日署名の更新に対応します。ローカル AOT コンパイルは未対応のため、Windows または macOS で GamePack をビルドして**完成済みビルドパッケージ**（`.32a`）を書き出し、Linux でインポートしてデプロイしてください。詳細は [launcher/linux/README.md](launcher/linux/README.md)。
 
 ### App Store で配信されていますか？
 
-いいえ。ランチャーがあなた自身の Apple ID でアプリを構成・署名し（Windows は同梱の公式 Impactor、macOS は Xcode の自動署名）、USB 経由でインストールします。3ds2apple は Nintendo や Apple と提携しておらず、承認も受けていません。
+いいえ。ランチャーがあなた自身の Apple ID でアプリを構成・署名し（Windows は同梱の公式 Impactor、macOS は Xcode の自動署名、Linux は同梱の plumesign-linux）、USB 経由でインストールします。3ds2apple は Nintendo や Apple と提携しておらず、承認も受けていません。
 
 ### 1 週間ほどでアプリが起動しなくなるのはなぜですか？
 
@@ -256,7 +261,8 @@ macOS のセットアップと署名の制限を含む詳細な手順は[セッ�
 | **iPhone / iPad** | iOS 16 以降。1 つのアプリにライブラリ、刷新されたゲーム内メニュー、ゲーム内レイアウト編集付きの New 3DS フルコントロール、横 6 種/縦 3 種の画面レイアウト、セーブステート、パフォーマンスオーバーレイ、アプリ別設定、自分用のチートファイル、6 つの実験的なレンダラー最適化が入ります。 |
 | **Windows** | Windows 10/11 x64。自己完結の単一ファイルランチャー。Mac なしでビルド、署名、インストール、プッシュができ、ポータブル `.32a` ビルドと、ゲームデータを内包した未署名の自己完結型単体ゲーム IPA のエクスポート、設定ページに高度な AOT ビルド設定があります。**検証済みの経路。** |
 | **macOS** | macOS 13+（Intel + Apple シリコン）。Xcode 署名を使う SwiftUI ランチャー。パッケージはまだ自己完結しておらず、実機へのインストールはメンテナーによって検証されていません。**開発者プレビュー。** |
-| **ビルドホスト** | Windows（同梱の LLVM/LLD）または macOS（Apple clang + Xcode）。 |
+| **Linux** | Linux x86_64 デスクトップ（X11 または Wayland）。Windows と Avalonia UI・エンジンを共有する GUI ランチャー：ROM と `.32a` パッケージのインポート、一致するパッケージのビルドキャッシュ再利用、同梱の公式 plumesign-linux による署名・上書きインストール、同梱 devpush と usbmuxd によるゲームデータのプッシュに対応。ローカル AOT コンパイルは未対応のため、デプロイには Windows/macOS でビルドした `.32a` パッケージを使用します。メンテナーの CachyOS x86_64 マシンでエンドツーエンド検証済み。 |
+| **ビルドホスト** | Windows（同梱の LLVM/LLD）または macOS（Apple clang + Xcode）。Linux は現時点では署名とインストールのみ。 |
 
 ## セットアップ
 
@@ -276,6 +282,14 @@ macOS のセットアップと署名の制限を含む詳細な手順は[セッ�
 2. パッケージは**まだ自己完結していません**。macOS 13+、Apple ID でサインインした Xcode 15+、`xcodegen`、リポジトリのチェックアウト、ビルド済みツール（`scripts/build-zakuro-ios.sh`、`builder` の pack CLI、`tools/devpush`）が必要です。ランチャーは自身のバンドル、チェックアウト、`PATH` を探します。
 3. インポート → デプロイ：Apple clang が GamePack をコンパイルし、Xcode の自動署名 + `devicectl` が構成済み IPA をインストールし、続いてゲームデータをプッシュします。選択ルールは Windows と同じです。無料 Apple ID の署名は約 7 日で期限切れになります。Deploy ページの同じ **署名の更新** ボタンで、ローカルの Apple Development 証明書を使って直近の IPA を再署名して上書きインストールできます（アプリのデータとセーブは保持されます）。ゲームの追加や GamePack の更新には、新しい IPA を上書きインストールする 1 回のデプロイが必要です。アプリは削除されず、ゲームデータとセーブは保持されます。
 
+### Linux ランチャー
+
+1. [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases/latest) から `3ds2apple-<version>-linux-x86_64.tar.gz` をダウンロードし、書き込み可能なフォルダーに展開します。パッケージは自己完結（ランチャー、固定の ROM なしシェルテンプレート、同梱の plumesign-linux/devpush、3 つのライセンス文）で、X11 または Wayland のある x86_64 Linux デスクトップが必要です。
+2. `usbmuxd` をインストールして起動し、iPhone/iPad を USB で接続してロック解除し「信頼」をタップします。ランチャーは同梱の `devpush` 経由でデバイスに接続します（読み取り専用の `usbmuxd` ソケットは `THREEDS2APPLE_USBMUXD_SOCKET` で上書き可能）。
+3. まず Windows または macOS でゲームを準備します：GamePack をビルドして**完成済みビルドパッケージ**（`.32a`）を書き出します。Linux はローカル AOT コンパイル未対応のため、GamePack を自分でコンパイルできません。一致するパッケージの GamePack とビルドキャッシュはそのまま再利用され、再コンパイルされません。
+4. ランチャーを起動し、**設定 → Sign in with plumesign** を開いて表示される端末で Apple ID にサインインします（パスワードと 2FA はその端末と plumesign 自身のストアにのみ残り、ランチャーは見ることもログに残すこともありません）。次に `.32a` を **インポート** し、ゲームを選んで **デプロイ** を押します：ランチャーが ROM なし IPA を構成し、同梱の plumesign で署名・上書きインストールしてから、`devpush` でゲームデータをプッシュします。
+5. 無料 Apple ID の署名は約 7 日で期限切れになります。同じ **署名の更新** ボタンで、再ビルドせずに直近の IPA を再署名・上書きインストールできます（データとセーブは保持）。ランチャーの `--self-test` はペイロード、ツール、ライセンスを検査します。ヘッドレス機では `xvfb-run -a` で実行できます。
+
 ### スマートフォン上のデータ、セーブ、制限
 
 - ゲームデータは `Documents/Games/<TITLEID>/` にあります（ファイル App で表示可能）。セーブとセーブステートはアプリのコンテナにあります。
@@ -285,12 +299,13 @@ macOS のセットアップと署名の制限を含む詳細な手順は[セッ�
 
 ## ダウンロードパッケージとポリシー
 
-公開ビルドは [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases) で公開されます。各リリースにはプラットフォームパッケージがちょうど 2 つ含まれます。
+公開ビルドは [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases) で公開されます。各リリースは 3 つのプラットフォームパッケージを提供します：
 
 - `3ds2apple-<version>-windows-x64.zip` —— Windows 10/11 ランチャー：自己完結の `3ds2apple-launcher.exe` と `LICENSE`、`NOTICE`、`THIRD_PARTY.md`。
-- `3ds2apple-<version>-macos-universal.zip` —— macOS 13+ ランチャー：`3ds2apple-launcher.app`（Intel + Apple シリコン）と `LICENSE`、`NOTICE`、`THIRD_PARTY.md`。
+- `3ds2apple-<version>-macos-universal.zip` —— macOS 13+ ランチャー：`3ds2apple-launcher.app`（Intel + Apple シリコン）と同じ 3 つのライセンス文。
+- `3ds2apple-<version>-linux-x86_64.tar.gz` —— Linux x86_64 ランチャー：自己完結のランチャー、固定の ROM なしシェルテンプレート、同梱の plumesign-linux と devpush、ランチャーフォルダー内の 3 つのライセンス文。
 
-0.1.1 以降、両方の zip のルートにこれら 3 つのライセンス文書がリポジトリ内のコピーとバイト単位で一致する形で含まれるため、ダウンロードしたパッケージは自己完結しています。これらは個別のリリースアセットとしては公開されず、[THIRD_PARTY.md](THIRD_PARTY.md) に記載された GPL プロジェクトは読み取り専用の参照のままで、GPL のコードや文書は一切パッケージされません。0.1.0 のパッケージはこれより前のもので、リポジトリ内のコピーに依存します。ROM を含まないシェルテンプレートは両方のランチャーに埋め込まれており、個別のダウンロードにはなりません。GitHub は各リリースアセットの SHA-256 ダイジェストを表示します。ゲームデータが添付されることはありません。
+0.1.1 以降、Windows/macOS の zip にはこれらのライセンス文書がルートに、Linux の tar にはランチャーフォルダー内に、リポジトリ内のコピーとバイト単位で一致する形で含まれるため、ダウンロードしたパッケージは自己完結しています。これらは個別のリリースアセットとしては公開されず、[THIRD_PARTY.md](THIRD_PARTY.md) に記載された GPL プロジェクトは読み取り専用の参照のままで、GPL のコードや文書は一切パッケージされません。0.1.0 のパッケージはこれより前のもので、リポジトリ内のコピーに依存します。ROM を含まないシェルテンプレートはすべてのランチャーに埋め込まれており、個別のダウンロードにはなりません。GitHub は各リリースアセットの SHA-256 ダイジェストを表示します。ゲームデータが添付されることはありません。
 
 ## ソースからビルド
 
@@ -298,6 +313,7 @@ macOS のセットアップと署名の制限を含む詳細な手順は[セッ�
 |---|---|
 | Windows ランチャー | `cd launcher/windows && dotnet build Launcher.slnx -c Release` / `dotnet test Launcher.slnx -c Debug` —— [launcher/windows/README.md](launcher/windows/README.md) を参照 |
 | macOS ランチャー | macOS で XcodeGen + `xcodebuild` —— [launcher/macos/README.md](launcher/macos/README.md) を参照 |
+| Linux ランチャー | `./launcher/linux/build-linux.sh`（開発者ビルド）。リリースペイロードには `--payload --tar` — [launcher/linux/README.md](launcher/linux/README.md) を参照 |
 | iOS アプリ / シェル | `scripts/build-zakuro-ios.sh` → `scripts/build-ios-app.sh` → `scripts/package-ipa.sh` —— [scripts/README.md](scripts/README.md) を参照 |
 | Pack CLI（`3ds2apple-pack`） | `cd builder && cargo build --workspace` / `cargo test --workspace` —— [builder/README.md](builder/README.md) を参照 |
 | デバイスブリッジ（`devpush`） | `cargo build --release --manifest-path tools/devpush/Cargo.toml` —— [tools/devpush/README.md](tools/devpush/README.md) を参照 |
@@ -327,9 +343,9 @@ bash scripts/tests/desktop-aot-selfcheck.sh
 
 ### ほぼ設定不要のグラフィカルランチャー
 
-Windows 用と macOS 用のランチャーがあります。自分で吸い出した復号済みの `.3ds`/`.cci` をインポートし、ゲームを選んで唯一のデプロイボタンを押すだけです。ランチャーは GamePack をコンパイルし、ROM を含まないベース IPA を構成し、あなた自身の Apple ID で署名・インストールし（Windows は同梱の公式 Impactor/plumesign、macOS は Xcode の自動署名）、`GameRom.cci` + `GameInfo.json` だけをアプリの Documents フォルダーへプッシュします。
+Windows、macOS、Linux 用のランチャーがあります。Windows と macOS では、自分で吸い出した復号済みの `.3ds`/`.cci` をインポートし、ゲームを選んで唯一のデプロイボタンを押します。ランチャーは GamePack をコンパイルし、ROM を含まないベース IPA を構成し、あなた自身の Apple ID で署名・インストールし（Windows は同梱の公式 Impactor/plumesign、macOS は Xcode の自動署名）、`GameRom.cci` + `GameInfo.json` だけをアプリの Documents フォルダーへプッシュします。Linux ランチャーは同じ Avalonia UI、エンジン、ポータブル状態、ビルドパッケージ形式を共有し、同梱の plumesign-linux で署名・上書きインストールし（Apple ID/2FA は端末内）、同梱の Linux devpush と usbmuxd でプッシュしますが、ローカル AOT コンパイラがまだ無いため、デプロイでは Windows/macOS でビルドした `.32a` パッケージの GamePack とビルドキャッシュを再利用します。
 
-ランチャーは実行ファイル/.app の隣にポータブルなデータフォルダーを保持し、ROM の SMDH メタデータ（アイコン、ローカライズされた名前、パブリッシャー）を読み取り、ビルド用ハードウェアを検出して 3dsrecomp を自動的に並列化します。さらに起動時のレディネスランプとセルフテストを表示するため、ツールの不足がデプロイ中に静かに失敗することはありません。Windows のデプロイはデバイスを認識します。インストール済みのアプリとゲームを先に読み取り、最新ならスキップし、上書き更新ではゲームデータとセーブを保持します。ローカルライブラリにないゲームがスマートフォンにある場合は一覧を示して更新前に確認し、そのデータを削除することはありません。ビルド済みの各ゲームはライブラリの 1 つの **エクスポート** ダイアログから、ポータブルな `.32a` パッケージ（ユーザー自身のゲームデータを含められる）またはサイドロード用の、ゲームデータを内包した未署名の自己完結型単体ゲーム IPA としてエクスポートでき、`.32a` はヘッダーの **インポート** で取り込み直せます。次回ビルドの AOT 最適化レベル、リンク時最適化、fast-math は設定ページの **詳細ビルド設定** で調整できます。
+ランチャーは実行ファイル/.app（または展開した Linux フォルダー）の隣にポータブルなデータフォルダーを保持し、ROM の SMDH メタデータ（アイコン、ローカライズされた名前、パブリッシャー）を読み取り、ビルド用ハードウェアを検出して 3dsrecomp を自動的に並列化します。さらに起動時のレディネスランプとセルフテストを表示するため、ツールの不足がデプロイ中に静かに失敗することはありません。Windows のデプロイはデバイスを認識します。インストール済みのアプリとゲームを先に読み取り、最新ならスキップし、上書き更新ではゲームデータとセーブを保持します。ローカルライブラリにないゲームがスマートフォンにある場合は一覧を示して更新前に確認し、そのデータを削除することはありません。ビルド済みの各ゲームはライブラリの 1 つの **エクスポート** ダイアログから、ポータブルな `.32a` パッケージ（ユーザー自身のゲームデータを含められる）またはサイドロード用の、ゲームデータを内包した未署名の自己完結型単体ゲーム IPA としてエクスポートでき、`.32a` はヘッダーの **インポート** で取り込み直せます。次回ビルドの AOT 最適化レベル、リンク時最適化、fast-math は設定ページの **詳細ビルド設定** で調整できます。
 
 ### プレイ中にスマートフォンが表示するもの
 
