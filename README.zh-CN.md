@@ -37,7 +37,7 @@
 <p align="center"><sub><b>最新稳定版：v0.3.1</b> · Windows 10/11 启动器（已验证路径）· macOS 13+ 启动器（开发者预览，见 <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>）· Linux x86_64 启动器（已验证路径；内置本地 AOT：3dsrecomp + LLVM/LLD 23.1.6） · iOS App 由启动器用你自己的 Apple ID 合成、签名并安装，因此没有单独的 iOS 下载。</sub></p>
 
 <p align="center">
-  <img src="docs/assets/hero.png" width="880" alt="0.3.0 hero image: synthetic portrait and landscape previews with the wordmark.">
+  <img src="docs/assets/hero.png" width="880" alt="3ds2apple hero image: the app on iPhone and the Windows, macOS and Linux launchers, on a dark grid background.">
 </p>
 
 > [!NOTE]
@@ -50,10 +50,10 @@
 ## 演示
 
 <p align="center">
-  <img src="docs/assets/demo.gif" width="720" alt="0.2.1 合成动画预览：纵向按键与 HOME 槽设置按钮、贴顶的横向按键、游戏内菜单，以及性能覆盖层设置。">
+  <img src="docs/assets/demo.gif" width="720" alt="合成动画预览：iPhone 游戏画面与虚拟按键、三平台启动器、分组设置页，以及 Metal 渲染路径。">
 </p>
 
-<p align="center"><sub>合成预览，不含游戏数据：竖屏按键 → 横屏按键 → 暂停菜单虚拟按键选项 → 屏幕布局设置。</sub></p>
+<p align="center"><sub>合成预览与当前截图，不含游戏数据：iPhone 游戏画面与虚拟按键、Windows/macOS/Linux 启动器、分组设置与 Metal 渲染路径。</sub></p>
 
 
 ## 功能一览

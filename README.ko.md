@@ -40,7 +40,7 @@
 <p align="center"><sub><b>최신 안정 버전: v0.3.1</b> · Windows 10/11 런처(검증된 경로) · macOS 13+ 런처(개발자 프리뷰, <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a> 참고) · Linux x86_64 런처(검증된 경로; 로컬 AOT 지원: 3dsrecomp + LLVM/LLD 23.1.6 내장) · iOS 앱은 런처가 사용자의 Apple ID로 구성·서명·설치하므로 별도의 iOS 다운로드는 없습니다.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/hero.png" width="880" alt="0.3.0 hero image: synthetic portrait and landscape previews with the wordmark.">
+  <img src="docs/assets/hero.png" width="880" alt="3ds2apple hero image: the app on iPhone and the Windows, macOS and Linux launchers, on a dark grid background.">
 </p>
 
 > [!NOTE]
@@ -53,10 +53,10 @@
 ## 데모
 
 <p align="center">
-  <img src="docs/assets/demo.gif" width="720" alt="0.2.1 합성 데모 루프: HOME 슬롯 설정 버튼이 있는 세로 화면 컨트롤, 위쪽 가장자리에 붙은 가로 화면 컨트롤, 게임 내 메뉴, 성능 오버레이 설정.">
+  <img src="docs/assets/demo.gif" width="720" alt="합성 데모 루프: iPhone 게임 화면과 터치 컨트롤, 세 플랫폼 런처, 그룹 설정, Metal 경로.">
 </p>
 
-<p align="center"><sub>0.2.1 합성 프리뷰, 게임 데이터 없음: 세로 화면 컨트롤 → 가로 화면 컨트롤 → 게임 내 메뉴 → 성능 오버레이 설정.</sub></p>
+<p align="center"><sub>합성 프리뷰와 현재 캡처, 게임 데이터 없음: iPhone 게임 화면과 터치 컨트롤, Windows/macOS/Linux 런처, 그룹 설정, Metal 경로.</sub></p>
 
 
 ## 기능 한눈에 보기

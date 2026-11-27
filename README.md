@@ -37,7 +37,7 @@
 <p align="center"><sub><b>Latest stable release: v0.3.1</b> · Windows 10/11 launcher (verified path) · macOS 13+ launcher (developer preview, see <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>) · Linux x86_64 launcher (verified path; local AOT build included: bundled 3dsrecomp + LLVM/LLD 23.1.6) · the iOS app is composed, signed and installed by the launcher with your own Apple ID, so there is no separate iOS download.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/hero.png" width="880" alt="0.3.0 hero image: synthetic portrait and landscape previews with the wordmark.">
+  <img src="docs/assets/hero.png" width="880" alt="3ds2apple hero image: the app on iPhone and the Windows, macOS and Linux launchers, on a dark grid background.">
 </p>
 
 > [!NOTE]
@@ -50,10 +50,10 @@
 ## Demo
 
 <p align="center">
-  <img src="docs/assets/demo.gif" width="720" alt="0.2.1 synthetic demo loop: portrait controls with the HOME-slot Settings button, landscape controls flush to the top edge, the in-game menu, and the performance overlay settings.">
+  <img src="docs/assets/demo.gif" width="720" alt="synthetic preview loop: the iPhone game view with touch controls, the three launchers, grouped Settings, and the Metal path.">
 </p>
 
-<p align="center"><sub>0.2.1 synthetic preview, no game data: portrait controls → landscape controls → in-game menu → performance overlay settings.</sub></p>
+<p align="center"><sub>Synthetic preview and current captures, no game data: iPhone game view with touch controls, the Windows/macOS/Linux launchers, grouped Settings and the Metal path.</sub></p>
 
 
 ## Features at a glance
@@ -122,7 +122,7 @@ Visibility is per orientation (the Toggle controls sheet edits the current one);
 
 Pause any game and open **Virtual controls → Edit layout**: every control has its own hit area, so you drag just the one you grabbed over the paused picture, and the centred **Done** saves the current orientation and resumes. The same card gives per-button visibility, 10%–200% size and opacity, and **Reset** restores the defaults. Portrait and landscape positions are stored separately.
 
-<p align="center"><sub>0.2.1 synthetic preview, no game data: portrait controls → landscape controls → in-game menu → performance overlay settings.</sub></p>
+<p align="center"><sub>Synthetic preview and current captures, no game data: iPhone game view with touch controls, the Windows/macOS/Linux launchers, grouped Settings and the Metal path.</sub></p>
 
 ## Settings, gamepad and updates
 

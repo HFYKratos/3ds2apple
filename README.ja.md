@@ -40,7 +40,7 @@
 <p align="center"><sub><b>最新の安定版: v0.3.1</b> · Windows 10/11 ランチャー（検証済みの経路）· macOS 13+ ランチャー（開発者プレビュー、<a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a> を参照）· Linux x86_64 ランチャー（検証済みの経路；ローカル AOT 対応：3dsrecomp + LLVM/LLD 23.1.6 を同梱）· iOS アプリはランチャーがあなた自身の Apple ID で構成・署名・インストールするため、iOS 単体のダウンロードはありません。</sub></p>
 
 <p align="center">
-  <img src="docs/assets/hero.png" width="880" alt="0.3.0 hero image: synthetic portrait and landscape previews with the wordmark.">
+  <img src="docs/assets/hero.png" width="880" alt="3ds2apple hero image: the app on iPhone and the Windows, macOS and Linux launchers, on a dark grid background.">
 </p>
 
 > [!NOTE]
@@ -53,10 +53,10 @@
 ## デモ
 
 <p align="center">
-  <img src="docs/assets/demo.gif" width="720" alt="0.2.1 合成デモループ：HOME スロットの設定ボタン付き縦画面コントロール、上端に貼り付く横画面コントロール、ゲーム内メニュー、パフォーマンスオーバーレイ設定。">
+  <img src="docs/assets/demo.gif" width="720" alt="合成デモループ：iPhone のゲーム画面とタッチコントロール、3 プラットフォームのランチャー、グループ化された設定、Metal パス。">
 </p>
 
-<p align="center"><sub>0.2.1 合成プレビュー、ゲームデータなし：縦画面コントロール → 横画面コントロール → ゲーム内メニュー → パフォーマンスオーバーレイ設定。</sub></p>
+<p align="center"><sub>合成プレビューと現行キャプチャ、ゲームデータなし：iPhone のゲーム画面とタッチコントロール、Windows/macOS/Linux ランチャー、グループ化された設定、Metal パス。</sub></p>
 
 
 ## 機能一覧
@@ -125,7 +125,7 @@
 
 ゲームをポーズして **バーチャルコントローラー → レイアウトを編集** を開きます。各コントロールには独自のヒット領域があるため、掴んだコントロールだけをポーズ中の画面の上でドラッグでき、中央の **完了** で現在の向きを保存して再開します。同じカードでボタンごとの表示、10%〜200% のサイズ、透明度、**リセット** も扱えます。縦画面と横画面の位置は別々に保存されます。
 
-<p align="center"><sub>0.2.1 合成プレビュー、ゲームデータなし：縦画面コントロール → 横画面コントロール → ゲーム内メニュー → パフォーマンスオーバーレイ設定。</sub></p>
+<p align="center"><sub>合成プレビューと現行キャプチャ、ゲームデータなし：iPhone のゲーム画面とタッチコントロール、Windows/macOS/Linux ランチャー、グループ化された設定、Metal パス。</sub></p>
 
 ## 設定・ゲームパッド・アップデート
 

@@ -5,10 +5,10 @@ media or headless captures of the project's own launchers**. No commercial game 
 logos, box art, ROM data, save data or game assets appear anywhere, and no commercial game name
 is used in any filename, caption or alt text.
 
-The app-preview artwork (hero, Open Graph card, social preview, demo GIF, portrait/landscape
-previews and the in-game/layout/overlay screenshots) is the 0.2.1 synthetic refresh. The launcher
-screenshots and the iOS Settings captures were refreshed for 0.3.1 (2026-11-28) and are listed
-below.
+The portrait/landscape previews and the in-game/layout/overlay screenshots are the 0.2.1
+synthetic refresh. The launcher screenshots and the iOS Settings captures were refreshed for 0.3.1
+(2026-11-28), and the marketing artwork (hero, Open Graph card, social preview, demo poster and demo
+GIF) was rebuilt on 2026-11-28 from those current compliant captures. Every file is listed below.
 
 ## Sources
 
@@ -16,11 +16,11 @@ below.
 |---|---|
 | docs/assets/portrait.png | out/sim-shots/20261125-0.2.1-final/01-preview-portrait.png (iOS Simulator synthetic preview, 1290x2796 -> 900x1951) |
 | docs/assets/landscape.png | out/sim-shots/20261125-0.2.1-final/02-preview-landscape.png (2796x1290 -> 1400x646) |
-| docs/assets/hero.png | generated composite of the two previews above (1600x900) |
-| docs/assets/og.png | generated Open Graph / Twitter card (1200x630) |
-| docs/assets/social-preview.png | generated repository social preview (1280x640) |
-| docs/assets/demo-poster.png | first demo slide composite (960x640) |
-| docs/assets/demo.gif | 4-slide 0.2.1 slideshow: portrait controls -> landscape controls -> in-game menu -> performance overlay settings (960x640) |
+| docs/assets/hero.png | marketing composite generated 2026-11-28 (1600x900) from the 0.3.1 Windows/Linux launcher captures and the synthetic portrait preview; no game imagery |
+| docs/assets/og.png | marketing Open Graph / Twitter card generated 2026-11-28 (1200x630) from the 0.3.1 Windows/macOS/Linux launcher captures and the synthetic portrait preview |
+| docs/assets/social-preview.png | repository social preview generated 2026-11-28 (1280x640) from the same current captures; upload manually in GitHub -> Settings -> Social preview (the API does not expose it) |
+| docs/assets/demo-poster.png | first frame of the 2026-11-28 demo loop (960x640): synthetic iPhone game view, wordmark and a 0.3.1 Windows launcher capture |
+| docs/assets/demo.gif | 4-slide slideshow rebuilt 2026-11-28 (960x640, ~6 s loop): iPhone game view + Windows launcher -> three-platform launchers -> iOS 26/27 grouped Settings device captures -> Metal/no-CPU-JIT path; synthetic and headless captures only |
 | docs/assets/screenshots/controls-*.png, layout-*.png, overlay-position.png, pause-virtual-controls.png, performance-overlay.png | 0.2.1 synthetic in-game / layout / overlay screenshots from out/sim-shots/20261125-0.2.1-final/ |
 | docs/assets/screenshots/ios-settings-root.png, ios-settings-system.png, ios-settings-layout.png | 0.3.1 device captures (iPhone10,3, iOS 16.7.16, 3ds2apple 0.3.1 shell): the app's Settings pages only, Simplified Chinese system UI. Downscaled to 800 px wide and palette-quantised. No game data. |
 | docs/assets/screenshots/windows-launcher-library-empty-en.png, -zh.png, windows-launcher-library-en.png | 0.3.1 Windows launcher (official `3ds2apple-0.3.1-windows-x64.zip`) under Wine + Xvfb with the developer `--ui-smoke` mode, light theme, deterministic synthetic fixtures (Example Game / Second Example). Downscaled/quantised; no ROM or game data. |
@@ -46,8 +46,9 @@ entries or an empty library, never a real game.
 
 - Pillow (Python) composition, Lanczos resizing, rounded cards, shadows, captions and Open
   Graph artwork for the 0.2.1 media set.
-- demo.gif: 960x640, 4 slides, per-slide captions, adaptive 96-colour palette, ~5 s loop,
-  under 200 KB.
+- demo.gif: 960x640, 4 slides, per-slide captions, 128-colour palette, ~6 s loop (~370 KB);
+  hero/OG/social-preview are Pillow composites of the compliant captures above, exported as
+  8-bit PNG (no game imagery, no version-stamped copy).
 - New 0.3.1 captures: Windows launcher via Wine/Xvfb `--ui-smoke`; macOS launcher via the
   headless SnapshotRenderer; iOS Settings via device screenshots; Linux launcher via Xvfb
   `--ui-smoke`. They are downscaled and palette-quantised to keep the committed media set small.
