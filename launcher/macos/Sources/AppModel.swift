@@ -483,18 +483,18 @@ final class AppModel: ObservableObject {
 
     // MARK: - Portable .32a build packages (Library export/import)
 
-    /// Workspace directory that holds the exported .32a user-data files.
-    /// A .32a can contain game data: it stays local and is never uploaded.
+    /// Workspace directory that holds the exported .32a user-data files
+    /// (0.2.2-beta5: workspace/export/32a; a .32a can contain game data, so it stays local).
     var buildPackagesDirectory: String {
-        pack.outRoot.appendingPathComponent("builds", isDirectory: true).path
+        pack.outRoot.appendingPathComponent("export/32a", isDirectory: true).path
     }
 
-    /// Workspace directory that holds the exported unsigned single-game IPAs.
+    /// Workspace directory that holds the exported single-game IPAs (workspace/export/ipa).
     var exportsDirectory: String {
-        pack.outRoot.appendingPathComponent("exports", isDirectory: true).path
+        pack.outRoot.appendingPathComponent("export/ipa", isDirectory: true).path
     }
 
-    /// Default full IPA path for the export dialog (workspace/exports/TITLE_ID-English name.ipa).
+    /// Default full IPA path for the export dialog (workspace/export/ipa/TITLE_ID-English name.ipa).
     func defaultIpaPath(for game: GameEntry) -> String {
         let name = SingleGameIpaExporter.outputFileName(
             displayName: game.displayName,

@@ -446,6 +446,7 @@ public sealed class MainViewModel : ObservableObject
     private bool _exportDialogVisible;
     private bool _exportFormatIpa;
     private string _exportDestination = string.Empty;
+    private string _refreshSigningStatus = string.Empty;
 
     public MainViewModel() : this(LauncherServices.Create())
     {
@@ -484,6 +485,7 @@ public sealed class MainViewModel : ObservableObject
             () => IsExportDialogVisible && !IsBusy);
         ConfirmExportCommand = new AsyncRelayCommand(ConfirmExportAsync, () => CanConfirmExport);
         CancelExportCommand = new RelayCommand(CancelExportDialog, () => IsExportDialogVisible && !IsBusy);
+        RefreshSigningCommand = new AsyncRelayCommand(RefreshSigningAsync, () => CanRefreshSigning);
         RebuildLanguageOptions();
         RebuildDeploySteps();
         Log($"workspace: {_services.Workspace.Root} ({_services.Workspace.RootReason})");
@@ -543,6 +545,7 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand BrowseExportDestinationCommand { get; }
     public AsyncRelayCommand ConfirmExportCommand { get; }
     public RelayCommand CancelExportCommand { get; }
+    public AsyncRelayCommand RefreshSigningCommand { get; }
 
     /// <summary>Localized UI strings; replaced whenever the language changes.</summary>
     public LocalizedText L { get => _localized; private set => SetProperty(ref _localized, value); }
@@ -695,10 +698,6 @@ public sealed class MainViewModel : ObservableObject
         ? "library.export.destinationIpa"
         : "library.export.destinationBuildPackage");
 
-    public string ExportFormatDetail => Loc.T(_exportFormatIpa
-        ? "library.export.detailIpa"
-        : "library.export.detailBuildPackage");
-
     public string ExportWarnings => Loc.T(_exportFormatIpa
         ? "library.export.warningsIpa"
         : "library.export.warningsBuildPackage");
@@ -746,11 +745,10 @@ public sealed class MainViewModel : ObservableObject
     }
 
     private string DefaultBuildPackageDestination() =>
-        Path.Combine(_services.Workspace.Root, "builds");
+        ExportPaths.DefaultBuildPackageFolder(_services.Workspace.Root);
 
     private string DefaultIpaDestination(GameRow row) =>
-        Path.Combine(_services.Workspace.Root, SingleGameIpaExporter.ExportsDirectoryName,
-            SingleGameIpaExporter.OutputFileName(row.Entry.DisplayName, row.TitleID));
+        ExportPaths.DefaultIpaPath(_services.Workspace.Root, row.Entry.DisplayName, row.TitleID);
 
     private void RaiseExportDialogProperties()
     {
@@ -761,7 +759,6 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ExportDestinationLabel));
         OnPropertyChanged(nameof(IsExportDestinationFolder));
         OnPropertyChanged(nameof(ExportDialogTitle));
-        OnPropertyChanged(nameof(ExportFormatDetail));
         OnPropertyChanged(nameof(ExportWarnings));
         OnPropertyChanged(nameof(CanConfirmExport));
         RaiseCommandStates();
@@ -1239,7 +1236,7 @@ public sealed class MainViewModel : ObservableObject
 
     // --- library build packages (.32a) -------------------------------------
 
-    /// <summary>Export one game as a .32a build package into the chosen folder (default workspace/builds).</summary>
+    /// <summary>Export one game as a .32a build package into the chosen folder (default workspace/export/32a).</summary>
     public async Task ExportBuildPackageAsync(GameRow row, string? outputDirectory = null)
     {
         if (IsBusy)
@@ -1365,7 +1362,7 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>Export one game as an unsigned single-game IPA (default workspace/exports).</summary>
+    /// <summary>Export one game as a single-game IPA (default workspace/export/ipa).</summary>
     public async Task ExportIpaAsync(GameRow row, string? savePath = null)
     {
         if (IsBusy)
@@ -1401,9 +1398,9 @@ public sealed class MainViewModel : ObservableObject
         {
             var template = Path.Combine(_services.ShellDirectory, shell.FileName);
             var outputDirectory = string.IsNullOrWhiteSpace(savePath)
-                ? Path.Combine(_services.Workspace.Root, SingleGameIpaExporter.ExportsDirectoryName)
+                ? ExportPaths.DefaultIpaFolder(_services.Workspace.Root)
                 : Path.GetDirectoryName(Path.GetFullPath(savePath))
-                    ?? Path.Combine(_services.Workspace.Root, SingleGameIpaExporter.ExportsDirectoryName);
+                    ?? ExportPaths.DefaultIpaFolder(_services.Workspace.Root);
             // TITLE_ID-English name.ipa; a user-typed save file name is kept verbatim.
             var outputFileName = string.IsNullOrWhiteSpace(savePath)
                 ? SingleGameIpaExporter.OutputFileName(row.Entry.DisplayName, row.TitleID)
@@ -1428,6 +1425,9 @@ public sealed class MainViewModel : ObservableObject
                 return;
             }
             SetBuildPackageStatus(Loc.T("library.ipaExported", result.IpaPath!), warning: false);
+            SigningRefreshService.RecordInstallableIpa(_services.Workspace, result.IpaPath);
+            OnPropertyChanged(nameof(CanRefreshSigning));
+            RaiseCommandStates();
             Log("exported unsigned single-game IPA " + result.IpaPath + " (" + result.Bytes + " bytes, sha256 " + result.Sha256
                 + ", icons replaced " + result.ReplacedIconCount + ", embedded game data " + result.RomRelativePath
                 + " " + result.RomBytes + " bytes) - contains the user's own game data; sign it yourself (Sideloadly/AltStore), keep it local, never upload it");
@@ -1554,6 +1554,91 @@ public sealed class MainViewModel : ObservableObject
     public string DeploySelectedCountText => Loc.T("deploy.selectedCount", SelectedDeployCount, DeployGames.Count);
 
     public bool CanDeploy => !IsBusy && SelectedDeployCount > 0;
+
+    /// <summary>True when a previously composed/exported IPA still exists to re-sign.</summary>
+    public bool CanRefreshSigning => !IsBusy && new SigningRefreshService(_services.Workspace).CanRefresh;
+
+    public string RefreshSigningStatus
+    {
+        get => _refreshSigningStatus;
+        private set
+        {
+            if (SetProperty(ref _refreshSigningStatus, value))
+            {
+                OnPropertyChanged(nameof(HasRefreshSigningStatus));
+            }
+        }
+    }
+
+    public bool HasRefreshSigningStatus => !string.IsNullOrWhiteSpace(_refreshSigningStatus);
+
+    private void SetRefreshSigningStatus(string message)
+    {
+        RefreshSigningStatus = message;
+        StatusText = message;
+    }
+
+    /// <summary>
+    /// "Refresh signing": re-sign + overwrite-install the last composed/exported IPA
+    /// with the existing plumber/Impactor path (free Apple ID 7-day renewal). It never
+    /// rebuilds, recomposes or deletes the app; Documents and saves stay on the phone.
+    /// </summary>
+    public async Task RefreshSigningAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+        var service = new SigningRefreshService(_services.Workspace);
+        if (!service.CanRefresh)
+        {
+            SetRefreshSigningStatus(Loc.T("deploy.refreshSigningNoIpa"));
+            Log("refresh signing skipped: " + Loc.T("deploy.refreshSigningNoIpa"));
+            return;
+        }
+        _shell ??= await _services.LoadShellAsync().ConfigureAwait(true);
+        if (_shell is null)
+        {
+            SetRefreshSigningStatus(Loc.T("deploy.refreshSigningFailed", L.DeployNeedShell));
+            return;
+        }
+        var installer = _services.CreateShellInstallService();
+        if (installer is null)
+        {
+            SetRefreshSigningStatus(Loc.T("deploy.refreshSigningNoInstaller"));
+            return;
+        }
+        SetBusy(true, Loc.T("deploy.refreshSigningRunning"));
+        SetRefreshSigningStatus(Loc.T("deploy.refreshSigningRunning"));
+        try
+        {
+            var outcome = await service.RefreshAsync(
+                installer,
+                _shell,
+                _services.ShellDirectory,
+                _device?.Udid,
+                line => Log("[refresh] " + line)).ConfigureAwait(true);
+            if (outcome.Installed)
+            {
+                SetRefreshSigningStatus(Loc.T("deploy.refreshSigningDone"));
+                Log("refresh signing: re-signed " + (outcome.IpaPath ?? "the last IPA") + " in place; app data kept");
+            }
+            else
+            {
+                SetRefreshSigningStatus(Loc.T("deploy.refreshSigningFailed", outcome.Error ?? "unknown error"));
+                Log("refresh signing failed: " + (outcome.Error ?? "unknown error"));
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            SetRefreshSigningStatus(Loc.T("deploy.refreshSigningFailed", exception.Message));
+            Log("refresh signing failed: " + exception.Message);
+        }
+        finally
+        {
+            SetBusy(false, Loc.T("status.ready"));
+        }
+    }
 
     public string DeployState => _deployState;
 
@@ -1834,6 +1919,9 @@ public sealed class MainViewModel : ObservableObject
             DeployErrorFix = string.Empty;
             StatusText = L.DeployDoneTitle;
             Log("deploy done: " + L.DeployDoneTitle + (outcome.ComposedIpaPath is null ? string.Empty : " (" + outcome.ComposedIpaPath + ")"));
+            SigningRefreshService.RecordInstallableIpa(_services.Workspace, outcome.ComposedIpaPath);
+            OnPropertyChanged(nameof(CanRefreshSigning));
+            RaiseCommandStates();
             DeployPlanStatus = outcome.DeviceSummary is { } deviceSummary
                 ? LocalizeDeployMode(deviceSummary.Mode, deviceSummary.IpaGameCount, deviceSummary.PushedGameCount)
                 : string.Empty;
@@ -2563,7 +2651,7 @@ public sealed class MainViewModel : ObservableObject
                      DeployCommand, ConfirmOrphanedDeployCommand, StopDeployCommand, BuildAllCommand, RefreshDevicesCommand, RefreshPrerequisitesCommand,
                      RefreshStatusCommand, RefreshReadinessCommand, OpenImpactorCommand,
                      ConfirmImportReplaceCommand, ResetAdvancedBuildCommand,
-                     BrowseExportDestinationCommand, ConfirmExportCommand, CancelExportCommand,
+                     BrowseExportDestinationCommand, ConfirmExportCommand, CancelExportCommand, RefreshSigningCommand,
                  })
         {
             switch (command)
@@ -2576,5 +2664,6 @@ public sealed class MainViewModel : ObservableObject
                     break;
             }
         }
+        OnPropertyChanged(nameof(CanRefreshSigning));
     }
 }
