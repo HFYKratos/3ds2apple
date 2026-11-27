@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "component": "plumesign CLI (official, unmodified) for Linux",
+  "testedVersion": "2.7.3",
+  "releasePage": "https://github.com/claration/impactor/releases/tag/v2.7.3",
+  "downloadBase": "https://github.com/claration/impactor/releases/download/v2.7.3/",
+  "verifiedAgainst": "GitHub REST API release asset digest (GET /repos/claration/impactor/releases/tags/v2.7.3), checked 2026-11-27",
+  "verificationMethod": "SHA-256 and size of plumesign-linux-x86_64 must equal this pin; build/package scripts and the P1 signing backend refuse any other file.",
+  "binaries": [
+    {
+      "fileName": "plumesign-linux-x86_64",
+      "sha256": "d7d631d04fd80bf134fef9a7c71f704e9ae92f3d8f7e4895f10de4236acdc177",
+      "bytes": 12694648
+    }
+  ],
+  "licenses": [
+    {
+      "file": "LICENSE-Impactor-MIT.txt",
+      "component": "Impactor v2.7.3 (plumesign is part of the same release)",
+      "license": "MIT",
+      "copyright": "Copyright 2025 Samara M",
+      "source": "https://github.com/claration/impactor/blob/v2.7.3/LICENSE"
+    },
+    {
+      "file": "LICENSE-apple-codesign-MPL-2.0.txt",
+      "component": "apple-codesign 0.29.0 library embedded in the official plumesign binary",
+      "license": "MPL-2.0",
+      "source": "https://github.com/claration/impactor/tree/v2.7.3/3rdparty/apple-codesign-0.29.0"
+    }
+  ],
+  "sourceLinks": [
+    "https://github.com/claration/impactor/tree/v2.7.3",
+    "https://github.com/claration/impactor/tree/v2.7.3/3rdparty/apple-codesign-0.29.0"
+  ],
+  "bundledBy": "manual download from the official v2.7.3 release into launcher/linux/vendor/ (git-ignored); launcher/linux/build-linux.sh and the P1 signing backend verify the SHA-256. Never rebuilt, patched or re-signed."
+}

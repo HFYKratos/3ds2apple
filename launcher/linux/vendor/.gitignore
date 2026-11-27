@@ -1,0 +1,6 @@
+# Official signing binaries are downloaded from the upstream release and are
+# never committed. Keep the pin/licence/README files tracked instead.
+plumesign-linux-x86_64
+*.exe
+*.part
+*.partial
