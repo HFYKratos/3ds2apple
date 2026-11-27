@@ -32,5 +32,13 @@
     "https://github.com/claration/impactor/tree/v2.7.3",
     "https://github.com/claration/impactor/tree/v2.7.3/3rdparty/apple-codesign-0.29.0"
   ],
-  "bundledBy": "manual download from the official v2.7.3 release into launcher/linux/vendor/ (git-ignored); launcher/linux/build-linux.sh and the P1 signing backend verify the SHA-256. Never rebuilt, patched or re-signed."
+  "bundledBy": "manual download from the official v2.7.3 release into launcher/linux/vendor/ (git-ignored); launcher/linux/build-linux.sh and the P1 signing backend verify the SHA-256. Never rebuilt, patched or re-signed.",
+  "localAot": {
+    "schema": "3ds2apple-linux-local-aot/1",
+    "purpose": "Local ROM -> GamePack AOT build on Linux: 3dsrecomp + open-source LLVM clang/ld64.lld + hand-written Darwin stubs, no Apple SDK.",
+    "recompiler": { "component": "3dsrecomp", "repo": "https://github.com/fearkov/3dsrecomp", "revision": "4b6de5d884b0d8bc337e16c07b84a0824e55a0e1", "license": "see upstream repository LICENSE" },
+    "llvm": { "component": "LLVM/Clang + LLD (official open-source release)", "preferredVersion": "23.1.6", "currentFallback": "none — exact 23.1.6 is staged; 23.1.5 was only a temporary fallback before the archive arrived", "license": "Apache-2.0 WITH LLVM-exception", "note": "Exact LLVM 23.1.6 archive (sha256 bd4d1c434ff69ef06d19e7934c04708da677e5f2eb51f5bcf052ab91818f0094) is staged; the actual staged version/sha is written to PINS-local-aot.json in the release payload. Manifest toolchain versions must report the actual staged version (23.1.6)." },
+    "darwinStubs": { "component": "tools/winbuild/darwin-stubs + zakuro GamePack shim/include", "license": "Apache-2.0 (same as this project)" },
+    "stagedBy": "launcher/linux/build-linux.sh --payload --local-aot (writes payload PINS-local-aot.json with actual versions/sha256)"
+  }
 }

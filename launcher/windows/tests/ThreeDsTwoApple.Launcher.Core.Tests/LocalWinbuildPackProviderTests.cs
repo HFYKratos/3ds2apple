@@ -93,7 +93,21 @@ public sealed class LocalWinbuildPackProviderTests
                 Directory.CreateDirectory(Path.Combine(recompDir, "code"));
                 File.WriteAllText(Path.Combine(recompDir, "code", "librecomp.a"), "archive");
                 Assert.NotNull(request.Environment);
-                Assert.Equal(LocalToolchain.ToolFileName("clang") + " --target=arm64-apple-ios16.0", request.Environment!["CC"]);
+                if (OperatingSystem.IsLinux())
+                {
+                    // Linux wraps CC with the no-SDK Darwin wrapper (host /usr/include must not leak in).
+                    Assert.EndsWith("darwin-clang.sh", request.Environment!["CC"], StringComparison.Ordinal);
+                    Assert.True(File.Exists(request.Environment!["CC"]));
+                    var wrapperText = File.ReadAllText(request.Environment!["CC"]);
+                    Assert.Contains("-target arm64-apple-ios16.0", wrapperText);
+                    Assert.Contains("-nostdinc", wrapperText);
+                    Assert.Contains(toolchain.ResourceIncludeDirectory!, wrapperText);
+                    Assert.Contains(toolchain.DarwinStubsDirectory!, wrapperText);
+                }
+                else
+                {
+                    Assert.Equal(LocalToolchain.ToolFileName("clang") + " --target=arm64-apple-ios16.0", request.Environment!["CC"]);
+                }
                 Assert.Equal(toolchain.LlvmArPath, request.Environment!["AR"]);
                 Assert.Equal(toolchain.DarwinStubsDirectory, request.Environment!["CPATH"]);
                 Assert.StartsWith(toolchain.LlvmBinDirectory!, request.Environment!["PATH"], StringComparison.Ordinal);
@@ -267,7 +281,9 @@ public sealed class LocalWinbuildPackProviderTests
             "local-build",
             BuildSlug.From("Demo", TitleId),
             "codegen",
-            OperatingSystem.IsWindows() ? "clang-wrapper.cmd" : "clang-wrapper.sh");
+            OperatingSystem.IsWindows() ? "clang-wrapper.cmd"
+                : OperatingSystem.IsLinux() ? "darwin-clang.sh"
+                : "clang-wrapper.sh");
         Assert.True(File.Exists(wrapper), wrapper);
         Assert.Contains("-O3 -flto -ffast-math", File.ReadAllText(wrapper), StringComparison.Ordinal);
     }

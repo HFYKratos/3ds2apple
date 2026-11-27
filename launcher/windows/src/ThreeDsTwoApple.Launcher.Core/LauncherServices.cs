@@ -151,7 +151,7 @@ public sealed class LauncherServices
 
     /// <summary>The local build provider the Deploy page uses (there is no build-mode choice in the UI).</summary>
     public IPackBuildProvider? CreateDeployBuildProvider() =>
-        LauncherPlatform.IsLinux ? new LinuxBuildUnavailableProvider() : CreateBuildProvider(PackBuildMode.LocalWinbuild);
+        Pack is null ? null : new LocalWinbuildPackProvider(LocalTools, Pack, _runner, compatibility: BuildCompatibility);
 
     /// <summary>Linux: plumesign account status/login helper (null when plumesign is missing).</summary>
     public PlumesignAccountService? CreatePlumesignAccountService() =>
@@ -379,8 +379,14 @@ public sealed class LauncherServices
                 shellReady ? "v" + shell.Version + " build " + shell.Build + " (" + shell.BundleId + ")" : verification.Error ?? compatibility.Error ?? "invalid"));
         }
 
-        tools.Add(new ToolStatus("local AOT build (Linux, P2)", false, "unsupported",
-            "Not available in P1/P2: deploy imported .32a packages that already contain a GamePack; no Linux recompilation yet."));
+        var localTools = LocalTools;
+        var missingLocalTools = localTools?.MissingTools() ?? new[] { "local build toolchain not resolved" };
+        var localBuildReady = localTools is not null && missingLocalTools.Count == 0;
+        tools.Add(new ToolStatus("local AOT build (Linux)", localBuildReady,
+            localBuildReady ? "ready" : (localTools is null ? "missing" : "incomplete"),
+            localBuildReady
+                ? "3dsrecomp + clang/llvm-ar/ld64.lld + Darwin stubs are ready; ROM builds run on this PC."
+                : "Missing: " + string.Join("; ", missingLocalTools.Select(ShortToolName)) + " — stage the Linux tool payload (build-linux.sh --payload --local-aot)."));
 
         var installReady = pin?.Ok == true && shellReady;
         return new HostReadiness(
@@ -388,7 +394,7 @@ public sealed class LauncherServices
             CanPreviewBuild: false,
             CanInstallShell: installReady,
             CanPush: DevPush is not null,
-            CanLocalBuild: false,
+            CanLocalBuild: localBuildReady,
             CanDeploy: Pack is not null && installReady);
     }
 
@@ -459,14 +465,19 @@ public sealed class LauncherServices
             }
         }
 
+        var localTools = LocalTools;
+        var missingLocalTools = localTools?.MissingTools().Select(ShortToolName).ToArray()
+                                ?? new[] { "3dsrecomp + clang/llvm-ar/ld64.lld + Darwin stubs (build-linux.sh --payload --local-aot)" };
         return DeployPrerequisiteEvaluator.Evaluate(new DeployPrerequisiteInputs(
             SigningToolsPinned: signingReady,
             SigningDetail: signingReady
                 ? "plumesign v" + LinuxPlumesignPins.TestedVersion + " · Apple ID signed in"
                 : account.Summary,
-            LocalToolchainResolved: false,
-            MissingLocalTools: new[] { "Linux local AOT build (P2) — import a .32a that already contains a GamePack" },
-            LocalToolchainDetail: string.Empty,
+            LocalToolchainResolved: localTools is not null,
+            MissingLocalTools: missingLocalTools,
+            LocalToolchainDetail: localTools is not null
+                ? "3dsrecomp · clang/llvm-ar/ld64.lld · Darwin stubs"
+                : string.Empty,
             DeviceBridgeFound: DevPush is not null,
             DeviceBridgeEnumerates: bridgeEnumerates,
             DeviceBridgeVersion: bridgeVersion,

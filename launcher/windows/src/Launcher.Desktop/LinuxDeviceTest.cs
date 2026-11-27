@@ -1,5 +1,7 @@
 using ThreeDsTwoApple.Launcher.Core;
+using ThreeDsTwoApple.Launcher.Core.BuildPipeline;
 using ThreeDsTwoApple.Launcher.Core.Deploy;
+using ThreeDsTwoApple.Launcher.Core.Models;
 using ThreeDsTwoApple.Launcher.Core.Signing;
 using ThreeDsTwoApple.Launcher.Core.Util;
 
@@ -28,6 +30,10 @@ internal static class LinuxDeviceTest
         var reportPath = Option(args, "--report");
         var refreshSigning = args.Contains("--refresh-signing");
         var noDeploy = args.Contains("--no-deploy");
+        var rom = Option(args, "--rom");
+        var skipAccount = args.Contains("--skip-account");
+        var aotName = Option(args, "--name");
+        var aotExport = args.Contains("--export-32a");
         var lines = new List<string>();
         void Line(string text)
         {
@@ -60,24 +66,45 @@ internal static class LinuxDeviceTest
             Line("linux-device-test: workspace=" + state.Root);
             Line("linux-device-test: shell dir=" + services.ShellDirectory);
 
-            var account = services.CreatePlumesignAccountService();
-            var accountStatus = account is null ? null : await account.StatusAsync();
-            Line("account: signedIn=" + (accountStatus?.SignedIn == true) + " — " + (accountStatus?.Summary ?? "plumesign missing"));
-            if (accountStatus?.SignedIn != true)
+            if (!string.IsNullOrWhiteSpace(rom))
             {
-                Line("RESULT: ACCOUNT_NOT_SIGNED_IN");
+                var exit = await RunAotBuildAsync(services, rom!, aotName, aotExport, Line);
                 SaveReport();
-                return 3;
+                return exit;
+            }
+
+            if (!skipAccount)
+            {
+                var accountService = services.CreatePlumesignAccountService();
+                var accountStatus = accountService is null ? null : await accountService.StatusAsync();
+                Line("account: signedIn=" + (accountStatus?.SignedIn == true) + " — " + (accountStatus?.Summary ?? "plumesign missing"));
+                if (accountStatus?.SignedIn != true)
+                {
+                    Line("RESULT: ACCOUNT_NOT_SIGNED_IN");
+                    SaveReport();
+                    return 3;
+                }
+            }
+            else
+            {
+                Line("account: skipped (--skip-account; local AOT/cache verification only)");
             }
 
             string? deviceUdid = null;
             if (services.DevPush is { } bridge)
             {
-                var devices = await bridge.DevicesAsync();
-                var usb = devices.Where(device => device.IsUsb).ToList();
-                Line("device: connected=" + devices.Count + " usb=" + usb.Count
-                     + (usb.Count > 0 ? " — " + usb[0].Display : string.Empty));
-                deviceUdid = (usb.Count > 0 ? usb[0] : devices.FirstOrDefault())?.Udid;
+                try
+                {
+                    var devices = await bridge.DevicesAsync();
+                    var usb = devices.Where(device => device.IsUsb).ToList();
+                    Line("device: connected=" + devices.Count + " usb=" + usb.Count
+                         + (usb.Count > 0 ? " — " + usb[0].Display : string.Empty));
+                    deviceUdid = (usb.Count > 0 ? usb[0] : devices.FirstOrDefault())?.Udid;
+                }
+                catch (Exception exception) when (exception is LauncherToolException or IOException or UnauthorizedAccessException)
+                {
+                    Line("device: unavailable (" + exception.Message + ") — import/cache verification continues");
+                }
             }
             else
             {
@@ -177,6 +204,97 @@ internal static class LinuxDeviceTest
             SaveReport();
             return 1;
         }
+    }
+
+    /// <summary>P2: build a real GamePack from a user ROM with the Linux payload's own toolchain, then export a .32a.</summary>
+    private static async Task<int> RunAotBuildAsync(
+        LauncherServices services,
+        string romPath,
+        string? name,
+        bool export,
+        Action<string> line)
+    {
+        if (!File.Exists(romPath))
+        {
+            line("aot: ROM not found: " + romPath);
+            return 2;
+        }
+        if (services.Pack is not { } pack)
+        {
+            line("aot: 3ds2apple-pack is missing from the payload");
+            return 2;
+        }
+        var provider = services.CreateDeployBuildProvider();
+        if (provider is null)
+        {
+            line("aot: no local build provider (3ds2apple-pack missing)");
+            return 2;
+        }
+        line("aot: provider=" + provider.Name + " installable=" + provider.Installable);
+        var tools = services.LocalTools;
+        line("aot: recompiler=" + (tools?.RecompilerPath ?? "missing")
+             + " llvm=" + (tools?.LlvmBinDirectory ?? "missing")
+             + " stubs=" + (tools?.DarwinStubsDirectory ?? "missing"));
+        if (tools is not null)
+        {
+            var missing = tools.MissingTools();
+            line("aot: missingTools=" + (missing.Count == 0 ? "none" : string.Join("; ", missing)));
+        }
+
+        var added = await pack.AddAsync(new[] { romPath }, name);
+        var errors = added.Errors.Count > 0 ? string.Join("; ", added.Errors) : string.Empty;
+        line("aot: romImport ok=" + added.Ok + (errors.Length > 0 ? " errors=" + errors : string.Empty));
+        var imported = added.Packages.FirstOrDefault();
+        if (imported is null)
+        {
+            line("aot: pack CLI returned no package for the ROM");
+            return 2;
+        }
+        var titleId = imported.TitleID;
+        var displayName = string.IsNullOrWhiteSpace(imported.DisplayName) ? (name ?? titleId) : imported.DisplayName;
+        line("aot: title=" + titleId + " display=" + displayName);
+
+        var work = Path.Combine(services.Workspace.WorkDirectory, "linux-aot", titleId);
+        var request = new PackBuildRequest(titleId, displayName, imported.ProductCode, romPath, work);
+        var progress = new Progress<BuildProgress>(item => line("aot progress: " + item.Stage + " " + (item.Percent?.ToString("F0") ?? "?") + "% — " + item.Message));
+        var outcome = await provider.BuildAsync(request, progress, text => line("[aot] " + text));
+        line("aot: success=" + outcome.Success + " installable=" + outcome.Installable
+             + " pack=" + (outcome.PackPath ?? "-") + " error=" + (outcome.ErrorCode ?? "-") + " " + (outcome.ErrorMessage ?? string.Empty));
+        if (!outcome.Success)
+        {
+            line("RESULT: AOT_BUILD_FAILED");
+            return 1;
+        }
+        if (outcome.Pack is { } packRecord)
+        {
+            line("aot: pack sha256=" + packRecord.Sha256 + " bytes=" + packRecord.Bytes);
+        }
+        if (!export)
+        {
+            line("aot: .32a export skipped (--export-32a not set)");
+            line("RESULT: AOT_BUILD_OK");
+            return 0;
+        }
+        var exportRoot = Path.Combine(services.Workspace.Root, "linux-aot-export");
+        var compatibility = await services.BuildCompatibility.ResolveAsync();
+        var exported = await pack.ExportBuildsAsync(
+            new[] { titleId },
+            exportRoot,
+            LauncherInfo.Version,
+            LauncherInfo.Version,
+            compatibility.ClangVersion,
+            compatibility.Ld64Version,
+            "O2",
+            lto: false,
+            fastMath: false,
+            romDirectories: new[] { Path.GetDirectoryName(Path.GetFullPath(romPath))! });
+        foreach (var build in exported.Packages)
+        {
+            line("aot: .32a " + build.Path + " bytes=" + build.Bytes + " sha256=" + build.Sha256 + " romIncluded=" + build.RomIncluded);
+        }
+        line("aot: export ok=" + exported.Ok + (exported.Errors.Count > 0 ? " errors=" + string.Join("; ", exported.Errors) : string.Empty));
+        line("RESULT: " + (exported.Ok ? "AOT_EXPORT_OK" : "AOT_EXPORT_FAILED"));
+        return exported.Ok ? 0 : 1;
     }
 
     private static string RedactAppleId(string text) =>

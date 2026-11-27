@@ -26,14 +26,15 @@ functional/parity reference and is not compiled here.
 - Devices are discovered through `devpush` (Linux build) with a read-only
   `usbmuxd` fallback (`/var/run/usbmuxd`; override with
   `THREEDS2APPLE_USBMUXD_SOCKET`). USB + unlock + Trust is required.
-- Imported `.32a` packages (built on Windows/macOS) deploy without recompiling:
-  their embedded GamePack + build cache are used directly.
-
-## Not available yet (P2)
-
-- Local AOT GamePack compilation on Linux is not implemented (P2 R&D). The Deploy
-  page states this explicitly and the build step fails with an actionable message;
-  it never produces a placeholder pack. Deploy imported `.32a` packages instead.
+- Imported `.32a` packages deploy without recompiling: their embedded GamePack +
+  build cache are used directly.
+- **Local AOT build on Linux (P2)**: when the payload includes the local-AOT tools
+  (`Bin/3dsrecomp`, `Bin/llvm/bin/{clang,llvm-ar,ld64.lld}`, `Bin/llvm/lib/clang/<ver>/include`,
+  `tools/winbuild/darwin-stubs`, the GamePack shim and headers), Deploy/Library can
+  compile a user's ROM into a real arm64 iOS GamePack on this PC (3dsrecomp →
+  clang `-target arm64-apple-ios16.0` → ld64.lld), then record/export a `.32a`.
+  No Apple SDK, macOS or Windows is used. The staged LLVM pin is the exact official 23.1.6 release; the actual version is
+  written to the payload's `PINS-local-aot.json` (no version is misreported).
 
 ## Build
 
@@ -44,12 +45,14 @@ pack CLI/devpush builds and the official plumesign binary.
     # developer build (no payload)
     ./launcher/linux/build-linux.sh
 
-    # P3 release payload + tar.gz
-    ./launcher/linux/build-linux.sh --payload --tar \
+    # release payload + tar.gz (P1/P3 + P2 local AOT)
+    ./launcher/linux/build-linux.sh --payload --local-aot --tar \
       --shell-dir /path/to/out/shell \
       --pack-bin  builder/target/release/3ds2apple-pack \
       --devpush-bin tools/devpush/target/release/devpush \
-      --plumesign launcher/linux/vendor/plumesign-linux-x86_64
+      --plumesign launcher/linux/vendor/plumesign-linux-x86_64 \
+      --llvm-dir /path/to/llvm/bin \
+      --recompiler-bin /path/to/linux/3dsrecomp
 
 Output: `out/launchers/3ds2apple-launcher-linux-x64/` (+ `.tar.gz`). The payload
 layout matches `DistributionLayout.LinuxExpectedRelativePaths`:
@@ -57,7 +60,9 @@ layout matches `DistributionLayout.LinuxExpectedRelativePaths`:
     Shell/manifest.json, Shell/3ds2apple-shell.ipa
     ThirdParty/Impactor/plumesign-linux-x86_64 (+ PINS/licences/README)
     Bin/3ds2apple-pack, Bin/devpush
-    licenses/LICENSE, licenses/NOTICE, licenses/THIRD_PARTY.md
+    Bin/3dsrecomp, Bin/llvm/bin/{clang,llvm-ar,ld64.lld}, Bin/llvm/lib/clang/<ver>/include
+    tools/winbuild/darwin-stubs, tools/winbuild/zk_gamepack_shim.c, tools/winbuild/include
+    PINS-local-aot.json, licenses/LICENSE, licenses/NOTICE, licenses/THIRD_PARTY.md
 
 Run the packaged build with `/path/to/3ds2apple-launcher --self-test`, then start
 the GUI. On a headless machine use `xvfb-run -a ./3ds2apple-launcher`.
@@ -75,12 +80,14 @@ The launcher provides no ROM, key, IPA or game asset and never uploads anything.
 
 1. Connect the iPhone/iPad by USB, unlock and tap Trust; install/start usbmuxd.
 2. Settings → Sign in with plumesign; enter the Apple ID and 2FA in the terminal.
-3. Import a ROM or an already-built `.32a`; build (on Windows/macOS) or use the
-   imported GamePack.
-4. Deploy: compose → plumesign sign/install → devpush push → verify.
+3. Import a ROM or an already-built `.32a`; with the local-AOT payload, Deploy
+   compiles the ROM into a real GamePack on Linux (no Windows/macOS build needed).
+4. Deploy: build (only when the cache is stale) → compose → plumesign sign/install →
+   devpush push → verify.
 5. After 7 days (free Apple ID), press Refresh signing; the app is overwrite-installed
    and existing Documents/saves stay intact.
 
-Known P1/P3 gaps: no Linux local AOT compile (P2); AppImage/desktop-entry packaging
-and full QA screenshots on the CachyOS build machine are follow-ups; Deploy copy is
-Linux-aware but the local-build row is always an explicit red P2 row.
+Known P2 gaps: the exact LLVM 23.1.6 release asset was not fetchable on the current
+build network (payload uses 23.1.5 and records the truth in PINS-local-aot.json);
+3dsrecomp is currently built on WSL and copied because CachyOS cargo cannot fetch its
+git dependency; AppImage/desktop-entry packaging is a follow-up.
