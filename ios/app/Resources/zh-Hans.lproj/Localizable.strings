@@ -587,6 +587,7 @@
 "The overlay opacity under Controls applies to both choices." = "“控制”页的覆盖层不透明度对两种选择都生效。";
 "Editing the %@ layout" = "正在编辑%@布局";
 "Drag to move, pinch to scale. The controls are shown for reference." = "拖动移动，双指捏合缩放。屏幕上的按键仅作对照。";
+"Takes effect after restarting the game." = "重启游戏后生效。";
 "Tap a control, then drag or pinch it. The screens show the current screen layout." = "点按选中按键后可拖动或捏合缩放。屏幕显示当前屏幕布局。";
 /* --- 0.1.4：后台暂停/恢复与恢复快照 --- */
 "%@ was interrupted when the app left the foreground." = "%@ 在应用离开前台时被中断。";

@@ -584,6 +584,7 @@
 "The overlay opacity under Controls applies to both choices." = "The overlay opacity under Controls applies to both choices.";
 "Editing the %@ layout" = "Editing the %@ layout";
 "Drag to move, pinch to scale. The controls are shown for reference." = "Drag to move, pinch to scale. The controls are shown for reference.";
+"Takes effect after restarting the game." = "Takes effect after restarting the game.";
 "Tap a control, then drag or pinch it. The screens show the current screen layout." = "Tap a control, then drag or pinch it. The screens show the current screen layout.";
 /* --- 0.1.4: background pause/resume and the recovery snapshot --- */
 "%@ was interrupted when the app left the foreground." = "%@ was interrupted when the app left the foreground.";

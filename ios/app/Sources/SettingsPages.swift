@@ -337,6 +337,7 @@ struct SettingsChoicePage<Choice: Hashable>: View {
 struct SettingsSegmentedRow<Choice: Hashable>: View {
     let title: LocalizedStringKey
     let description: LocalizedStringKey
+    let restartRequired: Bool
     let hint: String?
     let choices: [Choice]
     @Binding var selection: Choice
@@ -345,6 +346,7 @@ struct SettingsSegmentedRow<Choice: Hashable>: View {
     init(
         title: LocalizedStringKey,
         description: LocalizedStringKey,
+        restartRequired: Bool = false,
         hint: String? = nil,
         choices: [Choice],
         selection: Binding<Choice>,
@@ -352,6 +354,7 @@ struct SettingsSegmentedRow<Choice: Hashable>: View {
     ) {
         self.title = title
         self.description = description
+        self.restartRequired = restartRequired
         self.hint = hint
         self.choices = choices
         self._selection = selection
@@ -360,7 +363,12 @@ struct SettingsSegmentedRow<Choice: Hashable>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SettingsRowShell(title: title, description: description, hint: hint) {
+            SettingsRowShell(
+                title: title,
+                description: description,
+                restartRequired: restartRequired,
+                hint: hint
+            ) {
                 Text(label(selection))
                     .font(.body)
                     .foregroundStyle(.secondary)
@@ -1340,10 +1348,17 @@ struct GraphicsSettingsPage: View {
     var body: some View {
         SettingsPageScaffold(title: "Graphics") {
             Section {
+                // The drawable scale applies at once, but the runtime builds
+                // the guest 3D renderer when a system loads: the internal
+                // resolution only changes after the game is reloaded, so the
+                // row carries the same restart badge as the other next-launch
+                // graphics options (see zk_set_render_scale in
+                // ios/ZakuroBridge.h — no run-time renderer rebuild).
                 SettingsSegmentedRow(
                     title: "Resolution",
                     description: "Drawable and internal 3D scale; internal applies next load.",
-                    hint: resolutionCaption(for: settings.renderScale),
+                    restartRequired: true,
+                    hint: resolutionHint(for: settings.renderScale),
                     choices: [1, 2, 3, 4],
                     selection: persistedBinding(settings, \.renderScale),
                     label: { "\($0)x" }
@@ -1610,4 +1625,11 @@ func resolutionCaption(for renderScale: Int) -> String {
         return L10n.tr("1x is the 3DS's native 400×240.")
     }
     return L10n.format("%ldx is %ld×%ld.", renderScale, 400 * renderScale, 240 * renderScale)
+}
+
+/// The resolution caption plus the effective-time note: the drawable resizes at
+/// once, but the internal 3D resolution is read when a system loads and has no
+/// run-time rebuild, so it needs the game to be restarted/reloaded.
+func resolutionHint(for renderScale: Int) -> String {
+    resolutionCaption(for: renderScale) + " · " + L10n.tr("Takes effect after restarting the game.")
 }
