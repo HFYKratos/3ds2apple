@@ -52,8 +52,8 @@ enum ShellRuntime {
     /// Rebuilt 0.2.2 build 1 ROM-free shell IPA from current main (the 0.2.2
     /// release; CFBundleShortVersionString is the numeric 0.2.2 and the package
     /// label is 0.2.2-beta1 for this pre-release).
-    static let pinnedTemplateBytes: Int64 = 6_802_350
-    static let pinnedTemplateSHA256 = "9baf30ce97fade3cce2ec77ff0d54d7f910ae6b058af4e39a7fa44ad834fa400"
+    static let pinnedTemplateBytes: Int64 = 6_804_837
+    static let pinnedTemplateSHA256 = "6536c642220b68c497334358dc74908db03304bdbf784cec9b957673186ca5fb"
     /// The rebuilt shell identity the launcher is built against. The pinned
     /// template must report exactly these values; another shell build is refused.
     static let expectedShellVersion = "0.2.2"
