@@ -254,6 +254,7 @@
 "Start Anyway" = "仍要启动";
 "Starting %@…" = "正在启动 %@…";
 "Starting Zakuro…" = "正在启动 Zakuro…";
+"Starting the game…" = "正在启动游戏…";
 "Storage" = "存储";
 "Stretch" = "拉伸";
 "Summary" = "概要";
@@ -771,6 +772,7 @@
 "This build is the latest release." = "当前版本已是最新正式版。";
 "A newer release is available on GitHub." = "GitHub 上有更新的版本。";
 "Could not reach GitHub. Try again later." = "无法连接 GitHub，请稍后再试。";
+"Try again" = "重试";
 "Turbo limit" = "加速限制";
 "Turbo speed" = "加速速度";
 "Default speed" = "默认速度";
