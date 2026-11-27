@@ -215,7 +215,7 @@ sha256sum 3ds2apple-0.3.1-linux-x86_64.tar.gz</code></pre>
       <div class="section-head">
         <p class="eyebrow">Features</p>
         <h2>The full feature set.</h2>
-        <p>Full-bleed play, a complete New 3DS control set, GPU-drawn screen layouts and a launcher that handles the whole pipeline.</p>
+        <p>Full-bleed play, a complete New 3DS control set, GPU-drawn screen layouts, your own cheat files, a full gamepad layer and launchers that handle the whole pipeline.</p>
       </div>
       <div class="features">
         <article class="feature">
@@ -256,7 +256,32 @@ sha256sum 3ds2apple-0.3.1-linux-x86_64.tar.gz</code></pre>
         <article class="feature">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9V3Z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15V3.5Z"/></svg>
           <h3>GPU path for every layout</h3>
-          <p>Hybrid, LargeTopRight and TopFullWidth add presenter arrangements, and custom rectangles now run on the same GPU path — with rotation and screen swap.</p>
+          <p>Hybrid, LargeTopRight and Full width add presenter arrangements, and custom rectangles now run on the same GPU path — with rotation and screen swap.</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg>
+          <h3>Grouped Settings and the in-game menu</h3>
+          <p>Settings uses the iOS 26/27 inset-grouped pages — General, System, Gamepad, Cheats, Graphics, Layout, Sound, Debug and Other — with two-line descriptions, and the in-game menu is built in the same language with native push/pop sub-pages.</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="8" width="19" height="9" rx="4"/><path d="M8 11v3M6.5 12.5h3M16 11.5h.01M18 14h.01"/></svg>
+          <h3>Gamepad layer and per-app settings</h3>
+          <p>A physical controller gets an analog deadzone, button remapping, 2–4 button hotkeys, Standard / High contrast on-screen controls and per-app Gamepad profiles. Per-Application Settings override screen rotation and swap, Integer scaling, Screen aspect, deadzone, control appearance and button mapping per title.</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5h16v14H4z"/><path d="m7 9 2 2-2 2M12 9h4M12 13h4"/></svg>
+          <h3>Your own cheat codes</h3>
+          <p>Bring Citra/Azahar cheat text files: Settings → Cheats imports, edits, toggles and exports a game's file while the in-game menu's Cheats page switches codes on the fly. No database is bundled or downloaded, and only data patches are supported.</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 7h16v10H4z"/><path d="M8 7V5h8v2M9 12h6"/></svg>
+          <h3>Portable builds and single-game IPA</h3>
+          <p>One Export dialog writes a portable <code>.32a</code> build package or an unsigned, self-contained single-game IPA; Import accepts ROMs and <code>.32a</code> packages (with build-cache reuse) and the Settings page tunes the AOT options. <b>Refresh signing</b> renews a free-Apple-ID signature without rebuilding.</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v6M12 15v6M3 12h6M15 12h6"/><circle cx="12" cy="12" r="3"/></svg>
+          <h3>Speed, update channels and saves</h3>
+          <p>Default and Turbo speed run 1×–4× with an unlimited option, Stable/Beta update channels check GitHub in the background (at most once a day, with a local notification), and the Save Manager exports/imports battery saves as ZIP alongside three save-state slots per game.</p>
         </article>
       </div>
     </div>
@@ -344,7 +369,7 @@ sha256sum 3ds2apple-0.3.1-linux-x86_64.tar.gz</code></pre>
       <div class="section-head">
         <p class="eyebrow">Screens</p>
         <h2>Launchers and settings.</h2>
-        <p>The Windows and macOS launchers, plus the app's own settings screens. Launcher screenshots show the built-in synthetic demo entries; app screenshots are synthetic previews — no game data is depicted.</p>
+        <p>The Windows, macOS and Linux launchers, plus the app's own settings screens. Launcher screenshots show the built-in synthetic demo entries; app screenshots are synthetic previews — no game data is depicted.</p>
       </div>
       <div class="gallery">
         <figure><img src="assets/screenshots/launcher-windows-en.png" width="1120" height="820" loading="lazy" decoding="async" alt="Windows launcher 0.2.1 Library screen with an empty synthetic library."><figcaption>Windows launcher · Library (0.2.1, empty synthetic library)</figcaption></figure>
@@ -356,6 +381,8 @@ sha256sum 3ds2apple-0.3.1-linux-x86_64.tar.gz</code></pre>
         <figure><img src="assets/screenshots/display-settings.png" width="800" height="1734" loading="lazy" decoding="async" alt="Layout settings in 0.2.1 with the screen layout entry and the Performance monitoring group."><figcaption>Layout settings · screen layout + performance monitoring</figcaption></figure>
         <figure><img src="assets/screenshots/performance-overlay.png" width="800" height="1734" loading="lazy" decoding="async" alt="Performance overlay settings in 0.2.1: the master switch, background, six positions and five line switches."><figcaption>Performance overlay settings</figcaption></figure>
         <figure><img src="assets/screenshots/overlay-position.png" width="800" height="1734" loading="lazy" decoding="async" alt="Overlay position picker in 0.2.1 with the six corner positions."><figcaption>Overlay position · six places</figcaption></figure>
+        <figure><img src="assets/screenshots/launcher-linux-library-en.png" width="1240" height="776" loading="lazy" decoding="async" alt="Linux launcher 0.3.1 Library screen with the built-in synthetic demo entries."><figcaption>Linux launcher · Library (0.3.1)</figcaption></figure>
+        <figure><img src="assets/screenshots/launcher-linux-library-zh.png" width="1240" height="776" loading="lazy" decoding="async" alt="Linux 启动器 0.3.1 游戏库界面（中文，内置合成演示条目）。"><figcaption>Linux 启动器 · 游戏库（0.3.1）</figcaption></figure>
       </div>
     </div>
   </section>
@@ -441,6 +468,14 @@ sha256sum 3ds2apple-0.3.1-linux-x86_64.tar.gz</code></pre>
           <div class="a"><p>No. Compatibility is per title and there are no compatibility or performance guarantees. Some games may fail to boot or render incorrectly — a few menus in some titles can still show corrupted graphics (<a href="https://github.com/HFYKratos/3ds2apple/issues/2" rel="noopener">issue #2</a>). A compatibility report with the title ID helps.</p></div>
         </details>
         <details>
+          <summary>Can I use my own cheat codes?</summary>
+          <div class="a"><p>Yes. Settings → Cheats imports, edits, toggles and exports your own Citra/Azahar cheat text files for each title, and the in-game menu's Cheats page switches them while you play. The app bundles no cheat database and downloads none, and only data patches are supported — codes that rewrite the game's code can slow an AOT build down.</p></div>
+        </details>
+        <details>
+          <summary>How do updates work?</summary>
+          <div class="a"><p>Settings → General has a Stable/Beta update channel and a Check for updates row; background checks run at most once every 24 hours and post a local notification when a new release appears. The launcher renews the 7-day signature in place, and a new app build is installed with one Deploy that keeps Documents and saves.</p></div>
+        </details>
+        <details>
           <summary>Why is there no CPU JIT?</summary>
           <div class="a"><p>iOS does not allow JIT-compiled executable memory, and the project intentionally keeps the shipping path AOT: native ARM64 code produced on the host, then Metal for graphics. If an interpreter is detected the app refuses to start.</p></div>
         </details>
@@ -489,7 +524,7 @@ sha256sum 3ds2apple-0.3.1-linux-x86_64.tar.gz</code></pre>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>The Linux launcher is newer</h3><p>It builds GamePacks locally with the bundled 3dsrecomp + LLVM/LLD 23.1.6, signs/installs with plumesign-linux and pushes through usbmuxd/devpush, and imported <code>.32a</code> packages reuse their build cache. It has had less real-device exposure than the Windows path — report issues on the tracker.</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>The C-stick depends on the game</h3><p>It is reported through the New 3DS nub API; a title that never reads the nub ignores it, and a shell built with an older runtime does not provide it. It is hidden by default — enable it in Toggle controls when a game uses the nub.</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>No compatibility or performance promises</h3><p>Some titles may fail to boot or run slowly. The reference numbers in the README come from the maintainers testing specific titles — they are not a guarantee.</p></div></article>
-        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>Not yet included</h3><p>Delta-style skin import, a cheat manager, a game manual viewer, amiibo, microphone, camera and network/online features are not included — they need emulator-core work. CPU JIT, shader JIT, RPC and LLE module settings do not apply to the AOT-only architecture.</p></div></article>
+        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>Not yet included</h3><p>Delta-style skin import, a bundled cheat database, a game manual viewer, amiibo, microphone, camera and network/online features are not included — they need emulator-core work. CPU JIT, shader JIT, RPC and LLE module settings do not apply to the AOT-only architecture.</p></div></article>
         <article class="limit legal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 4 7v5c0 5 3.5 8 8 9 4.5-1 8-4 8-9V7l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg><div><h3>Legal boundaries</h3><p>No ROMs, keys, BIOS, system files or game assets are provided, and there is no piracy support. Use only games you legally own and dump yourself. 3ds2apple is not affiliated with Nintendo.</p></div></article>
       </div>
     </div>

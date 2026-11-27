@@ -89,7 +89,7 @@
 
 プリセットの配置はすべて GPU プレゼンターが描画します。Metal 経路で毎フレームの画面リードバックはありません。**カスタムレイアウト**は 2 つの画面を任意の矩形に配置します。X/Y/幅/高さをパーセントで編集でき（フィールドの下にライブプレビュー）、画面をドラッグして編集することもできます。カスタムレイアウトも GPU プレゼンターが描画し（任意の矩形、四方向の回転、上下画面の入れ替え）、低速なリードバック経路には戻りません。カスタムレイアウトは引き続き次回のゲーム読み込みから適用されます。
 
-画面の回転とインターフェースの向きは保持されます。レンダリング解像度（1x〜4x）は 2 つの部分に分かれます: 表示用の drawable はすぐに変わりますが、ホスト GPU の 3D レンダラー内部の倍率はシステム読み込み時に固定されるため、実行中のゲームは再読み込みするまで古い内部解像度のままです——Settings → Graphics とゲーム内メニューの両方の Resolution 行に「**再起動が必要**」バッジと「**ゲームを再起動すると反映されます**」の注記があります。0.1.5 で従来のアスペクト比と整数スケーリングのスイッチは削除されました。
+画面の回転とインターフェースの向きは保持されます。レンダリング解像度（1x〜4x）は 2 つの部分に分かれます: 表示用の drawable はすぐに変わりますが、ホスト GPU の 3D レンダラー内部の倍率はシステム読み込み時に固定されるため、実行中のゲームは再読み込みするまで古い内部解像度のままです——Settings → Graphics とゲーム内メニューの両方の Resolution 行に「**再起動が必要**」バッジと「**ゲームを再起動すると反映されます**」の注記があります。Integer scaling と Screen aspect（Fit / 4:3 / Stretch）は Settings → Graphics の個別オプションで、レンダラーは自動選択です（旧 read-only の Renderer 行はなくなりました）。
 
 ## レンダラー最適化（実験的）
 
@@ -127,6 +127,17 @@
 
 <p align="center"><sub>0.2.1 合成プレビュー、ゲームデータなし：縦画面コントロール → 横画面コントロール → ゲーム内メニュー → パフォーマンスオーバーレイ設定。</sub></p>
 
+## 設定・ゲームパッド・アップデート
+
+アプリの **Settings** は iOS 26/27 の inset-grouped 言語——General、System、Gamepad、Cheats、Graphics、Layout、Sound、Debug、Other——を使い、各項目に 2 行の説明があります。ゲーム内メニューも同じ言語で、ネイティブの push/pop サブページを備えます。
+
+- **実行速度** — Default と Turbo はそれぞれ 1×–4×。Run speed limit / Turbo limit をオフにすると上限がなくなり、真に無制限の速度になります（熱・バッテリー・消音の警告は残ります）。早送りは別の 1× / 2× / 4× コントロールです。
+- **アップデートチャンネル** — Stable / Beta チャンネルで GitHub を確認。手動またはバックグラウンド（24 時間に最大 1 回）で確認し、新リリースがあればローカル通知を出します。
+- **ゲームパッドレイヤー** — 物理コントローラーのアナログデッドゾーン、ボタン再マップ、2–4 ボタンのホットキー、Standard / High contrast のオンスクリーンコントロール、アプリ別 Gamepad プロファイル。
+- **アプリ別設定** — タイトル ID ごとに画面回転、画面入れ替え、Integer scaling、Screen aspect、デッドゾーン、コントロール外観、ボタン割り当てを上書き。
+- **グラフィックス** — Integer scaling と Screen aspect（Fit / 4:3 / Stretch）は Settings → Graphics にあり、6 つの実験的レンダラー最適化も同じ場所です。レンダラーは自動選択されます。
+- **セーブマネージャーとストレージ** — Save Manager はライブラリの全ゲームを対象に、選択ゲームのバッテリーセーブを ZIP に書き出し、ZIP または単体セーブファイルを読み込み、個別ファイルを削除できます（そのゲーム実行中は読み込み・削除が無効）。Storage ページはセーブデータ・旧ゲームファイル・ログ・パイプラインキャッシュの使用量を表示し、ゲーム未実行時にグラフィックスパイプラインキャッシュを消去できます。
+
 ## チートコード
 
 チートコードはアプリやランチャーが同梱するものではなく、自分で用意する Citra/Azahar 形式のテキストファイルです。アプリは `Documents/Cheats/<TITLEID>.txt`（ゲームフォルダーと同じ 16 桁のタイトル ID）から読み込みます。形式はデスクトップツールと同じで、`[name]` 行、任意の `*citra_enabled` 行、その後に `XXXXXXXX YYYYYYYY` のコード行を並べます。
@@ -151,12 +162,19 @@
 
 ## スクリーンショット
 
-**デスクトップランチャー**——実際のアプリのスクリーンショットです。ライブラリの項目は合成のデモ項目で、ゲームの画像は含まれません。
+**デスクトップランチャー**——Windows/macOS は 0.2.1 の実際の UI キャプチャ、Linux は 0.3.1 のヘッドレスキャプチャです。ライブラリの項目は合成のデモ項目で、ゲームの画像は含まれません。
 
 | Windows ランチャー | Windows ランチャー（简体中文） | macOS ランチャー |
 |:---:|:---:|:---:|
 | <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> |
 | ライブラリ（English） | ライブラリ（中文） | 空のライブラリ（ダーク） |
+
+**Linux ランチャー**——0.3.1 Linux パッケージのヘッドレスキャプチャ。ライブラリは内蔵の合成デモ項目で、ゲームデータは含まれません。
+
+| English | 简体中文 |
+|:---:|:---:|
+| <img src="docs/assets/screenshots/launcher-linux-library-en.png" width="430" alt="Linux launcher 0.3.1 Library with the built-in synthetic demo entries"> | <img src="docs/assets/screenshots/launcher-linux-library-zh.png" width="430" alt="Linux ランチャー 0.3.1 のライブラリ（中国語 UI、内蔵の合成デモ項目）"> |
+| ライブラリ（English） | ライブラリ（中文） |
 
 **iOS アプリ**——オンスクリーンコントロールの合成プレビューです。ゲームデータは含まれません。
 

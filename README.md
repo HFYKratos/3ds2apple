@@ -86,7 +86,7 @@ In landscape the picture box is top-aligned: **Large screen**, **Side by side** 
 
 All preset arrangements are drawn by the GPU presenter — the Metal path with zero per-frame screen readback. **Custom layout** places each screen at its own rectangle: edit X/Y/width/height percentages with a live preview under the fields, or drag the screens; custom layouts are drawn by the GPU presenter too (arbitrary rectangles, four-way rotation and top/bottom screen swap), so nothing falls back to a slower readback path. A custom layout still applies from the next game load.
 
-Screen rotation and interface orientation are kept. Render resolution (1x–4x) has two parts: the presented drawable resizes at once, while the host-GPU 3D renderer's internal scale is fixed when a system loads, so a running game keeps its old internal resolution until it is reloaded — both Resolution rows (Settings → Graphics and the in-game menu) carry a **Restart required** badge and the note **Takes effect after restarting the game**. 0.1.5 removed the old aspect-ratio and integer-scaling switches.
+Screen rotation and interface orientation are kept. Render resolution (1x–4x) has two parts: the presented drawable resizes at once, while the host-GPU 3D renderer's internal scale is fixed when a system loads, so a running game keeps its old internal resolution until it is reloaded — both Resolution rows (Settings → Graphics and the in-game menu) carry a **Restart required** badge and the note **Takes effect after restarting the game**. Integer scaling and Screen aspect (Fit / 4:3 / Stretch) are separate Settings → Graphics options, and the renderer is selected automatically (the old read-only Renderer row is gone).
 
 ## Renderer optimisations (experimental)
 
@@ -124,6 +124,17 @@ Pause any game and open **Virtual controls → Edit layout**: every control has 
 
 <p align="center"><sub>0.2.1 synthetic preview, no game data: portrait controls → landscape controls → in-game menu → performance overlay settings.</sub></p>
 
+## Settings, gamepad and updates
+
+The app's **Settings** page uses the iOS 26/27 inset-grouped language — General, System, Gamepad, Cheats, Graphics, Layout, Sound, Debug and Other — with two-line descriptions; the in-game menu is built the same way with native push/pop sub-pages.
+
+- **Run speed** — Default and Turbo speed are each 1×–4×, and switching off Run speed limit or Turbo limit removes the cap for true unlimited speed (the heat, battery and audio-muted warnings stay). Fast-forward is the separate 1× / 2× / 4× control.
+- **Update channels** — check GitHub on the Stable or Beta channel, manually or in the background (at most once every 24 hours), with a local notification when a new release appears.
+- **Gamepad layer** — physical-controller analog deadzone, button remapping, 2–4 button hotkeys, Standard / High contrast on-screen controls and per-app Gamepad profiles.
+- **Per-Application Settings** — per-title-ID overrides for screen rotation, screen swap, Integer scaling, Screen aspect, deadzone, control appearance and button mapping.
+- **Graphics** — Integer scaling and Screen aspect (Fit / 4:3 / Stretch) sit under Graphics next to the six experimental renderer optimisations; the renderer itself is chosen automatically.
+- **Save Manager and Storage** — the Save Manager covers every game in the library: export the selected game's battery saves as a ZIP, import a ZIP or single save files back, and delete individual files (import and delete are disabled while that game runs). The Storage page shows save-data, legacy game-file, log and pipeline-cache usage and can clear the graphics pipeline cache while no game is running.
+
 ## Cheat codes
 
 Cheat codes are your own Citra/Azahar text files, not something the app or the launcher ships. The app reads them from `Documents/Cheats/<TITLEID>.txt` (the same 16-hex title ID as the game folder), in the format the desktop tools already use: a `[name]` line, an optional `*citra_enabled` line, then `XXXXXXXX YYYYYYYY` code lines.
@@ -148,12 +159,19 @@ A built game has one **Export** action in the Library (disabled until a real AOT
 
 ## Screenshots
 
-**Desktop launchers** — real 0.2.1 launcher screenshots; the library is the built-in synthetic fixture (empty or demo entries) and no game art appears.
+**Desktop launchers** — real Windows/macOS 0.2.1 UI captures plus a 0.3.1 Linux launcher capture; the library is the built-in synthetic fixture (empty or demo entries) and no game art appears.
 
 | Windows launcher | Windows launcher (简体中文) | macOS launcher |
 |:---:|:---:|:---:|
 | <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> |
 | Library (EN) | Library (中文) | Empty library (dark) |
+
+**Linux launcher** — headless capture of the 0.3.1 Linux package with the built-in synthetic demo entries; no game data.
+
+| English | 简体中文 |
+|:---:|:---:|
+| <img src="docs/assets/screenshots/launcher-linux-library-en.png" width="430" alt="Linux launcher 0.3.1 Library with the built-in synthetic demo entries"> | <img src="docs/assets/screenshots/launcher-linux-library-zh.png" width="430" alt="Linux 启动器 0.3.1 游戏库（中文界面，内置合成演示条目）"> |
+| Library (EN) | 游戏库（中文） |
 
 **iOS app** — 0.2.1 synthetic previews of the game view and performance overlay; no game data.
 

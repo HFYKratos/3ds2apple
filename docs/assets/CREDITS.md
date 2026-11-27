@@ -4,9 +4,10 @@ All images on this site, in the press kit and in the READMEs are **project-owned
 media**. No commercial game screenshots, logos, box art, ROM data, save data or game assets
 appear anywhere, and no commercial game name is used in any filename, caption or alt text.
 
-These assets are the 0.2.1 refresh: every app screenshot and launcher screenshot was captured
-from the 0.2.1 build, and the hero, Open Graph card, social preview and demo GIF were rebuilt
-from those captures. Old 0.1.5/0.2.0 screenshots were removed.
+Most assets are the 0.2.1 refresh: the app screenshots and the Windows/macOS launcher screenshots
+were captured from the 0.2.1 build, and the hero, Open Graph card, social preview and demo GIF were
+rebuilt from those captures. Old 0.1.5/0.2.0 screenshots were removed. The two Linux launcher
+screenshots are a 0.3.1 capture (2026-11-28), added below.
 
 ## Sources
 
@@ -39,13 +40,14 @@ Launcher screenshots:
 
 - Windows 0.2.1 UI smoke (/tmp/win201): library-en/zh, deploy-en, settings-en (1120x820), copied to docs/assets/screenshots/launcher-windows-*.png and launcher/windows/docs/ui/v4-*.png;
 - macOS 0.2.1 UI smoke (/tmp/mac201/screenshots): launcher-library-empty-dark-en and launcher-settings-dark-en -> launcher-macos-empty/settings.png; the full 18-shot set overwrote launcher/macos/screenshots/.
+- Linux 0.3.1 launcher (2026-11-28, headless): captured from the published 0.3.1 Linux package with the launcher's developer `--ui-smoke` mode under Xvfb (isolated HOME, built-in synthetic demo entries, relative workspace paths, the window's bottom status strip cropped by 44 px) -> launcher-linux-library-en.png and launcher-linux-library-zh.png (1240x776). No game data, no local user path and no device identifier appears in the frame.
 
 ## Why the screenshots are synthetic
 
 The iOS screenshots are Simulator captures of the app's preview test harness, not a game: the two
 "screens" are flat blue and purple grids labelled **TOP 400x240** and **BOTTOM 320x240**, with the
 real 0.2.1 control overlay, in-game menu and Settings UI. No ROM is loaded and no game data is
-rendered. The Windows/macOS launcher screenshots show the launchers' built-in synthetic demo
+rendered. The Windows/macOS/Linux launcher screenshots show the launchers' built-in synthetic demo
 entries or an empty library, never a real game.
 
 ## How the media was produced

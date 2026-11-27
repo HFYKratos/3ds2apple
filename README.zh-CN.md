@@ -86,7 +86,7 @@
 
 所有预设排列都由 GPU presenter 绘制——走 Metal 路径，每帧零屏幕回读。**自定义布局**把两块屏幕放在任意矩形：可以在数值页按百分比编辑 X/Y/宽/高（下方实时预览），也可以拖动屏幕；自定义布局同样由 GPU presenter 绘制（任意矩形、四向旋转与上下屏交换），不再退回较慢的回读路径。自定义布局仍从下一次加载游戏起生效。
 
-屏幕旋转与界面方向保留。渲染分辨率（1x–4x）分两部分：呈现用的 drawable 会立即改变，而宿主 GPU 3D 渲染器的内部倍率在系统载入时固定，因此正在运行的游戏要重新载入后才会用新的内部分辨率——Settings → Graphics 与游戏内菜单的两个 Resolution 行都带「**需要重启 App**」徽标和「**重启游戏后生效**」提示。0.1.5 已移除旧的画面比例与整数缩放开关。
+屏幕旋转与界面方向保留。渲染分辨率（1x–4x）分两部分：呈现用的 drawable 会立即改变，而宿主 GPU 3D 渲染器的内部倍率在系统载入时固定，因此正在运行的游戏要重新载入后才会用新的内部分辨率——Settings → Graphics 与游戏内菜单的两个 Resolution 行都带「**需要重启 App**」徽标和「**重启游戏后生效**」提示。Integer scaling 与 Screen aspect（Fit / 4:3 / Stretch）是 Settings → Graphics 里的独立选项，渲染器为自动选择（旧的只读 Renderer 行已移除）。
 
 ## 渲染器优化（实验性）
 
@@ -124,6 +124,17 @@
 
 屏幕布局在 **设置 → 显示 → 屏幕布局** 里单独编辑：按百分比填 X/Y/宽/高并提供实时预览，或使用全屏拖拽编辑器（拖动移动、双指缩放；预览跟手、松手才提交，布局不再抖动）。编辑横向自定义布局时会强制横屏。预设立即生效；自定义屏幕布局从下一次加载游戏起生效。
 
+## 设置、手柄与更新
+
+App 的 **Settings** 页采用 iOS 26/27 inset-grouped 分组语言——General、System、Gamepad、Cheats、Graphics、Layout、Sound、Debug、Other——每项带两行说明；游戏内菜单沿用同一语言，并支持原生 push/pop 子页。
+
+- **运行速度**——Default 与 Turbo 速度各为 1×–4×；关闭 Run speed limit 或 Turbo limit 即可去掉上限、实现真正无限制速度（过热、电量与静音警告仍会保留）。快进是独立的 1× / 2× / 4× 控件。
+- **更新通道**——按 Stable 或 Beta 通道检查 GitHub 更新，可手动或后台检查（每 24 小时最多一次），有新版本时发送本地通知。
+- **手柄层**——物理手柄模拟死区、按键重映射、2–4 键组合热键、Standard / High contrast 屏幕按键样式，以及按游戏保存的 Gamepad 配置。
+- **按游戏设置（Per-Application Settings）**——按 title ID 覆盖屏幕旋转、上下屏交换、Integer scaling、Screen aspect、死区、按键外观与按键映射。
+- **图形**——Settings → Graphics 下有 Integer scaling 与 Screen aspect（Fit / 4:3 / Stretch），旁边是六项实验性渲染器优化；渲染器本身自动选择。
+- **存档管理器与存储**——Save Manager 覆盖游戏库中的每款游戏：把所选游戏的电池存档导出为 ZIP、导入 ZIP 或单个存档文件、删除单个文件（游戏运行期间禁用导入与删除）。Storage 页显示存档数据、旧版游戏文件、日志与管线缓存占用，并可在没有游戏运行时清空图形管线缓存。
+
 ## 金手指
 
 金手指是你自备的 Citra/Azahar 文本文件，不是 App 或启动器内置的内容。App 从 `Documents/Cheats/<TITLEID>.txt` 读取（使用与游戏目录相同的 16 位 title ID），格式与桌面工具一致：一行 `[name]`、可选的 `*citra_enabled` 行，然后是 `XXXXXXXX YYYYYYYY` 代码行。
@@ -148,12 +159,19 @@
 
 ## 截图
 
-**桌面启动器**——真实 App 截图；游戏库条目为合成演示条目，不含任何游戏画面。
+**桌面启动器**——Windows/macOS 为 0.2.1 真实界面截图，Linux 为 0.3.1 无头截图；游戏库条目为合成演示条目，不含任何游戏画面。
 
 | Windows 启动器 | Windows 启动器（简体中文） | macOS 启动器 |
 |:---:|:---:|:---:|
 | <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> |
 | 游戏库（English） | 游戏库（中文） | 空游戏库（深色） |
+
+**Linux 启动器**——0.3.1 Linux 包的无头截图，游戏库为内置合成演示条目；不含游戏数据。
+
+| English | 简体中文 |
+|:---:|:---:|
+| <img src="docs/assets/screenshots/launcher-linux-library-en.png" width="430" alt="Linux launcher 0.3.1 Library with the built-in synthetic demo entries"> | <img src="docs/assets/screenshots/launcher-linux-library-zh.png" width="430" alt="Linux 启动器 0.3.1 游戏库（中文界面，内置合成演示条目）"> |
+| 游戏库（English） | 游戏库（中文） |
 
 **iOS App**——虚拟按键的合成预览；不含游戏数据。
 

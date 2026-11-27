@@ -89,7 +89,7 @@
 
 모든 프리셋 배치는 GPU 프레젠터가 그립니다. Metal 경로이며 매 프레임 화면 리드백이 없습니다. **사용자 지정 레이아웃**은 두 화면을 임의의 사각형에 배치합니다. X/Y/너비/높이를 퍼센트로 편집할 수 있고(필드 아래 실시간 미리보기) 화면을 드래그할 수도 있습니다. 사용자 지정 레이아웃도 GPU 프레젠터가 그리며(임의 사각형, 네 방향 회전, 상하 화면 교체) 느린 리드백 경로로 돌아가지 않습니다. 사용자 지정 레이아웃은 여전히 다음 게임 로드부터 적용됩니다.
 
-화면 회전과 인터페이스 방향은 유지됩니다. 렌더링 해상도(1x–4x)는 두 부분으로 나뉩니다. 표시용 drawable은 즉시 바뀌지만, 호스트 GPU 3D 렌더러의 내부 배율은 시스템 로드 시 고정되므로 실행 중인 게임은 다시 로드할 때까지 이전 내부 해상도를 유지합니다——Settings → Graphics와 게임 내 메뉴의 두 Resolution 행에 **재시작 필요** 배지와 **게임을 다시 시작하면 적용됩니다** 안내가 있습니다. 0.1.5에서 기존 화면 비율과 정수 배율 스위치는 제거되었습니다.
+화면 회전과 인터페이스 방향은 유지됩니다. 렌더링 해상도(1x–4x)는 두 부분으로 나뉩니다. 표시용 drawable은 즉시 바뀌지만, 호스트 GPU 3D 렌더러의 내부 배율은 시스템 로드 시 고정되므로 실행 중인 게임은 다시 로드할 때까지 이전 내부 해상도를 유지합니다——Settings → Graphics와 게임 내 메뉴의 두 Resolution 행에 **재시작 필요** 배지와 **게임을 다시 시작하면 적용됩니다** 안내가 있습니다. Integer scaling과 Screen aspect(Fit / 4:3 / Stretch)는 Settings → Graphics의 별도 옵션이며 렌더러는 자동 선택됩니다(예전 읽기 전용 Renderer 행은 없어졌습니다).
 
 ## 렌더러 최적화(실험적)
 
@@ -127,6 +127,17 @@
 
 화면 레이아웃은 **설정 → 디스플레이 → 화면 레이아웃**에서 따로 편집합니다. 퍼센트 필드(실시간 미리보기 포함) 또는 전체 화면 드래그 편집기(드래그로 이동, 핀치로 크기 조절. 미리보기가 손가락을 따라가고 제스처가 끝날 때 커밋되어 레이아웃이 더 이상 떨리지 않습니다)를 사용합니다. 가로 사용자 지정 레이아웃을 편집하는 동안은 가로 화면으로 고정됩니다. 프리셋은 즉시 적용되고 사용자 지정 화면 레이아웃은 다음 게임 로드부터 적용됩니다.
 
+## 설정, 게임패드, 업데이트
+
+앱의 **Settings** 페이지는 iOS 26/27 inset-grouped 언어——General, System, Gamepad, Cheats, Graphics, Layout, Sound, Debug, Other——를 사용하며 각 항목에 두 줄 설명이 있습니다. 게임 내 메뉴도 같은 언어로 만들어지고 네이티브 push/pop 하위 페이지를 지원합니다.
+
+- **실행 속도** — Default와 Turbo 속도는 각각 1×–4×이며, Run speed limit 또는 Turbo limit을 끄면 상한이 사라져 진짜 무제한 속도가 됩니다(발열·배터리·음소거 경고는 유지). 빨리 감기는 별도의 1× / 2× / 4× 컨트롤입니다.
+- **업데이트 채널** — Stable 또는 Beta 채널로 GitHub를 확인하며, 수동 또는 백그라운드(24시간에 최대 1회)로 확인하고 새 릴리스가 있으면 로컬 알림을 보냅니다.
+- **게임패드 레이어** — 실제 컨트롤러의 아날로그 데드존, 버튼 재매핑, 2–4 버튼 핫키, Standard / High contrast 화면 컨트롤, 앱별 Gamepad 프로필.
+- **앱별 설정** — 타이틀 ID별로 화면 회전, 화면 교체, Integer scaling, Screen aspect, 데드존, 컨트롤 모양, 버튼 매핑을 재정의합니다.
+- **그래픽** — Integer scaling과 Screen aspect(Fit / 4:3 / Stretch)는 Settings → Graphics에 있고, 여섯 가지 실험적 렌더러 최적화도 같은 곳에 있습니다. 렌더러는 자동으로 선택됩니다.
+- **세이브 매니저와 저장 공간** — Save Manager는 라이브러리의 모든 게임을 다룹니다: 선택한 게임의 배터리 세이브를 ZIP으로 내보내고, ZIP 또는 단일 세이브 파일을 다시 가져오고, 개별 파일을 삭제합니다(해당 게임 실행 중에는 가져오기/삭제 비활성). Storage 페이지는 세이브 데이터, 레거시 게임 파일, 로그, 파이프라인 캐시 사용량을 보여 주고 게임이 실행 중이 아닐 때 그래픽 파이프라인 캐시를 지울 수 있습니다.
+
 ## 치트 코드
 
 치트 코드는 앱이나 런처가 포함하는 것이 아니라 직접 준비하는 Citra/Azahar 형식의 텍스트 파일입니다. 앱은 `Documents/Cheats/<TITLEID>.txt`(게임 폴더와 같은 16자리 타이틀 ID)에서 읽으며, 형식은 데스크톱 도구와 같습니다. `[name]` 줄, 선택적 `*citra_enabled` 줄, 그 뒤에 `XXXXXXXX YYYYYYYY` 코드 줄이 이어집니다.
@@ -151,12 +162,19 @@
 
 ## 스크린샷
 
-**데스크톱 런처** — 실제 앱 스크린샷입니다. 라이브러리 항목은 합성 데모 항목이며 게임 아트는 포함되지 않습니다.
+**데스크톱 런처** — Windows/macOS는 0.2.1 실제 UI 캡처, Linux는 0.3.1 헤드리스 캡처입니다. 라이브러리 항목은 합성 데모 항목이며 게임 아트는 포함되지 않습니다.
 
 | Windows 런처 | Windows 런처(简体中文) | macOS 런처 |
 |:---:|:---:|:---:|
 | <img src="launcher/windows/docs/ui/v4-library-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/windows/docs/ui/v4-library-zh.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> | <img src="launcher/macos/screenshots/launcher-library-empty-dark-en.png" width="330" alt="macOS launcher 0.2.1 with an empty library, dark theme"> |
 | 라이브러리(English) | 라이브러리(中文) | 빈 라이브러리(다크) |
+
+**Linux 런처** — 0.3.1 Linux 패키지의 헤드리스 캡처입니다. 라이브러리는 내장 합성 데모 항목이며 게임 데이터는 없습니다.
+
+| English | 简体中文 |
+|:---:|:---:|
+| <img src="docs/assets/screenshots/launcher-linux-library-en.png" width="430" alt="Linux launcher 0.3.1 Library with the built-in synthetic demo entries"> | <img src="docs/assets/screenshots/launcher-linux-library-zh.png" width="430" alt="Linux 런처 0.3.1 라이브러리(중국어 UI, 내장 합성 데모 항목)"> |
+| 라이브러리(English) | 라이브러리(中文) |
 
 **iOS 앱** — 화면 컨트롤의 합성 프리뷰입니다. 게임 데이터는 없습니다.
 

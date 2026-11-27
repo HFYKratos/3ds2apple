@@ -214,7 +214,7 @@ sha256sum 3ds2apple-0.3.1-linux-x86_64.tar.gz</code></pre>
       <div class="section-head">
         <p class="eyebrow">功能</p>
         <h2>完整功能。</h2>
-        <p>全屏游玩、完整的 New 3DS 键位、GPU 绘制的屏幕布局，以及一个包办整条流水线的启动器。</p>
+        <p>全屏游玩、完整的 New 3DS 键位、GPU 绘制的屏幕布局、自备金手指、完整手柄层，以及一个包办整条流水线的启动器。</p>
       </div>
       <div class="features">
         <article class="feature">
@@ -256,6 +256,31 @@ sha256sum 3ds2apple-0.3.1-linux-x86_64.tar.gz</code></pre>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9V3Z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15V3.5Z"/></svg>
           <h3>所有布局都走 GPU</h3>
           <p>Hybrid、LargeTopRight、TopFullWidth 增加 presenter 排列；自定义矩形现在也走同一条 GPU 路径，并支持旋转与交换屏幕。</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg>
+          <h3>分组设置与游戏内菜单</h3>
+          <p>设置页采用 iOS 26/27 inset-grouped 分组——General、System、Gamepad、Cheats、Graphics、Layout、Sound、Debug、Other——每项带两行说明；游戏内菜单沿用同一语言，子页为原生 push/pop。</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="8" width="19" height="9" rx="4"/><path d="M8 11v3M6.5 12.5h3M16 11.5h.01M18 14h.01"/></svg>
+          <h3>手柄层与按游戏设置</h3>
+          <p>物理手柄支持模拟死区、按键重映射、2–4 键 hotkey、Standard / High contrast 屏幕按键与按游戏 Gamepad profile；按游戏设置可覆盖屏幕旋转与交换、Integer scaling、Screen aspect、死区、控件外观与按键映射。</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5h16v14H4z"/><path d="m7 9 2 2-2 2M12 9h4M12 13h4"/></svg>
+          <h3>自备金手指</h3>
+          <p>支持你自备的 Citra/Azahar 金手指文本：设置 → 金手指可在不运行游戏时导入、编辑、开关与导出某个游戏的文件，游戏内菜单的「金手指」页可在游玩中即时开关。不内置也不下载任何数据库，只保证数据修改类代码。</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 7h16v10H4z"/><path d="M8 7V5h8v2M9 12h6"/></svg>
+          <h3>便携构建包与单游戏 IPA</h3>
+          <p>同一个导出对话框可写入便携 <code>.32a</code> 构建包或未签名、自包含的单游戏 IPA；导入支持 ROM 与 <code>.32a</code>（并复用构建缓存），设置页可调 AOT 选项。<b>续签</b> 可在不重新构建的情况下续 7 天签名。</p>
+        </article>
+        <article class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v6M12 15v6M3 12h6M15 12h6"/><circle cx="12" cy="12" r="3"/></svg>
+          <h3>速度、更新通道与存档</h3>
+          <p>Default 与 Turbo 速度 1×–4×，可选无限制；Stable/Beta 更新通道在后台检查 GitHub（每天最多一次，有新版本时本地通知）；Save Manager 可用 ZIP 导出/导入电池存档，并保留每游戏三个即时存档槽。</p>
         </article>
       </div>
     </div>
@@ -343,7 +368,7 @@ sha256sum 3ds2apple-0.3.1-linux-x86_64.tar.gz</code></pre>
       <div class="section-head">
         <p class="eyebrow">截图</p>
         <h2>启动器与设置。</h2>
-        <p>Windows 与 macOS 启动器，以及 App 自己的设置页。启动器截图使用内置合成演示条目；App 截图均为合成预览，不包含游戏数据。</p>
+        <p>Windows、macOS 与 Linux 启动器，以及 App 自己的设置页。启动器截图使用内置合成演示条目；App 截图均为合成预览，不包含游戏数据。</p>
       </div>
       <div class="gallery">
         <figure><img src="../assets/screenshots/launcher-windows-en.png" width="1120" height="820" loading="lazy" decoding="async" alt="Windows 启动器 0.2.1 游戏库界面，合成空库。"><figcaption>Windows 启动器 · 游戏库（0.2.1，合成空库）</figcaption></figure>
@@ -355,6 +380,8 @@ sha256sum 3ds2apple-0.3.1-linux-x86_64.tar.gz</code></pre>
         <figure><img src="../assets/screenshots/display-settings.png" width="800" height="1734" loading="lazy" decoding="async" alt="布局设置页：屏幕布局入口与性能监控分组。"><figcaption>布局设置 · 屏幕布局 + 性能监控</figcaption></figure>
         <figure><img src="../assets/screenshots/performance-overlay.png" width="800" height="1734" loading="lazy" decoding="async" alt="性能参数覆盖设置页：总开关、背景、六种位置与五个行开关。"><figcaption>性能参数覆盖设置</figcaption></figure>
         <figure><img src="../assets/screenshots/overlay-position.png" width="800" height="1734" loading="lazy" decoding="async" alt="覆盖层位置选择：六个角位置。"><figcaption>覆盖层位置 · 六处</figcaption></figure>
+        <figure><img src="../assets/screenshots/launcher-linux-library-en.png" width="1240" height="776" loading="lazy" decoding="async" alt="Linux 启动器 0.3.1 游戏库界面（English，内置合成演示条目）。"><figcaption>Linux 启动器 · 游戏库（0.3.1）</figcaption></figure>
+        <figure><img src="../assets/screenshots/launcher-linux-library-zh.png" width="1240" height="776" loading="lazy" decoding="async" alt="Linux 启动器 0.3.1 游戏库界面（中文，内置合成演示条目）。"><figcaption>Linux 启动器 · 游戏库（0.3.1）</figcaption></figure>
       </div>
     </div>
   </section>
@@ -440,6 +467,14 @@ sha256sum 3ds2apple-0.3.1-linux-x86_64.tar.gz</code></pre>
           <div class="a"><p>不能。兼容性因游戏而异，也不提供兼容性或性能保证。部分游戏可能无法启动或渲染异常——个别游戏的某些菜单仍可能出现花屏（<a href="https://github.com/HFYKratos/3ds2apple/issues/2" rel="noopener">issue #2</a>）。提交带 title ID 的兼容性报告会很有帮助。</p></div>
         </details>
         <details>
+          <summary>可以用自备金手指吗？</summary>
+          <div class="a"><p>可以。设置 → 金手指可为每款游戏导入、编辑、开关并导出你自己准备的 Citra/Azahar 金手指文本；游戏内菜单的「金手指」页可在游玩中即时开关。App 不内置也不下载任何金手指数据库，只支持数据修改类代码——改写游戏代码的代码可能拖慢 AOT 构建。</p></div>
+        </details>
+        <details>
+          <summary>更新是怎么工作的？</summary>
+          <div class="a"><p>设置 → 通用里有 Stable/Beta 更新通道与「检查更新」项；后台检查每 24 小时最多一次，有新版本时发本地通知。启动器可就地续 7 天签名，新的 App 构建用一次部署安装并保留 Documents 与存档。</p></div>
+        </details>
+        <details>
           <summary>为什么没有 CPU JIT？</summary>
           <div class="a"><p>iOS 不允许 JIT 编译的可执行内存，项目也刻意让发布路径保持 AOT：在电脑上产出原生 ARM64 代码，图形走 Metal。一旦检测到解释器，App 会拒绝启动。</p></div>
         </details>
@@ -488,7 +523,7 @@ sha256sum 3ds2apple-0.3.1-linux-x86_64.tar.gz</code></pre>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>Linux 启动器更新一些</h3><p>它用内置 3dsrecomp + LLVM/LLD 23.1.6 本地构建 GamePack，用 plumesign-linux 签名/安装，并通过 usbmuxd/devpush 推送；导入的 <code>.32a</code> 包会复用其构建缓存。真机使用量比 Windows 路径少——遇到问题请到 issue 反馈。</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>C 杆取决于游戏</h3><p>它通过 New 3DS 摇杆 API 上报；不读取该 API 的游戏会忽略它，用旧运行库构建的壳也不提供。默认隐藏——游戏读取摇杆时在「切换控制」里开启。</p></div></article>
         <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>不承诺兼容性与性能</h3><p>部分游戏可能无法启动或运行较慢。README 里的参考数据来自维护者对特定游戏的实测，不构成保证。</p></div></article>
-        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>尚未包含</h3><p>Delta 风格皮肤导入、金手指管理器、游戏说明书查看器、amiibo、麦克风、摄像头与网络/在线功能暂不包含——这些需要模拟器核心工作。CPU JIT、着色器 JIT、RPC 与 LLE 模块设置不适用于纯 AOT 架构。</p></div></article>
+        <article class="limit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg><div><h3>尚未包含</h3><p>Delta 风格皮肤导入、内置金手指数据库、游戏说明书查看器、amiibo、麦克风、摄像头与网络/在线功能暂不包含——这些需要模拟器核心工作。CPU JIT、着色器 JIT、RPC 与 LLE 模块设置不适用于纯 AOT 架构。</p></div></article>
         <article class="limit legal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 4 7v5c0 5 3.5 8 8 9 4.5-1 8-4 8-9V7l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg><div><h3>法律边界</h3><p>不提供 ROM、密钥、BIOS、系统文件或游戏资源，也不提供盗版支持。请只使用你合法拥有并自行导出的游戏。3ds2apple 与 Nintendo 无任何隶属关系。</p></div></article>
       </div>
     </div>
