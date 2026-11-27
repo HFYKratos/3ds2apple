@@ -75,18 +75,20 @@ minimal: users download one package, and GitHub provides the asset digests.
   `docs/assets/social-preview.png` (1280x640) once in **Settings -> Social
   preview** so link previews show the app icon.
 
-### Assets (exactly two)
+### Assets (three platform packages)
 
-Attach only the two platform packages produced by the release build:
+Attach only the three platform packages produced by the release build:
 
 | Asset | Content |
 |---|---|
 | `3ds2apple-<version>-windows-x64.zip` | Windows 10/11 launcher; one self-contained executable plus `LICENSE`, `NOTICE`, `THIRD_PARTY.md` at the ZIP root |
 | `3ds2apple-<version>-macos-universal.zip` | macOS 13+ launcher (`.app`, Intel + Apple silicon) plus the same three licence texts at the ZIP root |
+| `3ds2apple-<version>-linux-x86_64.tar.gz` | Linux x86_64 GUI launcher, the pinned ROM-free shell template, the bundled plumesign-linux/devpush builds and the three licence texts inside the launcher folder |
 
-**Licence texts ship inside the packages, never as separate assets.** Both
-platform zips carry `LICENSE`, `NOTICE` and `THIRD_PARTY.md` at their root,
-byte-identical to the repository files; `verify-release.sh` enforces this and
+**Licence texts ship inside the packages, never as separate assets.** The
+Windows/macOS zips carry `LICENSE`, `NOTICE` and `THIRD_PARTY.md` at their root
+and the Linux tar carries them inside the launcher folder, byte-identical to the
+repository files; `verify-release.sh` enforces this and
 `scripts/tests/release-selfcheck.sh` proves the gate offline with synthetic
 zips. **Never attach as separate Release assets:** `LICENSE`, `NOTICE`,
 `THIRD_PARTY.md`, a `SHA256SUMS.txt`, the ROM-free shell IPA template, per-game
@@ -132,7 +134,7 @@ automatically by GitHub).
 
 ### Process
 
-1. Build the two packages and run the project test gates (`cargo test`,
+1. Build the three packages and run the project test gates (`cargo test`,
    `dotnet test`, `scripts/tests/*-selfcheck.sh`, including
    `bash scripts/tests/release-selfcheck.sh`); the Windows package must pass
    its clean-folder `--self-test` and, on a Windows host, the native
@@ -149,9 +151,9 @@ automatically by GitHub).
      [--win-selftest-log <log from win-selftest.sh>]
    ```
 
-   The verifier requires both zips to carry `LICENSE`, `NOTICE` and
+   The verifier requires each package to carry `LICENSE`, `NOTICE` and
    `THIRD_PARTY.md` at the ZIP root with SHA-256 digests equal to the repository
-   files, and it still requires exactly the two platform assets.
+   files, and it requires the expected platform packages.
 
 3. Create the annotated tag and the GitHub Release; the **release title is only
    the version number** (`<version>`, e.g. `0.1.0`):

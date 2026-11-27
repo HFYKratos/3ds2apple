@@ -30,10 +30,11 @@
 <p align="center">
   <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.1/3ds2apple-0.2.1-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="下载 Windows 启动器"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.2.1/3ds2apple-0.2.1-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="下载 macOS 启动器"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="下载 Linux 启动器"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="在 GitHub 查看全部版本"></a>
 </p>
 
-<p align="center"><sub><b>最新稳定版：v0.2.1</b> · Windows 10/11 启动器（已验证路径）· macOS 13+ 启动器（开发者预览，见 <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>）· iOS App 由启动器用你自己的 Apple ID 合成、签名并安装，因此没有单独的 iOS 下载。</sub></p>
+<p align="center"><sub><b>最新稳定版：v0.2.1</b> · Windows 10/11 启动器（已验证路径）· macOS 13+ 启动器（开发者预览，见 <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>）· Linux x86_64 启动器（测试版：可签名安装 .32a 构建包；暂不支持本地 AOT 编译） · iOS App 由启动器用你自己的 Apple ID 合成、签名并安装，因此没有单独的 iOS 下载。</sub></p>
 
 <p align="center">
   <img src="docs/assets/hero.png" width="880" alt="0.2.1 hero image: synthetic portrait and landscape previews with the wordmark.">
@@ -68,7 +69,7 @@
     <td align="center" width="25%">✏️<br><b>游戏内编辑按键布局</b><br><sub>暂停后在画面上拖动按键，点中央「完成」保存；支持逐键显隐、10%–200% 大小与透明度。</sub></td>
     <td align="center" width="25%">💾<br><b>存档与即时存档</b><br><sub>电池存档保存在 App 容器内，每款游戏三个即时存档槽，存档管理器可导出与导入存档，以及按代码逐条开关的自备 Citra/Azahar 金手指文件。</sub></td>
     <td align="center" width="25%">⏩<br><b>快进、性能覆盖与 HUD</b><br><sub>2x 快进切换按钮、可编辑的快速存档与快速读档、可选的性能参数覆盖（位于画面顶端，显示帧率、帧生成时间、速度、应用内存与可用内存，六种位置、可开关的行与可选背景）、系统 Metal HUD（默认关闭），以及一键导出诊断。</sub></td>
-    <td align="center" width="25%">🖥️<br><b>Windows 与 macOS 启动器</b><br><sub>在同一个窗口里导入 → 编译 → 签名 → 安装 → 推送；Windows 路径不需要 Mac，并支持保留游戏数据的增量部署。每款已构建游戏的单个「导出」对话框可选择写入已完成构建包（.32a）或可自签安装包（未签名、自包含的单游戏 IPA）；「导入」可导入 ROM 与 .32a 构建包；高级 AOT 构建选项位于设置页。</sub></td>
+    <td align="center" width="25%">🖥️<br><b>Windows、macOS 与 Linux 启动器</b><br><sub>在同一个窗口里导入 → 构建 → 签名 → 安装 → 推送。Windows 启动器为已验证路径，支持保留游戏数据的增量部署；Linux 启动器共用同一套界面，用内置 plumesign-linux 签名安装，部署的是在 Windows/macOS 上构建好的 .32a 包（Linux 暂不支持本地 AOT 编译）。每款已构建游戏的单个「导出」对话框可选择写入已完成构建包（.32a）或可自签安装包（未签名、自包含的单游戏 IPA）；「导入」可导入 ROM 与 .32a 构建包；高级 AOT 构建选项位于设置页。</sub></td>
   </tr>
 </table>
 
@@ -187,11 +188,15 @@
 
 ### 需要 Mac 吗？
 
-已验证的 Windows 路径不需要。macOS 启动器是**开发者预览**：需要 macOS 13+、已登录 Apple ID 的 Xcode 15+、`xcodegen`、仓库 checkout 以及构建好的工具，而且真机安装尚未由维护者验证（issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)）。
+已验证的 Windows 路径不需要，Linux 也不需要 Mac：Linux 启动器可在 x86-64 Linux 上运行，用内置的 plumesign 签名安装准备好的 `.32a` 构建包——但 GamePack 仍需在 Windows 或 macOS 上构建，因为 Linux 暂不支持本地 AOT 编译。macOS 启动器是**开发者预览**：需要 macOS 13+、已登录 Apple ID 的 Xcode 15+、`xcodegen`、仓库 checkout 以及构建好的工具，而且真机安装尚未由维护者验证（issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)）。
+
+### 有 Linux 启动器吗？
+
+有。Linux x86_64 图形启动器复用 Windows 启动器的 Avalonia 界面与引擎：可导入 ROM 与 `.32a` 构建包、复用匹配包的构建缓存、用内置官方 `plumesign-linux` 签名并覆盖安装（Apple ID 与 2FA 只留在终端和 plumesign 自己的存储中），通过内置的 Linux `devpush` 与 `usbmuxd` 推送游戏数据，并用 **续签** 续 7 天签名。Linux 暂不支持本地 AOT 编译：请先在 Windows 或 macOS 上构建 GamePack 并导出**已完成构建包**（`.32a`），再在 Linux 上导入并部署。详见 [launcher/linux/README.md](launcher/linux/README.md)。
 
 ### App 上架 App Store 了吗？
 
-没有。启动器用你自己的 Apple ID 合成并签名 App（Windows 用内置官方 Impactor，macOS 用 Xcode 自动签名），再通过 USB 安装。3ds2apple 与 Nintendo、Apple 均无关联，也不代表其立场。
+没有。启动器用你自己的 Apple ID 合成并签名 App（Windows 用内置官方 Impactor，macOS 用 Xcode 自动签名，Linux 用内置 plumesign-linux），再通过 USB 安装。3ds2apple 与 Nintendo、Apple 均无关联，也不代表其立场。
 
 ### 为什么 App 过一周左右就打不开了？
 
@@ -255,7 +260,8 @@
 | **iPhone / iPad** | iOS 16 及以上。一个 App 承载游戏库、重做的游戏内菜单、完整 New 3DS 虚拟按键与游戏内布局编辑、横屏 6 种/竖屏 3 种屏幕布局、即时存档、性能参数覆盖、按游戏设置、自备金手指文件与六项实验性渲染器优化。 |
 | **Windows** | Windows 10/11 x64。单文件自包含启动器；无需 Mac 即可编译、签名、安装、推送，支持导出便携 `.32a` 构建包与未签名、自包含的单游戏 IPA，并在设置页提供高级 AOT 构建设置。**已验证路径。** |
 | **macOS** | macOS 13+（Intel + Apple 芯片）。SwiftUI 启动器，使用 Xcode 签名；分发包尚不自包含，真机安装尚未由维护者验证。**开发者预览。** |
-| **构建主机** | Windows（内置 LLVM/LLD）或 macOS（Apple clang + Xcode）。 |
+| **Linux** | Linux x86_64 桌面（X11 或 Wayland）。与 Windows 共用 Avalonia 界面与引擎的图形启动器：可导入 ROM 与 `.32a` 构建包、复用匹配包的构建缓存、用内置官方 plumesign-linux 签名并覆盖安装，通过内置 devpush 与 usbmuxd 推送游戏数据。暂不支持本地 AOT 编译，因此部署使用在 Windows/macOS 上构建的 `.32a` 包。已在维护者的 CachyOS x86_64 机器上完成端到端验证。 |
+| **构建主机** | Windows（内置 LLVM/LLD）或 macOS（Apple clang + Xcode）；Linux 目前只负责签名与安装。 |
 
 ## 安装与上手
 
@@ -275,6 +281,14 @@
 2. 分发包**尚不自包含**：需要 macOS 13+、已登录 Apple ID 的 Xcode 15+、`xcodegen`、仓库 checkout，以及构建好的工具（`scripts/build-zakuro-ios.sh`、`builder` 的 pack CLI、`tools/devpush`）。启动器会在自身 bundle、checkout 与 `PATH` 中查找。
 3. 导入 → 部署：Apple clang 编译 GamePack，Xcode 自动签名 + `devicectl` 安装合成后的 IPA，随后推送游戏数据。选择规则与 Windows 相同。免费 Apple ID 签名约 7 天后过期；Deploy 页的同一个 **续签** 按钮会用本机 Apple Development 证书重签最近的 IPA 并覆盖安装（App 的数据与存档保留）。新增游戏或更新 GamePack 仍需部署一次覆盖安装新 IPA，App 不会被删除，游戏数据与存档保留。
 
+### Linux 启动器
+
+1. 从 [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases/latest) 下载 `3ds2apple-<version>-linux-x86_64.tar.gz`，解压到可写目录。包是自包含的（启动器、固定且不含 ROM 的壳模板、内置 plumesign-linux/devpush 与三份许可证文本），需要带 X11 或 Wayland 的 x86_64 Linux 桌面。
+2. 安装并启动 `usbmuxd`，用 USB 连接 iPhone/iPad，解锁并点「信任」。启动器通过内置的 `devpush` 访问设备（只读的 `usbmuxd` socket 可用 `THREEDS2APPLE_USBMUXD_SOCKET` 覆盖）。
+3. 先在 Windows 或 macOS 上准备游戏：构建 GamePack 并导出**已完成构建包**（`.32a`）。Linux 暂不支持本地 AOT 编译，无法自行编译 GamePack；匹配包的 GamePack 与构建缓存会被直接复用，不会重新编译。
+4. 启动启动器，打开 **设置 → Sign in with plumesign**，在它打开的终端里登录你的 Apple ID（密码与 2FA 只留在该终端和 plumesign 自己的存储中，启动器不会看到也不会记录）。然后 **导入** 该 `.32a`，选中游戏并点 **部署**：启动器合成不含 ROM 的 IPA，用内置 plumesign 签名并覆盖安装，再通过 `devpush` 推送游戏数据。
+5. 免费 Apple ID 签名约 7 天后过期；同一个 **续签** 按钮会重签并覆盖安装最近的 IPA，无需重新构建（数据与存档保留）。启动器的 `--self-test` 会检查载荷、工具与许可证；无头机器上可用 `xvfb-run -a` 运行。
+
 ### 手机数据、存档与限制
 
 - 游戏数据位于 `Documents/Games/<TITLEID>/`（可在「文件」App 查看）；存档与即时存档保存在 App 容器内。
@@ -284,12 +298,13 @@
 
 ## 下载包与发布策略
 
-公开发布只走 [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases)。每次发布只附两个平台包：
+公开发布只走 [GitHub Releases](https://github.com/HFYKratos/3ds2apple/releases)。每次发布提供三个平台包：
 
 - `3ds2apple-<version>-windows-x64.zip` —— Windows 10/11 启动器：自包含的 `3ds2apple-launcher.exe`，外加 `LICENSE`、`NOTICE` 和 `THIRD_PARTY.md`。
 - `3ds2apple-<version>-macos-universal.zip` —— macOS 13+ 启动器：`3ds2apple-launcher.app`（Intel + Apple 芯片），外加 `LICENSE`、`NOTICE` 和 `THIRD_PARTY.md`。
+- `3ds2apple-<version>-linux-x86_64.tar.gz` —— Linux x86_64 启动器：自包含启动器、固定且不含 ROM 的壳模板、内置 plumesign-linux 与 devpush，以及放在启动器目录内的三份许可证文本。
 
-从 0.1.1 起，两个 zip 根级都带这三份许可文本，与仓库根文件逐字节一致，下载的包因此自包含；它们不作为单独的 Release 资产发布。[THIRD_PARTY.md](THIRD_PARTY.md) 里列出的 GPL 项目仍然只是只读参考——不打包任何 GPL 代码或文本。0.1.0 的包早于此项，依赖仓库内的副本。不含 ROM 的壳模板已内嵌在两个启动器中，无需单独下载。GitHub 会显示每个发布资产的 SHA-256 digest；发布中不含任何游戏数据。
+从 0.1.1 起，Windows/macOS 的 zip 在根级带有这三份许可文本，Linux tar 则放在启动器目录内，均与仓库根文件逐字节一致，下载的包因此自包含；它们不作为单独的 Release 资产发布。[THIRD_PARTY.md](THIRD_PARTY.md) 里列出的 GPL 项目仍然只是只读参考——不打包任何 GPL 代码或文本。0.1.0 的包早于此项，依赖仓库内的副本。不含 ROM 的壳模板已内嵌在所有启动器中，无需单独下载。GitHub 会显示每个发布资产的 SHA-256 digest；发布中不含任何游戏数据。
 
 ## 从源码构建
 
@@ -297,6 +312,7 @@
 |---|---|
 | Windows 启动器 | `cd launcher/windows && dotnet build Launcher.slnx -c Release` / `dotnet test Launcher.slnx -c Debug` —— 见 [launcher/windows/README.md](launcher/windows/README.md) |
 | macOS 启动器 | 在 macOS 上用 XcodeGen + `xcodebuild` —— 见 [launcher/macos/README.md](launcher/macos/README.md) |
+| Linux 启动器 | `./launcher/linux/build-linux.sh`（开发者构建）；发布载荷加 `--payload --tar` —— 见 [launcher/linux/README.md](launcher/linux/README.md) |
 | iOS App / 壳 | `scripts/build-zakuro-ios.sh` → `scripts/build-ios-app.sh` → `scripts/package-ipa.sh` —— 见 [scripts/README.md](scripts/README.md) |
 | Pack CLI（`3ds2apple-pack`） | `cd builder && cargo build --workspace` / `cargo test --workspace` —— 见 [builder/README.md](builder/README.md) |
 | 设备桥（`devpush`） | `cargo build --release --manifest-path tools/devpush/Cargo.toml` —— 见 [tools/devpush/README.md](tools/devpush/README.md) |
@@ -326,9 +342,9 @@ bash scripts/tests/desktop-aot-selfcheck.sh
 
 ### 图形化启动器，几乎零配置
 
-Windows 与 macOS 各有一个启动器。导入你自有的已解密 `.3ds`/`.cci`，勾选游戏，按唯一的一键部署按钮：启动器编译 GamePack、合成不含 ROM 的基础壳 IPA、用你自己的 Apple ID 签名安装（Windows 用内置官方 Impactor/plumesign，macOS 用 Xcode 自动签名），然后只把 `GameRom.cci` + `GameInfo.json` 推送到 App 的 Documents 目录。
+Windows、macOS 与 Linux 都有启动器。在 Windows 与 macOS 上，导入你自有的已解密 `.3ds`/`.cci`，勾选游戏，按唯一的一键部署按钮：启动器编译 GamePack、合成不含 ROM 的基础壳 IPA、用你自己的 Apple ID 签名安装（Windows 用内置官方 Impactor/plumesign，macOS 用 Xcode 自动签名），然后只把 `GameRom.cci` + `GameInfo.json` 推送到 App 的 Documents 目录。Linux 启动器共用同一套 Avalonia 界面、引擎、便携状态与构建包格式：它用内置 plumesign-linux 签名并覆盖安装（Apple ID/2FA 在终端中），通过内置的 Linux devpush 与 usbmuxd 推送，但暂不支持本地 AOT 编译，因此部署会直接复用 Windows/macOS 上构建的 `.32a` 包内 GamePack 与构建缓存。
 
-启动器会把数据放在 exe/.app 旁的便携目录，读取 ROM 的 SMDH 元数据（图标、本地化名称、发行商），检测编译硬件并自动并行 3dsrecomp，还会显示启动就绪灯与自检——缺工具时不会在部署中途静默失败。Windows 的部署是设备感知的：先读取手机已安装的 App 与游戏，已是最新则跳过；覆盖更新会保留游戏数据与存档；手机上有本机库缺失的游戏时会列出并在更新前询问——这些数据绝不会被删除。每款已构建的游戏还可以在游戏库中通过一个 **导出** 对话框导出为便携 `.32a` 构建包（可包含用户自有的游戏数据），或导出为未签名、自包含的单游戏 IPA（游戏数据内嵌在 IPA 中）以便自签安装；`.32a` 可通过标题栏的 **导入** 导回，设置页的**高级构建设置**可为下一次构建调整 AOT 优化级别、链接时优化与 fast-math。
+启动器会把数据放在 exe/.app（或解压出的 Linux 目录）旁的便携目录，读取 ROM 的 SMDH 元数据（图标、本地化名称、发行商），检测编译硬件并自动并行 3dsrecomp，还会显示启动就绪灯与自检——缺工具时不会在部署中途静默失败。Windows 的部署是设备感知的：先读取手机已安装的 App 与游戏，已是最新则跳过；覆盖更新会保留游戏数据与存档；手机上有本机库缺失的游戏时会列出并在更新前询问——这些数据绝不会被删除。每款已构建的游戏还可以在游戏库中通过一个 **导出** 对话框导出为便携 `.32a` 构建包（可包含用户自有的游戏数据），或导出为未签名、自包含的单游戏 IPA（游戏数据内嵌在 IPA 中）以便自签安装；`.32a` 可通过标题栏的 **导入** 导回，设置页的**高级构建设置**可为下一次构建调整 AOT 优化级别、链接时优化与 fast-math。
 
 ### 游戏画面上的显示
 
