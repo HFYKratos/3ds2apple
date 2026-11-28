@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.3.1"><img src="https://img.shields.io/badge/release-v0.3.1-brightgreen" alt="Latest release: v0.3.1"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.3.2"><img src="https://img.shields.io/badge/release-v0.3.2-brightgreen" alt="Latest release: v0.3.2"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/platforms-iOS%2016%2B%20%C2%B7%20Windows%2010%2F11%20%C2%B7%20macOS%2013%2B%20%C2%B7%20Linux%20x86__64-blue" alt="Platforms: iOS 16+, Windows 10/11, macOS 13+, Linux x86_64"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/github/downloads/HFYKratos/3ds2apple/total?label=downloads" alt="GitHub downloads"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/HFYKratos/3ds2apple/ci.yml?branch=main&label=CI" alt="CI status"></a>
@@ -28,13 +28,13 @@
 ## Download
 
 <p align="center">
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.1/3ds2apple-0.3.1-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download the Windows launcher"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.1/3ds2apple-0.3.1-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download the macOS launcher"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.1/3ds2apple-0.3.1-linux-x86_64.tar.gz"><img src="https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Download the Linux launcher"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.2/3ds2apple-0.3.2-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download the Windows launcher"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.2/3ds2apple-0.3.2-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download the macOS launcher"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.2/3ds2apple-0.3.2-linux-x86_64.tar.gz"><img src="https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Download the Linux launcher"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="All releases on GitHub"></a>
 </p>
 
-<p align="center"><sub><b>Latest stable release: v0.3.1</b> · Windows 10/11 launcher (verified path) · macOS 13+ launcher (developer preview, see <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>) · Linux x86_64 launcher (verified path; local AOT build included: bundled 3dsrecomp + LLVM/LLD 23.1.6) · the iOS app is composed, signed and installed by the launcher with your own Apple ID, so there is no separate iOS download.</sub></p>
+<p align="center"><sub><b>Latest stable release: v0.3.2</b> · Windows 10/11 launcher (verified path) · macOS 13+ launcher (developer preview, see <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>) · Linux x86_64 launcher (verified path; local AOT build included: bundled 3dsrecomp + LLVM/LLD 23.1.6) · the iOS app is composed, signed and installed by the launcher with your own Apple ID, so there is no separate iOS download.</sub></p>
 
 <p align="center">
   <img src="docs/assets/hero.png" width="880" alt="3ds2apple hero image: the app on iPhone and the Windows, macOS and Linux launchers, on a dark grid background.">
@@ -211,7 +211,7 @@ No. It is a native port and recompilation pipeline: each game is translated to C
 
 ### Does every game work?
 
-Compatibility is per game. Some titles may fail to boot or render incorrectly, and some menus in some titles can render incorrectly — tracked in [#2](https://github.com/HFYKratos/3ds2apple/issues/2). No compatibility or performance guarantee is made; reports with the 16-hex title ID are welcome.
+Compatibility is per game. Some titles may fail to boot or render incorrectly. No compatibility or performance guarantee is made; reports with the 16-hex title ID are welcome.
 
 ### Where do I get ROMs, keys or BIOS?
 
@@ -265,7 +265,7 @@ They may. The six switches under **Settings → Graphics → Renderer optimisati
 
 - **Bring your own games.** No ROMs, keys, BIOS, system files or game assets are provided or linked; there is no piracy support. Only use decrypted ROMs that you legally own and dump yourself.
 - **No endorsement.** 3ds2apple is not affiliated with, sponsored or endorsed by Nintendo or Apple, and it is not distributed on the App Store. You sign and install it with your own Apple ID.
-- **No guarantees.** Compatibility and performance are per game: some titles may fail to boot or render incorrectly, and some menus in some titles can render incorrectly (issue [#2](https://github.com/HFYKratos/3ds2apple/issues/2)). Compatibility and performance are not guaranteed.
+- **No guarantees.** Compatibility and performance are per game: some titles may fail to boot or render incorrectly. Compatibility and performance are not guaranteed.
 - **macOS is a developer preview.** Its package is not self-contained and its real-device install is not yet verified by the maintainers (issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)); the Windows and Linux paths are verified.
 - **Custom screen layouts are on the GPU path since 0.1.6.** Arbitrary rectangles, four-way rotation and screen swap are drawn by the GPU presenter (0.1.5 and earlier used a slower readback path); a custom layout still applies from the next game load.
 - **No CPU JIT by design.** The shipping path is AOT code plus the Zakuro HLE runtime; there is no interpreter fallback.
@@ -403,7 +403,7 @@ licenses/          third-party license texts (Impactor MIT, apple-codesign MPL-2
 
 ## Honest boundaries
 
-- **Compatibility is per game.** Some titles may fail to boot or render incorrectly, and some menus in some titles can render incorrectly (issue [#2](https://github.com/HFYKratos/3ds2apple/issues/2)); reports with the title ID are welcome — see [Issue reports and performance data](#issue-reports-and-performance-data).
+- **Compatibility is per game.** Some titles may fail to boot or render incorrectly; reports with the title ID are welcome — see [Issue reports and performance data](#issue-reports-and-performance-data).
 - **Custom screen layouts are on the GPU path since 0.1.6.** Arbitrary rectangles, four-way rotation and top/bottom screen swap are drawn by the GPU presenter; 0.1.5 and earlier used the screen-readback path. A custom layout still applies from the next game load.
 - **The C-stick depends on the game.** It is reported through the New 3DS nub API; a title that never reads the nub ignores it, and a shell built from an older runtime does not provide it.
 - **A mainland-China iPhone can ask for "wireless data" on the first text input.** This is a known iOS quirk: when the system text input first appears (for example the in-game keyboard overlay), UIKit's own dictation/network path check is attributed to the app, so iOS shows its "allow wireless data" alert. 3ds2apple makes no network requests and its cellular data usage stays at 0 — choose *Don't Allow* or *Wi-Fi only* and everything keeps working (a reinstall can show the alert again). Details in [ios/app/README.md](ios/app/README.md).

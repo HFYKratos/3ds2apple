@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="라이선스: Apache-2.0"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.3.1"><img src="https://img.shields.io/badge/release-v0.3.1-brightgreen" alt="최신 릴리스: v0.3.1"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.3.2"><img src="https://img.shields.io/badge/release-v0.3.2-brightgreen" alt="최신 릴리스: v0.3.2"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/platforms-iOS%2016%2B%20%C2%B7%20Windows%2010%2F11%20%C2%B7%20macOS%2013%2B%20%C2%B7%20Linux%20x86__64-blue" alt="Platforms: iOS 16+, Windows 10/11, macOS 13+, Linux x86_64"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/github/downloads/HFYKratos/3ds2apple/total?label=downloads" alt="GitHub 다운로드 수"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/HFYKratos/3ds2apple/ci.yml?branch=main&label=CI" alt="CI 상태"></a>
@@ -31,13 +31,13 @@
 ## 다운로드
 
 <p align="center">
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.1/3ds2apple-0.3.1-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows 런처 다운로드"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.1/3ds2apple-0.3.1-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS 런처 다운로드"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.1/3ds2apple-0.3.1-linux-x86_64.tar.gz"><img src="https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux 런처 다운로드"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.2/3ds2apple-0.3.2-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows 런처 다운로드"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.2/3ds2apple-0.3.2-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS 런처 다운로드"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.2/3ds2apple-0.3.2-linux-x86_64.tar.gz"><img src="https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux 런처 다운로드"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="GitHub에서 모든 릴리스 보기"></a>
 </p>
 
-<p align="center"><sub><b>최신 안정 버전: v0.3.1</b> · Windows 10/11 런처(검증된 경로) · macOS 13+ 런처(개발자 프리뷰, <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a> 참고) · Linux x86_64 런처(검증된 경로; 로컬 AOT 지원: 3dsrecomp + LLVM/LLD 23.1.6 내장) · iOS 앱은 런처가 사용자의 Apple ID로 구성·서명·설치하므로 별도의 iOS 다운로드는 없습니다.</sub></p>
+<p align="center"><sub><b>최신 안정 버전: v0.3.2</b> · Windows 10/11 런처(검증된 경로) · macOS 13+ 런처(개발자 프리뷰, <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a> 참고) · Linux x86_64 런처(검증된 경로; 로컬 AOT 지원: 3dsrecomp + LLVM/LLD 23.1.6 내장) · iOS 앱은 런처가 사용자의 Apple ID로 구성·서명·설치하므로 별도의 iOS 다운로드는 없습니다.</sub></p>
 
 <p align="center">
   <img src="docs/assets/hero.png" width="880" alt="3ds2apple hero image: the app on iPhone and the Windows, macOS and Linux launchers, on a dark grid background.">
@@ -214,7 +214,7 @@ macOS 설정과 서명 제한을 포함한 자세한 절차는 [시작하기](#�
 
 ### 모든 게임이 동작하나요?
 
-호환성은 게임마다 다릅니다. 부팅에 실패하거나 렌더링이 잘못되는 타이틀이 있고, 일부 게임의 일부 메뉴가 잘못 그려질 수 있습니다([#2](https://github.com/HFYKratos/3ds2apple/issues/2)에서 추적). 호환성이나 성능 보장도 없습니다. 16자리 타이틀 ID를 포함한 제보를 환영합니다.
+호환성은 게임마다 다릅니다. 부팅에 실패하거나 렌더링이 잘못되는 타이틀이 있습니다. 호환성이나 성능 보장도 없습니다. 16자리 타이틀 ID를 포함한 제보를 환영합니다.
 
 ### ROM, 키, BIOS는 어디서 구하나요?
 
@@ -268,7 +268,7 @@ macOS 설정과 서명 제한을 포함한 자세한 절차는 [시작하기](#�
 
 - **게임은 직접 준비.** ROM, 키, BIOS, 시스템 파일, 게임 에셋을 제공하거나 링크하지 않으며 불법 복제 지원도 없습니다. 법적으로 소유하고 직접 덤프한 복호화 ROM만 사용하세요.
 - **제휴·승인 없음.** 3ds2apple은 Nintendo 또는 Apple과 제휴하거나 후원·승인받지 않았고 App Store로 배포되지 않습니다. 본인의 Apple ID로 서명해 설치합니다.
-- **보장 없음.** 호환성과 성능은 게임마다 다릅니다. 부팅에 실패하거나 렌더링이 잘못되는 타이틀이 있고, 일부 게임의 일부 메뉴가 잘못 그려질 수 있습니다(이슈 [#2](https://github.com/HFYKratos/3ds2apple/issues/2)). 호환성 또는 성능 보장은 없습니다.
+- **보장 없음.** 호환성과 성능은 게임마다 다릅니다. 부팅에 실패하거나 렌더링이 잘못되는 타이틀이 있습니다. 호환성 또는 성능 보장은 없습니다.
 - **macOS는 개발자 프리뷰.** 패키지가 아직 자체 완결적이지 않고 실제 기기 설치도 메인테이너에 의해 검증되지 않았습니다(이슈 [#1](https://github.com/HFYKratos/3ds2apple/issues/1)). Windows와 Linux가 검증된 경로입니다.
 - **사용자 지정 화면 레이아웃은 0.1.6부터 GPU 경로입니다.** 임의 사각형, 네 방향 회전, 상하 화면 교체를 GPU 프레젠터가 그립니다(0.1.5 이전은 느린 리드백 경로였습니다). 적용은 여전히 다음 게임 로드부터입니다.
 - **설계상 CPU JIT 없음.** 출시 경로는 AOT 코드와 Zakuro HLE 런타임이며 인터프리터 폴백이 없습니다.
@@ -406,7 +406,7 @@ licenses/          타사 라이선스 텍스트(Impactor MIT, apple-codesign MP
 
 ## 솔직한 한계
 
-- **호환성은 게임마다.** 부팅에 실패하거나 렌더링이 잘못되는 타이틀이 있고, 일부 게임의 일부 메뉴가 잘못 그려질 수 있습니다(이슈 [#2](https://github.com/HFYKratos/3ds2apple/issues/2)). 타이틀 ID를 포함한 제보를 환영합니다 — [문제 보고와 성능 데이터](#문제-보고와-성능-데이터) 참고.
+- **호환성은 게임마다.** 부팅에 실패하거나 렌더링이 잘못되는 타이틀이 있습니다. 타이틀 ID를 포함한 제보를 환영합니다 — [문제 보고와 성능 데이터](#문제-보고와-성능-데이터) 참고.
 - **사용자 지정 화면 레이아웃은 0.1.6부터 GPU 경로입니다.** 임의 사각형, 네 방향 회전, 상하 화면 교체를 GPU 프레젠터가 그립니다. 0.1.5 이전은 화면 리드백 경로였습니다. 적용은 여전히 다음 게임 로드부터입니다.
 - **C 스틱은 게임에 따라 다름.** New 3DS 너브 API로 보고되므로 너브를 읽지 않는 타이틀은 무시하고, 이전 런타임으로 빌드된 셸은 제공하지 않습니다.
 - **중국 본토 iPhone은 첫 텍스트 입력에서 "무선 데이터"를 요청할 수 있습니다.** 알려진 iOS 특성입니다. 시스템 텍스트 입력이 처음 나타날 때(예: 게임 내 키보드 오버레이) UIKit 자체의 받아쓰기/네트워크 경로 검사가 앱에 귀속되어 iOS가 "무선 데이터 허용" 알림을 표시합니다. 3ds2apple은 네트워크 요청을 전혀 하지 않고 셀룰러 데이터 사용량은 0으로 유지됩니다. *허용 안 함* 또는 *Wi-Fi만*을 선택해도 모두 동작합니다(재설치 시 다시 표시될 수 있음). 자세한 내용은 [ios/app/README.md](ios/app/README.md).

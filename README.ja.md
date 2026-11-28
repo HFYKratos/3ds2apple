@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="ライセンス: Apache-2.0"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.3.1"><img src="https://img.shields.io/badge/release-v0.3.1-brightgreen" alt="最新リリース: v0.3.1"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.3.2"><img src="https://img.shields.io/badge/release-v0.3.2-brightgreen" alt="最新リリース: v0.3.2"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/platforms-iOS%2016%2B%20%C2%B7%20Windows%2010%2F11%20%C2%B7%20macOS%2013%2B%20%C2%B7%20Linux%20x86__64-blue" alt="Platforms: iOS 16+, Windows 10/11, macOS 13+, Linux x86_64"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/github/downloads/HFYKratos/3ds2apple/total?label=downloads" alt="GitHub ダウンロード数"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/HFYKratos/3ds2apple/ci.yml?branch=main&label=CI" alt="CI の状態"></a>
@@ -31,13 +31,13 @@
 ## ダウンロード
 
 <p align="center">
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.1/3ds2apple-0.3.1-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows ランチャーをダウンロード"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.1/3ds2apple-0.3.1-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS ランチャーをダウンロード"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.1/3ds2apple-0.3.1-linux-x86_64.tar.gz"><img src="https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux ランチャーをダウンロード"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.2/3ds2apple-0.3.2-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows ランチャーをダウンロード"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.2/3ds2apple-0.3.2-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS ランチャーをダウンロード"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.2/3ds2apple-0.3.2-linux-x86_64.tar.gz"><img src="https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux ランチャーをダウンロード"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="GitHub で全リリースを見る"></a>
 </p>
 
-<p align="center"><sub><b>最新の安定版: v0.3.1</b> · Windows 10/11 ランチャー（検証済みの経路）· macOS 13+ ランチャー（開発者プレビュー、<a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a> を参照）· Linux x86_64 ランチャー（検証済みの経路；ローカル AOT 対応：3dsrecomp + LLVM/LLD 23.1.6 を同梱）· iOS アプリはランチャーがあなた自身の Apple ID で構成・署名・インストールするため、iOS 単体のダウンロードはありません。</sub></p>
+<p align="center"><sub><b>最新の安定版: v0.3.2</b> · Windows 10/11 ランチャー（検証済みの経路）· macOS 13+ ランチャー（開発者プレビュー、<a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a> を参照）· Linux x86_64 ランチャー（検証済みの経路；ローカル AOT 対応：3dsrecomp + LLVM/LLD 23.1.6 を同梱）· iOS アプリはランチャーがあなた自身の Apple ID で構成・署名・インストールするため、iOS 単体のダウンロードはありません。</sub></p>
 
 <p align="center">
   <img src="docs/assets/hero.png" width="880" alt="3ds2apple hero image: the app on iPhone and the Windows, macOS and Linux launchers, on a dark grid background.">
@@ -214,7 +214,7 @@ macOS のセットアップと署名の制限を含む詳細な手順は[セッ�
 
 ### すべてのゲームが動きますか？
 
-互換性はゲームごとに異なります。起動できないタイトルや描画がおかしくなるタイトルがあり、一部のタイトルの一部メニューが正しく描画されないことがあります（[#2](https://github.com/HFYKratos/3ds2apple/issues/2) で追跡）。互換性や性能の保証はありません。16 桁のタイトル ID を添えた報告を歓迎します。
+互換性はゲームごとに異なります。起動できないタイトルや描画がおかしくなるタイトルがあります。互換性や性能の保証はありません。16 桁のタイトル ID を添えた報告を歓迎します。
 
 ### ROM、キー、BIOS はどこで入手できますか？
 
@@ -268,7 +268,7 @@ macOS のセットアップと署名の制限を含む詳細な手順は[セッ�
 
 - **ゲームは自分で用意。** ROM、キー、BIOS、システムファイル、ゲームアセットは提供もリンクもしません。海賊版の支援もありません。合法的に所有し自分で吸い出した復号済み ROM のみを使用してください。
 - **提携・承認はありません。** 3ds2apple は Nintendo や Apple と提携しておらず、スポンサーや承認も受けていません。App Store でも配信されません。あなた自身の Apple ID で署名してインストールします。
-- **保証はありません。** 互換性と性能はゲームごとに異なります。起動できないタイトルや描画がおかしいタイトルがあり、一部のタイトルの一部メニューが正しく描画されないことがあります（issue [#2](https://github.com/HFYKratos/3ds2apple/issues/2)）。互換性や性能の保証はありません。
+- **保証はありません。** 互換性と性能はゲームごとに異なります。起動できないタイトルや描画がおかしいタイトルがあります。互換性や性能の保証はありません。
 - **macOS は開発者プレビュー。** パッケージは自己完結しておらず、実機へのインストールもまだメンテナーによって検証されていません（issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)）。Windows と Linux が検証済みの経路です。
 - **カスタム画面レイアウトは 0.1.6 から GPU 経路です。** 任意の矩形、四方向の回転、上下画面の入れ替えを GPU プレゼンターが描画します（0.1.5 以前は低速なリードバック経路でした）。適用は引き続き次回のゲーム読み込みからです。
 - **設計上 CPU JIT はありません。** 出荷経路は AOT コードと Zakuro HLE ランタイムで、インタプリタのフォールバックはありません。
@@ -406,7 +406,7 @@ licenses/          サードパーティのライセンス文書（Impactor MIT�
 
 ## 正直な限界
 
-- **互換性はゲームごと。** 起動できないタイトルや描画がおかしくなるタイトルがあり、一部のタイトルの一部メニューが正しく描画されないことがあります（issue [#2](https://github.com/HFYKratos/3ds2apple/issues/2)）。タイトル ID を添えた報告を歓迎します——[問題報告とパフォーマンスデータ](#問題報告とパフォーマンスデータ)を参照。
+- **互換性はゲームごと。** 起動できないタイトルや描画がおかしくなるタイトルがあります。タイトル ID を添えた報告を歓迎します——[問題報告とパフォーマンスデータ](#問題報告とパフォーマンスデータ)を参照。
 - **カスタム画面レイアウトは 0.1.6 から GPU 経路です。** 任意の矩形、四方向の回転、上下画面の入れ替えを GPU プレゼンターが描画します。0.1.5 以前は画面リードバック経路でした。適用は引き続き次回のゲーム読み込みからです。
 - **C スティックはゲームに依存。** New 3DS のヌブ API を通して報告されるため、ヌブを読まないタイトルは無視します。古いランタイムでビルドされたシェルでは利用できません。
 - **中国本土の iPhone では、最初のテキスト入力時に「モバイルデータ通信」を尋ねられることがあります。** これは iOS の既知の癖です。システムのテキスト入力が最初に表示されたとき（たとえばゲーム内キーボードのオーバーレイ）、UIKit 自身のディクテーション/ネットワーク経路のチェックがアプリに帰属され、iOS が「モバイルデータ通信を許可」のアラートを表示します。3ds2apple はネットワーク要求を一切行わず、モバイルデータ通信の使用量は 0 のままです。*許可しない* または *Wi-Fi のみ* を選んでもすべて動作します（再インストールで再度表示されることがあります）。詳細は [ios/app/README.md](ios/app/README.md)。

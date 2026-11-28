@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="许可证：Apache-2.0"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.3.1"><img src="https://img.shields.io/badge/release-v0.3.1-brightgreen" alt="最新版本：v0.3.1"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/tag/v0.3.2"><img src="https://img.shields.io/badge/release-v0.3.2-brightgreen" alt="最新版本：v0.3.2"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases/latest"><img src="https://img.shields.io/badge/platforms-iOS%2016%2B%20%C2%B7%20Windows%2010%2F11%20%C2%B7%20macOS%2013%2B%20%C2%B7%20Linux%20x86__64-blue" alt="Platforms: iOS 16+, Windows 10/11, macOS 13+, Linux x86_64"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/github/downloads/HFYKratos/3ds2apple/total?label=downloads" alt="GitHub 下载量"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/HFYKratos/3ds2apple/ci.yml?branch=main&label=CI" alt="CI 状态"></a>
@@ -28,13 +28,13 @@
 ## 下载
 
 <p align="center">
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.1/3ds2apple-0.3.1-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="下载 Windows 启动器"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.1/3ds2apple-0.3.1-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="下载 macOS 启动器"></a>
-  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.1/3ds2apple-0.3.1-linux-x86_64.tar.gz"><img src="https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="下载 Linux 启动器"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.2/3ds2apple-0.3.2-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="下载 Windows 启动器"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.2/3ds2apple-0.3.2-macos-universal.zip"><img src="https://img.shields.io/badge/Download-macOS%20universal-000000?style=for-the-badge&logo=apple&logoColor=white" alt="下载 macOS 启动器"></a>
+  <a href="https://github.com/HFYKratos/3ds2apple/releases/download/v0.3.2/3ds2apple-0.3.2-linux-x86_64.tar.gz"><img src="https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="下载 Linux 启动器"></a>
   <a href="https://github.com/HFYKratos/3ds2apple/releases"><img src="https://img.shields.io/badge/All%20releases-GitHub-lightgrey?style=for-the-badge&logo=github&logoColor=white" alt="在 GitHub 查看全部版本"></a>
 </p>
 
-<p align="center"><sub><b>最新稳定版：v0.3.1</b> · Windows 10/11 启动器（已验证路径）· macOS 13+ 启动器（开发者预览，见 <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>）· Linux x86_64 启动器（已验证路径；内置本地 AOT：3dsrecomp + LLVM/LLD 23.1.6） · iOS App 由启动器用你自己的 Apple ID 合成、签名并安装，因此没有单独的 iOS 下载。</sub></p>
+<p align="center"><sub><b>最新稳定版：v0.3.2</b> · Windows 10/11 启动器（已验证路径）· macOS 13+ 启动器（开发者预览，见 <a href="https://github.com/HFYKratos/3ds2apple/issues/1">#1</a>）· Linux x86_64 启动器（已验证路径；内置本地 AOT：3dsrecomp + LLVM/LLD 23.1.6） · iOS App 由启动器用你自己的 Apple ID 合成、签名并安装，因此没有单独的 iOS 下载。</sub></p>
 
 <p align="center">
   <img src="docs/assets/hero.png" width="880" alt="3ds2apple hero image: the app on iPhone and the Windows, macOS and Linux launchers, on a dark grid background.">
@@ -211,7 +211,7 @@ App 的 **Settings** 页采用 iOS 26/27 inset-grouped 分组语言——General
 
 ### 所有游戏都能玩吗？
 
-兼容性因游戏而异。部分游戏可能无法启动或渲染异常，个别游戏的某些菜单也可能渲染异常——见 issue [#2](https://github.com/HFYKratos/3ds2apple/issues/2)。本项目不提供兼容性或性能保证；欢迎带上 16 位 title ID 反馈。
+兼容性因游戏而异。部分游戏可能无法启动或渲染异常。本项目不提供兼容性或性能保证；欢迎带上 16 位 title ID 反馈。
 
 ### 从哪里获取 ROM、密钥或 BIOS？
 
@@ -265,7 +265,7 @@ App 的 **Settings** 页采用 iOS 26/27 inset-grouped 分组语言——General
 
 - **自备游戏。** 不提供也不链接任何 ROM、密钥、BIOS、系统文件或游戏资源；不提供盗版支持。请只使用你合法拥有并自行导出的已解密 ROM。
 - **无关联、无背书。** 3ds2apple 与 Nintendo、Apple 均无关联、未获赞助或背书，也不通过 App Store 分发；请用你自己的 Apple ID 签名并安装。
-- **不做保证。** 兼容性与性能因游戏而异：部分游戏可能无法启动或渲染异常，个别游戏的某些菜单也可能渲染异常（issue [#2](https://github.com/HFYKratos/3ds2apple/issues/2)）。不提供兼容性或性能保证。
+- **不做保证。** 兼容性与性能因游戏而异：部分游戏可能无法启动或渲染异常。不提供兼容性或性能保证。
 - **macOS 是开发者预览。** 分发包尚不自包含，真机安装也还未由维护者验证（issue [#1](https://github.com/HFYKratos/3ds2apple/issues/1)）；Windows 与 Linux 是已验证路径。
 - **渲染器优化是实验性的。** 设置 → 图形 里的六个开关默认关闭、需要重新启动 App，且只影响 GPU 路径；如果某款游戏出现画面差异，请逐项关闭。
 - **金手指需自备。** App 不内置也不下载任何金手指代码库；代码是你自备的文本文件，只应修改游戏数据——改写游戏代码的代码在 AOT 下可能变慢——使用前请先备份存档。
@@ -405,7 +405,7 @@ licenses/          第三方许可文本（Impactor MIT、apple-codesign MPL-2.0
 
 ## 实话实说的边界
 
-- **兼容性因游戏而异。** 部分游戏可能无法启动或渲染异常，个别游戏的某些菜单也可能渲染异常（issue [#2](https://github.com/HFYKratos/3ds2apple/issues/2)）；欢迎带上 title ID 反馈——见[问题反馈与性能数据](#问题反馈与性能数据)。
+- **兼容性因游戏而异。** 部分游戏可能无法启动或渲染异常；欢迎带上 title ID 反馈——见[问题反馈与性能数据](#问题反馈与性能数据)。
 - **自定义屏幕布局自 0.1.6 起走 GPU 路径。** 任意矩形、四向旋转与上下屏交换都由 GPU presenter 绘制；0.1.5 及更早走屏幕回读路径。自定义布局仍从下一次加载游戏起生效。
 - **C 杆依赖游戏支持。** 它通过 New 3DS 摇杆 API 上报；不读取该摇杆的游戏会忽略它，用旧运行库构建的壳也不提供它。
 - **国行 iPhone 首次弹出键盘时可能询问「无线数据」。** 这是 iOS 的已知系统问题：系统文本输入首次出现时（例如游戏内键盘覆盖层），UIKit 内部的听写/网络路径自检会被系统归因到 App，于是弹出「允许使用无线数据」。本应用不发起任何网络请求、蜂窝数据用量为 0，选*不允许*或*仅限无线局域网*即可，功能不受影响（重装后可能再次出现）。详见 [ios/app/README.md](ios/app/README.md)。
