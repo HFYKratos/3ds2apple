@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "builder-core"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "crc32fast",
  "flate2",
@@ -86,7 +86,7 @@ dependencies = [
 
 [[package]]
 name = "builder-pack"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "builder-core",
  "clap",
