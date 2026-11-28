@@ -20,8 +20,21 @@
 //  renders at 400x480 for the stacked console, 720x240 side by side, or the
 //  whole arrangement turned a quarter turn, and CoreAnimation scales that image
 //  to the view's box. Rendering at the device resolution would make the GPU do
-//  20x the work for no visible benefit; the Settings render resolution can raise
+//  ~8x the work for no visible benefit; the Settings render resolution can raise
 //  the drawable to one to four times the arrangement's pixels.
+//
+//  Drawable sizing (the CAMetalLayer drawableSize fix): CAMetalLayer.drawableSize
+//  is not an independent property. Apple documents its default value as the
+//  layer's bounds size multiplied by its contentsScale factor, and Core Animation
+//  rewrites it whenever it lays the layer out (including every frame of a bounds
+//  animation). The presenter needs the arrangement's own pixel size no matter
+//  how SwiftUI sizes the picture box, so this view is *not* sized by SwiftUI:
+//  MetalScreenContainerView gives it deliberately chosen bounds and scales it
+//  with a transform. `bounds * contentsScale` therefore always equals the
+//  presenter's drawable, so Core Animation has nothing to rewrite: no drawable
+//  size resets, no swapchain rebuilds while a layout animates, and the picture
+//  keeps the arrangement's pixels instead of being re-sampled from the view's
+//  point size.
 //
 //  Threading: `UIView` objects are main-thread only, so the view, and the
 //  presenter created from it, are created/resized on the main queue. The
@@ -34,6 +47,13 @@ import UIKit
 
 /// A `UIView` whose backing layer is a `CAMetalLayer`, sized for the presenter
 /// that draws the 3DS screens into it.
+///
+/// The view is placed and scaled by `MetalScreenContainerView`, never by
+/// SwiftUI. For a fixed screen arrangement its bounds are the drawable size in
+/// points with `contentsScale` 1; for the custom full-stage layout its bounds
+/// are the container's points with `contentsScale` equal to the screen scale.
+/// Both cases keep `bounds * contentsScale` equal to what the presenter expects,
+/// which is the invariant CAMetalLayer itself maintains.
 final class MetalScreenView: UIView {
     /// The screen arrangement at the 3DS resolutions, in pixels, before the
     /// render scale: 400x480 for the stacked console, 720x240 side by side,
@@ -60,6 +80,16 @@ final class MetalScreenView: UIView {
         CGSize(width: nativePixelSize.width * renderScale,
                height: nativePixelSize.height * renderScale)
     }
+
+    /// The CAMetalLayer's drawable size as Core Animation currently reports it.
+    /// Diagnostics only (main queue): it must equal `drawablePixelSize` (fixed
+    /// arrangement) or the custom layout's stage pixels.
+    var actualDrawableSize: CGSize { metalLayer.drawableSize }
+
+    /// How many times Core Animation rewrote `drawableSize` and the value had to
+    /// be re-asserted. A correct container layout leaves this at 0; a growing
+    /// count means the bounds x contentsScale invariant is broken again.
+    private(set) var drawableSizeCorrections = 0
 
     /// Called on the main queue after layout when the drawable size in pixels
     /// changes, so the runtime can resize its swapchain to match.
@@ -108,61 +138,104 @@ final class MetalScreenView: UIView {
         // present path: `presentsWithTransaction = false` lets a present land
         // without waiting for the next commit. Nothing here is written per
         // frame, and `drawableSize` is only set when the layout or the render
-        // scale changes (see `updateDrawableSize(force:)`), so the frame loop
-        // does no CAMetalLayer property work.
+        // scale changes (see `publishDrawableSize`), so the frame loop does no
+        // CAMetalLayer property work.
         metalLayer.maximumDrawableCount = 3
         metalLayer.presentsWithTransaction = false
-        // CoreAnimation stretches the drawable into the view's box: the box has
-        // the picture's own shape for fit/4:3 (so this is a uniform scale) and
-        // the whole available space in stretch mode (deliberate distortion).
+        // The container transforms the layer into the picture box; the drawable
+        // itself is never resized to the box, so this gravity is only a safe
+        // default when the layer's own aspect and its bounds differ by rounding.
         metalLayer.contentsGravity = .resize
         applyPictureFilters()
     }
 
+    // MARK: - Sizing from the container
+
     /// Gives the layer a drawable size before the view is in the window
     /// hierarchy, so the presenter can make its surface and first swapchain
-    /// while the ROM loads. SwiftUI replaces the view's frame with the laid-out
-    /// one; the drawable stays the arrangement's own pixels, so this only needs
-    /// to run once. Main queue only.
+    /// while the ROM loads. The container keeps the layer's bounds at this size;
+    /// SwiftUI only ever sizes the container. Main queue only.
     func prepareForPresentation() {
-        if bounds.width < 1 || bounds.height < 1 {
-            bounds = CGRect(origin: .zero,
-                            size: customFill
-                                ? UIScreen.main.bounds.size
-                                : drawablePixelSize)
+        let displayScale = window?.screen.scale ?? UIScreen.main.scale
+        let scale = desiredContentsScale(displayScale: displayScale)
+        if metalLayer.contentsScale != scale {
+            metalLayer.contentsScale = scale
         }
-        updateCustomFillDrawableSize(force: false)
-        updateDrawableSize(force: true)
+        // The presenter reads the layer while it makes its surface: give it the
+        // new geometry's drawable size directly. The container re-applies the
+        // same size on its next layout pass (this view is reused across loads and
+        // the layout preset or the render scale may have changed meanwhile).
+        let points = desiredLayerPoints()
+        let target = CGSize(width: max(points.width, 1), height: max(points.height, 1))
+        if customFill {
+            nativePixelSize = CGSize(width: target.width * scale,
+                                     height: target.height * scale)
+            renderScale = 1
+        }
+        if bounds.size != target {
+            bounds = CGRect(origin: .zero, size: target)
+        }
+        syncDrawableSize()
+        publishDrawableSize(force: true)
+    }
+
+    /// Lays the layer out inside the container that SwiftUI sized: the layer gets
+    /// its presenter-sized bounds, the container animates its transform, and the
+    /// drawable never follows the picture box. Main queue only.
+    func layoutInContainer(_ containerBounds: CGRect, displayScale: CGFloat) {
+        guard containerBounds.width >= 1, containerBounds.height >= 1 else { return }
+        let scale = desiredContentsScale(displayScale: displayScale)
+        var points: CGSize
+        if customFill {
+            // The custom layout draws into the whole stage at native device
+            // pixels: container points x contentsScale is exactly that size.
+            nativePixelSize = CGSize(width: containerBounds.width * scale,
+                                     height: containerBounds.height * scale)
+            renderScale = 1
+            points = containerBounds.size
+        } else {
+            // A fixed arrangement: the layer's own bounds are the drawable in
+            // pixels (contentsScale 1), whatever the picture box is.
+            points = drawablePixelSize
+        }
+        let target = CGSize(width: max(points.width, 1), height: max(points.height, 1))
+        if bounds.size != target {
+            bounds = CGRect(origin: .zero, size: target)
+        }
+        if metalLayer.contentsScale != scale {
+            metalLayer.contentsScale = scale
+        }
+        contentScaleFactor = scale
+        // CoreAnimation scales the layer into the container. For a fixed
+        // arrangement this is the old contentsGravity .resize behaviour, now
+        // expressed as a transform so the layer's own bounds never change while
+        // SwiftUI animates the picture box (rotation, keyboard, transitions).
+        transform = CGAffineTransform(
+            scaleX: containerBounds.width / target.width,
+            y: containerBounds.height / target.height
+        )
+        center = CGPoint(x: containerBounds.midX, y: containerBounds.midY)
+        syncDrawableSize()
+        publishDrawableSize(force: false)
     }
 
     /// Switches between a fixed presenter arrangement (false) and the custom GPU
-    /// layout's full-stage fill (true). While enabled the drawable is the view's
-    /// own size in native device pixels, so the presenter's normalised custom
-    /// viewports map directly onto the game-view stage. Main queue only.
+    /// layout's full-stage fill (true). Main queue only.
     func setCustomFill(_ enabled: Bool) {
         if enabled {
             customFill = true
             renderScale = 1
             integerScaling = false
             applyPictureFilters()
-            updateCustomFillDrawableSize(force: true)
+            let displayScale = window?.screen.scale ?? UIScreen.main.scale
+            let stage = superview?.bounds.size ?? UIScreen.main.bounds.size
+            nativePixelSize = CGSize(width: max(stage.width * displayScale, 1),
+                                     height: max(stage.height * displayScale, 1))
+            updateContainerLayout()
+            publishDrawableSize(force: true)
         } else {
             customFill = false
         }
-    }
-
-    private func updateCustomFillDrawableSize(force: Bool) {
-        guard customFill, bounds.width >= 1, bounds.height >= 1 else { return }
-        let displayScale = window?.screen.scale ?? UIScreen.main.scale
-        let size = CGSize(width: max(bounds.width * displayScale, 1),
-                          height: max(bounds.height * displayScale, 1))
-        guard size != nativePixelSize else {
-            if force { updateDrawableSize(force: true) }
-            return
-        }
-        nativePixelSize = size
-        renderScale = 1
-        updateDrawableSize(force: true)
     }
 
     /// Sets the arrangement the presenter draws and the layer holds: the native
@@ -191,7 +264,8 @@ final class MetalScreenView: UIView {
         self.renderScale = factor
         self.integerScaling = integerScaling
         applyPictureFilters()
-        updateDrawableSize(force: true)
+        updateContainerLayout()
+        publishDrawableSize(force: true)
     }
 
     /// Nearest-pixel magnification for integer scaling, smooth filtering
@@ -207,9 +281,8 @@ final class MetalScreenView: UIView {
     /// (iOS 16+): `mode` takes "default" / "main" to show the HUD and
     /// "disabled" to hide it. The build must also enable the HUD, through
     /// `MetalHudEnabled` in Info.plist (the packaged test IPAs do) or
-    /// Settings → Developer → Graphics HUD on the device; otherwise there is
-    /// nothing to show. Main queue only. `developerHUDProperties` is an iOS 16
-    /// API, exactly the deployment target, so no availability check is needed.
+    /// Settings -> Developer -> Graphics HUD on the device; otherwise there is
+    /// nothing to show. Main queue only.
     func applySystemMetalHUD(enabled: Bool) {
         // The variable has to be in the environment before Metal creates the
         // device (App.init does that); the layer property below is the part
@@ -223,37 +296,53 @@ final class MetalScreenView: UIView {
                    enabled ? "on" : "off", MetalHUD.diagnosticsLine)
     }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        updateScaleFromWindow()
-        updateCustomFillDrawableSize(force: false)
-        updateDrawableSize(force: false)
+    // MARK: - Drawable bookkeeping
+
+    /// The layer's bounds in points for the current mode, before the container
+    /// is known (the load-time presenter creation reads the layer directly).
+    private func desiredLayerPoints() -> CGSize {
+        if customFill {
+            let stage = superview?.bounds.size ?? UIScreen.main.bounds.size
+            return CGSize(width: max(stage.width, 1), height: max(stage.height, 1))
+        }
+        return drawablePixelSize
     }
 
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        updateScaleFromWindow()
-        updateCustomFillDrawableSize(force: false)
-        updateDrawableSize(force: false)
+    /// 1 for a fixed arrangement (bounds are pixels); the screen scale for the
+    /// custom full-stage layout (bounds are points, the drawable is native pixels).
+    private func desiredContentsScale(displayScale: CGFloat) -> CGFloat {
+        customFill ? max(displayScale, 1) : 1
     }
 
-    /// Keeps `contentsScale` and `drawableSize` in step with the window's screen
-    /// (the presenter derives its swapchain extent from `drawableSize`).
-    private func updateScaleFromWindow() {
-        // The drawable is fixed at the arrangement's pixels; CoreAnimation
-        // scales it to the view. Keep the layer's own scale at 1 so the
-        // presenter's swapchain extent never follows the iPhone's native pixels.
-        contentScaleFactor = 1.0
-        if metalLayer.contentsScale != 1.0 {
-            metalLayer.contentsScale = 1.0
+    /// The drawable size the presenter expects for the current bounds and scale.
+    private var desiredDrawableSize: CGSize {
+        CGSize(width: (bounds.width * metalLayer.contentsScale).rounded(),
+               height: (bounds.height * metalLayer.contentsScale).rounded())
+    }
+
+    /// Re-asserts the drawable size if Core Animation rewrote it and counts the
+    /// correction (diagnostics; a correct layout never needs this).
+    private func syncDrawableSize() {
+        let expected = desiredDrawableSize
+        guard expected.width >= 1, expected.height >= 1 else { return }
+        let found = metalLayer.drawableSize
+        guard found != expected else { return }
+        metalLayer.drawableSize = expected
+        drawableSizeCorrections += 1
+        if drawableSizeCorrections == 1 {
+            AppLog.log(
+                "[3ds2apple] CAMetalLayer drawableSize was rewritten to %@ (expected %@); re-asserting the presenter size",
+                "\(Int(found.width))x\(Int(found.height))",
+                "\(Int(expected.width))x\(Int(expected.height))"
+            )
         }
     }
 
-    private func updateDrawableSize(force: Bool) {
-        let pixels = drawablePixelSize
-        // MoltenVK sets this again when it (re)builds the swapchain, and reads
-        // it to pick the surface extent. Setting it here before the resize call
-        // is what makes a layout/rotation/render-scale change take effect.
+    /// Hands a changed drawable size to the session so it can resize the
+    /// presenter's swapchain. Main queue only.
+    private func publishDrawableSize(force: Bool) {
+        let pixels = desiredDrawableSize
+        guard pixels.width >= 1, pixels.height >= 1 else { return }
         if metalLayer.drawableSize != pixels {
             metalLayer.drawableSize = pixels
         }
@@ -261,17 +350,80 @@ final class MetalScreenView: UIView {
         reportedDrawableSize = pixels
         onDrawableSizeChanged?(pixels)
     }
+
+    /// Re-runs the container layout immediately after a geometry change, so the
+    /// layer, transform and presenter size all change together. Main queue only.
+    private func updateContainerLayout() {
+        guard let container = superview else { return }
+        container.setNeedsLayout()
+        container.layoutIfNeeded()
+    }
+
+    // MARK: - UIView layout
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // Core Animation re-derives drawableSize from bounds * contentsScale; the
+        // container keeps both equal to the presenter size, so this is only a
+        // safety net and a diagnostic hook.
+        syncDrawableSize()
+        publishDrawableSize(force: false)
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        updateContainerLayout()
+        syncDrawableSize()
+        publishDrawableSize(force: false)
+    }
 }
 
-/// Bridges `MetalScreenView` into SwiftUI. The session owns the view (and the
-/// presenter drawing into it) for the app's lifetime; this representable only
-/// places it in the layout, which is why it returns a pre-made view.
+/// The view SwiftUI actually lays out. It only carries the long-lived
+/// `MetalScreenView`: the container takes the picture-box size SwiftUI gives it
+/// and lays the Metal layer out at its presenter size with a transform, so the
+/// CAMetalLayer drawable never follows the animated picture box.
+final class MetalScreenContainerView: UIView {
+    let metalView: MetalScreenView
+
+    init(metalView: MetalScreenView) {
+        self.metalView = metalView
+        super.init(frame: .zero)
+        backgroundColor = .black
+        isOpaque = true
+        if metalView.superview !== self {
+            metalView.removeFromSuperview()
+        }
+        addSubview(metalView)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("MetalScreenContainerView is created by MetalScreenRepresentable")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let displayScale = window?.screen.scale ?? UIScreen.main.scale
+        metalView.layoutInContainer(bounds, displayScale: displayScale)
+    }
+}
+
+/// Bridges `MetalScreenView` into SwiftUI. The session owns the Metal view (and
+/// the presenter drawing into it) for the app's lifetime; the representable
+/// creates the container that sizes it, which is why it returns a pre-made
+/// view.
 struct MetalScreenRepresentable: UIViewRepresentable {
     let view: MetalScreenView
 
-    func makeUIView(context: Context) -> MetalScreenView {
-        view
+    func makeUIView(context: Context) -> MetalScreenContainerView {
+        // Re-inserting the same representable reuses the container that already
+        // holds the long-lived Metal view.
+        if let container = view.superview as? MetalScreenContainerView {
+            return container
+        }
+        return MetalScreenContainerView(metalView: view)
     }
 
-    func updateUIView(_ uiView: MetalScreenView, context: Context) {}
+    func updateUIView(_ uiView: MetalScreenContainerView, context: Context) {
+        uiView.setNeedsLayout()
+    }
 }

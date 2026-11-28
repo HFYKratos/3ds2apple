@@ -339,6 +339,15 @@ final class ROMSession: ObservableObject, SaveStateRuntime {
     private let turboUnlimitedState = LockedIntState(initialValue: 0)
     /// A1: drawable size of `metalScreenView` in pixels. Main queue only.
     private(set) var presentedDrawableSize = CGSize.zero
+    /// The CAMetalLayer's actual drawable size read back from the layer, for the
+    /// diagnostics report. It must equal `presentedDrawableSize`; a different
+    /// value means Core Animation rewrote the drawable (see MetalScreenView).
+    var presentedDrawableLayerPixels: CGSize? { metalScreenView?.actualDrawableSize }
+    /// How many times the layer's drawableSize had to be re-asserted after Core
+    /// Animation rewrote it (diagnostics; expected 0 with the container sizing).
+    var presentedDrawableSizeCorrections: Int {
+        metalScreenView?.drawableSizeCorrections ?? 0
+    }
     /// A1: presenter handle (`zk_presenter_*`). Created and destroyed on the
     /// main queue; the value is handed to the runtime queue for `zk_present`.
     private var presenter: UnsafeMutableRawPointer?

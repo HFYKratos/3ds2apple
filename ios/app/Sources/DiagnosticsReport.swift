@@ -149,6 +149,13 @@ enum DiagnosticsExporter {
         return "\(Int(size.width))x\(Int(size.height))"
     }
 
+    /// The CAMetalLayer's actual drawable size (what the presenter's swapchain is
+    /// built from), or "-" before the Metal view exists.
+    private static func drawableLayerPixelSizeDescription(model: ROMSession) -> String {
+        guard let size = model.presentedDrawableLayerPixels else { return "-" }
+        return "\(Int(size.width.rounded()))x\(Int(size.height.rounded()))"
+    }
+
     /// 1 when the loaded renderer measures its own GPU execution time (the
     /// diagnostic GPU profile set `ZAKURO_GPU_TIMES=1`), 0 otherwise.
     private static var gpuTimingEnabled: Bool {
@@ -312,6 +319,9 @@ enum DiagnosticsExporter {
         render_scale_applies=next_load
         presented_native_pixels=\(nativePixelSizeDescription(settings: settings))
         presented_drawable_pixels=\(drawablePixelSizeDescription(model: model, settings: settings))
+        presented_drawable_layer_pixels=\(drawableLayerPixelSizeDescription(model: model))
+        presented_drawable_size_corrections=\(model.presentedDrawableSizeCorrections)
+        presented_drawable_definition=presented_drawable_pixels is the drawable size the app asked the presenter for; presented_drawable_layer_pixels is the CAMetalLayer.drawableSize read back at export time and must equal it (a different value means Core Animation rewrote the drawable, the issue #2 drawable-size bug). presented_drawable_size_corrections counts how often the layer's drawableSize had to be re-asserted since launch (expected 0 with the container sizing).
         orientation=\(settings.orientation.rawValue)
         fps=\(String(format: "%.1f", model.frameStats.fps))
         frames=\(model.frameStats.frames)
