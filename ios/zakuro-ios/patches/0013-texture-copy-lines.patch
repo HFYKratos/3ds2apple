@@ -1,0 +1,124 @@
+diff --git a/crates/zakuro-gpu/src/lib.rs b/crates/zakuro-gpu/src/lib.rs
+index 8484009..bf65678 100644
+--- a/crates/zakuro-gpu/src/lib.rs
++++ b/crates/zakuro-gpu/src/lib.rs
+@@ -572,24 +572,45 @@ impl Gpu {
+ 
+         let (mut src, mut dst) = (input, output);
+ 
+-        // a zero width means one contiguous run
+-        if input_width == 0 || output_width == 0 {
+-            let mut buffer = vec![0u8; size as usize];
+-            memory.read(src, &mut buffer);
+-            memory.write(dst, &buffer);
+-            self.transfers += 1;
+-            return;
+-        }
+-
++        // the input and output lines are walked independently, each advancing a line
++        // at a time with its own gap, because the two widths need not match: a title
++        // captures a frame by naming the whole contiguous block as one input line and
++        // the destination's tile rows as the output lines, so the input has to be read
++        // straight through while the output skips its gap after every line
++        // (a zero width is one run)
+         let mut remaining = size;
+-        let chunk = input_width.min(output_width);
+-        let mut buffer = vec![0u8; chunk as usize];
+-        while remaining >= chunk && chunk > 0 {
++        let mut input_line = if input_width == 0 { remaining } else { input_width.min(remaining) };
++        let mut output_line = if output_width == 0 { remaining } else { output_width.min(remaining) };
++        let mut buffer = Vec::new();
++        while remaining > 0 {
++            let count = remaining.min(input_line).min(output_line);
++            if count == 0 {
++                if input_line == 0 {
++                    src += input_skip;
++                    input_line = if input_width == 0 { remaining } else { input_width.min(remaining) };
++                }
++                if output_line == 0 {
++                    dst += output_skip;
++                    output_line = if output_width == 0 { remaining } else { output_width.min(remaining) };
++                }
++                continue;
++            }
++            buffer.resize(count as usize, 0);
+             memory.read(src, &mut buffer);
+             memory.write(dst, &buffer);
+-            src += input_width + input_skip;
+-            dst += output_width + output_skip;
+-            remaining -= chunk;
++            remaining -= count;
++            src += count;
++            dst += count;
++            input_line -= count;
++            output_line -= count;
++            if input_line == 0 && remaining > 0 {
++                src += input_skip;
++                input_line = if input_width == 0 { remaining } else { input_width.min(remaining) };
++            }
++            if output_line == 0 && remaining > 0 {
++                dst += output_skip;
++                output_line = if output_width == 0 { remaining } else { output_width.min(remaining) };
++            }
+         }
+         self.transfers += 1;
+     }
+@@ -1430,6 +1451,58 @@ mod tests {
+         }
+     }
+ 
++    /// a capture copy names the whole contiguous block as one input line and the
++    /// destination's tile rows as the output lines: the input reads straight through
++    #[test]
++    fn texture_copy_reads_a_contiguous_input_straight_through() {
++        let (input_base, output_base) = (0x1000u32, 0x10000u32);
++        let (tile_row, gap, rows) = (3840u32, 256u32, 50u32);
++        let size = tile_row * rows;
++        let mut memory = FlatMemory(vec![0; 0x80000]);
++        for i in 0..size as usize {
++            memory.0[input_base as usize + i] = (i % 251) as u8;
++        }
++        let mut gpu = Gpu::new();
++        // one input line of the whole block, output lines of a tile row and a gap
++        let input_gap = size / 16;
++        let output_gap = ((gap / 16) << 16) | (tile_row / 16);
++        gpu.texture_copy(&mut memory, input_base, output_base, size, input_gap, output_gap);
++        for row in 0..rows {
++            let from = input_base as usize + (row * tile_row) as usize;
++            let to = output_base as usize + (row * (tile_row + gap)) as usize;
++            assert_eq!(
++                &memory.0[to..to + tile_row as usize],
++                &memory.0[from..from + tile_row as usize],
++                "tile row {row}"
++            );
++        }
++    }
++
++    /// a crop copy still copies each line and skips both gaps, as it always has
++    #[test]
++    fn texture_copy_skips_both_gaps_between_lines() {
++        let (input_base, output_base) = (0x1000u32, 0x10000u32);
++        let (line, gap, lines) = (192u32, 64u32, 4u32);
++        let size = line * lines;
++        let mut memory = FlatMemory(vec![0; 0x40000]);
++        for i in 0..size as usize {
++            memory.0[input_base as usize + i] = (i % 253) as u8;
++        }
++        let mut gpu = Gpu::new();
++        let input_gap = ((gap / 16) << 16) | (line / 16);
++        let output_gap = ((gap / 16) << 16) | (line / 16);
++        gpu.texture_copy(&mut memory, input_base, output_base, size, input_gap, output_gap);
++        for row in 0..lines {
++            let from = input_base as usize + (row * (line + gap)) as usize;
++            let to = output_base as usize + (row * (line + gap)) as usize;
++            assert_eq!(
++                &memory.0[to..to + line as usize],
++                &memory.0[from..from + line as usize],
++                "line {row}"
++            );
++        }
++    }
++
+     /// the inverse of [shader::isa::decode_float24], for normal values
+     fn float24(value: f32) -> u32 {
+         if value == 0.0 {
